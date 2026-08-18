@@ -12,8 +12,6 @@
 ![License](https://img.shields.io/github/license/major1ink/beacon-table)
 ![Go Report Card](https://goreportcard.com/badge/github.com/major1ink/beacon-table)
 
-<!-- TODO: заменить на реальный скриншот/GIF сцены с токенами, туманом войны и DM-панелью -->
-
 ---
 
 ## Что это
@@ -21,10 +19,9 @@
 DM-инструмент для стола, который работает в двух режимах одновременно (не
 взаимоисключающих — можно и то, и другое сразу на одной комнате):
 
-- **Локально** — DM управляет сценой с планшета, ТВ/проектор в комнате
+- **Локально** — DM управляет сценой со своего устройства, ТВ/проектор в комнате
   показывает то же самое по локальной сети, без авторизации.
-- **Через интернет** — DM расшаривает адрес своего self-hosted сервера (как
-  в Foundry VTT), удалённые игроки заходят по логину/паролю, заводят
+- **Через интернет** — DM расшаривает адрес своего self-hosted сервера, удалённые игроки заходят по логину/паролю, заводят
   персонажей, двигают токены и кидают кубы.
 
 Всё крутится на одном Go-бинарнике — никакого обязательного центрального
@@ -45,11 +42,35 @@ DM-инструмент для стола, который работает в д
 
 ## Быстрый старт
 
-В разработке
+### Готовый бинарник (рекомендуется, Go не нужен)
+
+Скачайте файл под вашу ОС/архитектуру со страницы
+[Releases](https://github.com/major1ink/Beacon-Table/releases/latest) —
+имя вида `beacon-table_<версия>_<ос>_<архитектура>` (`.exe` для Windows),
+например `beacon-table_v0.1.0_linux_amd64`. Это готовый к запуску
+бинарник без установки.
 
 ```bash
-git clone https://github.com/major1ink/beacon-table.git
-cd beacon-table
+chmod +x beacon-table_*        # Linux/macOS: GitHub не хранит бит "исполняемый"
+./beacon-table_v0.1.0_linux_amd64
+```
+```powershell
+.\beacon-table_v0.1.0_windows_amd64.exe
+```
+
+При первом запуске рядом с исполняемым файлом создаются
+папки `data/` (БД, аккаунты, ДМ-заметки) и `uploads/` (карты, токены). Далее после запуска необходимо перейти по адресу напечатнному в консоли.
+
+Например:
+
+- Окно ДМ или игрока: http://localhost:8080/
+- На телевизоре или любом другом устройстве локальной сети для просмотра и трансляции http://localhost:8080/tv.html 
+
+### Из исходников
+
+```bash
+git clone https://github.com/major1ink/Beacon-Table.git
+cd Beacon-Table
 go run ./cmd/beacon-table
 ```
 
@@ -57,8 +78,7 @@ go run ./cmd/beacon-table
 запуска сервера не требуется, только для разработки самого фронтенда
 (`cd web && npm install && npm run build`).
 
-Откройте `http://<IP-сервера>:8080/dm` с планшета ДМ и `.../tv` на
-телевизоре.
+---
 
 ## Contributing
 
@@ -100,7 +120,10 @@ redistributed; DMs add their own homebrew/imported content locally.
 Russian-speaking)
 Contributions and issues in English are welcome.
 
-**Quick start:** `git clone https://github.com/major1ink/beacon-table.git && cd beacon-table && go run ./cmd/beacon-table`
+**Quick start:** grab a prebuilt binary for your OS from
+[Releases](https://github.com/major1ink/Beacon-Table/releases/latest) and
+run it — no Go toolchain needed, frontend and SRD data are embedded. To
+build from source: `git clone https://github.com/major1ink/Beacon-Table.git && cd Beacon-Table && go run ./cmd/beacon-table`
 
 Licensed under AGPL-3.0. Bundled default content catalog is SRD 5.1/5.2 only
 (CC-BY-4.0/OGL) — no proprietary WotC book content is redistributed.

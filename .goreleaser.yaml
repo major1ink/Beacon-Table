@@ -1,0 +1,43 @@
+# Локальный тестовый прогон (без публикации, без тега):
+#   goreleaser release --snapshot --clean
+#
+# Документация: https://goreleaser.com/customization/
+version: 2
+
+builds:
+  - id: beacon-table
+    main: ./cmd/beacon-table
+    binary: beacon-table
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+
+archives:
+  - id: beacon-table
+    formats: ["binary"]
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - none*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+release:
+  name_template: "Beacon Table {{ .Version }}"
