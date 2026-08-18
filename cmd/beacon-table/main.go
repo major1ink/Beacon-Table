@@ -1,13 +1,5 @@
 // Beacon Table — сервер виртуального стола для настольных ролевых игр.
-//
-// Это композиционный корень приложения: единственное место (вместе с
-// internal/app, который делает то же самое заново при переключении мира,
-// см. app.CompanyManager.Launch), где известны конкретные реализации
-// (SQLite, файловая система) и где они собираются в сервисы, а сервисы — в
-// HTTP/WS API. Ни один из внутренних пакетов (internal/service, internal/api/...)
-// не знает про internal/repository/sqlite или internal/repository/scenefile
-// напрямую — только про интерфейсы internal/repository, которые здесь и
-// подключаются.
+
 package main
 
 import (
@@ -84,29 +76,16 @@ func main() {
 		log.Fatal("не удалось поднять миры:", err)
 	}
 
-	// ---- api-слой: HTTP/WS транспорт поверх интерфейсов service ----
 	mux := http.NewServeMux()
 
 	sub, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		log.Fatal(err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(sub))) // static/index.html — единая точка входа (логин/регистрация)
+	mux.Handle("/", http.FileServer(http.FS(sub))) 
 
-	// Загруженные карты/токены живут на диске, а не в embed.FS — embed
-	// зашивается только на этапе компиляции, рантайм-аплоады физически не
-	// могут туда попасть. Один и тот же корень "uploads" обслуживает все
-	// миры разом (см. app.CompanyManager.rootsFor) — новые миры пишут в
-	// свою подпапку uploads/companies/<id>/, легаси — прямо в корень, но
-	// раздача статикой в обоих случаях идёт этим одним хендлером.
 	mux.Handle(uploadsURL, http.StripPrefix(uploadsURL, http.FileServer(http.Dir(uploadsDir))))
 
-	// system-assets — картинки каталога "из коробки" (systemdata/assets/<system>/...,
-	// см. cmd/beacon-table/systemdata/README.md), зашитые в бинарник вместе с
-	// остальным systemFiles: Item/Monster/Reference.ImageURL карточек "из
-	// коробки" указывают сюда (в отличие от uploads/ — этот каталог только на
-	// чтение и целиком собирается на этапе компиляции, рантайм в него не
-	// пишет).
 	systemAssets, err := fs.Sub(systemFiles, "systemdata/assets")
 	if err != nil {
 		log.Fatal(err)
@@ -116,10 +95,7 @@ func main() {
 	apihttp.NewAPI(authSvc, companies, version).RegisterRoutes(mux)
 	apiws.RegisterRoutes(mux, companies, authSvc)
 
-	// Ловим Ctrl+C/остановку службы и сохраняем текущий мир перед выходом, а
-	// не полагаемся только на автосейв по таймеру — иначе последние секунды
-	// правок (стены, туман, позиции токенов) терялись бы при штатном
-	// перезапуске сервера.
+	// Ловим Ctrl+C/остановку службы и сохраняем текущий мир перед выходом
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
