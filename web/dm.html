@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Beacon Table — DM</title>
+  <link rel="stylesheet" href="/src/styles/theme.css" />
+  <style>
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex; flex-direction: column; overflow: hidden; font-size: 13px;
+    }
+    button { cursor: pointer; padding: 8px 12px; border: none; border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; transition: background .12s ease; }
+    button svg { flex: 0 0 auto; }
+    button.active { background: #e74c3c; }
+    button:hover { background: var(--surface-hover); }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button:disabled:hover { background: var(--surface); }
+    input[type="file"] { color: var(--text-dim); max-width: 100%; font-size: 12px; }
+    select {
+      background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 7px 8px; font-size: 12px; max-width: 100%; width: 100%; box-sizing: border-box;
+    }
+    label { display: flex; align-items: center; gap: 6px; }
+    .hint { opacity: 0.55; font-size: 11px; line-height: 1.5; }
+
+    /* ---- каркас: плавающий рейл + плавающая панель + канвас ----
+       Рейл/панель остаются flex-колонками в потоке #appBody (канвас по
+       прежнему подстраивает ширину под открытую панель — камере/HUD это
+       не мешает, они уже завязаны на getBoundingClientRect канваса), но
+       визуально отделены от краёв экрана и друг от друга — margin вместо
+       docking-границ, скругление со всех сторон, стекло+тень вместо
+       плоской заливки. */
+    #appBody { flex: 1 1 auto; min-height: 0; display: flex; position: relative; }
+
+    #rail {
+      flex: 0 0 auto; width: 60px; margin: 14px 0 14px 14px; padding: 12px 0;
+      display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 6;
+      box-sizing: border-box;
+    }
+    .rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+    .rail-bottom { margin-top: auto; }
+    .rail-sep { width: 28px; height: 1px; background: var(--border); margin: 6px 0; }
+    #accountsBadge {
+      display: none; position: absolute; top: 2px; right: 2px; background: #e74c3c; color: #fff; border-radius: 8px;
+      font-size: 9px; line-height: 1; padding: 2px 4px; min-width: 12px; text-align: center;
+    }
+    #accountsBadge.show { display: block; }
+
+    #panel {
+      flex: 0 0 0; width: 0; margin: 14px 0; overflow: hidden;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 0 solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: none;
+      transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
+      display: flex; flex-direction: column;
+    }
+    #panel.open { flex-basis: 300px; width: 300px; margin: 14px 12px 14px 10px; border-width: 1px; box-shadow: var(--shadow-float); }
+    .panel-section { display: none; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+    .panel-section.active { display: flex; }
+    .panel-header {
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border); gap: 8px;
+    }
+    .panel-header h3 { margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.8; }
+    .panel-header-actions { display: flex; align-items: center; gap: 2px; }
+    .panel-close {
+      background: none; opacity: 0.55; border-radius: 8px; width: 26px; height: 26px; padding: 0;
+      display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    }
+    .panel-close svg { display: block; }
+    .panel-close:hover { opacity: 1; background: var(--surface); }
+    .panel-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+    .field-block { display: flex; flex-direction: column; gap: 5px; width: 100%; box-sizing: border-box; }
+    .field-label { font-size: 11px; opacity: 0.6; }
+    .check-row { font-size: 13px; cursor: pointer; padding: 2px 0; }
+    .tool-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 9px; }
+    .primary-btn { width: 100%; background: var(--accent); font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .primary-btn:hover { background: #6a5ae0; }
+    .section-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+    .light-field { display: none; align-items: center; justify-content: space-between; }
+    .light-field.visible { display: flex; }
+    .light-field .field-label { opacity: 0.75; }
+    .light-field input[type="number"] {
+      width: 64px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); padding: 6px 7px; font: inherit; text-align: right;
+    }
+    #globalLightBrightBtn.active { background: var(--gold); }
+    #globalLightDimBtn.active { background: var(--blue); }
+
+    #canvasWrap { flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
+    canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
+
+    /* ---- плавающая плашка статуса (сцена / игроки / аккаунт) ---- */
+    #statusBar {
+      position: absolute; left: 10px; top: 10px; z-index: 5;
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
+      border-radius: var(--radius-pill); padding: 7px 14px;
+      display: flex; align-items: center; gap: 8px; font-size: 12px; max-width: calc(100% - 240px);
+    }
+    #statusBar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sceneSwitchName { font-weight: 600; }
+    #playersHint { opacity: 0.8; cursor: default; display: inline-flex; align-items: center; gap: 4px; }
+    #dmUsername { opacity: 0.6; }
+    .status-sep { opacity: 0.35; }
+
+    #tokenMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    #tokenMenu label { display: flex; gap: 6px; padding: 4px 2px; cursor: pointer; }
+    #tokenMenu .light-field { display: none; }
+    #tokenMenu .light-field.visible { display: flex; }
+    #tokenMenu button { width: 100%; margin-top: 6px; background: var(--danger); }
+    #tokenMenu button:hover { background: var(--danger-hover); }
+    #tokenMenuLightHeader {
+      display: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+      opacity: 0.6; padding: 2px 2px 6px; align-items: center; gap: 5px;
+    }
+    #tokenMenuLightToggleBtn { display: none; background: var(--accent); }
+    #tokenMenuLightToggleBtn:hover { background: #6a5ae0; }
+    #tokenMenuAddInitiativeBtn { background: var(--accent); }
+    #tokenMenuAddInitiativeBtn:hover { background: #6a5ae0; }
+    #tokenMenu button, #wallPointMenu button, #noteMarkerMenu button {
+      display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start;
+    }
+
+    #wallPointMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    #wallPointMenu button { width: 100%; background: var(--danger); }
+    #wallPointMenu button:hover { background: var(--danger-hover); }
+
+    #noteMarkerMenu {
+      position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 170px;
+    }
+    #noteMarkerMenu button { width: 100%; }
+    #noteMarkerResizeBtn { background: var(--accent); }
+    #noteMarkerResizeBtn:hover { background: #6a5ae0; }
+    #noteMarkerDeleteBtn { background: var(--danger); }
+    #noteMarkerDeleteBtn:hover { background: var(--danger-hover); }
+
+    #zoomHud {
+      position: absolute; right: 10px; bottom: 10px; z-index: 5;
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
+      border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
+    }
+    #zoomHud button { width: 28px; height: 28px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+    /* ---- переключатель сцен (панель "Сцена") ---- */
+    .scene-row { padding: 9px 11px 9px 6px; cursor: pointer; font-size: 13px; }
+    .scene-row.active { background: rgba(31,107,58,0.16); box-shadow: 0 0 0 1.5px var(--green) inset; }
+    .scene-row .scene-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .scene-row .scene-viewers { flex: 0 0 auto; }
+    /* "+ Сцена" переехала в шапку панели (#sceneCreateBtn, .panel-add-btn
+       в theme.css) — кнопка статична в разметке, dm.js только вешает
+       onclick, а не создаёт её заново на каждый renderSceneDropdown(). */
+
+    /* ---- раздел "Настроить сцену" (в выезжающей панели, по аналогии с "Освещение") ---- */
+    .modal-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .modal-tabs button { background: #2a2a35; font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
+    .modal-tabs button.active { background: var(--green); }
+    .modal-tab-panel { display: none; flex-direction: column; gap: 10px; }
+    .modal-tab-panel.active { display: flex; }
+    /* .cat-tabs — переключатель "Свои"/"Каталог" в панелях "Бестиарий"/
+       "Заклинания" (см. renderBestiaryRows/renderSpellRows в dm.js) — вид
+       как у .modal-tabs выше, но СВОИЙ класс, не .modal-tabs: тот метится
+       глобальным селектором ".modal-tabs button" (см. dm.js: tabButtons,
+       switchTab) для вкладок "Настроить сцену" — общий класс означало бы,
+       что тот код тоже находит и перевешивает onclick на этих кнопках. */
+    .cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .cat-tabs button { background: #2a2a35; font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
+    .cat-tabs button.active { background: var(--green); }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 12px; opacity: 0.75; }
+    .field input[type="text"], .field input[type="number"], .field select {
+      background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px;
+      padding: 6px 8px; font-size: 13px; width: 100%; box-sizing: border-box;
+    }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .modal-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.55; }
+
+    #bgPreview {
+      width: 100%; height: 120px; background: #111 center/contain no-repeat;
+      border: 1px solid #3a3a45; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;
+    }
+
+    /* список ассетов (карты/аудио) — вертикальные строки вместо широкой таблицы */
+    .asset-list { max-height: 180px; overflow-y: auto; border: 1px solid #3a3a45; border-radius: 8px; }
+    .asset-row { padding: 6px 8px; border-bottom: 1px solid #2a2a35; cursor: pointer; font-size: 12px; }
+    .asset-row:last-child { border-bottom: none; }
+    .asset-row:hover { background: #26262f; }
+    .asset-row.selected { background: #1f6b3a33; }
+    .asset-row .asset-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .asset-row .asset-meta { display: block; opacity: 0.55; font-size: 11px; margin-top: 1px; }
+
+    .color-row { display: flex; align-items: center; gap: 8px; }
+    .color-row input[type="color"] { width: 32px; height: 30px; padding: 0; border: none; background: none; }
+
+    #sceneDeleteBtn { background: var(--danger); }
+    #sceneDeleteBtn:hover { background: var(--danger-hover); }
+    #modalSaveBtn { background: var(--green); }
+    #modalSaveBtn:hover { background: var(--green-hover); }
+
+    #gridEditDone {
+      display: none; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      z-index: 15; background: var(--green); padding: 10px 18px; border-radius: var(--radius-pill);
+      box-shadow: var(--shadow-float); font-size: 13px; align-items: center; gap: 7px;
+    }
+    #gridEditDone.open { display: flex; }
+
+    /* ---- раздел "Аккаунты" (в панели) ---- */
+    .account-row { padding: 10px; border-radius: 12px; background: var(--surface); margin-bottom: 6px; font-size: 12px; }
+    .account-row .account-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .account-row .account-name { font-weight: 600; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .account-row .account-role { opacity: 0.6; font-size: 11px; }
+    .status-pill { border-radius: 10px; padding: 1px 8px; font-size: 11px; display: inline-block; }
+    .status-pill.active { background: #1f6b3a44; color: #7fd694; }
+    .status-pill.pending { background: #6b5a2b44; color: #f1c40f; }
+    .account-row .account-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .account-row .account-actions button { padding: 4px 8px; font-size: 11px; }
+    .account-row .account-actions button.danger { background: var(--danger); }
+    .account-row .account-actions button.danger:hover { background: var(--danger-hover); }
+    .account-row .account-actions button.approve { background: var(--green); }
+    .account-row .account-actions button.approve:hover { background: var(--green-hover); }
+
+    /* ---- раздел "Персонажи" (в панели) ---- */
+    .dmchar-owner-group { font-size: 11px; opacity: 0.55; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .dmchar-owner-group:first-child { margin-top: 0; }
+    .dmchar-row {
+      display: flex; align-items: center; gap: 6px; padding: 6px 9px 6px 4px; border-radius: 12px;
+      background: var(--surface); margin-bottom: 6px; cursor: grab;
+    }
+    .dmchar-row:active { cursor: grabbing; }
+    .dmchar-avatar {
+      width: 32px; height: 32px; border-radius: 50%; background: var(--surface-hover) center/cover no-repeat;
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--text-dim);
+    }
+    .dmchar-name { flex: 1 1 auto; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dmchar-row button { padding: 4px 7px; font-size: 11px; }
+
+    /* ---- раздел "Ассеты" (в панели) — библиотека ассетов карты с
+       подпапками: хлебные крошки текущего пути + сетка плиток (папки и
+       файлы вперемешку, папки первыми — см. renderAssetsGrid в dm.js).
+       Файл — drag-source на канвас (см. sceneCanvasEl drop-обработчик),
+       папка — клик открывает её. ---- */
+    .assets-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 1px; font-size: 12px; }
+    .assets-breadcrumb button { background: none; padding: 3px 6px; font-size: 12px; color: var(--text-dim); border-radius: 7px; }
+    .assets-breadcrumb button:hover { background: var(--surface); color: var(--text); }
+    .assets-breadcrumb button.current { color: var(--text); font-weight: 600; cursor: default; }
+    .assets-breadcrumb button.current:hover { background: none; }
+    .assets-breadcrumb .assets-breadcrumb-sep { opacity: 0.35; }
+
+    .assets-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .asset-tile {
+      position: relative; border-radius: 12px; background: var(--surface); overflow: hidden;
+      aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border: 1px solid transparent; box-sizing: border-box;
+    }
+    .asset-tile:hover { background: var(--surface-hover); border-color: var(--border); }
+    .asset-tile.folder-tile { flex-direction: column; gap: 5px; color: var(--text-dim); }
+    .asset-tile.folder-tile svg { opacity: 0.8; }
+    .asset-tile.folder-tile:hover { color: var(--text); }
+    .asset-tile.item-tile { cursor: grab; background: var(--bg) center/cover no-repeat; }
+    .asset-tile.item-tile:active { cursor: grabbing; }
+    .asset-tile.item-tile video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    .asset-tile .asset-tile-name {
+      position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 6px 3px;
+      font-size: 10.5px; line-height: 1.25; background: linear-gradient(transparent, rgba(0,0,0,0.75));
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+    }
+    .asset-tile .folder-tile-name {
+      position: static; background: none; padding: 0; font-size: 11px; text-align: center; max-width: 100%;
+    }
+    .asset-tile .asset-tile-del {
+      position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; padding: 0; border-radius: 7px;
+      background: rgba(10,10,14,0.65); color: #fff; display: none; align-items: center; justify-content: center;
+    }
+    .asset-tile:hover .asset-tile-del { display: flex; }
+    .asset-tile .asset-tile-del:hover { background: var(--danger-hover); }
+    .assets-empty-hint { grid-column: 1 / -1; opacity: 0.5; font-size: 12px; text-align: center; padding: 18px 8px; }
+
+    /* .item-row — используется строками "Хаб лута" (renderLootHub в dm.js)
+       поверх .dmchar-row: количество+кнопка не помещаются в один ряд на
+       узкой панели без переноса. */
+    .item-row { flex-wrap: wrap; }
+
+    /* ---- раздел "Трекер инициативы" (в панели) ---- */
+    #combatHeaderRow { display: flex; flex-direction: column; gap: 8px; }
+    #combatRoundRow { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    #combatRoundRow button { padding: 5px 10px; }
+    #combatRoundLabel { font-size: 12px; font-weight: 600; opacity: 0.85; min-width: 62px; text-align: center; }
+    #combatSearchWrap { position: relative; }
+    #combatSearch {
+      width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); color: #eee;
+      border-radius: 8px; padding: 8px 10px; font-size: 12px;
+    }
+    #combatSearch:focus { outline: none; border-color: var(--accent); }
+    #combatSearchResults {
+      display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 220px; overflow-y: auto;
+    }
+    .combat-search-row {
+      display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
+      background: var(--surface); cursor: pointer;
+    }
+    .combat-search-row:hover { background: var(--surface-hover); }
+    .combat-search-row .combat-avatar { width: 26px; height: 26px; }
+    .combat-search-row .combat-name { flex: 1 1 auto; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Карточка бойца — две строки: шапка (портрет/имя/удалить) и ряд
+       подписанных характеристик (Иниц./КД/HP) под ней. Раньше всё было одной
+       строкой из аватара и трёх голых инпутов без подписей — непонятно, где
+       что, и на узкой панели всё сминалось в кучу. */
+    .combat-row {
+      display: flex; flex-direction: column; gap: 7px; padding: 8px 9px; border-radius: 10px;
+      background: var(--surface); margin-bottom: 6px; border: 1px solid transparent;
+    }
+    .combat-row.current { border-color: var(--accent); background: var(--accent-bg); }
+    .combat-row[draggable="true"] { cursor: grab; }
+    .combat-row[draggable="true"]:active { cursor: grabbing; }
+    .combat-row-top { display: flex; align-items: center; gap: 8px; }
+    .combat-avatar {
+      width: 32px; height: 32px; border-radius: 50%; background: var(--surface-hover) center/cover no-repeat;
+      flex: 0 0 auto; box-shadow: 0 0 0 1px var(--border) inset;
+    }
+    .combat-row .combat-name {
+      flex: 1 1 auto; min-width: 0; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .combat-row .combat-remove {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; font-size: 11px; background: var(--danger);
+    }
+    .combat-row .combat-remove:hover { background: var(--danger-hover); }
+    .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
+    .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+    .combat-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; }
+    /* Числа не влезали в узкие инпуты — во-первых, Chrome/Edge рисуют внутри
+       number-инпута свои "стрелочки" (spin button), съедающие добрую треть
+       и без того тесной ширины, во-вторых, ширины/паддинги были впритык под
+       однозначные числа, а не под "20"/"15" и т.п. Прячем стрелочки и
+       считаем ширину так, чтобы 2 цифры + паддинги гарантированно влезали. */
+    .combat-row input[type="number"] {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px;
+      font: inherit; font-size: 12px; text-align: center; padding: 4px 1px; box-sizing: border-box;
+      -moz-appearance: textfield;
+    }
+    .combat-row input[type="number"]::-webkit-inner-spin-button,
+    .combat-row input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none; margin: 0;
+    }
+    .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
+    .combat-hp-group { display: flex; align-items: center; gap: 3px; }
+    .combat-hp-group input { width: 36px; }
+    .combat-hp-group .combat-hp-sep { opacity: 0.4; font-size: 11px; }
+    /* спасброски от смерти (см. combat-panel.js: deathSaveRow) — те же
+       "лампы"-чекбоксы, что и на бланке персонажа (character-sheet.html).
+       Заголовок по центру, под ним колонки "успехи"/"провалы" — подпись
+       каждой колонки прямо над её чекбоксами, а не слитно с заголовком. */
+    .combat-death-row { display: flex; flex-direction: column; gap: 5px; padding-left: 40px; }
+    .combat-death-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; text-align: center; }
+    .combat-death-groups { display: flex; gap: 28px; justify-content: center; }
+    .combat-death-group { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .bulb-row { display: flex; gap: 4px; }
+    .bulb { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--text-dim); padding: 0; background: transparent; }
+    .bulb.filled { background: var(--accent); border-color: var(--accent); }
+    .bulb.filled.fail { background: var(--danger); border-color: var(--danger); }
+
+    #newAccountForm { display: flex; flex-direction: column; gap: 8px; }
+    #newAccountForm label { font-size: 11px; opacity: 0.7; }
+    #newAccountForm input, #newAccountForm select {
+      background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px;
+      padding: 6px 8px; font-size: 12px;
+    }
+    #newAccountMsg { font-size: 12px; color: #e74c3c; min-height: 14px; }
+
+    /* ---- раздел "Заметки" (в панели, мастер-детейл, как "Плейлисты") ---- */
+    #noteSearch {
+      width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); color: #eee;
+      border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 10px;
+    }
+    #noteSearch:focus { outline: none; border-color: var(--accent); }
+    .note-rows { display: flex; flex-direction: column; gap: 6px; }
+    .note-row {
+      display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 10px;
+      background: var(--surface); border: 1px solid transparent; cursor: pointer;
+      transition: background .12s ease, border-color .12s ease;
+    }
+    .note-row:hover { background: var(--surface-hover); border-color: var(--border); }
+    .note-row .note-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-row .note-meta { font-size: 11px; opacity: 0.5; }
+    #newNoteForm { display: flex; gap: 4px; margin-top: 10px; }
+    #newNoteForm input {
+      flex: 1 1 auto; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: #eee;
+      border-radius: 8px; padding: 7px 9px; font-size: 12px;
+    }
+    #newNoteForm input:focus { outline: none; border-color: var(--accent); }
+    #newNoteForm button[type="submit"] { background: var(--accent); font-weight: 600; }
+    #newNoteForm button[type="submit"]:hover { background: #6a5ae0; }
+
+    /* заголовок открытой заметки: "‹ назад" + название + иконки-действия справа */
+    .note-detail-header {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    }
+    .note-detail-title { flex: 1 1 auto; min-width: 60px; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-detail-icons { display: flex; gap: 3px; flex-shrink: 0; }
+    .note-icon-btn {
+      width: 30px; height: 30px; padding: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      background: var(--surface); border-radius: 8px; font-size: 14px;
+    }
+    .note-icon-btn:hover { background: var(--surface-hover); }
+    .note-icon-btn.active { background: var(--accent-bg); color: var(--accent); }
+    .note-icon-danger:hover { background: var(--danger); }
+
+    /* панель форматирования (см. web/src/notes/toolbar.js) */
+    .note-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .note-toolbar-group { display: flex; gap: 2px; background: var(--surface); border-radius: 8px; padding: 2px; }
+    .note-toolbar-btn {
+      min-width: 26px; height: 26px; padding: 0 6px; background: none; border-radius: 6px;
+      font-size: 12px; line-height: 1; color: var(--text-dim);
+    }
+    .note-toolbar-btn:hover { background: var(--surface-hover); color: var(--text); }
+    .note-toolbar-btn.tb-bold { font-weight: 700; }
+    .note-toolbar-btn.tb-italic { font-style: italic; }
+    .note-toolbar-btn.tb-strike { text-decoration: line-through; }
+    .note-toolbar-file-input { display: none; }
+
+    #noteEditArea {
+      width: 100%; box-sizing: border-box; min-height: 260px; resize: vertical;
+      background: #1c1c24; border: 1px solid #3a3a45; color: #eee; border-radius: 8px;
+      padding: 10px; font: 12px/1.6 "Cascadia Code", Consolas, monospace; margin-bottom: 8px;
+    }
+    #noteEditArea:focus { outline: none; border-color: var(--accent); }
+    #noteMsg { min-height: 14px; color: #e74c3c; font-size: 12px; }
+
+    /* рендер markdown заметки — карточка с более "читаемой" типографикой */
+    .note-render {
+      font-size: 13px; line-height: 1.6; overflow-wrap: break-word;
+      background: var(--surface); border-radius: 10px; padding: 12px 14px;
+    }
+    .note-render:empty::before { content: "Пусто — нажми ✎, чтобы начать писать."; opacity: 0.45; }
+    .note-render h1, .note-render h2, .note-render h3 { margin: 0.6em 0 0.35em; line-height: 1.3; }
+    .note-render h1:first-child, .note-render h2:first-child, .note-render h3:first-child { margin-top: 0; }
+    .note-render h1 { font-size: 1.35em; padding-bottom: 0.25em; border-bottom: 1px solid var(--border); }
+    .note-render h2 { font-size: 1.15em; }
+    .note-render h3 { font-size: 1.05em; opacity: 0.9; }
+    .note-render p { margin: 0.5em 0; }
+    .note-render a { color: var(--accent); text-decoration: none; }
+    .note-render a:hover { text-decoration: underline; }
+    .note-render code { background: var(--bg); border-radius: 4px; padding: 1px 5px; font-size: 0.92em; }
+    .note-render pre { background: var(--bg); border-radius: 8px; padding: 8px 10px; overflow-x: auto; }
+    .note-render pre code { background: none; padding: 0; }
+    .note-render blockquote { margin: 0.5em 0; padding: 2px 10px; border-left: 3px solid var(--accent); opacity: 0.85; }
+    .note-render ul, .note-render ol { margin: 0.4em 0; padding-left: 1.4em; }
+    .note-render img { max-width: 100%; border-radius: 6px; }
+    .note-render hr { border: none; border-top: 1px solid var(--border); margin: 0.8em 0; }
+    .note-render table { border-collapse: collapse; width: 100%; font-size: 0.92em; }
+    .note-render th, .note-render td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; }
+    .note-render th { background: var(--bg); }
+
+    /* ---- раздел "Плейлисты" (канал ДМ, в панели, мастер-детейл с кнопкой "‹ Назад") ---- */
+    #nowPlayingBar {
+      display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 12px;
+      padding: 8px 10px; margin-bottom: 10px; font-size: 12px;
+    }
+    /* min-width: 0 обязателен — без него flex-item с flex-basis:auto не
+       сжимается меньше своего содержимого, и text-overflow:ellipsis никогда
+       не срабатывает (классический баг), сколько бы места ни просили соседи. */
+    #nowPlayingBar #nowPlayingLabel { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+    #nowPlayingBar .volume-row { flex: 0 0 auto; gap: 5px; }
+    #nowPlayingBar .volume-row svg { flex: 0 0 auto; opacity: 0.75; }
+    #cueVolumeSlider { width: 64px; }
+    #cueStopBtn { flex: 0 0 auto; padding: 6px 10px; font-size: 11px; display: flex; align-items: center; gap: 6px; }
+    .playlist-row {
+      display: flex; align-items: center; gap: 4px; padding: 7px 8px; border-radius: 8px;
+      cursor: pointer; font-size: 12px; background: var(--surface); margin-bottom: 4px;
+    }
+    .playlist-row:hover { background: var(--surface-hover); }
+    .playlist-row.active { background: var(--green); color: #fff; }
+    .playlist-row .pl-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .playlist-row button { padding: 3px 6px; font-size: 12px; background: none; opacity: 0.7; flex-shrink: 0; }
+    .playlist-row button:hover { opacity: 1; background: #3a3a45; }
+    #newPlaylistForm { display: flex; gap: 4px; margin-top: 6px; }
+    #newPlaylistForm input { flex: 1 1 auto; min-width: 0; background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+    #playlistBackBtn { margin-bottom: 10px; }
+    #trackPanelTitle { margin: 0 0 8px; font-size: 13px; opacity: 0.8; font-weight: normal; }
+    .track-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 8px;
+      background: var(--surface); margin-bottom: 6px; font-size: 12px;
+    }
+    .track-row.playing { background: #1f6b3a44; }
+    .track-row .track-name { flex: 1 1 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .track-row input[type="range"] { flex: 1 1 auto; min-width: 0; }
+    .track-row button { padding: 5px 8px; font-size: 12px; flex-shrink: 0; line-height: 1; }
+    #addTrackForm { margin-top: 10px; border-top: 1px solid #3a3a45; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    #addTrackForm label { font-size: 11px; opacity: 0.7; }
+    #addTrackForm input, #addTrackForm select {
+      background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px; padding: 6px 8px; font-size: 12px;
+    }
+    #addTrackMsg { font-size: 12px; color: #e74c3c; min-height: 14px; }
+
+    /* ---- лог бросков кубов: правый верхний угол, поверх канваса ----
+       Сами кнопки броска теперь в меню громкости справа (см. audio.js —
+       туда JS-ом монтируется .dice-controls-menu), здесь только результаты. */
+    #diceLog {
+      position: absolute; right: 10px; top: 10px; z-index: 5; width: 220px;
+      background: rgba(38,38,47,0.92); border-radius: 8px; padding: 8px; font-size: 12px;
+      max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; opacity: 0.85;
+    }
+    #diceLog:empty { display: none; } /* не занимать место, пока не было ни одного броска */
+    .dice-log-row { font-size: 11px; }
+
+    /* ---- кнопки/поле броска кубов — содержимое монтируется JS-ом
+       (dm.js) внутрь меню громкости справа от канваса, см. audio.js ---- */
+    .dice-controls-menu { display: flex; flex-direction: column; gap: 6px; }
+    .dice-controls-menu .dice-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
+    .dice-controls-menu .dice-buttons button { padding: 4px 7px; font-size: 11px; }
+    .dice-controls-menu .dice-custom { display: flex; gap: 4px; }
+    .dice-controls-menu .dice-custom input {
+      flex: 1 1 auto; min-width: 0; background: #1c1c24; border: 1px solid #3a3a45; color: #eee;
+      border-radius: 6px; padding: 4px 6px; font-size: 11px;
+    }
+
+    /* ---- экран "не удалось подключиться" ---- */
+    #authFailedOverlay {
+      display: none; position: fixed; inset: 0; z-index: 50; background: rgba(10,10,14,0.92);
+      align-items: center; justify-content: center; text-align: center; color: #eee; font-size: 14px; padding: 20px;
+    }
+    #authFailedOverlay.open { display: flex; }
+  </style>
+</head>
+<body>
+  <div id="appBody">
+    <!-- ---- узкая иконка-панель слева ---- -->
+    <nav id="rail" class="glass-rail">
+      <div class="rail-top">
+        <button class="rail-btn" id="sceneSwitchBtn" data-section="scene" title="Сцена"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></span></button>
+        <button class="rail-btn" id="sceneSettingsBtn" data-section="sceneSettings" title="Настроить сцену"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/></svg></span></button>
+        <button class="rail-btn" id="railAssets" data-section="assets" title="Ассеты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5.5-5.5L9 17"/></svg></span></button>
+        <button class="rail-btn" id="railTools" data-section="tools" title="Инструменты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 7.4a4.3 4.3 0 01-5.9 4L7 18.2 4.8 16l6.8-7.7a4.3 4.3 0 014-5.9l-3 3 1.4 1.4z"/></svg></span></button>
+        <button class="rail-btn" id="railLight" data-section="light" title="Освещение"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg></span></button>
+        <button class="rail-btn" id="combatBtn" data-section="combat" title="Трекер инициативы"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg></span></button>
+        <div class="rail-sep"></div>
+        <button class="rail-btn" id="charactersBtn" data-section="characters" title="Персонажи"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg></span></button>
+        <button class="rail-btn" id="notesBtn" data-section="notes" title="Заметки"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h11a2 2 0 012 2v13a2 2 0 01-2 2H8a2 2 0 01-2-2V3z"/><path d="M6 3a2 2 0 00-2 2v13a2 2 0 002 2"/><line x1="9" y1="8" x2="16" y2="8"/><line x1="9" y1="12" x2="16" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></span></button>
+        <button class="rail-btn" id="lootBtn" data-section="loot" title="Хаб лута"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg></span></button>
+        <button class="rail-btn" id="playlistsBtn" data-section="playlists" title="Аудио / плейлисты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg></span></button>
+      </div>
+      <div class="rail-bottom">
+        <button class="rail-btn" id="worldsBtn" title="Миры — переключить или создать другой стол"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 010 18 14 14 0 010-18z"/></svg></span></button>
+        <button class="rail-btn" id="accountsBtn" data-section="accounts" title="Аккаунты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z"/><circle cx="12" cy="10" r="2.1"/><path d="M9 15.4c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg></span><span id="accountsBadge">0</span></button>
+        <button class="rail-btn" id="settingsBtn" data-section="settings" title="Настройки"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg></span></button>
+        <button class="rail-btn" id="logoutBtn" title="Выйти"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span></button>
+      </div>
+    </nav>
+
+    <!-- ---- выезжающая секция с содержимым текущего раздела ---- -->
+    <aside id="panel">
+      <section class="panel-section" data-panel="scene">
+        <header class="panel-header">
+          <h3>Сцена</h3>
+          <div class="panel-header-actions">
+            <button id="sceneCreateBtn" class="panel-add-btn" type="button" title="Новая сцена"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Сцена</button>
+            <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+          </div>
+        </header>
+        <div class="panel-body" style="padding: 8px;">
+          <div id="sceneDropdown"></div>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="assets">
+        <header class="panel-header">
+          <h3>Ассеты</h3>
+          <div class="panel-header-actions">
+            <button id="assetsNewFolderBtn" class="panel-add-btn" type="button" title="Новая папка в текущем разделе библиотеки"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2.5h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/><line x1="12" y1="11.5" x2="12" y2="16.5"/><line x1="9.5" y1="14" x2="14.5" y2="14"/></svg> Папка</button>
+            <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+          </div>
+        </header>
+        <div class="panel-body">
+          <div class="field-block">
+            <span class="field-label">Загрузить в текущую папку</span>
+            <input type="file" id="assetUpload" accept="image/*,video/mp4,video/webm" multiple title="Картинка или mp4/webm — анимированный арт (зациклен на карте)" />
+          </div>
+          <div id="assetsBreadcrumb" class="assets-breadcrumb"></div>
+          <div id="assetsGrid" class="assets-grid"></div>
+          <p class="hint">Ассеты карты (костры, бочки, лодки и т.п.) — перетащи карточку на карту, чтобы поставить как токен. ПКМ на токене на карте → форма/скрыт от игроков/источник света. У монстров и персонажей свой токен-арт — в их собственных карточках.</p>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="tools">
+        <header class="panel-header"><h3>Инструменты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <button id="attackBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="16" y2="8"/><line x1="14" y1="6" x2="18" y2="10"/><line x1="12" y1="4" x2="20" y2="12"/></svg> Атака</button>
+          <button id="wallBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="10"/><line x1="15" y1="5" x2="15" y2="10"/><line x1="6" y1="10" x2="6" y2="15"/><line x1="12" y1="10" x2="12" y2="15"/><line x1="18" y1="10" x2="18" y2="15"/><line x1="9" y1="15" x2="9" y2="19"/><line x1="15" y1="15" x2="15" y2="19"/></svg> Стены</button>
+          <button id="buildingBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11L12 4l8 7"/><path d="M6 10v10h12V10"/><rect x="10" y="14" width="4" height="6"/></svg> Здание</button>
+          <button id="fogBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01.4-8 5.5 5.5 0 0110.4 1A3.5 3.5 0 0117 16H7z"/><line x1="5" y1="19" x2="19" y2="19"/></svg> Туман</button>
+          <button id="rulerBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg> Линейка</button>
+          <div class="section-divider"></div>
+          <p class="hint">Линейка — ЛКМ и тяни, отпустил — замер исчезает; расстояние в единицах текущей сетки (см. настройки сцены → сетка). Стены рисуются цепочкой: клик — точка, клик — следующий сегмент от неё; Esc/двойной клик/ПКМ — закончить. Точки рядом друг с другом прилипают, образуя ровный угол. В инструменте "выбор" точку можно перетащить — двигаются сразу все стены её угла. Здание — та же цепочка, но обязательно замкнутая: клик рядом со стартовой точкой (она увеличивается, когда точек уже достаточно) замыкает контур и сохраняет здание; Esc/двойной клик/ПКМ до замыкания — отмена без сохранения. Замкнутое здание скрывает у игроков всё, что внутри контура, непрозрачной "крышей" — снимается целиком, как только внутрь заходит видимый токен; ПКМ внутри контура — удалить здание. ЛКМ таскает · ПКМ на точке стены — меню "удалить точку" · ПКМ на самой стене — удалить её целиком · ПКМ на токене/тумане — меню/удалить · средняя кнопка — пан · колесо — зум</p>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="light">
+        <header class="panel-header"><h3>Освещение</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <button id="addLightToken" class="primary-btn" title="Добавляет на карту невидимый токен-источник света без арта — перетащи, где нужно, радиусы можно поправить через ПКМ → меню токена"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> + Токен света</button>
+          <p class="hint">Токен без арта, только источник света. Позицию и радиусы правь через ПКМ на токене.</p>
+          <div class="section-divider"></div>
+          <button id="globalLightBrightBtn" class="tool-btn" title="Залить всю карту ярким светом — как будто глобальный день"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.6" y1="4.6" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.4" y2="19.4"/><line x1="4.6" y1="19.4" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.4" y2="4.6"/></svg> Свет на карту</button>
+          <button id="globalLightDimBtn" class="tool-btn" title="Залить всю карту тусклым светом — вполовину слабее яркого"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1110 3.8a7 7 0 0010 10.7z"/></svg> Тусклый свет на карту</button>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="combat">
+        <header class="panel-header">
+          <h3>Трекер инициативы</h3>
+          <div style="display:flex;gap:2px;">
+            <button class="panel-close" id="combatPopoutBtn" title="Открыть в окне поверх карты"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v16h16v-5"/><path d="M13 4h7v7"/><line x1="10" y1="14" x2="20" y2="4"/></svg></button>
+            <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+          </div>
+        </header>
+        <div class="panel-body">
+          <div id="combatHeaderRow">
+            <button id="combatStartBtn" class="primary-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg> Начать бой</button>
+            <button id="combatEndBtn" class="tool-btn" style="display:none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg> Завершить бой</button>
+            <div id="combatRoundRow" style="display:none;">
+              <button id="combatPrevBtn" title="Предыдущий ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg></button>
+              <span id="combatRoundLabel">Раунд 1</span>
+              <button id="combatNextBtn" title="Следующий ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></button>
+            </div>
+          </div>
+          <div class="section-divider"></div>
+          <button id="combatAddBtn" class="tool-btn">+ Добавить</button>
+          <div id="combatSearchWrap" style="display:none;">
+            <input type="text" id="combatSearch" placeholder="🔍 Поиск по бестиарию/персонажам…" autocomplete="off" />
+            <div id="combatSearchResults"></div>
+          </div>
+          <div class="section-divider"></div>
+          <div id="combatList"></div>
+          <p class="hint">Существ и персонажей можно добавить и через ПКМ на токене на карте → «⚔️ Добавить в инициативу». Боец без токена (добавлен через «+ Добавить») — перетащи его карточку из списка ниже на карту, чтобы поставить токен. Инициатива считается автоматически (1к20 + модификатор Ловкости); правка вручную — без переброски. КД и HP подтягиваются из листа/статблока и правятся вручную; видит их и правит только ДМ.</p>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="sceneSettings">
+        <header class="panel-header"><h3>Настроить сцену</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <div class="modal-tabs">
+            <button data-tab="basic" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/></svg> Основное</button>
+            <button data-tab="bg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5.5-5.5L9 17"/></svg> Фон</button>
+            <button data-tab="audio"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg> Аудио</button>
+            <button data-tab="grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg> Сетка</button>
+          </div>
+
+          <div class="modal-tab-panel active" data-panel="basic">
+            <div class="field"><label>Название</label><input type="text" id="fName" /></div>
+            <div class="field"><label>Ширина (px)</label><input type="number" id="fWidth" min="1" step="1" /></div>
+            <div class="field"><label>Высота (px)</label><input type="number" id="fHeight" min="1" step="1" /></div>
+            <button id="fitToBgBtn" class="tool-btn" title="Подогнать размер холста под фон"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg> Под фон</button>
+            <div class="checkbox-row"><label><input type="checkbox" id="fFogOfWar" /> Туман войны — скрывает неисследованные области карты от игроков</label></div>
+          </div>
+
+          <div class="modal-tab-panel" data-panel="bg">
+            <div id="bgPreview">нет фона</div>
+            <div class="field"><label>URL фона (картинка или mp4/webm)</label><input type="text" id="fMapUrl" placeholder="/uploads/maps/..." /></div>
+            <div class="modal-section-title">Библиотека загруженных карт</div>
+            <div id="assetTableWrap" class="asset-list"></div>
+            <div class="field"><label>Загрузить новую</label><input type="file" id="bgUpload" accept="image/*,video/mp4,video/webm" /></div>
+            <div class="hint">Поддерживаются mp4/webm — анимированный фон карты, зациклен, звук из видео включается по клику «Включить звук» вместе с амбиентом.</div>
+          </div>
+
+          <div class="modal-tab-panel" data-panel="audio">
+            <div class="field"><label>URL трека-амбиента</label><input type="text" id="fAmbientUrl" placeholder="/uploads/audio/..." /></div>
+            <div class="modal-section-title">Библиотека загруженных треков</div>
+            <div id="audioAssetTableWrap" class="asset-list"></div>
+            <div class="field"><label>Загрузить новый</label><input type="file" id="ambientUpload" accept="audio/*" /></div>
+            <div class="field">
+              <label>Громкость: <span id="fAmbientVolumeLabel">60%</span></label>
+              <input type="range" id="fAmbientVolume" min="0" max="100" step="1" />
+            </div>
+            <div class="hint">Трек всегда зациклен и стартует у всех (ДМ, TV, игроки) при открытии этой сцены. Пустой URL — амбиента нет.</div>
+          </div>
+
+          <div class="modal-tab-panel" data-panel="grid">
+            <div class="field"><label>Размер клетки (px)</label><input type="number" id="fGridSize" min="0" step="1" /></div>
+            <button id="gridEditorBtn" class="tool-btn" title="Редактировать сетку прямо на карте"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg> Редактор сетки на карте</button>
+            <div class="field"><label>Смещение X</label><input type="number" id="fGridOffX" step="1" /></div>
+            <div class="field"><label>Смещение Y</label><input type="number" id="fGridOffY" step="1" /></div>
+            <div class="checkbox-row"><label><input type="checkbox" id="fGridVisible" /> Показать сетку</label></div>
+            <div class="field"><label>Единиц в клетке</label><input type="number" id="fUnitsPerCell" min="0" step="0.5" /></div>
+            <div class="field">
+              <label>Единица измерения</label>
+              <select id="fUnit">
+                <option value="ft">Футы (ft)</option>
+                <option value="m">Метры (m)</option>
+                <option value="sq">Клетки (sq)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Цвет линий</label>
+              <div class="color-row">
+                <input type="color" id="fGridColorPicker" />
+                <input type="text" id="fGridColor" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Прозрачность: <span id="fGridOpacityLabel">50%</span></label>
+              <input type="range" id="fGridOpacity" min="0" max="100" step="1" />
+            </div>
+            <div class="hint">0 в "Размер клетки" — выключить прилипание токенов к сетке. "Показать сетку" — отдельно от размера: сетка может работать, но не рисоваться.</div>
+          </div>
+
+          <div class="section-divider"></div>
+          <button id="modalSaveBtn" class="primary-btn">Сохранить изменения</button>
+          <button id="sceneDeleteBtn" class="tool-btn" title="Удалить текущую сцену"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить эту сцену</button>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="accounts">
+        <header class="panel-header"><h3>Аккаунты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <div id="accountsList"></div>
+          <div class="section-divider"></div>
+          <form id="newAccountForm">
+            <div class="field"><label>Логин</label><input type="text" id="newAccUsername" required /></div>
+            <div class="field"><label>Пароль</label><input type="text" id="newAccPassword" required /></div>
+            <div class="field">
+              <label>Роль</label>
+              <select id="newAccRole">
+                <option value="player">Игрок</option>
+                <option value="admin">ДМ</option>
+              </select>
+            </div>
+            <button type="submit" class="primary-btn">+ Создать аккаунт</button>
+            <div id="newAccountMsg"></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="settings">
+        <header class="panel-header"><h3>Настройки</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <div class="field-block">
+            <span class="field-label">Версия</span>
+            <span id="appVersion">…</span>
+          </div>
+          <div class="section-divider"></div>
+          <div class="field-block">
+            <div class="checkbox-row"><label><input type="checkbox" id="combatShowHpToggle" /> Показывать HP в верхней панели хода — игрокам и на TV</label></div>
+            <p class="hint">ДМ видит HP в трекере и в верхней панели всегда — переключатель влияет только на то, что видят игроки и экран TV.</p>
+          </div>
+          <div class="field-block">
+            <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить игрокам лутить убитых монстров</label></div>
+            <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах (костях) недоступен игрокам — только ДМ.</p>
+          </div>
+          <p class="hint">Раздел общих настроек приложения — здесь появятся будущие опции, не привязанные к конкретной сцене.</p>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="characters">
+        <header class="panel-header"><h3>Персонажи</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <p class="hint">Персонажи всех игроков. Перетащи на карту — поставит токен с именем/артом и владельцем. 📜 открывает лист (можно править), ✎ — имя/аватар.</p>
+          <div id="dmCharactersList"></div>
+          <div id="dmCharEditForm" style="display:none;">
+            <div class="section-divider"></div>
+            <div class="field-block">
+              <span class="field-label">Имя</span>
+              <input type="text" id="dmCharEditName" />
+            </div>
+            <div class="field-block">
+              <span class="field-label">Аватар / токен-арт</span>
+              <input type="file" id="dmCharEditAvatarUpload" accept="image/*,video/mp4,video/webm" />
+            </div>
+            <div id="dmCharEditPreviewWrap" style="display:none;">
+              <img id="dmCharEditPreview" style="max-width:100%;border-radius:8px;" />
+              <video id="dmCharEditPreviewVideo" muted loop autoplay playsinline style="display:none;max-width:100%;border-radius:8px;"></video>
+            </div>
+            <div id="dmCharEditMsg" class="hint"></div>
+            <button id="dmCharEditSaveBtn" class="primary-btn">Сохранить</button>
+            <button id="dmCharEditCancelBtn" class="tool-btn">Отмена</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="notes">
+        <header class="panel-header"><h3>Заметки</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <div id="noteListView">
+            <input type="text" id="noteSearch" placeholder="🔍 Поиск по заголовку…" />
+            <div id="noteRows" class="note-rows"></div>
+            <form id="newNoteForm">
+              <input type="text" id="newNoteTitle" placeholder="Название новой заметки" maxlength="120" />
+              <button type="submit" title="Создать заметку">+</button>
+            </form>
+          </div>
+
+          <div id="noteDetailView" style="display:none;">
+            <div class="note-detail-header">
+              <button id="noteBackBtn" class="note-icon-btn" title="Все заметки"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg></button>
+              <span id="noteDetailTitle" class="note-detail-title">—</span>
+              <div class="note-detail-icons">
+                <button id="noteEditToggleBtn" class="note-icon-btn" title="Редактировать"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/></svg></button>
+                <button id="notePlaceBtn" class="note-icon-btn" title="Поставить значок этой заметки на карту"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.9-6.5-10.5a6.5 6.5 0 0113 0C18.5 15.1 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg></button>
+                <button id="noteWindowBtn" class="note-icon-btn" title="Открыть в окне поверх карты"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v16h16v-5"/><path d="M13 4h7v7"/><line x1="10" y1="14" x2="20" y2="4"/></svg></button>
+                <button id="noteDeleteBtn" class="note-icon-btn note-icon-danger" title="Удалить заметку безвозвратно"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+              </div>
+            </div>
+            <div id="noteRenderView" class="note-render"></div>
+            <div id="noteEditView" style="display:none;">
+              <div id="noteToolbar" class="note-toolbar"></div>
+              <textarea id="noteEditArea" placeholder="# Заголовок&#10;&#10;markdown, [[Другая заметка]] — вики-ссылка…"></textarea>
+              <button id="noteSaveBtn" class="primary-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg> Сохранить</button>
+            </div>
+            <div id="noteMsg"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="loot">
+        <header class="panel-header"><h3>Хаб лута</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <p class="hint">Скидывай сюда предметы из каталога — игроки сами заберут их себе через кнопку «Хаб» на своём экране.</p>
+          <div id="lootHubPicker"></div>
+          <div class="section-divider"></div>
+          <div id="lootHubRows"></div>
+        </div>
+      </section>
+
+      <section class="panel-section" data-panel="playlists">
+        <header class="panel-header"><h3>Плейлисты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <div class="panel-body">
+          <p class="hint">Отдельный канал ДМ — играет поверх амбиента сцены, не прерывая его.</p>
+          <div id="nowPlayingBar">
+            <span id="nowPlayingLabel">Ничего не играет</span>
+            <label class="hint volume-row" style="max-width:none;display:flex;align-items:center;" title="Громкость канала ДМ"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8a5 5 0 010 8"/></svg><input type="range" id="cueVolumeSlider" min="0" max="100" /></label>
+            <button id="cueStopBtn" title="Остановить канал ДМ"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> Стоп</button>
+          </div>
+
+          <div id="playlistListView">
+            <div id="playlistRows"></div>
+            <form id="newPlaylistForm">
+              <input type="text" id="newPlaylistName" placeholder="Новый плейлист" maxlength="60" />
+              <button type="submit">+</button>
+            </form>
+          </div>
+
+          <div id="playlistTracksView" style="display:none;">
+            <button id="playlistBackBtn" class="tool-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg> Все плейлисты</button>
+            <h3 id="trackPanelTitle">—</h3>
+            <div id="trackList"></div>
+            <form id="addTrackForm">
+              <div class="field"><label>Имя трека</label><input type="text" id="newTrackName" maxlength="60" /></div>
+              <div class="field"><label>Загрузить файл</label><input type="file" id="newTrackUpload" accept="audio/*" /></div>
+              <div class="field"><label>или из библиотеки</label><select id="newTrackLibrary"><option value="">— выбрать —</option></select></div>
+              <div class="field"><label>Громкость</label><input type="range" id="newTrackVolume" min="0" max="100" value="80" /></div>
+              <label style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="newTrackLoop" /> зациклен</label>
+              <button type="submit" class="primary-btn">+ Добавить трек</button>
+            </form>
+            <div id="addTrackMsg"></div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <div id="canvasWrap">
+      <canvas id="scene"></canvas>
+      <div id="statusBar">
+        <span id="sceneSwitchName">Сцена</span>
+        <span class="status-sep">·</span>
+        <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg> игроков онлайн: 0</span>
+        <span class="status-sep">·</span>
+        <span id="dmUsername"></span>
+      </div>
+      <div id="zoomHud">
+        <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        <button id="zoomResetBtn" title="Сбросить вид"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>
+        <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      </div>
+      <div id="diceLog"></div>
+    </div>
+  </div>
+
+  <div id="tokenMenu">
+    <div id="tokenMenuLightHeader"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> Источник света</div>
+    <button id="tokenMenuSheetBtn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h11a2 2 0 012 2v13a2 2 0 01-2 2H8a2 2 0 01-2-2V3z"/><path d="M6 3a2 2 0 00-2 2v13a2 2 0 002 2"/><line x1="9" y1="8" x2="16" y2="8"/><line x1="9" y1="12" x2="16" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg> Лист персонажа</button>
+    <button id="tokenMenuBestiaryBtn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5c-1.8-1.3-4-2-6.5-2-1 0-2 .1-3 .4v13.6c1-.3 2-.4 3-.4 2.5 0 4.7.7 6.5 2 1.8-1.3 4-2 6.5-2 1 0 2 .1 3 .4V4.9c-1-.3-2-.4-3-.4-2.5 0-4.7.7-6.5 2z"/><line x1="12" y1="6.5" x2="12" y2="19.9"/></svg> Статблок</button>
+    <button id="tokenMenuAddInitiativeBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg> Добавить в инициативу</button>
+    <button id="tokenMenuLootBtn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg> Лутить</button>
+    <label id="tokenMenuHiddenRow"><input type="checkbox" id="tokenMenuHidden" /> скрыт от игроков</label>
+    <label id="tokenMenuShapeRow">Форма: <select id="tokenMenuShape">
+      <option value="circle">○ Круг</option>
+      <option value="square">▢ Квадрат (без обрезки)</option>
+    </select></label>
+    <label id="tokenMenuLightRow"><input type="checkbox" id="tokenMenuLight" /> <span id="tokenMenuLightLabel">источник света</span></label>
+    <label id="tokenMenuLightBrightField" class="light-field" title="Радиус яркого света в единицах линейки сцены (по умолчанию фт, см. настройку сетки) — 0: без яркого ядра, только тусклая кайма">
+      ярк. <input type="number" id="tokenMenuLightBright" min="0" step="5" value="0" />
+    </label>
+    <label id="tokenMenuLightDimField" class="light-field" title="Радиус тусклого света в единицах линейки сцены (по умолчанию фт) — дальняя граница, видно приглушённо">
+      тускл. <input type="number" id="tokenMenuLightDim" min="0" step="5" value="0" />
+    </label>
+    <button id="tokenMenuLightToggleBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> Включить свет</button>
+    <button id="tokenMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить токен</button>
+  </div>
+
+  <div id="wallPointMenu">
+    <button id="wallPointMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить точку стены</button>
+  </div>
+
+  <div id="noteMarkerMenu">
+    <button id="noteMarkerResizeBtn" title="Дальше потяни за значок на карте — тащишь от него дальше, он растёт, ближе — уменьшается"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg> Изменить размер</button>
+    <button id="noteMarkerDeleteBtn" title="Не удаляет саму заметку — только значок с карты"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Убрать со сцены</button>
+  </div>
+
+  <div id="authFailedOverlay">
+    <div>Сессия истекла или недействительна. Сейчас перекинем на вход…</div>
+  </div>
+
+  <button id="gridEditDone"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg> Готово — красный квадрат тащит сетку, его край меняет размер клетки</button>
+
+  <script type="module" src="/src/pages/dm.js"></script>
+</body>
+</html>

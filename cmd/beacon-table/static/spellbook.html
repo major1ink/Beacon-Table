@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beacon Table — Заклинание</title>
+  <style>
+    /* Та же палитра/база, что bestiary.html/character-sheet.html — единая "бумага" для карточек. */
+    :root { --radius: 8px; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12.5px; display: flex; flex-direction: column;
+    }
+    button { cursor: pointer; border: none; border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+    button:hover { background: var(--surface-hover); }
+    input, textarea, select {
+      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 5px; padding: 4px 6px; font: inherit; width: 100%;
+    }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+    label.field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); }
+    label.field > span { padding-left: 1px; }
+    textarea { resize: vertical; min-height: 60px; font-family: inherit; line-height: 1.4; }
+    label.check-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
+    label.check-row input[type="checkbox"] { width: auto; }
+
+    #topBar {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+      border-bottom: 1px solid var(--border); background: var(--panel-bg); flex-wrap: wrap;
+    }
+    #spellTitle { font-weight: 700; font-size: 15px; margin-right: auto; }
+    #saveStatus { font-size: 11px; color: var(--text-dim); min-width: 90px; text-align: right; }
+    #saveStatus.saving { color: var(--amber); }
+    #saveStatus.error { color: #e74c3c; }
+    #closeBtn, #editToggleBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
+    #editToggleBtn.active { background: var(--accent); color: #fff; }
+    /* .sys-pill/#cloneBtn — карточка каталога "из коробки" (domain.Spell.
+       System, см. internal/repository/spellfile/system.go): вместо ✎ —
+       бейдж "только чтение" и кнопка "Клонировать" (см. spellbook.js: boot). */
+    .sys-pill { font-size: 10.5px; color: var(--amber); background: rgba(165,115,15,0.16); border-radius: var(--radius-pill); padding: 3px 10px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+    #cloneBtn { display: none; align-items: center; gap: 6px; padding: 4px 10px; font-size: 11px; white-space: nowrap; }
+    #cloneBtn.visible { display: inline-flex; }
+
+    #loadingHint { padding: 24px; opacity: 0.6; }
+    #app { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: none; padding: 16px; }
+    #app.ready { display: block; }
+
+    .section {
+      background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 10px 12px; margin-bottom: 10px;
+    }
+    .section > h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > * { flex: 1 1 120px; }
+    .checkbox-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+
+    .tag-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .tag-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--surface); border-radius: 12px; padding: 2px 8px 2px 10px; font-size: 11px; }
+    .tag-pill button { background: none; padding: 0 2px; color: var(--text-dim); }
+    .tag-pill button:hover { color: #fff; background: var(--danger); border-radius: 50%; }
+
+    /* описание: textarea markdown/HTML слева, живой рендер справа */
+    .md-block { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .md-block textarea { min-height: 160px; font-size: 12px; }
+    .md-render { font-size: 12.5px; line-height: 1.55; background: var(--surface); border-radius: 8px; padding: 8px 10px; overflow-wrap: break-word; }
+    .md-render:empty::before { content: "—"; opacity: 0.4; }
+    .md-render p { margin: 0.4em 0; }
+    .md-render strong { color: #fff; }
+
+    /* импорт из TTG Club */
+    #importSection .hint { font-size: 11px; opacity: 0.65; margin: 0 0 8px; line-height: 1.5; }
+    #importMsg { font-size: 11px; margin-top: 6px; min-height: 14px; }
+    #importMsg.error { color: #e74c3c; }
+    #importMsg.ok { color: #6fbf73; }
+    #importTextarea { min-height: 70px; font-family: monospace; font-size: 11px; margin-top: 6px; }
+    #importBtn { margin-top: 6px; }
+
+    /* ---- read-режим: аккуратная карточка вместо формы (см. spellbook.js: renderReadView) ---- */
+    .sb-header-text { margin-bottom: 4px; }
+    .sb-name { margin: 0 0 2px; font-size: 21px; font-weight: 700; color: #fff; }
+    .sb-subtitle { font-style: italic; color: var(--text-dim); font-size: 12.5px; }
+    .sb-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+    .sb-tag-pill { background: var(--surface); border-radius: 10px; padding: 1px 8px; font-size: 10.5px; color: var(--text-dim); }
+
+    .sb-hr { height: 2px; background: linear-gradient(to right, var(--accent), transparent 85%); margin: 14px 0; border-radius: 2px; opacity: 0.7; }
+
+    .sb-info { display: flex; flex-direction: column; gap: 3px; }
+    .sb-line { font-size: 13px; line-height: 1.55; }
+    .sb-line strong { color: #fff; font-weight: 600; }
+
+    .inline-roll { color: var(--accent); text-decoration: none; border-bottom: 1px dashed var(--accent); cursor: pointer; font-weight: 600; }
+    .inline-roll:hover { color: #fff; background: var(--accent); border-radius: 3px; border-bottom-color: transparent; }
+    .catalog-ref { color: var(--blue); text-decoration: none; border-bottom: 1px solid var(--blue); cursor: pointer; font-weight: 600; }
+    .catalog-ref:hover { color: #fff; background: var(--blue); border-radius: 3px; border-bottom-color: transparent; }
+
+    .sb-block { margin: 14px 0; }
+    .sb-section-title { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .sb-prose { font-size: 13px; line-height: 1.6; }
+    .sb-prose p { margin: 0.5em 0; }
+    .sb-prose p:first-child { margin-top: 0; }
+    .sb-prose p:last-child { margin-bottom: 0; }
+    .sb-prose strong { color: #fff; }
+
+    #rollLogWrap { border-top: 1px solid var(--border); background: var(--panel-bg); padding: 6px 12px; max-height: 22vh; overflow-y: auto; flex: 0 0 auto; }
+    #rollLogWrap.hidden { display: none; }
+    .dice-log-row { font-size: 11px; padding: 1px 0; }
+  </style>
+  <script type="module" crossorigin src="/assets/spellbook-CNIQ7kVA.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-WLhJmSR7.js">
+  <link rel="modulepreload" crossorigin href="/assets/icons-3nongrBp.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-D4FZCO_d.js">
+  <link rel="modulepreload" crossorigin href="/assets/spell-import-C3bxU7BH.js">
+  <link rel="modulepreload" crossorigin href="/assets/inline-rolls-CpGUepvd.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CFKxqnGS.js">
+  <link rel="stylesheet" crossorigin href="/assets/theme-DX4UEURW.css">
+</head>
+<body>
+  <div id="topBar">
+    <span id="spellTitle">—</span>
+    <span id="saveStatus"></span>
+    <button id="cloneBtn" type="button" title="Скопировать в библиотеку для редактирования"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 15V5a2 2 0 012-2h10"/></svg> Клонировать</button>
+    <button id="editToggleBtn" type="button" title="Редактировать"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/></svg></button>
+    <button id="closeBtn" type="button" title="Закрыть"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+  </div>
+  <div id="loadingHint">Загрузка…</div>
+  <div id="app"></div>
+  <div id="rollLogWrap" class="hidden"><div id="rollLog"></div></div>
+
+</body>
+</html>

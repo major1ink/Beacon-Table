@@ -1,0 +1,275 @@
+/* theme.css — общие токены и переиспользуемые классы для всех страниц.
+   Подключается через <link rel="stylesheet" href="/src/styles/theme.css">
+   ПЕРЕД page-специфичным <style> в каждом HTML (см. план редизайна) —
+   так локальные переопределения в самой странице остаются возможны.
+   Палитра идентичности не меняется (акцент — фиолетовый, зелёный — для
+   подтверждающих/создающих действий), меняется форма: стекло, скругления,
+   тени — под референс плавающего UI. */
+
+:root {
+  --bg: #131318;
+  --rail-bg: #191921;
+  --panel-bg: #1c1c25;
+  --surface: #26262f;
+  --surface-hover: #303039;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #eee;
+  --text-dim: rgba(238, 238, 238, 0.55);
+
+  --accent: #7c6cf0;
+  --accent-hover: #6a5ae0;
+  --accent-bg: rgba(124, 108, 240, 0.16);
+
+  --danger: #6b2b2b;
+  --danger-hover: #8a3535;
+  --green: #1f6b3a;
+  --green-hover: #24803f;
+  --green-bright: #7fd694;
+  --gold: #b5891f;
+  --amber: #a5730f;
+  --blue: #3a5a8a;
+
+  --radius: 10px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  /* стекло — плавающий рейл/панели/оверлеи поверх канваса */
+  --glass-bg: rgba(26, 26, 34, 0.74);
+  --glass-bg-strong: rgba(22, 22, 29, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-blur: blur(20px) saturate(150%);
+
+  --shadow-float: 0 16px 40px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.3);
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --ring-accent: 0 0 0 3px rgba(124, 108, 240, 0.35);
+}
+
+/* ---- скроллбар — тонкий и тёмный вместо системного, везде одинаковый ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--surface-hover) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--surface-hover); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #3c3c48; background-clip: padding-box; }
+
+/* ---- .glass-rail / .glass-panel — плавающая, отделённая от краёв экрана
+   "стеклянная" поверхность (blur + мягкая тень) для навигации и панелей
+   поверх канваса, вместо докинга во всю высоту вплотную к краю ---- */
+.glass-rail {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-float);
+}
+
+.glass-panel {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+}
+
+/* ---- .rail-btn — единая иконка-кнопка вертикального рейла ---- */
+.rail-btn {
+  position: relative;
+  width: 42px; height: 42px; border-radius: 13px;
+  background: transparent; border: none; color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer; transition: background .12s ease, color .12s ease;
+}
+.rail-btn .rail-icon { display: flex; }
+.rail-btn svg { display: block; }
+.rail-btn:hover { background: var(--surface); color: var(--text); }
+.rail-btn.active { background: var(--accent-bg); color: var(--accent); }
+
+/* ---- .icon-btn — маленькая квадратная кнопка-иконка (закрыть/действие) ---- */
+.icon-btn {
+  width: 28px; height: 28px; border-radius: 9px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; color: var(--text-dim); cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.icon-btn svg { display: block; }
+.icon-btn:hover { background: var(--surface); color: var(--text); }
+.icon-btn.danger:hover { background: var(--danger); color: #fff; }
+
+/* ---- .panel-add-btn — зелёная текстовая кнопка "+ Название" в шапке
+   панели (создание сцены/заметки/трека и т.п.), как на референсе ---- */
+.panel-add-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; color: var(--green-bright);
+  font: inherit; font-weight: 600; font-size: 12.5px; padding: 4px 6px;
+  border-radius: 7px; cursor: pointer; transition: background .12s ease;
+}
+.panel-add-btn svg { display: block; }
+.panel-add-btn:hover { background: rgba(127, 214, 148, 0.14); }
+
+/* ---- .row-card — базовая строка списка (сцены/заметки/персонажи/бестиарий
+   и т.п.) — общий фон/hover/radius, дальше по месту добавляются свои
+   модификаторы (.active, статус-бейджи) ---- */
+.row-card {
+  display: flex; align-items: center; gap: 8px;
+  border-radius: 12px; background: var(--surface);
+  border: 1px solid transparent;
+  transition: background .12s ease, border-color .12s ease;
+}
+.row-card:hover { background: var(--surface-hover); }
+
+/* ---- .drag-handle — декоративная "хватка" слева строки, как на референсе
+   (реального drag-reorder нет — только визуальный язык) ---- */
+.drag-handle {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 16px; color: var(--text-dim); opacity: 0.6; cursor: default;
+}
+.drag-handle svg { display: block; }
+
+/* ---- .pill-badge — статус-бейдж (видимость сцены, CR/уровень/редкость,
+   каталог "из коробки" и т.п.) ---- */
+.pill-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; line-height: 1; white-space: nowrap;
+  background: rgba(0, 0, 0, 0.25); color: var(--text-dim);
+  border-radius: var(--radius-pill); padding: 3px 9px;
+}
+.pill-badge svg { display: block; }
+.pill-badge.gold { color: var(--gold); background: rgba(181, 137, 31, 0.16); }
+.pill-badge.on { color: var(--green-bright); background: rgba(31, 107, 58, 0.22); }
+
+/* ---- .item-picker — поиск по каталогу предметов + количество + добавить
+   (см. web/src/item-picker.js) — используется в инвентаре персонажа,
+   инвентаре монстра (бестиарий) и хабе лута ДМ ---- */
+.item-picker-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.item-picker-search {
+  flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font: inherit; padding: 7px 10px;
+}
+.item-picker-qty {
+  width: 56px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font: inherit; padding: 7px 6px; text-align: center;
+}
+.item-picker-results { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.item-picker-result {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 9px; background: var(--surface);
+}
+.item-picker-result:hover { background: var(--surface-hover); }
+.item-picker-avatar {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px;
+  background: var(--surface-hover) center/cover no-repeat;
+}
+.item-picker-name { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-picker-add {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--green); border: none; color: #fff; cursor: pointer;
+}
+.item-picker-add:hover { background: var(--green-hover); }
+.item-picker-add svg { display: block; }
+
+/* ---- .loot-modal — окно "забрать предметы" (хаб ДМ / труп монстра), см.
+   web/src/loot-take-modal.js ---- */
+.loot-modal-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.loot-modal {
+  width: min(420px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 32px));
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
+  padding: 16px;
+}
+.loot-modal h2 {
+  margin: 0; font-size: 16px; display: flex; align-items: center; justify-content: space-between;
+}
+.loot-modal h2 button {
+  background: none; border: none; color: var(--text); cursor: pointer; padding: 0;
+  width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+}
+.loot-modal h2 button:hover { background: var(--surface); }
+.loot-modal-char-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); }
+.loot-modal-char-row select {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font: inherit; padding: 5px 8px;
+}
+.loot-modal-body { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.loot-modal-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 10px; background: var(--surface); }
+.loot-modal-avatar {
+  flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px;
+  background: var(--surface-hover) center/cover no-repeat;
+  display: flex; align-items: center; justify-content: center; color: var(--text-dim);
+}
+.loot-modal-info { flex: 1; min-width: 0; }
+.loot-modal-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loot-modal-meta { font-size: 11.5px; color: var(--text-dim); }
+.loot-modal-qty {
+  width: 48px; background: var(--surface-hover); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--text); font: inherit; padding: 5px 4px; text-align: center;
+}
+.loot-modal-take {
+  flex: 0 0 auto; background: var(--green); border: none; color: #fff;
+  border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.loot-modal-take:hover { background: var(--green-hover); }
+.loot-modal-take:disabled { opacity: 0.6; cursor: default; }
+
+/* ---- .compendium-* — дерево навигации панели "Компендиум" (см.
+   web/src/compendium-menu.js), монтируется в панель side-menu.js.addIcon.
+   Два уровня одинаковой формы: корень (Beacon Table/Пользовательские) и
+   вложенная группа "Снаряжение" — оба через collapsible() в JS, разница
+   только в отступе/размере шрифта. ---- */
+.compendium-tree { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+
+.compendium-panel-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 2px 2px 8px 6px; margin-bottom: 4px; border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 13px; color: var(--text);
+}
+
+.compendium-root-header, .compendium-group-header {
+  display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text); font: inherit; font-weight: 600;
+  padding: 7px 6px; border-radius: 8px; cursor: pointer;
+}
+.compendium-root-header { text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; color: var(--text-dim); }
+.compendium-root-header:hover, .compendium-group-header:hover { background: var(--surface); color: var(--text); }
+.compendium-chevron { display: flex; flex: 0 0 auto; transition: transform 0.12s ease; opacity: 0.7; }
+.compendium-root.open > .compendium-root-header .compendium-chevron,
+.compendium-group.open > .compendium-group-header .compendium-chevron { transform: rotate(90deg); }
+
+.compendium-root-body { display: flex; flex-direction: column; gap: 1px; padding: 2px 0 6px 4px; }
+.compendium-group { border-radius: 8px; }
+.compendium-group-body { display: flex; flex-direction: column; gap: 1px; padding: 2px 0 4px 16px; }
+
+.compendium-node {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text-dim); font: inherit;
+  padding: 6px 8px 6px 20px; border-radius: 8px; cursor: pointer;
+}
+.compendium-node:hover { background: var(--accent-bg); color: var(--text); }
+
+/* ---- .catalog-* — список одной категории компендиума (web/catalog.html /
+   pages/catalog.js) — общая форма строки вместо 4 копий (.spell-row/
+   .item-row/.dmchar-row) в старых панелях. ---- */
+.catalog-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 9px 6px 4px; border-radius: 12px; background: var(--surface); margin-bottom: 6px;
+}
+.catalog-row[draggable="true"] { cursor: grab; }
+.catalog-row[draggable="true"]:active { cursor: grabbing; }
+.catalog-avatar {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--surface-hover) center/cover no-repeat;
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--text-dim);
+}
+.catalog-name { flex: 1 1 auto; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.catalog-name:hover { color: var(--accent); }
+.catalog-badge { flex: 0 0 auto; font-size: 10px; opacity: 0.6; background: var(--bg); border-radius: 8px; padding: 1px 6px; }
+.catalog-sys-badge { flex: 0 0 auto; font-size: 10px; color: var(--gold); background: rgba(181,137,31,.16); border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
+.catalog-row button { padding: 4px 7px; font-size: 11px; }
+.catalog-target { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; width: 100%; margin-top: 4px; }
+.catalog-target select { flex: 1 1 auto; min-width: 0; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 3px 5px; font-size: 11px; }
+.catalog-target button { padding: 3px 8px; font-size: 12px; }

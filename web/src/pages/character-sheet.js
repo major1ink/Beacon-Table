@@ -1,0 +1,1302 @@
+// Лист персонажа D&D 2024 (PHB 2024, стиль бланка "Long Story Short") —
+// отдельное окно, открывается из player.html ("Мои персонажи", кнопка 📜,
+// владелец — редактирует) или из dm.html (панель "Персонажи", та же кнопка
+// 📜 — ДМ редактирует ЛЮБОЙ лист наравне с владельцем, см. isAdminView
+// ниже), по аналогии с note-window.html/note-window.js.
+//
+// "Умный бланк" (см. README и план реализации): почти все поля — свободный
+// ввод, как в бумажном листе. Автоматически считаются только производные
+// значения по формулам PHB 2024 — весь rules-блок ниже (abilityMod..spellAtk).
+// Сервер (internal/domain/character_sheet.go) эти формулы не знает и не
+// проверяет, только хранит присланный JSON целиком.
+import {
+  fetchMe,
+  fetchCharacter,
+  updateCharacterSheet,
+  fetchAdminCharacter,
+  updateAdminCharacterSheet,
+  fetchCharacterInventory,
+  addCharacterInventoryItem,
+  updateCharacterInventoryItem,
+  deleteCharacterInventoryItem,
+  fetchReferences,
+} from "../api.js";
+import { icon } from "../icons.js";
+import { parseLssExport, applyLssImport } from "../lss-import.js";
+import { initItemPicker } from "../item-picker.js";
+
+// ==================== PHB 2024 rules ====================
+
+const ABILITIES = [
+  { key: "str", label: "Сила" },
+  { key: "dex", label: "Ловкость" },
+  { key: "con", label: "Телосложение" },
+  { key: "int", label: "Интеллект" },
+  { key: "wis", label: "Мудрость" },
+  { key: "cha", label: "Харизма" },
+];
+
+// Соответствие 18 навыков характеристикам — PHB 2024, полностью совпадает с
+// бланком (см. приложенный PDF).
+const SKILLS = [
+  { key: "athletics", label: "Атлетика", ability: "str" },
+  { key: "acrobatics", label: "Акробатика", ability: "dex" },
+  { key: "sleightOfHand", label: "Ловкость рук", ability: "dex" },
+  { key: "stealth", label: "Скрытность", ability: "dex" },
+  { key: "investigation", label: "Анализ", ability: "int" },
+  { key: "history", label: "История", ability: "int" },
+  { key: "arcana", label: "Магия", ability: "int" },
+  { key: "nature", label: "Природа", ability: "int" },
+  { key: "religion", label: "Религия", ability: "int" },
+  { key: "perception", label: "Восприятие", ability: "wis" },
+  { key: "survival", label: "Выживание", ability: "wis" },
+  { key: "medicine", label: "Медицина", ability: "wis" },
+  { key: "insight", label: "Проницательность", ability: "wis" },
+  { key: "animalHandling", label: "Уход за животными", ability: "wis" },
+  { key: "performance", label: "Выступление", ability: "cha" },
+  { key: "intimidation", label: "Запугивание", ability: "cha" },
+  { key: "deception", label: "Обман", ability: "cha" },
+  { key: "persuasion", label: "Убеждение", ability: "cha" },
+];
+
+function abilityMod(score) {
+  return Math.floor(((score || 0) - 10) / 2);
+}
+function fmtMod(n) {
+  return n >= 0 ? "+" + n : String(n);
+}
+// Бонус владения по уровню — единая таблица PHB 2024, одна на всех, не
+// зависит от класса.
+function profBonus(level) {
+  const lvl = Math.max(1, Math.min(20, level || 1));
+  return 2 + Math.floor((lvl - 1) / 4);
+}
+function skillBonus(sheet, skill) {
+  const state = sheet.skillProf[skill.key] || 0; // 0 нет / 1 владение / 2 экспертиза
+  return abilityMod(sheet.abilities[skill.ability]) + profBonus(sheet.info.level) * state;
+}
+function saveBonus(sheet, abilityKey) {
+  return abilityMod(sheet.abilities[abilityKey]) + (sheet.saveProf[abilityKey] ? profBonus(sheet.info.level) : 0);
+}
+function passivePerception(sheet) {
+  const perception = SKILLS.find((s) => s.key === "perception");
+  return 10 + skillBonus(sheet, perception);
+}
+// Грузоподъёмность/прыжки — PHB 2024, "с разбега": прыжок в длину = Сила
+// (значение) фут., прыжок в высоту = 3 + модификатор Силы фут. При Силе 10
+// это даёт "10 фут."/"3 фут." — ровно дефолты пустого бланка.
+function carryCapacity(sheet) {
+  return (sheet.abilities.str || 0) * 15;
+}
+function longJumpFt(sheet) {
+  return sheet.abilities.str || 0;
+}
+function highJumpFt(sheet) {
+  return 3 + abilityMod(sheet.abilities.str);
+}
+function spellAbilityMod(sheet) {
+  const a = sheet.spellcasting.ability;
+  return a ? abilityMod(sheet.abilities[a]) : 0;
+}
+function spellSaveDC(sheet) {
+  return sheet.spellcasting.ability ? 8 + profBonus(sheet.info.level) + spellAbilityMod(sheet) : null;
+}
+function spellAtkBonus(sheet) {
+  return sheet.spellcasting.ability ? profBonus(sheet.info.level) + spellAbilityMod(sheet) : null;
+}
+// parseFlatBonus — распознаёт колонку "Бонус/Сложность" таблицы оружия как
+// чистое число со знаком (для кнопки-броска); "СЛ 13" или что угодно ещё
+// текстовое — не распознаётся, кнопка не показывается (это не бросок
+// персонажа, а спасбросок цели).
+function parseFlatBonus(text) {
+  const m = /^([+-]?\d+)$/.exec(String(text || "").trim());
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// ==================== state ====================
+
+let me = null;
+let charId = null;
+let character = null; // {id, name, avatarUrl, sheet, accountUsername?}
+let sheet = null; // character.sheet, нормализованный
+// readOnly — управляет ТОЛЬКО disabled-состоянием полей ниже по файлу;
+// с тех пор как ДМ тоже полноценно редактирует чужой лист (см. isAdminView),
+// это поле никогда не становится true, но название и условия оставлены как
+// есть — переписывать каждый `if (readOnly)` в разметке смысла не было бы.
+let readOnly = false;
+// isAdminView — ДМ смотрит/правит лист ЧУЖОГО персонажа: влияет только на
+// подзаголовок с именем игрока, баннер и то, какой из двух PUT-эндпоинтов
+// (свой/админский) дёргать при автосохранении, см. doSave().
+let isAdminView = false;
+let rollWS = null;
+
+// isClassic — система ЭТОГО персонажа (Character.System, см.
+// internal/domain/company.go: SystemDnD5e2014/2024, проставляется один раз
+// при создании персонажа из компании игрока) — D&D 5e 2014, а не 2024.
+// Влияет только на то, какие поля бланка показываем: "Раса" вместо "Вид" и
+// 4 отдельные графы (Черты/Идеалы/Привязанности/Слабости) бланка 2014
+// вместо единого текста "Предыстория и личные качества" бланка 2024 — сами
+// данные (sheet) хранятся в одном и том же формате на обе системы, см.
+// internal/domain/character_sheet.go.
+function isClassic() {
+  return character && character.system === "dnd5e-2014";
+}
+
+function normalizeSheet(raw) {
+  const s = raw && typeof raw === "object" ? raw : {};
+  s.info = s.info || {};
+  if (!s.info.level) s.info.level = 1;
+  s.abilities = s.abilities || {};
+  for (const a of ABILITIES) if (!s.abilities[a.key]) s.abilities[a.key] = 10;
+  s.saveProf = s.saveProf || {};
+  for (const a of ABILITIES) if (s.saveProf[a.key] === undefined) s.saveProf[a.key] = false;
+  s.skillProf = s.skillProf || {};
+  s.armor = s.armor || {};
+  s.combat = s.combat || {};
+  s.weapons = Array.isArray(s.weapons) ? s.weapons : [];
+  s.notes = Array.isArray(s.notes) && s.notes.length === 6 ? s.notes : ["", "", "", "", "", ""];
+  s.spellcasting = s.spellcasting || {};
+  s.spellcasting.ability = s.spellcasting.ability || "";
+  s.spellcasting.slotsByLevel =
+    Array.isArray(s.spellcasting.slotsByLevel) && s.spellcasting.slotsByLevel.length === 9
+      ? s.spellcasting.slotsByLevel
+      : ["", "", "", "", "", "", "", "", ""];
+  s.preparedSpells = Array.isArray(s.preparedSpells) ? s.preparedSpells : [];
+  s.coins = s.coins || {};
+  // personalityTraits/ideals/bonds/flaws — показываются на обеих системах
+  // (см. renderTab1/renderTab4 ниже), просто в разных местах листа;
+  // race/species — только 2014/2024 соответственно, у "чужой" системы
+  // остаются пустой строкой, ничего не отображающей.
+  s.personalityTraits = s.personalityTraits || "";
+  s.ideals = s.ideals || "";
+  s.bonds = s.bonds || "";
+  s.flaws = s.flaws || "";
+  s.info.race = s.info.race || "";
+  s.info.species = s.info.species || "";
+  s.info.playerName = s.info.playerName || "";
+  s.physical = s.physical || {};
+  for (const k of ["age", "height", "weight", "eyes", "skin", "hair"]) s.physical[k] = s.physical[k] || "";
+  s.traits = s.traits || "";
+  s.proficiencyNotes = s.proficiencyNotes || "";
+  s.combat.darkvision = s.combat.darkvision || 0;
+  s.combat.isDying = !!s.combat.isDying;
+  s.resources = Array.isArray(s.resources) ? s.resources : [];
+  // attunementItems — заменяет прежние безымянные 3 чекбокса (см.
+  // internal/domain/character_sheet.go: AttunementItems); дополняем как
+  // минимум до 3 строк при первой загрузке, чтобы сохранить привычный UX
+  // "3 слота", но список динамический — можно добавлять/удалять строки.
+  s.attunementItems = Array.isArray(s.attunementItems) ? s.attunementItems.slice() : [];
+  while (s.attunementItems.length < 3) s.attunementItems.push({ name: "", attuned: false });
+  return s;
+}
+
+// ==================== DOM helpers ====================
+
+function h(tag, attrs, children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "text") e.textContent = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of [].concat(children || [])) {
+    if (c === undefined || c === null || c === false) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function field(labelText, inputEl) {
+  return h("label", { class: "field" }, [h("span", { text: labelText }), inputEl]);
+}
+
+function textInput(get, set, opts) {
+  const inp = h("input", Object.assign({ type: "text" }, opts || {}));
+  inp.value = get() ?? "";
+  if (readOnly) inp.disabled = true;
+  else
+    inp.addEventListener("input", () => {
+      set(inp.value);
+      scheduleSave();
+    });
+  return inp;
+}
+
+// suggestInput — текстовое поле с подсказками из справочника (см.
+// api.js: fetchReferences, domain.Reference) через HTML <datalist>:
+// выглядит в браузере как обычный выпадающий список, но НЕ блокирует ввод
+// произвольного текста — тот же принцип "умного бланка", что и у остального
+// листа: мультикласс ("Воин 3 / Плут 2"), домашний класс/вид, которого ещё
+// нет в справочнике, старые листы с уже вписанным значением — ничего из
+// этого не ломается строгой валидацией. options — обычный массив имён,
+// вычисленный на момент вызова (не геттер) — для полей, чьи подсказки не
+// зависят от других полей листа (Вид/Раса, Происхождение). У связки
+// Класс+Подкласс, где список архетипов зависит от выбранного класса,
+// datalist пересчитывается отдельно вручную (см. classSubclassFields ниже),
+// не через этот generic-хелпер.
+let suggestSeq = 0;
+function suggestInput(get, set, options, opts) {
+  const id = "dl" + suggestSeq++;
+  const dl = h("datalist", { id });
+  for (const name of options) dl.appendChild(h("option", { value: name }));
+  const inp = h("input", Object.assign({ type: "text", list: id }, opts || {}));
+  inp.value = get() ?? "";
+  if (readOnly) inp.disabled = true;
+  else
+    inp.addEventListener("input", () => {
+      set(inp.value);
+      scheduleSave();
+    });
+  return h("span", { class: "suggest-wrap" }, [inp, dl]);
+}
+
+function textareaInput(get, set, opts) {
+  const t = h("textarea", opts || {});
+  t.value = get() ?? "";
+  if (readOnly) t.disabled = true;
+  else
+    t.addEventListener("input", () => {
+      set(t.value);
+      scheduleSave();
+    });
+  return t;
+}
+
+function numberInput(get, set, opts) {
+  const inp = h("input", Object.assign({ type: "number" }, opts || {}));
+  inp.value = get() ?? 0;
+  if (readOnly) inp.disabled = true;
+  else
+    inp.addEventListener("input", () => {
+      set(parseInt(inp.value, 10) || 0);
+      scheduleSave();
+      refreshComputed();
+    });
+  return inp;
+}
+
+function checkboxInput(get, set, opts) {
+  const c = h("input", Object.assign({ type: "checkbox" }, opts || {}));
+  c.checked = !!get();
+  if (readOnly) c.disabled = true;
+  else
+    c.addEventListener("change", () => {
+      set(c.checked);
+      scheduleSave();
+      refreshComputed();
+    });
+  return c;
+}
+
+// computed-элементы, которые надо освежить после любого изменения, влияющего
+// на формулы (характеристика/уровень/владения) — каждый описан функцией
+// пересчёта текста.
+const computedRefs = [];
+function computed(labelText, compute, extra) {
+  const span = h("span", { class: "computed" });
+  computedRefs.push(() => (span.textContent = compute()));
+  span.textContent = compute();
+  const wrap = h("span", {}, [labelText ? h("span", { class: "computed-lbl", text: labelText }) : null, span, extra]);
+  return wrap;
+}
+function refreshComputed() {
+  for (const fn of computedRefs) fn();
+}
+
+function rollBtn(getFormula, label) {
+  if (readOnly) return null;
+  return h("button", {
+    type: "button",
+    class: "roll-btn",
+    title: "Бросить " + label,
+    html: icon("dice", { size: 12 }),
+    onclick: () => sendRoll(getFormula(), label),
+  });
+}
+
+// ==================== переиспользуемые секции (обе системы/вкладки) ====================
+
+// equipmentSection — "Снаряжение". У бланка 2024 живёт на вкладке
+// "Заклинания" (см. renderTab4), у классического бланка 2014 — на вкладке
+// "Лист" рядом с оружием (ближе к бумажному page 1, см. renderTab1) —
+// содержимое (sheet.equipment) общее на обе системы, отличается только
+// место в вёрстке, поэтому вынесено в общую функцию.
+function equipmentSection() {
+  return h("div", { class: "section" }, [h("h3", { text: "Снаряжение" }), textareaInput(() => sheet.equipment, (v) => (sheet.equipment = v), { rows: 6 })]);
+}
+
+// personalityFields — 4 текстовых поля личных качеств + мировоззрение.
+// Показываются на обеих системах (см. internal/domain/character_sheet.go:
+// PersonalityTraits/Ideals/Bonds/Flaws), но в разных местах листа: у
+// классического бланка 2014 — на вкладке "Лист" рядом со способностями
+// (renderTab1), у 2024 — на вкладке "Заклинания" вместе с историей
+// персонажа (renderTab4). Общие геттеры/сеттеры вынесены сюда, чтобы не
+// дублировать проводку — обёртку (заголовок, .section) добавляет каждый
+// вызывающий сам.
+function personalityFields() {
+  return [
+    field("Черты характера", textareaInput(() => sheet.personalityTraits, (v) => (sheet.personalityTraits = v), { rows: 2 })),
+    field("Идеалы", textareaInput(() => sheet.ideals, (v) => (sheet.ideals = v), { rows: 2 })),
+    field("Привязанности", textareaInput(() => sheet.bonds, (v) => (sheet.bonds = v), { rows: 2 })),
+    field("Слабости", textareaInput(() => sheet.flaws, (v) => (sheet.flaws = v), { rows: 2 })),
+    field("Мировоззрение", textInput(() => sheet.alignment, (v) => (sheet.alignment = v))),
+  ];
+}
+
+// ==================== импорт из Long Story Short ====================
+
+// applyLssFile — общая точка для файла и вставленного текста: парсит,
+// маппит через lss-import.js, мутирует sheet напрямую (applyLssImport), а
+// не мержит патч — тот же принцип, что и у остального этого файла (sheet
+// правится через геттеры/сеттеры на месте, не иммутабельно). Затрагивает
+// поля почти всех 4 вкладок — после успеха перерисовываем всё.
+function applyLssFile(rawText, msgEl) {
+  msgEl.classList.remove("error", "ok");
+  msgEl.textContent = "";
+  let parsed;
+  try {
+    parsed = parseLssExport(rawText);
+  } catch (err) {
+    msgEl.textContent = err.message;
+    msgEl.classList.add("error");
+    return;
+  }
+  const { name, warnings } = applyLssImport(sheet, parsed, isClassic());
+  msgEl.textContent = `Импортировано${name ? `: «${name}»` : ""}.` + (warnings.length ? " " + warnings.join(" ") : "");
+  msgEl.classList.add("ok");
+  scheduleSave();
+  renderTab1();
+  renderTab2();
+  renderTab3();
+  renderTab4();
+}
+
+function importSection() {
+  const msg = h("div", { id: "lssImportMsg" });
+  const fileInput = h("input", { type: "file", accept: "application/json,.json" });
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    applyLssFile(await file.text(), msg);
+    fileInput.value = "";
+  });
+  const textarea = h("textarea", { placeholder: "...или вставь сюда содержимое JSON-файла экспорта", rows: 2 });
+  const importBtn = h("button", { type: "button", text: "Импортировать вставленный JSON", onclick: () => applyLssFile(textarea.value, msg) });
+  return h("div", { class: "section" }, [
+    h("h3", { text: "Импорт из Long Story Short" }),
+    h("p", { style: "margin:0 0 8px;color:var(--text-dim);font-size:11px;" }, "На lss экспортируй лист персонажа в JSON и выбери файл ниже (или вставь содержимое текстом). Уже заполненные текстовые поля не затираются — импорт дописывает к ним снизу."),
+    field("Файл экспорта", fileInput),
+    textarea,
+    importBtn,
+    msg,
+  ]);
+}
+
+// referencesByKind — записи справочника (см. api.js: fetchReferences,
+// domain.Reference), сгруппированные по Kind — источник подсказок для
+// suggestInput ниже. Заполняется один раз в boot(), пусто (не ошибка), пока
+// нужный Kind ("вид"/"происхождение") ещё не завезли импортом — datalist
+// тогда просто окажется пустым, поле остаётся обычным текстовым вводом.
+let references = [];
+function referenceNames(kind) {
+  return references.filter((r) => r.kind === kind).map((r) => r.name);
+}
+
+// classSubclassFields — "Класс"+"Подкласс" неразделимы: список подсказок
+// архетипа зависит от того, что сейчас набрано в поле класса, поэтому
+// datalist подкласса пересчитывается вручную по input-событию поля класса
+// (см. refreshSubclassOptions) — БЕЗ полного renderTab1() на каждую
+// клавишу, иначе терялся бы фокус/курсор посреди набора имени класса.
+// Архетипы без ParentName (или пока класс не набран) показываются все —
+// лучше избыточная подсказка, чем пустой список.
+function classSubclassFields() {
+  const subclassDl = h("datalist", { id: "dl" + suggestSeq++ });
+  function refreshSubclassOptions() {
+    subclassDl.innerHTML = "";
+    const cls = (sheet.info.class || "").trim();
+    for (const r of references) {
+      if (r.kind !== "архетип") continue;
+      if (cls && r.parentName && r.parentName !== cls) continue;
+      subclassDl.appendChild(h("option", { value: r.name }));
+    }
+  }
+  refreshSubclassOptions();
+
+  const classDl = h("datalist", { id: "dl" + suggestSeq++ });
+  for (const name of referenceNames("класс")) classDl.appendChild(h("option", { value: name }));
+  const classInput = h("input", { type: "text", list: classDl.id });
+  classInput.value = sheet.info.class ?? "";
+  if (readOnly) classInput.disabled = true;
+  else
+    classInput.addEventListener("input", () => {
+      sheet.info.class = classInput.value;
+      scheduleSave();
+      refreshSubclassOptions();
+    });
+
+  const subclassInput = h("input", { type: "text", list: subclassDl.id });
+  subclassInput.value = sheet.info.subclass ?? "";
+  if (readOnly) subclassInput.disabled = true;
+  else
+    subclassInput.addEventListener("input", () => {
+      sheet.info.subclass = subclassInput.value;
+      scheduleSave();
+    });
+
+  return [
+    field("Класс", h("span", { class: "suggest-wrap" }, [classInput, classDl])),
+    field("Подкласс", h("span", { class: "suggest-wrap" }, [subclassInput, subclassDl])),
+  ];
+}
+
+// ==================== tab 1: лист ====================
+
+function renderTab1() {
+  const root = document.getElementById("tab1");
+  root.innerHTML = "";
+
+  root.appendChild(importSection());
+
+  // ---- шапка ----
+  root.appendChild(
+    h("div", { class: "section" }, [
+      h("h3", { text: "Персонаж" }),
+      h("div", { class: "row" }, [
+        field("Имя игрока", textInput(() => sheet.info.playerName, (v) => (sheet.info.playerName = v))),
+        field("Предыстория", suggestInput(() => sheet.info.background, (v) => (sheet.info.background = v), referenceNames("происхождение"))),
+        ...classSubclassFields(),
+        isClassic()
+          ? field("Раса", suggestInput(() => sheet.info.race, (v) => (sheet.info.race = v), referenceNames("вид")))
+          : field("Вид", suggestInput(() => sheet.info.species, (v) => (sheet.info.species = v), referenceNames("вид"))),
+        field(
+          "Уровень",
+          numberInput(() => sheet.info.level, (v) => (sheet.info.level = Math.max(1, Math.min(20, v || 1))), { min: 1, max: 20 })
+        ),
+        field("Опыт", numberInput(() => sheet.info.xp, (v) => (sheet.info.xp = v), { min: 0 })),
+        field("Бонус владения", computed("", () => fmtMod(profBonus(sheet.info.level)))),
+      ]),
+    ])
+  );
+
+  // ---- характеристики + навыки + спасброски ----
+  const abilitiesCol = h("div", { class: "col" });
+  for (const a of ABILITIES) {
+    const scoreGet = () => sheet.abilities[a.key];
+    const scoreSet = (v) => (sheet.abilities[a.key] = Math.max(1, Math.min(30, v || 10)));
+    const box = h("div", { class: "ability-box" }, [
+      h("div", { class: "ability-head" }, [
+        h("span", { class: "ability-name", text: a.label }),
+        numberInput(scoreGet, scoreSet, { min: 1, max: 30 }),
+        computed("мод.", () => fmtMod(abilityMod(sheet.abilities[a.key]))),
+      ]),
+      h("div", { class: "save-row" }, [
+        profToggleBool(() => sheet.saveProf[a.key], (v) => (sheet.saveProf[a.key] = v)),
+        h("span", { class: "skill-name", text: "Спасбросок" }),
+        computed("", () => fmtMod(saveBonus(sheet, a.key))),
+        rollBtn(() => "1d20" + fmtMod(saveBonus(sheet, a.key)), "Спасбросок " + a.label),
+      ]),
+      ...SKILLS.filter((s) => s.ability === a.key).map((s) =>
+        h("div", { class: "skill-row" }, [
+          profToggleTri(() => sheet.skillProf[s.key] || 0, (v) => (sheet.skillProf[s.key] = v)),
+          h("span", { class: "skill-name", text: s.label }),
+          computed("", () => fmtMod(skillBonus(sheet, s))),
+          rollBtn(() => "1d20" + fmtMod(skillBonus(sheet, s)), s.label),
+        ])
+      ),
+    ]);
+    abilitiesCol.appendChild(box);
+  }
+
+  // ---- бой ----
+  const combatCol = h("div", { class: "col" });
+  combatCol.appendChild(
+    h("div", { class: "section" }, [
+      h("h3", { text: "Боевые показатели" }),
+      h("div", { class: "row" }, [
+        field("КЗ (AC)", numberInput(() => sheet.combat.ac, (v) => (sheet.combat.ac = v))),
+        field("Скорость", numberInput(() => sheet.combat.speed, (v) => (sheet.combat.speed = v))),
+        field("Тёмное зрение", numberInput(() => sheet.combat.darkvision, (v) => (sheet.combat.darkvision = v), { min: 0, placeholder: "0" })),
+        field("Инициатива", computed("", () => fmtMod(abilityMod(sheet.abilities.dex)))),
+        field("Пасс. восприятие", computed("", () => String(passivePerception(sheet)))),
+      ]),
+      h("div", { class: "row" }, [
+        field("ХП текущие", numberInput(() => sheet.combat.hpCurrent, (v) => (sheet.combat.hpCurrent = v))),
+        field("ХП временные", numberInput(() => sheet.combat.hpTemp, (v) => (sheet.combat.hpTemp = v))),
+        field("ХП максимум", numberInput(() => sheet.combat.hpMax, (v) => (sheet.combat.hpMax = v))),
+      ]),
+      h("div", { class: "row" }, [
+        field("Кости хитов (всего)", textInput(() => sheet.combat.hitDiceTotal, (v) => (sheet.combat.hitDiceTotal = v), { placeholder: "3к8" })),
+        field("Кости хитов (сейчас)", textInput(() => sheet.combat.hitDiceCurrent, (v) => (sheet.combat.hitDiceCurrent = v), { placeholder: "3к8" })),
+      ]),
+      h("div", { class: "row" }, [
+        h("div", {}, [
+          h("span", { class: "computed-lbl", text: "Спасброски от смерти — успехи" }),
+          bulbRow(3, () => sheet.combat.deathSaveSuccess || 0, (v) => (sheet.combat.deathSaveSuccess = v), false),
+        ]),
+        h("div", {}, [
+          h("span", { class: "computed-lbl", text: "провалы" }),
+          bulbRow(3, () => sheet.combat.deathSaveFail || 0, (v) => (sheet.combat.deathSaveFail = v), true),
+        ]),
+      ]),
+      h("div", { class: "row" }, [
+        h("div", {}, [
+          h("span", { class: "computed-lbl", text: "Истощение (0-6)" }),
+          bulbRow(6, () => sheet.combat.exhaustion || 0, (v) => (sheet.combat.exhaustion = v), true),
+        ]),
+        h("label", { class: "checkbox-line" }, [
+          checkboxInput(() => sheet.combat.inspiration, (v) => (sheet.combat.inspiration = v)),
+          "Героическое вдохновение",
+        ]),
+        h("label", { class: "checkbox-line" }, [
+          checkboxInput(() => sheet.combat.isDying, (v) => (sheet.combat.isDying = v)),
+          "Умирает / без сознания",
+        ]),
+      ]),
+      field("Состояния", textareaInput(() => sheet.combat.conditions, (v) => (sheet.combat.conditions = v), { rows: 2 })),
+    ])
+  );
+
+  combatCol.appendChild(
+    h("div", { class: "section" }, [
+      h("h3", { text: "Владение снаряжением" }),
+      h("div", { class: "row" }, [
+        h("label", { class: "checkbox-line" }, [checkboxInput(() => sheet.armor.lightArmor, (v) => (sheet.armor.lightArmor = v)), "Лёгкие доспехи"]),
+        h("label", { class: "checkbox-line" }, [checkboxInput(() => sheet.armor.mediumArmor, (v) => (sheet.armor.mediumArmor = v)), "Средние доспехи"]),
+        h("label", { class: "checkbox-line" }, [checkboxInput(() => sheet.armor.heavyArmor, (v) => (sheet.armor.heavyArmor = v)), "Тяжёлые доспехи"]),
+        h("label", { class: "checkbox-line" }, [checkboxInput(() => sheet.armor.shield, (v) => (sheet.armor.shield = v)), "Щит"]),
+      ]),
+      h("div", { class: "row" }, [
+        h("label", { class: "checkbox-line" }, [checkboxInput(() => sheet.armor.simpleWeapons, (v) => (sheet.armor.simpleWeapons = v)), "Простое оружие"]),
+        h("label", { class: "checkbox-line" }, [checkboxInput(() => sheet.armor.martialWeapons, (v) => (sheet.armor.martialWeapons = v)), "Воинское оружие"]),
+      ]),
+      field("Другое оружие", textInput(() => sheet.armor.otherWeapons, (v) => (sheet.armor.otherWeapons = v))),
+      field("Владение инструментами и языками", textareaInput(() => sheet.toolsLanguages, (v) => (sheet.toolsLanguages = v), { rows: 2 })),
+      field("Прочие владения (текстом)", textareaInput(() => sheet.proficiencyNotes, (v) => (sheet.proficiencyNotes = v), { rows: 3 })),
+    ])
+  );
+
+  // ---- ресурсы (очки чародейства, ярость, ки и т.п.) ----
+  const resourcesSection = h("div", { class: "section" }, [h("h3", { text: "Ресурсы" })]);
+  const resourcesTableWrap = h("div", {});
+  resourcesSection.appendChild(resourcesTableWrap);
+  function renderResources() {
+    resourcesTableWrap.innerHTML = "";
+    const table = h("table", { class: "dyn-table" }, [
+      h("thead", {}, [h("tr", {}, [h("th", { text: "Название" }), h("th", { text: "Сейчас" }), h("th", { text: "Максимум" }), h("th", { text: "Восстановление" }), readOnly ? null : h("th", {})])]),
+    ]);
+    const tbody = h("tbody", {});
+    sheet.resources.forEach((row, i) => {
+      tbody.appendChild(
+        h("tr", {}, [
+          h("td", {}, [textInput(() => row.name, (v) => (row.name = v))]),
+          h("td", {}, [numberInput(() => row.current, (v) => (row.current = v), { min: 0, style: "width:64px" })]),
+          h("td", {}, [numberInput(() => row.max, (v) => (row.max = v), { min: 0, style: "width:64px" })]),
+          h("td", {}, [textInput(() => row.recovery, (v) => (row.recovery = v), { placeholder: "коротк. отдых" })]),
+          readOnly ? null : h("td", {}, [h("button", { type: "button", class: "row-del", html: icon("close", { size: 11 }), onclick: () => { sheet.resources.splice(i, 1); scheduleSave(); renderResources(); } })]),
+        ])
+      );
+    });
+    table.appendChild(tbody);
+    resourcesTableWrap.appendChild(table);
+    if (!readOnly) {
+      resourcesTableWrap.appendChild(
+        h("button", {
+          type: "button",
+          class: "add-row-btn",
+          text: "+ строка",
+          onclick: () => {
+            sheet.resources.push({ name: "", current: 0, max: 0, recovery: "" });
+            scheduleSave();
+            renderResources();
+          },
+        })
+      );
+    }
+  }
+  renderResources();
+  combatCol.appendChild(resourcesSection);
+
+  // ---- оружие ----
+  const weaponsSection = h("div", { class: "section" }, [h("h3", { text: "Оружие и боевые заговоры" })]);
+  const weaponsTableWrap = h("div", {});
+  weaponsSection.appendChild(weaponsTableWrap);
+  function renderWeapons() {
+    weaponsTableWrap.innerHTML = "";
+    const table = h("table", { class: "dyn-table" }, [
+      h("thead", {}, [h("tr", {}, [h("th", { text: "Название" }), h("th", { text: "Бонус/Сложность" }), h("th", { text: "Урон/Вид" }), h("th", { text: "Заметки" }), readOnly ? null : h("th", {})])]),
+    ]);
+    const tbody = h("tbody", {});
+    sheet.weapons.forEach((row, i) => {
+      const bonusInput = textInput(() => row.bonus, (v) => (row.bonus = v), { placeholder: "+5" });
+      const rollWrap = h("span", {});
+      const refreshRoll = () => {
+        rollWrap.innerHTML = "";
+        const b = parseFlatBonus(row.bonus);
+        if (b !== null) {
+          const btn = rollBtn(() => "1d20" + fmtMod(b), row.name || "Атака");
+          if (btn) rollWrap.appendChild(btn);
+        }
+      };
+      bonusInput.addEventListener("input", refreshRoll);
+      refreshRoll();
+      const bonusCell = h("td", {}, [bonusInput, rollWrap]);
+      tbody.appendChild(
+        h("tr", {}, [
+          h("td", {}, [textInput(() => row.name, (v) => (row.name = v))]),
+          bonusCell,
+          h("td", {}, [textInput(() => row.damage, (v) => (row.damage = v))]),
+          h("td", {}, [textInput(() => row.notes, (v) => (row.notes = v))]),
+          readOnly ? null : h("td", {}, [h("button", { type: "button", class: "row-del", html: icon("close", { size: 11 }), onclick: () => { sheet.weapons.splice(i, 1); scheduleSave(); renderWeapons(); } })]),
+        ])
+      );
+    });
+    table.appendChild(tbody);
+    weaponsTableWrap.appendChild(table);
+    if (!readOnly) {
+      weaponsTableWrap.appendChild(
+        h("button", {
+          type: "button",
+          class: "add-row-btn",
+          text: "+ строка",
+          onclick: () => {
+            sheet.weapons.push({ name: "", bonus: "", damage: "", notes: "" });
+            scheduleSave();
+            renderWeapons();
+          },
+        })
+      );
+    }
+  }
+  renderWeapons();
+
+  // isClassic() — вёрстка бланка 2014 держит снаряжение и личные качества
+  // на этой же вкладке, ближе к бумажному page 1 (см. renderTab2/renderTab4
+  // ниже — там для 2014, наоборот, этих секций нет).
+  const textsCol = h("div", { class: "col" }, [
+    weaponsSection,
+    ...(isClassic() ? [equipmentSection()] : []),
+    h("div", { class: "section" }, [h("h3", { text: "Видовые черты" }), textareaInput(() => sheet.traits, (v) => (sheet.traits = v), { rows: 4 })]),
+    h("div", { class: "section" }, [h("h3", { text: "Умения и способности" }), textareaInput(() => sheet.features, (v) => (sheet.features = v), { rows: 8 })]),
+    h("div", { class: "section" }, [h("h3", { text: "Атаки и заклинания" }), textareaInput(() => sheet.attacksSpells, (v) => (sheet.attacksSpells = v), { rows: 4 })]),
+    h("div", { class: "section" }, [h("h3", { text: "Черты" }), textareaInput(() => sheet.feats, (v) => (sheet.feats = v), { rows: 4 })]),
+    ...(isClassic() ? [h("div", { class: "section" }, [h("h3", { text: "Черты характера, идеалы, привязанности, слабости" }), ...personalityFields()])] : []),
+  ]);
+
+  root.appendChild(h("div", { class: "grid-cols" }, [abilitiesCol, combatCol, textsCol]));
+}
+
+function profToggleBool(get, set) {
+  const btn = h("button", { type: "button", class: "prof-toggle" });
+  const render = () => btn.setAttribute("data-state", get() ? "1" : "0");
+  render();
+  if (readOnly) btn.disabled = true;
+  else
+    btn.addEventListener("click", () => {
+      set(!get());
+      render();
+      scheduleSave();
+      refreshComputed();
+    });
+  return btn;
+}
+
+// 0 нет владения / 1 владение / 2 экспертиза (кольцо/точка/ромб)
+function profToggleTri(get, set) {
+  const btn = h("button", { type: "button", class: "prof-toggle" });
+  const render = () => {
+    const st = get();
+    btn.setAttribute("data-state", String(st));
+    btn.textContent = st === 2 ? "◆" : "";
+  };
+  render();
+  if (readOnly) btn.disabled = true;
+  else
+    btn.addEventListener("click", () => {
+      set((get() + 1) % 3);
+      render();
+      scheduleSave();
+      refreshComputed();
+    });
+  return btn;
+}
+
+function bulbRow(count, get, set, isFail) {
+  const wrap = h("div", { class: "bulb-row" });
+  const render = () => {
+    wrap.innerHTML = "";
+    const val = get();
+    for (let i = 0; i < count; i++) {
+      const filled = i < val;
+      wrap.appendChild(
+        h("button", {
+          type: "button",
+          class: "bulb" + (filled ? " filled" + (isFail ? " fail" : "") : ""),
+          title: String(i + 1),
+          onclick: readOnly
+            ? undefined
+            : () => {
+                // Клик по заполненной крайней лампе гасит её, иначе заполняет по эту включительно.
+                set(val > i ? i : i + 1);
+                scheduleSave();
+                render();
+              },
+        })
+      );
+    }
+  };
+  render();
+  return wrap;
+}
+
+// ==================== tab 2: портрет и т.д. ====================
+
+function renderTab2() {
+  const root = document.getElementById("tab2");
+  root.innerHTML = "";
+  const portrait = character.avatarUrl
+    ? h("img", { class: "portrait-img", src: character.avatarUrl })
+    : h("div", { class: "portrait-placeholder", text: "нет аватара" });
+  const physicalSection = h("div", { class: "section" }, [
+    h("h3", { text: "Данные персонажа" }),
+    h("div", { class: "row" }, [
+      field("Возраст", textInput(() => sheet.physical.age, (v) => (sheet.physical.age = v))),
+      field("Рост", textInput(() => sheet.physical.height, (v) => (sheet.physical.height = v))),
+      field("Вес", textInput(() => sheet.physical.weight, (v) => (sheet.physical.weight = v))),
+    ]),
+    h("div", { class: "row" }, [
+      field("Глаза", textInput(() => sheet.physical.eyes, (v) => (sheet.physical.eyes = v))),
+      field("Кожа", textInput(() => sheet.physical.skin, (v) => (sheet.physical.skin = v))),
+      field("Волосы", textInput(() => sheet.physical.hair, (v) => (sheet.physical.hair = v))),
+    ]),
+  ]);
+  // backstorySection — история персонажа (нарратив), только для бланка 2014:
+  // у 2024 то же самое поле (sheet.background) уже показывается на вкладке
+  // "Заклинания" вместе с личными качествами (см. renderTab4). Без этого у
+  // классических персонажей sheet.background нигде не отображался бы вовсе.
+  const backstorySection = isClassic()
+    ? h("div", { class: "section" }, [h("h3", { text: "Предыстория" }), textareaInput(() => sheet.background, (v) => (sheet.background = v), { rows: 6 })])
+    : null;
+
+  root.appendChild(
+    h("div", { class: "grid-cols" }, [
+      h("div", { class: "col" }, [
+        h("div", { class: "section" }, [
+          h("h3", { text: "Портрет" }),
+          portrait,
+          h("div", {
+            style: "margin-top:6px;color:var(--text-dim);font-size:11px;",
+            // Сам аватар редактируется не здесь, а в списке персонажей —
+            // разном для игрока и ДМ (у ДМ нет "Мои персонажи").
+            text: isAdminView ? "Меняется в панели «Персонажи» → ✎." : "Меняется в «Мои персонажи» → аватар/токен-арт.",
+          }),
+        ]),
+        physicalSection,
+        backstorySection,
+        h("div", { class: "section" }, [h("h3", { text: "Цели и задачи" }), textareaInput(() => sheet.goals, (v) => (sheet.goals = v), { rows: 6 })]),
+      ]),
+      h("div", { class: "col" }, [
+        h("div", { class: "section" }, [h("h3", { text: "Союзники и организации" }), textareaInput(() => sheet.allies, (v) => (sheet.allies = v), { rows: 8 })]),
+        h("div", { class: "section" }, [h("h3", { text: "Дополнительные способности и умения" }), textareaInput(() => sheet.additionalFeatures, (v) => (sheet.additionalFeatures = v), { rows: 6 })]),
+        h("div", { class: "section" }, [h("h3", { text: "Сокровища" }), textareaInput(() => sheet.treasure, (v) => (sheet.treasure = v), { rows: 6 })]),
+      ]),
+    ])
+  );
+}
+
+// ==================== tab 3: заметки ====================
+
+function renderTab3() {
+  const root = document.getElementById("tab3");
+  root.innerHTML = "";
+  const grid = h("div", { class: "notes-grid" });
+  for (let i = 0; i < 6; i++) {
+    grid.appendChild(
+      h("div", { class: "section" }, [
+        h("h3", { text: "Заметки " + (i + 1) }),
+        textareaInput(() => sheet.notes[i], (v) => (sheet.notes[i] = v), { rows: 8 }),
+      ])
+    );
+  }
+  root.appendChild(grid);
+}
+
+// ==================== tab 4: заклинания ====================
+
+const SPELL_ABILITY_OPTIONS = [
+  { value: "", label: "Нет" },
+  { value: "int", label: "Интеллект" },
+  { value: "wis", label: "Мудрость" },
+  { value: "cha", label: "Харизма" },
+];
+
+function selectInput(get, set, options) {
+  const sel = h("select", {});
+  for (const o of options) sel.appendChild(h("option", { value: o.value, text: o.label }));
+  sel.value = get() || "";
+  if (readOnly) sel.disabled = true;
+  else
+    sel.addEventListener("change", () => {
+      set(sel.value);
+      scheduleSave();
+      refreshComputed();
+    });
+  return sel;
+}
+
+function renderTab4() {
+  const root = document.getElementById("tab4");
+  root.innerHTML = "";
+
+  const spellSection = h("div", { class: "section" }, [
+    h("h3", { text: "Заклинательная статистика" }),
+    h("div", { class: "row" }, [
+      field("Характеристика", selectInput(() => sheet.spellcasting.ability, (v) => (sheet.spellcasting.ability = v), SPELL_ABILITY_OPTIONS)),
+      field("Модификатор", computed("", () => fmtMod(spellAbilityMod(sheet)))),
+      field("СЛ спасброска", computed("", () => (spellSaveDC(sheet) === null ? "—" : String(spellSaveDC(sheet))))),
+      field(
+        "Бонус атаки",
+        computed(
+          "",
+          () => (spellAtkBonus(sheet) === null ? "—" : fmtMod(spellAtkBonus(sheet))),
+          rollBtn(() => "1d20" + fmtMod(spellAtkBonus(sheet) || 0), "Атака заклинанием")
+        )
+      ),
+    ]),
+    h("div", { class: "row" }, [
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((lvl) =>
+        field(
+          "Ячейки " + lvl + "-го ур.",
+          textInput(() => sheet.spellcasting.slotsByLevel[lvl - 1], (v) => (sheet.spellcasting.slotsByLevel[lvl - 1] = v), { placeholder: "0" })
+        )
+      ),
+    ]),
+  ]);
+
+  const spellsTableSection = h("div", { class: "section" }, [h("h3", { text: "Заговоры и подготовленные заклинания" })]);
+  const spellsWrap = h("div", {});
+  spellsTableSection.appendChild(spellsWrap);
+  function renderSpells() {
+    spellsWrap.innerHTML = "";
+    const table = h("table", { class: "dyn-table" }, [
+      h("thead", {}, [
+        h("tr", {}, [
+          h("th", { text: "Ур." }),
+          h("th", { text: "Название" }),
+          h("th", { text: "Время" }),
+          h("th", { text: "Дистанция" }),
+          h("th", { text: "К" }),
+          h("th", { text: "Р" }),
+          h("th", { text: "М" }),
+          h("th", { text: "Заметки" }),
+          readOnly ? null : h("th", {}),
+        ]),
+      ]),
+    ]);
+    const tbody = h("tbody", {});
+    sheet.preparedSpells.forEach((row, i) => {
+      tbody.appendChild(
+        h("tr", {}, [
+          h("td", {}, [numberInput(() => row.level, (v) => (row.level = Math.max(0, Math.min(9, v))), { min: 0, max: 9, style: "width:48px" })]),
+          h("td", {}, [textInput(() => row.name, (v) => (row.name = v))]),
+          h("td", {}, [textInput(() => row.castTime, (v) => (row.castTime = v), { style: "width:70px" })]),
+          h("td", {}, [textInput(() => row.range, (v) => (row.range = v), { style: "width:70px" })]),
+          h("td", {}, [checkboxInput(() => row.concentration, (v) => (row.concentration = v))]),
+          h("td", {}, [checkboxInput(() => row.ritual, (v) => (row.ritual = v))]),
+          h("td", {}, [checkboxInput(() => row.material, (v) => (row.material = v))]),
+          h("td", {}, [textInput(() => row.notes, (v) => (row.notes = v))]),
+          readOnly ? null : h("td", {}, [h("button", { type: "button", class: "row-del", html: icon("close", { size: 11 }), onclick: () => { sheet.preparedSpells.splice(i, 1); scheduleSave(); renderSpells(); } })]),
+        ])
+      );
+    });
+    table.appendChild(tbody);
+    spellsWrap.appendChild(table);
+    if (!readOnly) {
+      spellsWrap.appendChild(
+        h("button", {
+          type: "button",
+          class: "add-row-btn",
+          text: "+ строка",
+          onclick: () => {
+            sheet.preparedSpells.push({ level: 0, name: "", castTime: "", range: "", concentration: false, ritual: false, material: false, notes: "" });
+            scheduleSave();
+            renderSpells();
+          },
+        })
+      );
+    }
+  }
+  renderSpells();
+
+  const miscSection = h("div", { class: "section" }, [
+    h("h3", { text: "Размер, грузоподъёмность, прыжки" }),
+    h("div", { class: "row" }, [
+      field("Размер", textInput(() => sheet.size, (v) => (sheet.size = v), { placeholder: "Средний" })),
+      field("Грузоподъёмность", computed("", () => carryCapacity(sheet) + " фунт.")),
+      field("Прыжок в высоту", computed("", () => highJumpFt(sheet) + " фут.")),
+      field("Прыжок в длину", computed("", () => longJumpFt(sheet) + " фут.")),
+    ]),
+  ]);
+
+  const appearanceSection = h("div", { class: "section" }, [h("h3", { text: "Внешность" }), textareaInput(() => sheet.appearance, (v) => (sheet.appearance = v), { rows: 4 })]);
+  // backgroundSection — только для бланка 2024: история персонажа вместе с
+  // личными качествами (черты характера/идеалы/привязанности/слабости) и
+  // мировоззрением. У классического бланка 2014 то же самое содержимое —
+  // на других вкладках (личные качества на "Лист" — renderTab1, история
+  // персонажа на "Портрет" — renderTab2, см. комментарии там), тут для него
+  // рендерить нечего.
+  const backgroundSection = isClassic()
+    ? null
+    : h("div", { class: "section" }, [
+        h("h3", { text: "Предыстория и личные качества" }),
+        textareaInput(() => sheet.background, (v) => (sheet.background = v), { rows: 5 }),
+        ...personalityFields(),
+      ]);
+  const attunementSection = h("div", { class: "section" }, [h("h3", { text: "Настройка на магические предметы" })]);
+  const attunementTableWrap = h("div", {});
+  attunementSection.appendChild(attunementTableWrap);
+  function renderAttunement() {
+    attunementTableWrap.innerHTML = "";
+    const table = h("table", { class: "dyn-table" }, [
+      h("thead", {}, [h("tr", {}, [h("th", { text: "Предмет" }), h("th", { text: "Настроен" }), readOnly ? null : h("th", {})])]),
+    ]);
+    const tbody = h("tbody", {});
+    sheet.attunementItems.forEach((row, i) => {
+      tbody.appendChild(
+        h("tr", {}, [
+          h("td", {}, [textInput(() => row.name, (v) => (row.name = v))]),
+          h("td", {}, [checkboxInput(() => row.attuned, (v) => (row.attuned = v))]),
+          readOnly ? null : h("td", {}, [h("button", { type: "button", class: "row-del", html: icon("close", { size: 11 }), onclick: () => { sheet.attunementItems.splice(i, 1); scheduleSave(); renderAttunement(); } })]),
+        ])
+      );
+    });
+    table.appendChild(tbody);
+    attunementTableWrap.appendChild(table);
+    if (!readOnly) {
+      attunementTableWrap.appendChild(
+        h("button", {
+          type: "button",
+          class: "add-row-btn",
+          text: "+ строка",
+          onclick: () => {
+            sheet.attunementItems.push({ name: "", attuned: false });
+            scheduleSave();
+            renderAttunement();
+          },
+        })
+      );
+    }
+  }
+  renderAttunement();
+  const coinsSection = h("div", { class: "section" }, [
+    h("h3", { text: "Монеты" }),
+    h("div", { class: "row" }, [
+      field("ММ (медь)", numberInput(() => sheet.coins.cp, (v) => (sheet.coins.cp = v), { min: 0 })),
+      field("СМ (серебро)", numberInput(() => sheet.coins.sp, (v) => (sheet.coins.sp = v), { min: 0 })),
+      field("ЗМ (золото)", numberInput(() => sheet.coins.gp, (v) => (sheet.coins.gp = v), { min: 0 })),
+      field("ЭМ (электрум)", numberInput(() => sheet.coins.ep, (v) => (sheet.coins.ep = v), { min: 0 })),
+      field("ПМ (платина)", numberInput(() => sheet.coins.pp, (v) => (sheet.coins.pp = v), { min: 0 })),
+    ]),
+  ]);
+
+  root.appendChild(
+    h("div", { class: "grid-cols" }, [
+      h("div", { class: "col" }, [spellSection, spellsTableSection, miscSection]),
+      // equipmentSection() — только 2024 (см. её же на вкладке "Лист" для
+      // isClassic(), в renderTab1 выше).
+      h("div", { class: "col" }, [appearanceSection, backgroundSection, ...(isClassic() ? [] : [equipmentSection()])]),
+      h("div", { class: "col" }, [attunementSection, coinsSection]),
+    ])
+  );
+}
+
+// ==================== tab 5: инвентарь ====================
+//
+// В отличие от остального листа, инвентарь НЕ часть sheet/scheduleSave —
+// своя sub-collection (см. api.js: fetchCharacterInventory и соседи), у неё
+// собственные точечные запросы (см. internal/domain/character_sheet.go и
+// repository.CharacterRepository про причину: инвентарь может писать не
+// только сам игрок — ДМ через хаб, сервер при луте трупа — полная
+// перезапись sheet_json по debounce-автосейву листа не должна откатывать
+// только что выданный лут устаревшей копией). Доступна только владельцу
+// (см. isAdminView ниже — у ДМ, открывшего ЧУЖОЙ лист, эндпоинты инвентаря
+// вернут 404: они авторизуются по сессии текущего аккаунта, а не персонажа).
+let inventory = [];
+
+function totalWeight() {
+  const w = inventory.reduce((sum, e) => sum + (e.weightLb || 0) * (e.quantity || 0), 0);
+  return Math.round(w * 100) / 100;
+}
+
+async function loadInventory() {
+  try {
+    inventory = await fetchCharacterInventory(charId);
+  } catch {
+    inventory = [];
+  }
+  renderTab5();
+}
+
+function saveInventoryEntry(e, patch) {
+  Object.assign(e, patch);
+  updateCharacterInventoryItem(charId, e.id, e.quantity, e.equipped, e.notes).catch((err) => alert("Не удалось сохранить: " + err.message));
+}
+
+function removeInventoryEntry(id) {
+  deleteCharacterInventoryItem(charId, id)
+    .then(() => {
+      inventory = inventory.filter((e) => e.id !== id);
+      renderTab5();
+    })
+    .catch((err) => alert("Не удалось удалить: " + err.message));
+}
+
+function renderTab5() {
+  const root = document.getElementById("tab5");
+  root.innerHTML = "";
+
+  const listSection = h("div", { class: "section" }, [
+    h("h3", { text: "Инвентарь" }),
+    h("p", { class: "inv-total-weight" }, ["Общий вес: ", h("b", { text: String(totalWeight()) }), " фнт."]),
+  ]);
+
+  const table = h("table", { class: "dyn-table" }, [
+    h("thead", {}, [
+      h("tr", {}, [
+        h("th", {}),
+        h("th", { text: "Название" }),
+        h("th", { text: "Вес/шт" }),
+        h("th", { text: "Кол-во" }),
+        h("th", { text: "Надето" }),
+        h("th", { text: "Заметка" }),
+        h("th", {}),
+      ]),
+    ]),
+  ]);
+  const tbody = h("tbody", {});
+  for (const e of inventory) {
+    const avatar = h("div", { class: "inv-avatar" });
+    if (e.imageUrl) avatar.style.backgroundImage = `url("${e.imageUrl}")`;
+
+    const qtyInput = h("input", { type: "number", min: "0", value: String(e.quantity) });
+    qtyInput.addEventListener("change", () => {
+      const q = parseInt(qtyInput.value, 10);
+      saveInventoryEntry(e, { quantity: Number.isFinite(q) && q >= 0 ? q : e.quantity });
+      renderTab5();
+    });
+
+    const equippedInput = h("input", { type: "checkbox" });
+    equippedInput.checked = !!e.equipped;
+    equippedInput.addEventListener("change", () => saveInventoryEntry(e, { equipped: equippedInput.checked }));
+
+    const notesInput = h("input", { type: "text", value: e.notes || "", placeholder: "заметка" });
+    notesInput.addEventListener("change", () => saveInventoryEntry(e, { notes: notesInput.value }));
+
+    const delBtn = h("button", {
+      type: "button",
+      class: "row-del",
+      html: icon("close", { size: 11 }),
+      onclick: () => removeInventoryEntry(e.id),
+    });
+
+    tbody.appendChild(
+      h("tr", {}, [
+        h("td", {}, [avatar]),
+        h("td", { text: e.name }),
+        h("td", { text: (e.weightLb || 0) + " фнт" }),
+        h("td", {}, [qtyInput]),
+        h("td", {}, [equippedInput]),
+        h("td", {}, [notesInput]),
+        h("td", {}, [delBtn]),
+      ])
+    );
+  }
+  table.appendChild(tbody);
+  listSection.appendChild(table);
+
+  const addSection = h("div", { class: "section" }, [h("h3", { text: "Добавить из каталога" })]);
+  const pickerWrap = h("div", {});
+  addSection.appendChild(pickerWrap);
+  initItemPicker(pickerWrap, {
+    onPick: (item, qty) => {
+      addCharacterInventoryItem(charId, item.id, qty)
+        .then(loadInventory)
+        .catch((err) => alert("Не удалось добавить: " + err.message));
+    },
+  });
+
+  root.append(listSection, addSection);
+}
+
+// ==================== autosave ====================
+
+let saveTimer = null;
+let dirty = false;
+const saveStatusEl = document.getElementById("saveStatus");
+
+function setSaveStatus(kind, detail) {
+  saveStatusEl.classList.remove("saving", "error");
+  if (kind === "saving") {
+    saveStatusEl.textContent = "Сохранение…";
+    saveStatusEl.classList.add("saving");
+  } else if (kind === "saved") {
+    saveStatusEl.textContent = "Сохранено";
+  } else if (kind === "error") {
+    saveStatusEl.textContent = "Ошибка: " + (detail || "");
+    saveStatusEl.classList.add("error");
+  } else {
+    saveStatusEl.textContent = "";
+  }
+}
+
+function scheduleSave() {
+  if (readOnly) return;
+  dirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(doSave, 700);
+}
+
+async function doSave() {
+  if (!dirty || readOnly) return;
+  dirty = false;
+  setSaveStatus("saving");
+  try {
+    await (isAdminView ? updateAdminCharacterSheet(charId, sheet) : updateCharacterSheet(charId, sheet));
+    setSaveStatus("saved");
+  } catch (err) {
+    dirty = true;
+    setSaveStatus("error", err.message);
+  }
+}
+
+window.addEventListener("beforeunload", () => {
+  if (dirty && !readOnly) {
+    // best-effort — большинство браузеров не ждут async в beforeunload,
+    // но debounce всего 700мс, так что почти всегда уже сохранено к этому моменту.
+    doSave();
+  }
+});
+
+// ==================== dice rolls ====================
+
+function connectRollSocket() {
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  // /ws/player требует роль "player" (см. internal/api/ws/routes.go) — ДМ
+  // туда просто не пустят, поэтому в режиме ДМ бросок идёт через /ws/dm
+  // (авторизован ролью admin из той же cookie сессии). Сервер разрешает DM
+  // отправлять roll_dice как и все остальные типы сообщений (authorize),
+  // и подписывает бросок именем "ДМ" (room.go: handleRollDice) — здесь
+  // важен только сам roll_result, остальной трафик DM-сокета (снапшот
+  // сцены и т.п.) молча игнорируется.
+  rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
+  rollWS.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    if (data.type === "roll_result") showRollResult(data);
+  };
+}
+
+function sendRoll(formula, label) {
+  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
+  // Бросок с чужого листа уходит по /ws/dm и в общем логе подписывается
+  // просто "ДМ" (см. connectRollSocket, room.go: handleRollDice — имя там
+  // берётся из роли сокета, персонажа сервер не знает) — без имени
+  // персонажа в самом label непонятно, за кого именно бросал ДМ, если
+  // открыто несколько листов подряд.
+  const fullLabel = isAdminView && character ? `${character.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
+  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
+}
+
+function showRollResult(data) {
+  const wrap = document.getElementById("rollLogWrap");
+  wrap.classList.remove("hidden");
+  const log = document.getElementById("rollLog");
+  const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
+  const who = data.label ? `${data.name} — ${data.label}` : data.name;
+  const row = h("div", { class: "dice-log-row", text: `${who}: ${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}` });
+  log.prepend(row);
+  while (log.children.length > 20) log.removeChild(log.lastChild);
+}
+
+// ==================== boot ====================
+
+function switchTab(n) {
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === String(n)));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+  document.getElementById("tab" + n).classList.add("active");
+}
+document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+document.getElementById("closeBtn").onclick = () => {
+  // По умолчанию лист открывается ВНУТРИ dm.html/player.html как плавающее
+  // окно (см. web/src/floating-window.js) — это iframe, а не отдельная
+  // вкладка, и window.close() у iframe молча ничего не делает. Родитель
+  // слушает это сообщение и закрывает плавающее окно сам. Если же лист
+  // вынесли кнопкой 🗗 в настоящее окно браузера (window.parent === window),
+  // ведём себя как раньше.
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
+  } else {
+    window.close();
+  }
+};
+
+function currentId() {
+  return new URLSearchParams(location.search).get("id");
+}
+
+(async function boot() {
+  me = await fetchMe();
+  if (!me || (me.role !== "player" && me.role !== "admin")) {
+    location.href = "/";
+    return;
+  }
+  charId = currentId();
+  if (!charId) {
+    document.getElementById("loadingHint").textContent = "Не указан id персонажа (?id=...).";
+    return;
+  }
+  isAdminView = me.role === "admin";
+  try {
+    character = isAdminView ? await fetchAdminCharacter(charId) : await fetchCharacter(charId);
+  } catch (err) {
+    document.getElementById("loadingHint").textContent = "Не удалось загрузить лист: " + err.message;
+    return;
+  }
+  sheet = normalizeSheet(character.sheet);
+  // Справочник (классы/архетипы/происхождения/виды, см. domain.Reference) —
+  // источник подсказок для полей "Класс"/"Подкласс"/"Вид"/"Предыстория"
+  // (см. suggestInput/classSubclassFields выше). Отсутствие/ошибка запроса
+  // не должна ронять открытие листа — тогда поля просто останутся обычным
+  // текстовым вводом без подсказок.
+  references = await fetchReferences().catch(() => []);
+
+  document.getElementById("charTitle").textContent = character.name;
+  document.getElementById("charSub").textContent = isAdminView && character.accountUsername ? "игрок: " + character.accountUsername : "";
+  // Баннер больше не значит "только для чтения" (ДМ тоже редактирует) —
+  // просто предупреждает, чей это лист, чтобы не перепутать со своим.
+  document.getElementById("readonlyBanner").classList.toggle("shown", isAdminView);
+
+  renderTab1();
+  renderTab2();
+  renderTab3();
+  renderTab4();
+
+  // Инвентарь — только у владельца (см. комментарий renderTab5 выше): у ДМ,
+  // открывшего чужой лист, эндпоинты инвентаря вернули бы 404 (авторизация
+  // по сессии текущего аккаунта), поэтому вкладку в режиме ДМ просто прячем,
+  // а не показываем пустой/ошибающийся список.
+  const tab5Btn = document.querySelector('.tab-btn[data-tab="5"]');
+  if (isAdminView) {
+    if (tab5Btn) tab5Btn.style.display = "none";
+  } else {
+    loadInventory();
+  }
+
+  document.getElementById("loadingHint").style.display = "none";
+  document.getElementById("app").classList.add("ready");
+
+  // Бросок кубов с листа — и у владельца, и у ДМ (см. connectRollSocket:
+  // разные WS-эндпоинты под роль).
+  connectRollSocket();
+})();

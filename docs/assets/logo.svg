@@ -1,0 +1,43 @@
+<svg viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="tower" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#f0e6d2"/>
+<stop offset="100%" stop-color="#cbb98f"/>
+</linearGradient>
+<linearGradient id="lamp" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#fbbf4c"/>
+<stop offset="100%" stop-color="#c9701f"/>
+</linearGradient>
+<radialGradient id="glow" cx="50%" cy="50%" r="50%">
+<stop offset="0%" stop-color="#ffe6a8" stop-opacity="0.85"/>
+<stop offset="100%" stop-color="#ffe6a8" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect x="0" y="0" width="680" height="680" fill="#0b1220"/>
+<g transform="translate(340,360) scale(1.18) translate(-340,-360)">
+<circle cx="340" cy="215" r="115" fill="url(#glow)"/>
+<g stroke="#f3b93a" stroke-linecap="round">
+<line x1="289" y1="94" x2="340" y2="235" stroke-width="6" opacity="0.4"/>
+<line x1="391" y1="94" x2="340" y2="235" stroke-width="6" opacity="0.4"/>
+<line x1="244" y1="120" x2="340" y2="235" stroke-width="5" opacity="0.3"/>
+<line x1="436" y1="120" x2="340" y2="235" stroke-width="5" opacity="0.3"/>
+<line x1="340" y1="85" x2="340" y2="235" stroke-width="9" opacity="0.8"/>
+</g>
+<polygon points="387.6,282.5 340,310 292.4,282.5 292.4,227.5 340,200 387.6,227.5" fill="url(#lamp)" stroke="#7a4a12" stroke-width="3"/>
+<g stroke="#a5590f" stroke-width="2" opacity="0.55">
+<line x1="340" y1="255" x2="387.6" y2="282.5"/>
+<line x1="340" y1="255" x2="340" y2="310"/>
+<line x1="340" y1="255" x2="292.4" y2="282.5"/>
+<line x1="340" y1="255" x2="292.4" y2="227.5"/>
+<line x1="340" y1="255" x2="340" y2="200"/>
+<line x1="340" y1="255" x2="387.6" y2="227.5"/>
+</g>
+<polygon points="340,163 308,201 372,201" fill="url(#tower)"/>
+<rect x="296" y="298" width="88" height="16" rx="3" fill="url(#tower)"/>
+<polygon points="313,314 367,314 403,562 277,562" fill="url(#tower)"/>
+<line x1="313" y1="380" x2="367" y2="380" stroke="#a99668" stroke-width="4"/>
+<line x1="305" y1="460" x2="375" y2="460" stroke="#a99668" stroke-width="4"/>
+<rect x="326" y="500" width="28" height="62" rx="2" fill="#7a6a48"/>
+<line x1="257" y1="565" x2="423" y2="565" stroke="#3a4256" stroke-width="8" stroke-linecap="round"/>
+</g>
+</svg>

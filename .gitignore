@@ -1,0 +1,6 @@
+.claude
+*.exe
+/beacon-table
+/uploads
+/data
+/web/node_modules

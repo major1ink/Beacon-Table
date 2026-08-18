@@ -1,0 +1,22 @@
+# Бинарные ассеты — через Git LFS (превентивно: скриншоты/гифки для README,
+# демо-контент, свой CC0/собственный арт-пак, если появится по образцу
+# модулей Foundry — см. migration-plan.md). Сегодня в репозитории таких
+# файлов почти нет (systemdata/assets очищен от стороннего контента), но
+# правило действует с первого коммита, чтобы не было "уже поздно" повторно.
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.webp filter=lfs diff=lfs merge=lfs -text
+*.gif filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.webm filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.wav filter=lfs diff=lfs merge=lfs -text
+
+# Текст остаётся обычным git — диффы читаемы, PR-ревью не превращается в
+# "скачай LFS-объект, чтобы посмотреть, что изменилось".
+*.go -text
+*.js -text
+*.json -text
+*.md -text
