@@ -139,6 +139,26 @@
     #wallPointMenu button { width: 100%; background: var(--danger); }
     #wallPointMenu button:hover { background: var(--danger-hover); }
 
+    #fogAreaMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    #fogAreaMenu button { width: 100%; display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start; background: var(--danger); }
+    #fogAreaMenu button:hover { background: var(--danger-hover); }
+
+    #wallMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    #wallMenu button { width: 100%; display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start; background: var(--danger); }
+    #wallMenu button:hover { background: var(--danger-hover); }
+
     #noteMarkerMenu {
       position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
       background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
@@ -918,6 +938,14 @@
 
   <div id="wallPointMenu">
     <button id="wallPointMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить точку стены</button>
+  </div>
+
+  <div id="fogAreaMenu">
+    <button id="fogAreaMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить фигуру тумана</button>
+  </div>
+
+  <div id="wallMenu">
+    <button id="wallMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить стену</button>
   </div>
 
   <div id="noteMarkerMenu">

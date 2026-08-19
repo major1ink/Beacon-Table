@@ -8,6 +8,7 @@ type ClientMsg struct {
 	ID         string        `json:"id,omitempty"`
 	NoteMarker *NoteMarker   `json:"noteMarker,omitempty"`
 	Wall       *Wall         `json:"wall,omitempty"`
+	Wall2      *Wall         `json:"wall2,omitempty"` // вторая половина при "split_wall" (см. Wall)
 	FogArea    *FogArea      `json:"fogArea,omitempty"`
 	Building   *Building     `json:"building,omitempty"` // "add_building" — контур целиком, ОДНОЙ мутацией (см. Building)
 	Grid       *GridSettings `json:"grid,omitempty"`
@@ -20,6 +21,10 @@ type ClientMsg struct {
 	// разом, одной мутацией.
 	WallPoints []WallPointRef `json:"wallPoints,omitempty"` // "move_wall_point"
 	WallIDs    []string       `json:"wallIds,omitempty"`    // "remove_wall_point"
+
+	// "split_wall" — вставка новой точки посреди существующей стены: ID —
+	// удаляемая исходная стена, Wall/Wall2 — две новые, на которые она
+	// делится в точке вставки (см. web/src/vtt/interaction.js:splitWallAt).
 
 	// поля команд управления сценами (create_scene/rename_scene/delete_scene/
 	// switch_scene/update_scene)

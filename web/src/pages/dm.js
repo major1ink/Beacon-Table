@@ -450,6 +450,8 @@ function closeWallPointMenu() {
 document.addEventListener("vtt:wallPointContextMenu", (e) => {
   closeTokenMenu();
   closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
   menuWallIds = [...new Set(e.detail.refs.map((r) => r.wallId))];
   wallPointMenu.style.left = e.detail.pageX + "px";
   wallPointMenu.style.top = e.detail.pageY + "px";
@@ -459,6 +461,67 @@ document.addEventListener("vtt:wallPointContextMenu", (e) => {
 wallPointMenuDelete.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:removeWallPoint", { detail: { wallIds: menuWallIds } }));
   closeWallPointMenu();
+};
+
+// ================= меню фигуры ручного тумана (ПКМ внутри контура) =================
+// Раньше ПКМ сразу удалял фигуру без подтверждения — теперь фигуру можно ещё
+// и двигать/переформовывать (см. interaction.js), поэтому снос вынесен в
+// меню, как у токена/значка заметки, а не остаётся единственным ПКМ-действием.
+const fogAreaMenu = document.getElementById("fogAreaMenu");
+const fogAreaMenuDelete = document.getElementById("fogAreaMenuDelete");
+let menuFogAreaId = null;
+
+function closeFogAreaMenu() {
+  fogAreaMenu.style.display = "none";
+  menuFogAreaId = null;
+}
+
+document.addEventListener("vtt:fogAreaContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeWallMenu();
+  menuFogAreaId = e.detail.id;
+  fogAreaMenu.style.left = e.detail.pageX + "px";
+  fogAreaMenu.style.top = e.detail.pageY + "px";
+  fogAreaMenu.style.display = "block";
+});
+
+fogAreaMenuDelete.onclick = () => {
+  if (!menuFogAreaId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeFogArea", { detail: { id: menuFogAreaId } }));
+  closeFogAreaMenu();
+};
+
+// ================= меню стены (ПКМ по линии, не по концу) =================
+// Раньше ПКМ рядом со стеной сразу сносил её без подтверждения — теперь
+// середину стены можно ещё и кликнуть, чтобы вставить точку (см.
+// interaction.js:splitWallAt), так что снос вынесен в меню, как у фигуры
+// тумана выше.
+const wallMenu = document.getElementById("wallMenu");
+const wallMenuDelete = document.getElementById("wallMenuDelete");
+let menuWallId = null;
+
+function closeWallMenu() {
+  wallMenu.style.display = "none";
+  menuWallId = null;
+}
+
+document.addEventListener("vtt:wallContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  menuWallId = e.detail.id;
+  wallMenu.style.left = e.detail.pageX + "px";
+  wallMenu.style.top = e.detail.pageY + "px";
+  wallMenu.style.display = "block";
+});
+
+wallMenuDelete.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeWall", { detail: { id: menuWallId } }));
+  closeWallMenu();
 };
 
 // ================= меню значка заметки (ПКМ по свитку на карте) =================
@@ -475,6 +538,8 @@ function closeNoteMarkerMenu() {
 document.addEventListener("vtt:noteMarkerContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
   menuNoteMarkerId = e.detail.id;
   noteMarkerMenu.style.left = e.detail.pageX + "px";
   noteMarkerMenu.style.top = e.detail.pageY + "px";
@@ -501,6 +566,8 @@ function updateLightToggleBtnLabel() {
 document.addEventListener("vtt:tokenContextMenu", (e) => {
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
   const { id, token, pageX, pageY } = e.detail;
   menuTokenId = id;
   menuCharacterId = token.characterId || "";
@@ -1758,6 +1825,8 @@ document.addEventListener("mousedown", (e) => {
   if (tokenMenu.style.display === "block" && !tokenMenu.contains(e.target)) closeTokenMenu();
   if (wallPointMenu.style.display === "block" && !wallPointMenu.contains(e.target)) closeWallPointMenu();
   if (noteMarkerMenu.style.display === "flex" && !noteMarkerMenu.contains(e.target)) closeNoteMarkerMenu();
+  if (fogAreaMenu.style.display === "block" && !fogAreaMenu.contains(e.target)) closeFogAreaMenu();
+  if (wallMenu.style.display === "block" && !wallMenu.contains(e.target)) closeWallMenu();
 });
 
 // ===================================================================

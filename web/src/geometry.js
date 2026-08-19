@@ -59,12 +59,21 @@ export function computeVisibilityPolygon(ox, oy, radius, walls) {
 // distToSegment — расстояние от точки до отрезка (для поиска ближайшей
 // стены под курсором).
 export function distToSegment(px, py, x1, y1, x2, y2) {
+  const { cx, cy } = closestPointOnSegment(px, py, x1, y1, x2, y2);
+  return Math.hypot(px - cx, py - cy);
+}
+
+// closestPointOnSegment — ближайшая к (px,py) точка НА отрезке (x1,y1)-(x2,y2)
+// (проекция, зажатая в [0,1] по длине отрезка) — {cx,cy}. Используется и
+// distToSegment (нужно только расстояние), и вставкой новой точки в стену
+// (splitWallAt в interaction.js — там нужна сама точка на линии, а не
+// сырая позиция курсора, иначе новая вершина "спрыгивает" со стены).
+export function closestPointOnSegment(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
   const lenSq = dx * dx + dy * dy;
   let t = lenSq > 0 ? ((px - x1) * dx + (py - y1) * dy) / lenSq : 0;
   t = Math.max(0, Math.min(1, t));
-  const cx = x1 + t * dx, cy = y1 + t * dy;
-  return Math.hypot(px - cx, py - cy);
+  return { cx: x1 + t * dx, cy: y1 + t * dy };
 }
 
 // wallNear — id ближайшей стены к (x,y) в пределах screenPx экранных
@@ -233,6 +242,30 @@ export function fogAreaAt(x, y, fogAreas) {
     if (area.points.length >= 3 && pointInPolygon(x, y, area.points)) return id;
   }
   return null;
+}
+
+// fogVertexNear — ближайшая вершина фигуры ручного тумана к (x,y) в пределах
+// screenPx экранных пикселей, либо null — {areaId, index, x, y}. Та же идиома,
+// что wallVertexNear, но точки фигуры тумана не группируются между разными
+// фигурами (в отличие от стен, углы разных облаков тумана не обязаны
+// склеиваться) — index прямо указывает на area.points[index], которую
+// перетаскивание в interaction.js подменяет на новую позицию (переформовка
+// контура).
+export function fogVertexNear(x, y, fogAreas, scale, screenPx = 10) {
+  const threshold = screenPx / scale;
+  let best = null, bestDist = threshold;
+  for (const id in fogAreas) {
+    const area = fogAreas[id];
+    for (let i = 0; i < area.points.length; i++) {
+      const p = area.points[i];
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < bestDist) {
+        best = { areaId: id, index: i, x: p.x, y: p.y };
+        bestDist = d;
+      }
+    }
+  }
+  return best;
 }
 
 // buildingAt — id здания, содержащего точку (x,y), либо null. Та же идиома,

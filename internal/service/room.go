@@ -1487,6 +1487,18 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		}
 		r.markDirty(r.currentSceneID)
 
+	case "split_wall":
+		// Вставка точки в середину стены (см. web/src/vtt/interaction.js:
+		// splitWallAt) — исходная стена заменяется двумя новыми, стыкующимися
+		// в точке вставки; одна мутация вместо remove_wall+add_wall×2, чтобы
+		// у остальных клиентов не мелькал момент "стена исчезла".
+		if msg.Wall != nil && msg.Wall2 != nil {
+			delete(r.scene.Walls, msg.ID)
+			r.scene.Walls[msg.Wall.ID] = msg.Wall
+			r.scene.Walls[msg.Wall2.ID] = msg.Wall2
+			r.markDirty(r.currentSceneID)
+		}
+
 	case "remove_wall_point":
 		// "удалить точку" = удалить все стены, у которых там конец — одна
 		// стена, если конец никем больше не разделён, несколько — если это
