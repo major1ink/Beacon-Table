@@ -37,9 +37,14 @@ export function createBackgroundLayer(ctx) {
     v.muted = true;
     v.playsInline = true;
     v.preload = "auto";
+    v.volume = ctx.localAmbientVol != null ? ctx.localAmbientVol : 1;
     v.src = url;
     return v;
   }
+
+  document.addEventListener("vtt:ambientLocalVolChanged", (e) => {
+    if (mapVideo) mapVideo.volume = e.detail;
+  });
 
   function releaseVideo() {
     if (cancelFrameWait) {

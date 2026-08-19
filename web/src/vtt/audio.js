@@ -157,14 +157,17 @@ export function createAudio(ctx, sideMenu) {
     volumePanel.appendChild(row);
     return row.querySelector("input");
   }
-  const ambientVolSlider = addVolumeRow(icon("music", { size: 13 }), "Сцена", "Громкость музыки сцены — только у тебя, на других клиентов не влияет");
+  const ambientVolSlider = addVolumeRow(icon("music", { size: 13 }), "Сцена", "Громкость сцены — амбиент-трек и звук видео-фона карты, только у тебя, на других клиентов не влияет");
   const cueVolSlider = addVolumeRow(icon("headphones", { size: 13 }), "ДМ", "Громкость канала ДМ (плейлисты) — только у тебя");
   ambientVolSlider.value = Math.round(localAmbientVol * 100);
   cueVolSlider.value = Math.round(localCueVol * 100);
+  ctx.localAmbientVol = localAmbientVol;
   ambientVolSlider.oninput = () => {
     localAmbientVol = ambientVolSlider.value / 100;
     localStorage.setItem(LOCAL_VOL_KEY_AMBIENT, localAmbientVol);
     ambientAudio.volume = Math.max(0, Math.min(1, (ctx.scene.ambientVolume || 0) * localAmbientVol));
+    ctx.localAmbientVol = localAmbientVol;
+    document.dispatchEvent(new CustomEvent("vtt:ambientLocalVolChanged", { detail: localAmbientVol }));
   };
   cueVolSlider.oninput = () => {
     localCueVol = cueVolSlider.value / 100;
