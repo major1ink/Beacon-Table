@@ -1,0 +1,107 @@
+# https://taskfile.dev
+version: "3"
+
+vars:
+  BIN: beacon-table
+
+tasks:
+  default:
+    desc: Показать список доступных задач
+    silent: true
+    cmds:
+      - task --list
+
+  build:
+    desc: Собрать бинарник сервера
+    sources:
+      - cmd/**/*.go
+      - internal/**/*.go
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BIN}}"
+    cmds:
+      - go build -o {{.BIN}} ./cmd/beacon-table
+
+  run:
+    desc: Запустить сервер (go run)
+    cmds:
+      - go run ./cmd/beacon-table
+
+  test:
+    desc: Прогнать тесты Go
+    cmds:
+      - go test ./...
+
+  vet:
+    desc: go vet
+    cmds:
+      - go vet ./...
+
+  fmt:
+    desc: Проверить форматирование Go-кода (без изменений)
+    cmds:
+      - |
+        UNFORMATTED=$(gofmt -l .)
+        if [ -n "$UNFORMATTED" ]; then
+          echo "Не отформатировано (gofmt -w .):"
+          echo "$UNFORMATTED"
+          exit 1
+        fi
+
+  fmt:fix:
+    desc: Отформатировать Go-код (gofmt -w)
+    cmds:
+      - gofmt -w .
+
+  lint:go:
+    desc: Линтер Go-кода (golangci-lint)
+    cmds:
+      - golangci-lint run
+
+  web:install:
+    desc: Установить зависимости фронтенда
+    dir: web
+    sources:
+      - package.json
+      - package-lock.json
+    cmds:
+      - npm install
+
+  web:build:
+    desc: Собрать фронтенд (vite build)
+    dir: web
+    deps:
+      - web:install
+    cmds:
+      - npm run build
+
+  web:dev:
+    desc: Запустить фронтенд в режиме разработки (vite dev)
+    dir: web
+    deps:
+      - web:install
+    cmds:
+      - npm run dev
+
+  lint:web:
+    desc: Линтер фронтенда (eslint)
+    dir: web
+    deps:
+      - web:install
+    cmds:
+      - npm run lint
+
+  lint:
+    desc: Все линтеры — Go + фронтенд
+    cmds:
+      - task: lint:go
+      - task: lint:web
+
+  check:
+    desc: Полная проверка перед PR — fmt:fix, vet, test, lint
+    cmds:
+      - task: fmt:fix
+      - task: vet
+      - task: test
+      - task: lint

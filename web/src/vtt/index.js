@@ -279,7 +279,7 @@ export async function initVTT({ canvasId, role, playerId }) {
           // Только через систему текстур: source._gpuData в 8.19 пуст, ключ там
           // не совпадает с renderer.uid.
           pixiGl = pixiSource && app.renderer.texture.getGlSource(pixiSource);
-        } catch (e) {
+        } catch {
           pixiGl = null;
         }
         const errName = (e) =>

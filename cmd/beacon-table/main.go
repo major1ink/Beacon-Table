@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	apihttp "beacon-table/internal/api/http"
 	apiws "beacon-table/internal/api/ws"
@@ -48,7 +49,7 @@ func main() {
 	version := serverVersion()
 	log.Println("Beacon Table версия:", version)
 
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
 		log.Fatal(err)
 	}
 
@@ -82,7 +83,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(sub))) 
+	mux.Handle("/", http.FileServer(http.FS(sub)))
 
 	mux.Handle(uploadsURL, http.StripPrefix(uploadsURL, http.FileServer(http.Dir(uploadsDir))))
 
@@ -109,5 +110,10 @@ func main() {
 	addr := ":8080"
 	log.Println("Beacon Table сервер запущен на", addr)
 	printAccessURLs()
-	log.Fatal(http.ListenAndServe(addr, mux))
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	log.Fatal(srv.ListenAndServe())
 }

@@ -42,12 +42,15 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "world not running", http.StatusServiceUnavailable)
 		return
 	}
-	kind := r.FormValue("kind")
-
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+	//nolint:gosec // G120: тело уже ограничено MaxBytesReader выше — gosec
+	// не умеет это распознавать (его taint-анализ ParseMultipartForm не
+	// знает про MaxBytesReader как санитайзер), см. github.com/securego/gosec.
 	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
 		http.Error(w, "file too large", http.StatusBadRequest)
 		return
 	}
+	kind := r.FormValue("kind")
 	folder := r.FormValue("folder")
 
 	file, header, err := r.FormFile("file")

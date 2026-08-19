@@ -98,16 +98,6 @@ function textInput(get, set, opts) {
   return inp;
 }
 
-function textareaInput(get, set, opts) {
-  const t = h("textarea", opts || {});
-  t.value = get() ?? "";
-  t.addEventListener("input", () => {
-    set(t.value);
-    scheduleSave();
-  });
-  return t;
-}
-
 function numberInput(get, set, opts) {
   const inp = h("input", Object.assign({ type: "number" }, opts || {}));
   inp.value = get() ?? 0;

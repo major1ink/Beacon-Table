@@ -81,6 +81,7 @@ func (s *Store) List(ctx context.Context) ([]*domain.Note, error) {
 			continue
 		}
 		p := filepath.Join(s.notesDir, e.Name())
+		//nolint:gosec // G304: e.Name() — имя файла из os.ReadDir(s.notesDir)
 		data, err := os.ReadFile(p)
 		if err != nil {
 			continue // повреждённый/недоступный файл одной заметки не роняет список остальных
@@ -102,6 +103,8 @@ func (s *Store) List(ctx context.Context) ([]*domain.Note, error) {
 
 func (s *Store) Get(ctx context.Context, id string) (*domain.Note, error) {
 	p := s.notePath(id)
+	//nolint:gosec // G304: notePath санитизирует id (unsafeIDChars) и всегда
+	// добавляет ".md" — результат не может выйти за пределы notesDir.
 	data, err := os.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -121,12 +124,12 @@ func (s *Store) Get(ctx context.Context, id string) (*domain.Note, error) {
 // поверх целевого, как SaveScene в scenefile.go — падение/убийство процесса
 // посреди записи не оставляет битый файл этой заметки.
 func (s *Store) writeAtomic(id, content string) error {
-	if err := os.MkdirAll(s.notesDir, 0o755); err != nil {
+	if err := os.MkdirAll(s.notesDir, 0o750); err != nil {
 		return err
 	}
 	p := s.notePath(id)
 	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(content), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, p)

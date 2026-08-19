@@ -244,7 +244,9 @@ function buildWeaponProperties(sys) {
   let codes = [];
   if (Array.isArray(raw)) codes = raw;
   else if (raw && typeof raw === "object") codes = Object.keys(raw).filter((k) => raw[k]);
-  if (sys.proficient === false) codes = codes; // не игровое правило — сервер не считает бонус атаки, это поле сюда не идёт
+  // sys.proficient (владение оружием) сознательно не влияет на список
+  // свойств: не игровое правило, сервер не считает бонус атаки, это поле
+  // сюда вообще не идёт.
   return codes.map((c) => ru(WEAPON_PROPERTIES_RU, c)).join(", ");
 }
 

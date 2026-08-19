@@ -1,11 +1,4 @@
 // Package scenefile реализует repository.SceneRepository поверх JSON-файлов
-// на диске: по файлу на сцену, а не один общий JSON. Причина — реальный
-// сценарий использования: за пару недель игр библиотека сцен легко
-// разрастается до полусотни-сотни штук, а мутирует в любой момент времени
-// только ОДНА активная сцена. Один общий файл means каждый автосейв
-// перезаписывал бы весь архив целиком ради правки в одной сцене — и чем
-// больше сцен, тем дороже. С файлом на сцену на диск идёт только то, что
-// реально изменилось.
 package scenefile
 
 import (
@@ -54,7 +47,7 @@ func NewStore(dataDir string) *Store {
 // roomMeta — единственное, что нужно хранить сверх самих сцен: какая из них
 // открыта сейчас и в каком порядке они идут в переключателе DM. CurrentMap —
 // легаси-поле для чтения room.json, сохранённого до перехода на сцены как
-// самостоятельные сущности (тогда "активная сцена" была равна URL карты).
+// самостоятельные сущности.
 type roomMeta struct {
 	CurrentSceneID string   `json:"currentSceneId,omitempty"`
 	SceneOrder     []string `json:"sceneOrder,omitempty"`
@@ -70,9 +63,7 @@ func fnvHash(s string) uint32 {
 }
 
 // sceneFileName — имя файла на диске для сцены по её ID. ID уже
-// filesystem-safe (генерируется в виде "scene-<...>"), но на всякий случай
-// всё равно прогоняем через санитайзер — если кто-то руками пропишет id со
-// спецсимволами.
+// filesystem-safe (генерируется в виде "scene-<...>")
 func sceneFileName(id string) string {
 	safe := unsafeFileChars.ReplaceAllString(id, "_")
 	if safe == "" {
@@ -120,7 +111,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 	}
 
 	scenes := make(map[string]*domain.SceneState)
-	var diskOrder []string // порядок обнаружения на диске — фолбэк, если room.json ничего не подскажет
+	var diskOrder []string
 
 	entries, err := os.ReadDir(s.scenesDir)
 	if err != nil && !os.IsNotExist(err) {
@@ -131,6 +122,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 			continue
 		}
 		p := filepath.Join(s.scenesDir, e.Name())
+		//nolint:gosec // G304: e.Name() — имя файла из os.ReadDir(s.scenesDir)
 		data, err := os.ReadFile(p)
 		if err != nil {
 			log.Println("не удалось прочитать сцену, пропускаю:", p, err)
@@ -200,8 +192,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 // loadCombat читает трекер инициативы (см. domain.CombatState) из его
 // отдельного файла. Отсутствующий файл (первый запуск) и битый JSON
 // (ручное редактирование) одинаково трактуются как "начать с пустого
-// трекера" — как и остальной Load, одна повреждённая часть состояния не
-// должна ронять запуск сервера целиком.
+// трекера" — как и остальной Load.
 func (s *Store) loadCombat() *domain.CombatState {
 	combat := domain.NewCombatState()
 	data, err := os.ReadFile(s.combatFile)
@@ -219,10 +210,9 @@ func (s *Store) loadCombat() *domain.CombatState {
 }
 
 // SaveCombat implements repository.SceneRepository. Атомарно сохраняет
-// трекер инициативы — тот же приём, что SaveScene (пишем во временный файл,
-// переименовываем поверх целевого).
+// трекер инициативы — тот же приём, что SaveScene.
 func (s *Store) SaveCombat(ctx context.Context, combat *domain.CombatState) error {
-	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dataDir, 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(combat, "", "  ")
@@ -230,7 +220,7 @@ func (s *Store) SaveCombat(ctx context.Context, combat *domain.CombatState) erro
 		return err
 	}
 	tmp := s.combatFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.combatFile)
@@ -255,9 +245,8 @@ func (s *Store) loadHub() *domain.LootHub {
 	return hub
 }
 
-// SaveHub implements repository.SceneRepository — тот же приём, что SaveCombat.
 func (s *Store) SaveHub(ctx context.Context, hub *domain.LootHub) error {
-	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dataDir, 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(hub, "", "  ")
@@ -265,7 +254,7 @@ func (s *Store) SaveHub(ctx context.Context, hub *domain.LootHub) error {
 		return err
 	}
 	tmp := s.hubFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.hubFile)
@@ -372,11 +361,10 @@ func (s *Store) migrateLegacyIfNeeded() *domain.RoomSnapshot {
 // data/migrations/<дата-время>/<исходное-имя> — с датой в имени папки
 // всегда, без вариантов "забыли проставить". Так по мере развития проекта
 // (новые миграции формата state будут копиться и дальше) в data/migrations/
-// остаётся история "что и когда мигрировали", а не плоская куча файлов
-// "*.migrated", "*.migrated.2" и т.п. вперемешку с рабочими данными.
+// остаётся история "что и когда мигрировали".
 func (s *Store) backupToMigrations(srcPath string) error {
 	dir := filepath.Join(s.migrationsDir, time.Now().Format("2006-01-02_15-04-05"))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 	return os.Rename(srcPath, filepath.Join(dir, filepath.Base(srcPath)))
@@ -447,7 +435,7 @@ func sanitizeScene(s *domain.SceneState) {
 // оставляло битый файл именно этой сцены (а не портило заодно и остальную
 // библиотеку, как было бы с одним общим файлом).
 func (s *Store) SaveScene(ctx context.Context, id string, scene *domain.SceneState) error {
-	if err := os.MkdirAll(s.scenesDir, 0o755); err != nil {
+	if err := os.MkdirAll(s.scenesDir, 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(scene, "", "  ")
@@ -456,7 +444,7 @@ func (s *Store) SaveScene(ctx context.Context, id string, scene *domain.SceneSta
 	}
 	p := filepath.Join(s.scenesDir, sceneFileName(id))
 	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, p)
@@ -476,7 +464,7 @@ func (s *Store) DeleteScene(ctx context.Context, id string) error {
 // SaveMeta implements repository.SceneRepository. Атомарно сохраняет, какая
 // сцена сейчас активна и в каком порядке они идут в переключателе DM.
 func (s *Store) SaveMeta(ctx context.Context, currentSceneID string, order []string) error {
-	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dataDir, 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(roomMeta{CurrentSceneID: currentSceneID, SceneOrder: order}, "", "  ")
@@ -484,7 +472,7 @@ func (s *Store) SaveMeta(ctx context.Context, currentSceneID string, order []str
 		return err
 	}
 	tmp := s.roomMetaFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.roomMetaFile)

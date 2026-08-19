@@ -189,15 +189,6 @@ function renderEditView(root) {
 // сетка сотворения, эффект, описание — без единого сырого инпута. Урон и
 // прочие формулы в описании кликабельны (см. web/src/inline-rolls.js).
 
-function rollLink(formula, label, text) {
-  const a = h("a", { class: "inline-roll", href: "#", title: "Бросить " + label, text });
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    sendRoll(formula, label);
-  });
-  return a;
-}
-
 function lineIf(label, value) {
   const v = (value ?? "").toString().trim();
   if (!v) return null;

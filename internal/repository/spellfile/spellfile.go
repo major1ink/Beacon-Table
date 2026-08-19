@@ -95,7 +95,7 @@ func (s *Store) Get(ctx context.Context, id string) (*domain.Spell, error) {
 // writeAtomic — общая запись Create/Update: во временный файл и
 // переименование поверх целевого (см. monsterfile.writeAtomic).
 func (s *Store) writeAtomic(id string, sp *domain.Spell) error {
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dir, 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(sp, "", "  ")
@@ -104,7 +104,7 @@ func (s *Store) writeAtomic(id string, sp *domain.Spell) error {
 	}
 	p := s.spellPath(id)
 	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, p)

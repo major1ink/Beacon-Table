@@ -8,21 +8,24 @@ import (
 )
 
 func setSessionCookie(w http.ResponseWriter, token string) {
+	//nolint:gosec // G124: Secure сознательно не ставим — сервер по умолчанию
+	// плейн HTTP (см. README "Доступ через интернет"), Secure-cookie тут
+	// просто не долетела бы обратно. За HTTPS-реверс-прокси включайте
+	// отдельно на уровне прокси (или форкайте это место под свой деплой).
 	http.SetCookie(w, &http.Cookie{
 		Name:     domain.SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 		// SameSite=Lax: не улетает на кросс-сайтовые POST/WS из чужого
-		// origin, но переживает обычную навигацию. Secure не ставим — сервер
-		// по умолчанию плейн HTTP (см. README "Доступ через интернет"); за
-		// HTTPS-реверс-прокси это стоит включить отдельно.
+		// origin, но переживает обычную навигацию.
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(domain.SessionTTL.Seconds()),
 	})
 }
 
 func clearSessionCookie(w http.ResponseWriter) {
+	//nolint:gosec // G124: см. обоснование в setSessionCookie выше.
 	http.SetCookie(w, &http.Cookie{
 		Name:     domain.SessionCookieName,
 		Value:    "",

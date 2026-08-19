@@ -3,11 +3,9 @@ import { canvasPos, screenToWorld, getTransform, zoomAt, resetCamera } from "./c
 import {
   tokenAt,
   snapToGrid,
-  distToSegment,
   wallNear,
   wallVertexNear,
   snapToWallVertex,
-  pointInPolygon,
   fogAreaAt,
   buildingAt,
   noteMarkerAt,

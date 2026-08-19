@@ -37,7 +37,7 @@ import {
   deleteNote,
   fetchMonster,
 } from "../api.js";
-import { renderNoteHtml, noteTitleFromContent, wireWikiLinks } from "../notes/markdown.js";
+import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
 import { initItemPicker } from "../item-picker.js";
@@ -2091,7 +2091,7 @@ document.getElementById("fitToBgBtn").onclick = async () => {
     const { w, h } = await loadImageSize(fMapUrl.value.trim());
     fWidth.value = w;
     fHeight.value = h;
-  } catch (err) {
+  } catch {
     alert("Не удалось прочитать размер фона — проверь URL.");
   }
 };

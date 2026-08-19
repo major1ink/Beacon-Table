@@ -23,10 +23,22 @@ npm run build   # результат нужно закоммитить вмес�
 
 ## Перед PR
 
+В проекте используется [Task](https://taskfile.dev) (`go install
+github.com/go-task/task/v3/cmd/task@latest` или пакет `task` в вашем
+менеджере пакетов). Список всех задач — `task` без аргументов.
+
+```bash
+task check   # fmt + vet + test + lint (Go и фронтенд)
+```
+
+Эквивалент вручную, если Task недоступен:
+
 ```bash
 go build ./...
 go vet ./...
 go test ./...
+golangci-lint run
+cd web && npm install && npm run lint
 ```
 
 ## Игровой контент (bestiary/spells/items/references)

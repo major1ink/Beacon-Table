@@ -92,7 +92,7 @@ func (s *Store) Get(ctx context.Context, id string) (*domain.Item, error) {
 // writeAtomic — общая запись Create/Update: во временный файл и
 // переименование поверх целевого (см. spellfile.writeAtomic).
 func (s *Store) writeAtomic(id string, it *domain.Item) error {
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dir, 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(it, "", "  ")
@@ -101,7 +101,7 @@ func (s *Store) writeAtomic(id string, it *domain.Item) error {
 	}
 	p := s.itemPath(id)
 	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, p)

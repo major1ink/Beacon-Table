@@ -48,11 +48,11 @@ func NewStore(rootDir, urlPrefix string) *Store {
 // заранее — вызывается композиционным корнем при старте, чтобы Save/List
 // не спотыкались об отсутствующие директории на первом обращении.
 func (s *Store) EnsureDirs() error {
-	if err := os.MkdirAll(s.rootDir, 0o755); err != nil {
+	if err := os.MkdirAll(s.rootDir, 0o750); err != nil {
 		return err
 	}
 	for _, kind := range domain.AssetKinds {
-		if err := os.MkdirAll(filepath.Join(s.rootDir, kind), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(s.rootDir, kind), 0o750); err != nil {
 			return err
 		}
 	}
@@ -104,11 +104,15 @@ func (s *Store) Save(ctx context.Context, kind, folder, filename string, r io.Re
 		dir = filepath.Join(baseDir, filepath.FromSlash(folder))
 		urlFolder = folder + "/"
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", err
 	}
 
 	safeName := fmt.Sprintf("%d-%s", time.Now().UnixNano(), filepath.Base(filename))
+	//nolint:gosec // G304: safeName — только filepath.Base(filename) с
+	// добавленным числовым префиксом, ".."/"/" в нём быть не может; dir
+	// собран из kind (проверен knownKinds) и folder, прогнанного через
+	// sanitizeFolder выше (отклоняет "."/".."/пустые сегменты).
 	dst, err := os.Create(filepath.Join(dir, safeName))
 	if err != nil {
 		return "", err
@@ -215,7 +219,7 @@ func (s *Store) CreateFolder(ctx context.Context, kind, folder string) error {
 	if folder == "" {
 		return fmt.Errorf("имя папки не может быть пустым")
 	}
-	return os.MkdirAll(filepath.Join(baseDir, filepath.FromSlash(folder)), 0o755)
+	return os.MkdirAll(filepath.Join(baseDir, filepath.FromSlash(folder)), 0o750)
 }
 
 // DeleteFolder implements repository.AssetRepository — удаляет папку со
