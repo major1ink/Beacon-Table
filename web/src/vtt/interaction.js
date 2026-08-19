@@ -17,6 +17,7 @@ import {
   formatDistanceValue,
   unitsToWorldDistance,
   trackMovementStep,
+  clampMoveByWalls,
 } from "../geometry.js";
 import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
@@ -1167,7 +1168,14 @@ export function createInteraction(ctx) {
       // (и лимит выдаётся заново), только если токен оказался РОВНО в
       // точке, откуда начался весь жест (dragStart) — именно этот случай
       // и есть "вернул персонажа — верни движение" из уточнения задачи.
-      const step = trackMovementStep(dragLastPos, snapped, dragStart, dragTraveled, maxAllowed, ctx.scene.grid);
+      // Стены/закрытые двери/окна физически блокируют перемещение СВОЕГО
+      // токена игроком (см. clampMoveByWalls в geometry.js) — путь до
+      // снапнутой клетки останавливается чуть НЕ доходя до преграды, если
+      // пересекает её. У ДМ (ветка выше) такого ограничения нет — полная
+      // авторская власть над картой, как и у лимита скорости не бывает.
+      const wallClamped = clampMoveByWalls(dragLastPos.x, dragLastPos.y, snapped.x, snapped.y, ctx.scene.walls);
+
+      const step = trackMovementStep(dragLastPos, wallClamped, dragStart, dragTraveled, maxAllowed, ctx.scene.grid);
       t.x = step.pos.x;
       t.y = step.pos.y;
       dragLastPos = step.pos;

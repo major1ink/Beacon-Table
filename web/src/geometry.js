@@ -201,6 +201,62 @@ export function wallBlocksSight(w) {
   return true;
 }
 
+// wallBlocksMovement — блокирует ли этот сегмент ФИЗИЧЕСКОЕ перемещение
+// токена прямо сейчас: обычная стена и окно — всегда (окно, в отличие от
+// wallBlocksSight, сквозь него видно, но не пройти — это стекло, а не
+// проём), дверь — пока не открыта (closed/locked блокируют как обычная
+// стена, open — нет). Используется clampMoveByWalls ниже — только для
+// драга СВОЕГО токена игроком (см. interaction.js); у ДМ перемещение любых
+// токенов ничем не ограничено, эта функция там не дёргается.
+export function wallBlocksMovement(w) {
+  if (w.door) return w.doorState !== "open";
+  return true;
+}
+
+// segSegIntersectT — параметр t пересечения отрезка A(ax,ay)->B(bx,by) с
+// отрезком C(cx,cy)->D(dx,dy) (t и u оба в [0,1]), либо null, если отрезки
+// не пересекаются (в т.ч. параллельны/коллинеарны). В отличие от
+// raySegmentT выше (луч из точки в бесконечность против отрезка, для
+// raycasting видимости), тут ОБА отрезка конечные — нужен именно факт
+// пересечения пути перемещения со стеной, а не первая стена на луче.
+function segSegIntersectT(ax, ay, bx, by, cx, cy, dx, dy) {
+  const rX = bx - ax, rY = by - ay;
+  const sX = dx - cx, sY = dy - cy;
+  const det = rX * sY - rY * sX;
+  if (Math.abs(det) < 1e-9) return null;
+  const qpX = cx - ax, qpY = cy - ay;
+  const t = (qpX * sY - qpY * sX) / det;
+  const u = (qpX * rY - qpY * rX) / det;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return t;
+}
+
+// clampMoveByWalls — прямой путь ОТ (fromX,fromY) К (toX,toY) для токена
+// игрока (токен считается точкой в его центре — того же приближения
+// достаточно для клетчатой сетки, к которой он и так примагничен: стены
+// обычно идут по границам клеток, поэтому "войти в клетку за стеной"
+// надёжно ловится пересечением центральной линии пути), проверяется на
+// пересечение с каждой блокирующей стеной/закрытой дверью/окном (см.
+// wallBlocksMovement). Если путь пересекает хотя бы одну — движение
+// останавливается чуть НЕ доходя до неё (epsPx отступ назад вдоль пути):
+// без отступа токен на следующем кадре стартовал бы РОВНО на линии стены и
+// застревал бы там навсегда — путь "от точки на самой стене" тут же снова
+// пересекал бы её на t=0. Берётся САМАЯ БЛИЗКАЯ по пути преграда (наименьший
+// t), не первая встреченная при переборе walls.
+export function clampMoveByWalls(fromX, fromY, toX, toY, walls, epsPx = 4) {
+  let bestT = 1;
+  for (const id in walls) {
+    const w = walls[id];
+    if (!wallBlocksMovement(w)) continue;
+    const t = segSegIntersectT(fromX, fromY, toX, toY, w.x1, w.y1, w.x2, w.y2);
+    if (t != null && t < bestT) bestT = t;
+  }
+  if (bestT >= 1) return { x: toX, y: toY };
+  const dist = Math.hypot(toX - fromX, toY - fromY);
+  const stopT = dist > 0 ? Math.max(0, bestT - epsPx / dist) : 0;
+  return { x: fromX + (toX - fromX) * stopT, y: fromY + (toY - fromY) * stopT };
+}
+
 // wallMidpoint — точка значка двери (середина сегмента).
 export function wallMidpoint(w) {
   return { x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2 };
