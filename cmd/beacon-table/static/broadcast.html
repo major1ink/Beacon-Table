@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Beacon Table — Трансляция</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
+    #canvasWrap { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; background: #333; }
+
+    /* ---- HUD зума/полноэкранного режима — тот же стиль плавающей
+       пилюли, что и у ДМ (см. web/dm.html: #zoomHud), но средняя кнопка
+       тут переключает НАСТОЯЩИЙ полноэкранный режим (Fullscreen API), а
+       не просто сброс камеры — на ТВ/проекторе это и есть "на весь
+       экран", в отличие от окна ДМ/игрока, где это лишь вписывает карту
+       в канвас (см. web/src/pages/broadcast.js). ---- */
+    #zoomHud {
+      position: absolute; right: 10px; bottom: 10px; z-index: 5;
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
+      border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
+    }
+    #zoomHud button {
+      cursor: pointer; width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%;
+      background: var(--surface); color: var(--text); font: inherit; transition: background .12s ease;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #zoomHud button svg { flex: 0 0 auto; }
+    #zoomHud button:hover { background: var(--surface-hover); }
+    #zoomHud button.active { background: #e74c3c; }
+  </style>
+  <script type="module" crossorigin src="/assets/broadcast-B9AqXKwr.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-Zkc90Izu.js">
+  <link rel="modulepreload" crossorigin href="/assets/icons-3nongrBp.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-C5YsgANZ.js">
+  <link rel="stylesheet" crossorigin href="/assets/api-DX4UEURW.css">
+</head>
+<body>
+  <div id="canvasWrap">
+    <canvas id="scene"></canvas>
+    <div id="zoomHud">
+      <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button id="fullscreenBtn" title="На весь экран"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>
+      <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+    </div>
+  </div>
+</body>
+</html>

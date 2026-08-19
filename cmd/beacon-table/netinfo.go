@@ -17,7 +17,7 @@ func printAccessURLs() {
 	}
 	for _, ip := range ips {
 		log.Printf("Стол: http://%s:8080/  (ДМ и игроки входят через одну страницу)", ip)
-		log.Printf("TV:   http://%s:8080/tv.html", ip)
+		log.Printf("Трансляция: http://%s:8080/broadcast.html", ip)
 	}
 }
 

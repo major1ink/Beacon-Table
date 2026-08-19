@@ -30,6 +30,23 @@
     #canvasWrap { flex: 1 1 auto; min-height: 0; position: relative; }
     canvas { display: block; width: 100%; height: 100%; background: #222; }
 
+    /* ---- HUD зума — тот же плавающий кружок-пилюля, что и у ДМ (см.
+       web/dm.html: #zoomHud) — тут своя копия правил кнопки, страница не
+       подключает общий сброс `button {...}` дм-страницы. ---- */
+    #zoomHud {
+      position: absolute; right: 10px; bottom: 10px; z-index: 5;
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
+      border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
+    }
+    #zoomHud button {
+      cursor: pointer; width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%;
+      background: var(--surface); color: var(--text); font: inherit; transition: background .12s ease;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #zoomHud button svg { flex: 0 0 auto; }
+    #zoomHud button:hover { background: var(--surface-hover); }
+
     #diceDock {
       flex: 0 0 auto; background: var(--panel-bg); padding: 8px 10px; font-size: 12px;
       max-height: 30vh; overflow-y: auto;
@@ -135,7 +152,14 @@
       <button id="settingsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg> Настройки</button>
       <button id="logoutBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
     </div>
-    <div id="canvasWrap"><canvas id="scene"></canvas></div>
+    <div id="canvasWrap">
+      <canvas id="scene"></canvas>
+      <div id="zoomHud">
+        <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        <button id="zoomResetBtn" title="Сбросить вид"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>
+        <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      </div>
+    </div>
     <div id="diceDock"></div>
   </div>
 

@@ -62,6 +62,14 @@ document.getElementById("logoutBtn").onclick = async () => {
   location.href = "/";
 };
 
+// ================= HUD зума =================
+// Те же кнопки/события, что у ДМ (см. web/src/pages/dm.js) — interaction.js
+// слушает vtt:zoomBy/vtt:resetView одинаково для всех трёх ролей, тут только
+// не хватало кнопок в разметке (см. web/player.html: #zoomHud).
+document.getElementById("zoomInBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1.3 }));
+document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1 / 1.3 }));
+document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
+
 // ================= "Линейка" =================
 // Единственный "инструмент" карты, доступный игроку (см. web/src/vtt/
 // interaction.js: ветка ctx.isPlayer слушает то же "vtt:setTool", что и ДМ)

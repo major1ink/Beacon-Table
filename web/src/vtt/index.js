@@ -23,8 +23,8 @@ import { installVideoUploaderFix } from "./gl-video-uploader.js";
 // /home/major/.claude/plans/imperative-baking-thunder.md). Единственное
 // вынужденное отличие: initVTT теперь ASYNC (PIXI.Application.init() в v8 —
 // промис) — обе вызывающих страницы (dm.html/player.html) уже вызывали её
-// внутри async boot(), так что там достаточно добавить await; tv.html
-// оборачивается в свой маленький async IIFE (см. pages/tv.js).
+// внутри async boot(), так что там достаточно добавить await; broadcast.html
+// оборачивается в свой маленький async IIFE (см. pages/broadcast.js).
 //
 // role: "dm" — полный контроль. role: "tv" — чистый зритель без авторизации.
 // role: "player" — авторизован сессией аккаунта, может тащить СВОИ токены

@@ -17,7 +17,7 @@ export default defineConfig({
         worlds: resolve(__dirname, "worlds.html"),
         dm: resolve(__dirname, "dm.html"),
         player: resolve(__dirname, "player.html"),
-        tv: resolve(__dirname, "tv.html"),
+        broadcast: resolve(__dirname, "broadcast.html"),
         noteWindow: resolve(__dirname, "note-window.html"),
         characterSheet: resolve(__dirname, "character-sheet.html"),
         bestiary: resolve(__dirname, "bestiary.html"),
