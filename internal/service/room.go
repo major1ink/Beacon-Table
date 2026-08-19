@@ -210,6 +210,19 @@ func (r *Room) run() {
 			case "move_own_token":
 				r.applyOwnTokenMove(im.from, im.msg) // сам шлёт broadcastAll при успехе
 				continue
+			case "toggle_door":
+				// Своя ветка, а не applyMutation — единственная мутация стен,
+				// доступная игроку (см. authorize), поэтому нужна ролевая
+				// проверка внутри (секретная/запертая дверь — только ДМ), а
+				// не просто "разрешено/нет" целиком по типу сообщения.
+				r.handleToggleDoor(im.from, im.msg)
+				continue
+			case "set_door_lock":
+				// ДМ-only (authorize не пускает игрока), но своя ветка —
+				// нужно перевести Locked в конкретное DoorState, а не просто
+				// присвоить поле как applyMutation делает для прочих стен.
+				r.handleSetDoorLock(im.msg)
+				continue
 			case "get_scene":
 				// точечный запрос: DM открыл "Настроить сцену" для НЕактивной
 				// сцены через шестерёнку в списке — её данных (фон/размер/сетка)
@@ -534,18 +547,21 @@ func (r *Room) broadcastPlayerList() {
 }
 
 // authorize — права по типу сообщения и роли отправителя. DM может всё; TV
-// не может ничего (чистый зритель); игрок — только двигать СВОИ токены и
-// кидать кубы, остальное (создание/удаление/скрытие токенов, стены, туман,
-// сцены) — только ДМ. Владение конкретным токеном проверяется отдельно, уже
-// внутри applyOwnTokenMove — тут только проверка "тип сообщения вообще
-// разрешён этой роли".
+// не может ничего (чистый зритель); игрок — только двигать СВОИ токены,
+// кидать кубы и открывать/закрывать двери (см. handleToggleDoor — секретные и
+// запертые для игрока дополнительно отбрасывает уже сам обработчик, тут
+// только "тип сообщения вообще разрешён этой роли"), остальное (создание/
+// удаление/скрытие токенов, стены, окна, замки дверей, туман, сцены) —
+// только ДМ. Владение конкретным токеном проверяется отдельно, уже внутри
+// applyOwnTokenMove.
 func (r *Room) authorize(c RoomClient, msgType string) bool {
 	switch c.Role() {
 	case domain.RoleDM:
 		return true
 	case domain.RolePlayer:
 		return msgType == "move_own_token" || msgType == "roll_dice" ||
-			msgType == "hub_take_item" || msgType == "loot_take_item"
+			msgType == "hub_take_item" || msgType == "loot_take_item" ||
+			msgType == "toggle_door"
 	default: // RoleTV
 		return false
 	}
@@ -565,6 +581,51 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	}
 	existing.X = msg.Token.X
 	existing.Y = msg.Token.Y
+	r.markDirty(r.currentSceneID)
+	r.broadcastAll()
+}
+
+// handleToggleDoor переключает дверь closed<->open. Разрешено и ДМ, и
+// игроку (см. authorize) — но игроку сервер, а не только клиентский UI,
+// отказывает для секретной (Door=="secret") и запертой (DoorState=="locked")
+// двери: клиент и так прячет их значок/хит-тест от роли player (см.
+// web/src/vtt/layers/doors.js, geometry.js:doorAt), но подделать WS-сообщение
+// руками ничего не стоит, а тут — единственная стеновая мутация, доступная
+// не-ДМ, так что источник правды должен быть здесь.
+func (r *Room) handleToggleDoor(from RoomClient, msg domain.ClientMsg) {
+	w, ok := r.scene.Walls[msg.ID]
+	if !ok || w.Door == "" {
+		return
+	}
+	if from.Role() != domain.RoleDM && (w.Door == "secret" || w.DoorState == "locked") {
+		return
+	}
+	if w.DoorState == "open" {
+		w.DoorState = "closed"
+	} else {
+		w.DoorState = "open"
+	}
+	r.markDirty(r.currentSceneID)
+	r.broadcastAll()
+}
+
+// handleSetDoorLock — запереть/отпереть дверь, только ДМ (authorize не
+// пускает игрока к "set_door_lock" вовсе). Запереть подразумевает и закрыть
+// (запертая-но-открытая дверь бессмысленна); отпереть просто возвращает в
+// "closed", а не открывает — ДМ решает открыть отдельным действием.
+func (r *Room) handleSetDoorLock(msg domain.ClientMsg) {
+	if msg.Locked == nil {
+		return
+	}
+	w, ok := r.scene.Walls[msg.ID]
+	if !ok || w.Door == "" {
+		return
+	}
+	if *msg.Locked {
+		w.DoorState = "locked"
+	} else {
+		w.DoorState = "closed"
+	}
 	r.markDirty(r.currentSceneID)
 	r.broadcastAll()
 }
@@ -1469,6 +1530,42 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 	case "remove_wall":
 		delete(r.scene.Walls, msg.ID)
 		r.markDirty(r.currentSceneID)
+
+	// set_wall_door/set_wall_window — классификация уже существующей стены
+	// (ДМ-only, см. authorize: оба типа не в списке RolePlayer). Открыть/
+	// закрыть/запереть саму дверь — отдельные сообщения ("toggle_door"/
+	// "set_door_lock"), см. handleToggleDoor/handleSetDoorLock выше: там
+	// нужна ролевая проверка внутри, тут — нет, поэтому эти два кейса живут
+	// в общем applyMutation, а не рядом с теми в run().
+	case "set_wall_door":
+		if w, ok := r.scene.Walls[msg.ID]; ok {
+			switch msg.Door {
+			case "", "door", "secret":
+				w.Door = msg.Door
+				if w.Door != "" {
+					// Door и Window взаимоисключающие (см. domain.Wall) —
+					// назначение двери сбрасывает окно, если оно было.
+					w.Window = false
+					if w.DoorState == "" {
+						w.DoorState = "closed" // дверь всегда стартует закрытой
+					}
+				} else {
+					w.DoorState = "" // вернули обычной стеной — состояние больше не осмысленно
+				}
+				r.markDirty(r.currentSceneID)
+			}
+		}
+
+	case "set_wall_window":
+		if w, ok := r.scene.Walls[msg.ID]; ok && msg.Window != nil {
+			w.Window = *msg.Window
+			if w.Window {
+				// Window и Door взаимоисключающие — назначение окна сбрасывает дверь.
+				w.Door = ""
+				w.DoorState = ""
+			}
+			r.markDirty(r.currentSceneID)
+		}
 
 	case "move_wall_point":
 		// Один угол может быть общим концом НЕСКОЛЬКИХ стен — двигаем все

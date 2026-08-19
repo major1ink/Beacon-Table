@@ -497,14 +497,28 @@ fogAreaMenuDelete.onclick = () => {
 // Раньше ПКМ рядом со стеной сразу сносил её без подтверждения — теперь
 // середину стены можно ещё и кликнуть, чтобы вставить точку (см.
 // interaction.js:splitWallAt), так что снос вынесен в меню, как у фигуры
-// тумана выше.
+// тумана выше. Плюс тут же — классификация сегмента (дверь/окно/секретная) и
+// управление дверью (открыть-закрыть/запереть-отпереть, см.
+// domain.Wall.Door/DoorState/Window) — набор видимых кнопок зависит от
+// текущего состояния стены (menuWall, из detail — см. interaction.js:
+// vtt:wallContextMenu, передаёт объект стены тем же приёмом, что и
+// vtt:tokenContextMenu передаёт токен).
 const wallMenu = document.getElementById("wallMenu");
+const wallMenuToggleOpen = document.getElementById("wallMenuToggleOpen");
+const wallMenuToggleLock = document.getElementById("wallMenuToggleLock");
+const wallMenuMakeDoor = document.getElementById("wallMenuMakeDoor");
+const wallMenuMakeWindow = document.getElementById("wallMenuMakeWindow");
+const wallMenuMakeSecret = document.getElementById("wallMenuMakeSecret");
+const wallMenuMakeNormalDoor = document.getElementById("wallMenuMakeNormalDoor");
+const wallMenuUnsetSpecial = document.getElementById("wallMenuUnsetSpecial");
 const wallMenuDelete = document.getElementById("wallMenuDelete");
 let menuWallId = null;
+let menuWall = null;
 
 function closeWallMenu() {
   wallMenu.style.display = "none";
   menuWallId = null;
+  menuWall = null;
 }
 
 document.addEventListener("vtt:wallContextMenu", (e) => {
@@ -513,11 +527,69 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   closeNoteMarkerMenu();
   closeFogAreaMenu();
   menuWallId = e.detail.id;
+  menuWall = e.detail.wall || null;
+
+  const isDoor = !!(menuWall && menuWall.door);
+  const isSecret = isDoor && menuWall.door === "secret";
+  const isWindow = !!(menuWall && menuWall.window);
+  const isPlain = !isDoor && !isWindow;
+
+  wallMenuToggleOpen.style.display = isDoor ? "flex" : "none";
+  wallMenuToggleOpen.textContent = menuWall && menuWall.doorState === "open" ? "🚪 Закрыть" : "🚪 Открыть";
+  wallMenuToggleLock.style.display = isDoor ? "flex" : "none";
+  wallMenuToggleLock.textContent = menuWall && menuWall.doorState === "locked" ? "🔓 Отпереть" : "🔒 Запереть";
+  wallMenuMakeDoor.style.display = isPlain ? "flex" : "none";
+  wallMenuMakeWindow.style.display = isPlain ? "flex" : "none";
+  wallMenuMakeSecret.style.display = isDoor && !isSecret ? "flex" : "none";
+  wallMenuMakeNormalDoor.style.display = isSecret ? "flex" : "none";
+  wallMenuUnsetSpecial.style.display = isDoor || isWindow ? "flex" : "none";
+
   wallMenu.style.left = e.detail.pageX + "px";
   wallMenu.style.top = e.detail.pageY + "px";
   wallMenu.style.display = "block";
 });
 
+wallMenuToggleOpen.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:toggleDoor", { detail: { id: menuWallId } }));
+  closeWallMenu();
+};
+wallMenuToggleLock.onclick = () => {
+  if (!menuWallId || !menuWall) return;
+  const locked = menuWall.doorState !== "locked";
+  document.dispatchEvent(new CustomEvent("vtt:setDoorLock", { detail: { id: menuWallId, locked } }));
+  closeWallMenu();
+};
+wallMenuMakeDoor.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "door" } }));
+  closeWallMenu();
+};
+wallMenuMakeWindow.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallWindow", { detail: { id: menuWallId, window: true } }));
+  closeWallMenu();
+};
+wallMenuMakeSecret.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "secret" } }));
+  closeWallMenu();
+};
+wallMenuMakeNormalDoor.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "door" } }));
+  closeWallMenu();
+};
+wallMenuUnsetSpecial.onclick = () => {
+  if (!menuWallId) return;
+  // Стена могла быть либо дверью (Door!==""), либо окном (Window===true) —
+  // не знаем какой именно, поэтому сбрасываем оба поля разом (см.
+  // room.go:applyMutation — установка одного и так сбрасывает другое, тут
+  // просто гарантируем чистый результат независимо от исходного состояния).
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "" } }));
+  document.dispatchEvent(new CustomEvent("vtt:setWallWindow", { detail: { id: menuWallId, window: false } }));
+  closeWallMenu();
+};
 wallMenuDelete.onclick = () => {
   if (!menuWallId) return;
   document.dispatchEvent(new CustomEvent("vtt:removeWall", { detail: { id: menuWallId } }));

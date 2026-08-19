@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import { computeVisibilityPolygon, weldWalls, pointInPolygon } from "../../geometry.js";
+import { computeVisibilityPolygon, weldWalls, pointInPolygon, wallBlocksSight } from "../../geometry.js";
 import { worldSize } from "../camera.js";
 import { unionAll, intersectMulti, differenceMulti, unionMulti, worldRect, paintMulti, gridUnitsToWorld } from "../light-geometry.js";
 
@@ -113,6 +113,11 @@ export function createVisionFogLayer(ctx) {
     // помещения видит всю карту. Не трогает сами данные стен — только эту
     // локальную копию, которую видит только расчёт видимости/света ниже.
     //
+    // wallBlocksSight — фильтрует ДО weldWalls: открытая дверь и окно (см.
+    // domain.Wall.Door/DoorState/Window, geometry.js:wallBlocksSight) просто
+    // не попадают в raycasting вообще, как будто их тут нет — ни отдельной
+    // ветки в computeVisibilityPolygon, ни пересчёта геометрии не нужно.
+    //
     // Здания (domain.Building) НЕ участвуют в этом raycasting'е — ни в
     // обзоре, ни в самом построении луча света: подмешивание их контуров
     // сюда добавляло вершины/лучи от КАЖДОГО угла здания для ЛЮБОГО токена
@@ -123,7 +128,7 @@ export function createVisionFogLayer(ctx) {
     // блокируется отдельно, простым вычитанием/пересечением уже готовых
     // многоугольников (см. clipLightByBuildings ниже) — без единого лишнего
     // луча.
-    const walls = weldWalls(Object.values(ctx.scene.walls || {}));
+    const walls = weldWalls(Object.values(ctx.scene.walls || {}).filter(wallBlocksSight));
     const tokens = Object.values(ctx.scene.tokens || {}).filter((t) => !t.hidden);
     if (tokens.length === 0) return empty; // некому видеть — сплошная тьма
 

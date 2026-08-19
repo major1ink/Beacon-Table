@@ -11,6 +11,7 @@ import { createGridLayer } from "./layers/grid.js";
 import { createTokensLayer } from "./layers/tokens.js";
 import { createNoteMarkersLayer } from "./layers/note-markers.js";
 import { createWallsLayer } from "./layers/walls.js";
+import { createDoorsLayer } from "./layers/doors.js";
 import { createVisionFogLayer } from "./layers/vision-fog.js";
 import { createBuildingsLayer } from "./layers/buildings.js";
 import { createManualFogLayer } from "./layers/manual-fog.js";
@@ -103,6 +104,11 @@ export async function initVTT({ canvasId, role, playerId }) {
   const tokens = createTokensLayer(ctx);
   const noteMarkers = createNoteMarkersLayer(ctx);
   const walls = createWallsLayer(ctx);
+  // doors — значки дверей (см. layers/doors.js), ПЕРЕД vision-fog: в отличие
+  // от walls (линии — только ДМ), значки видны и игроку, и должны лежать в
+  // мировых координатах ПОД тьмой — тогда тьма перекрывает их в
+  // неисследованных местах бесплатно, той же причиной, что и tokens выше.
+  const doors = createDoorsLayer(ctx);
   const visionFog = createVisionFogLayer(ctx);
   // buildings — ПОСЛЕ vision-fog (см. layers/buildings.js): здание не
   // участвует в raycasting'е, поэтому его непрозрачная "крыша" должна
@@ -118,6 +124,7 @@ export async function initVTT({ canvasId, role, playerId }) {
     tokens.container,
     noteMarkers.container,
     walls.container,
+    doors.container,
     visionFog.container,
     buildings.container,
     manualFog.container,
@@ -125,7 +132,7 @@ export async function initVTT({ canvasId, role, playerId }) {
   );
   ctx.spawnFx = fx.spawnFx;
 
-  const layers = [background, grid, tokens, noteMarkers, walls, visionFog, buildings, manualFog, fx];
+  const layers = [background, grid, tokens, noteMarkers, walls, doors, visionFog, buildings, manualFog, fx];
 
   // render — вызывается на каждый WS-снапшот и на каждое локальное
   // взаимодействие (драг токена/камера/инструменты ДМ), НЕ на каждый кадр

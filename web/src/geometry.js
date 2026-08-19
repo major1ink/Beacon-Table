@@ -186,6 +186,50 @@ export function weldWalls(wallList, eps = 12) {
   });
 }
 
+// ---- двери/окна в стенах (domain.Wall.Door/DoorState/Window, как в Foundry —
+// см. web/src/vtt/layers/doors.js, interaction.js) ----
+
+// wallBlocksSight — блокирует ли этот сегмент обзор ПРЯМО СЕЙЧАС: окно —
+// никогда, дверь — только пока не открыта (closed/locked блокируют как
+// обычная стена, open — нет), обычная стена — всегда. Используется
+// vision-fog.js ПЕРЕД raycasting'ом (фильтрует стены до weldWalls), а не
+// внутри самого computeVisibilityPolygon — так открытая дверь/окно просто не
+// участвуют в лучах вообще, без отдельной ветки в геометрии.
+export function wallBlocksSight(w) {
+  if (w.window) return false;
+  if (w.door && w.doorState === "open") return false;
+  return true;
+}
+
+// wallMidpoint — точка значка двери (середина сегмента).
+export function wallMidpoint(w) {
+  return { x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2 };
+}
+
+// doorAt — id ближайшей двери (по значку в СЕРЕДИНЕ стены, не по всей линии)
+// к (x,y) в пределах screenPx экранных px, либо null. includeSecret=false —
+// не учитывать секретные двери (клиентский хит-тест для игрока и для чужого
+// клика ДМ мимо инструмента "выбор"; настоящая защита секретных/запертых
+// дверей — на сервере, см. service.Room.handleToggleDoor). walls: { [id]:
+// {x1,y1,x2,y2,door,...} }.
+export function doorAt(x, y, walls, scale, includeSecret, screenPx = 16) {
+  const threshold = screenPx / scale;
+  let best = null,
+    bestDist = threshold;
+  for (const id in walls) {
+    const w = walls[id];
+    if (!w.door) continue;
+    if (w.door === "secret" && !includeSecret) continue;
+    const { x: mx, y: my } = wallMidpoint(w);
+    const d = Math.hypot(mx - x, my - y);
+    if (d < bestDist) {
+      best = id;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
 // wallVertexNear — ближайшая вершина к (x,y) в пределах screenPx экранных
 // пикселей, либо null. Та же идиома, что wallNear, но для точек, не стен
 // целиком — используется для драга точки и ПКМ-меню "удалить точку".

@@ -22,6 +22,18 @@ type ClientMsg struct {
 	WallPoints []WallPointRef `json:"wallPoints,omitempty"` // "move_wall_point"
 	WallIDs    []string       `json:"wallIds,omitempty"`    // "remove_wall_point"
 
+	// поля дверей/окон (см. domain.Wall) — ID (уже объявлен выше) указывает
+	// целевую стену, тем же приёмом, что и "remove_wall".
+	//
+	// Door — только для "set_wall_door": "" | "door" | "secret" (см.
+	// service.Room.applyMutation — невалидные значения молча игнорируются).
+	Door string `json:"door,omitempty"`
+	// Window — только для "set_wall_window".
+	Window *bool `json:"window,omitempty"`
+	// Locked — только для "set_door_lock": true — запереть (подразумевает
+	// закрыть), false — отпереть (возвращает в "closed").
+	Locked *bool `json:"locked,omitempty"`
+
 	// "split_wall" — вставка новой точки посреди существующей стены: ID —
 	// удаляемая исходная стена, Wall/Wall2 — две новые, на которые она
 	// делится в точке вставки (см. web/src/vtt/interaction.js:splitWallAt).

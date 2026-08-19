@@ -7,6 +7,7 @@ import {
   wallVertexNear,
   snapToWallVertex,
   closestPointOnSegment,
+  doorAt,
   fogAreaAt,
   fogVertexNear,
   buildingAt,
@@ -382,6 +383,17 @@ export function createInteraction(ctx) {
       }
 
       if (tool === "select") {
+        // Клик по значку двери (см. layers/doors.js) — ПЕРЕД проверками
+        // вершины/линии стены ниже: значок сидит РОВНО на линии стены (в её
+        // середине), без этой проверки первой клик по нему попал бы в
+        // splitWallAt (см. wallNear ниже) и воткнул бы лишнюю точку вместо
+        // переключения двери. includeSecret=true — ДМ может кликом
+        // переключить и секретную дверь, не открывая контекстное меню.
+        const doorId = doorAt(x, y, ctx.scene.walls, ctx.world.scale.x || 1, true);
+        if (doorId) {
+          ctx.send({ type: "toggle_door", id: doorId });
+          return;
+        }
         const vertex = wallVertexNear(x, y, ctx.scene.walls, ctx.world.scale.x || 1);
         if (vertex) {
           draggingWallPoint = vertex;
@@ -869,7 +881,13 @@ export function createInteraction(ctx) {
       // "снести", и снос без подтверждения слишком легко словить случайно.
       const wallId = wallNear(x, y, ctx.scene.walls, scale);
       if (wallId) {
-        document.dispatchEvent(new CustomEvent("vtt:wallContextMenu", { detail: { id: wallId, pageX: e.clientX, pageY: e.clientY } }));
+        // wall в detail — как у vtt:tokenContextMenu (см. ниже) — меню
+        // (pages/dm.js) читает текущие door/window/doorState, чтобы
+        // показать нужный набор пунктов (сделать дверью/окном, открыть/
+        // закрыть, запереть/отпереть, раскрыть секретную и т.д.).
+        document.dispatchEvent(
+          new CustomEvent("vtt:wallContextMenu", { detail: { id: wallId, wall: ctx.scene.walls[wallId], pageX: e.clientX, pageY: e.clientY } })
+        );
         return;
       }
 
@@ -932,6 +950,23 @@ export function createInteraction(ctx) {
     // все стены, сходящиеся в одной точке).
     document.addEventListener("vtt:removeWall", (e) => {
       ctx.send({ type: "remove_wall", id: e.detail.id });
+    });
+
+    // команды из меню стены/двери (см. web/dm.html #wallMenu, pages/dm.js) —
+    // классификация сегмента (дверь/секретная/окно/обычная стена) и
+    // состояние двери (открыть-закрыть/запереть-отпереть), см.
+    // domain.Wall.Door/DoorState/Window и обработчики в service/room.go.
+    document.addEventListener("vtt:setWallDoor", (e) => {
+      ctx.send({ type: "set_wall_door", id: e.detail.id, door: e.detail.door });
+    });
+    document.addEventListener("vtt:setWallWindow", (e) => {
+      ctx.send({ type: "set_wall_window", id: e.detail.id, window: e.detail.window });
+    });
+    document.addEventListener("vtt:toggleDoor", (e) => {
+      ctx.send({ type: "toggle_door", id: e.detail.id });
+    });
+    document.addEventListener("vtt:setDoorLock", (e) => {
+      ctx.send({ type: "set_door_lock", id: e.detail.id, locked: e.detail.locked });
     });
 
     // команды из контекстного меню токена (см. web/dm.html)
@@ -1064,6 +1099,18 @@ export function createInteraction(ctx) {
       const { x, y } = mousePos(e);
       if (rulerActive) {
         rulerFrom = { x, y };
+        return;
+      }
+      // Клик по значку двери (см. layers/doors.js) — единственное стеновое
+      // взаимодействие, доступное игроку (см. authorize/handleToggleDoor в
+      // service/room.go): переключает closed<->open. includeSecret=false —
+      // игрок не видит и не может кликнуть секретную дверь (сервер её и так
+      // отдельно отбрасывает, это просто чтобы клик по "пустому месту" не
+      // пытался попасть в неё же случайно). Запертую/секретную сервер молча
+      // проигнорирует — тут заранее не различаем, просто шлём попытку.
+      const doorId = doorAt(x, y, ctx.scene.walls, ctx.world.scale.x || 1, false);
+      if (doorId) {
+        ctx.send({ type: "toggle_door", id: doorId });
         return;
       }
       const hitId = tokenAt(x, y, ctx.scene.tokens);

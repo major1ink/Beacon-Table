@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <title>Beacon Table — DM</title>
+  <title>Beacon Table — DM</title>
   <style>
     html, body { height: 100%; }
     body {
@@ -155,8 +155,12 @@
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
     }
-    #wallMenu button { width: 100%; display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start; background: var(--danger); }
-    #wallMenu button:hover { background: var(--danger-hover); }
+    #wallMenu button { width: 100%; display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start; }
+    #wallMenu button + button { margin-top: 4px; }
+    #wallMenuToggleOpen { background: var(--accent); }
+    #wallMenuToggleOpen:hover { background: #6a5ae0; }
+    #wallMenuDelete { background: var(--danger); }
+    #wallMenuDelete:hover { background: var(--danger-hover); }
 
     #noteMarkerMenu {
       position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
@@ -560,10 +564,10 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BBdV-i5m.js"></script>
+  <script type="module" crossorigin src="/assets/dm-CFXcJgWg.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-Zkc90Izu.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-3nongrBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-COBHQEqJ.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-BFrYtF22.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-CyFmcI4N.js">
   <link rel="modulepreload" crossorigin href="/assets/combat-panel-CBd2OuXc.js">
@@ -955,6 +959,13 @@
   </div>
 
   <div id="wallMenu">
+    <button id="wallMenuToggleOpen">🚪 Открыть</button>
+    <button id="wallMenuToggleLock">🔒 Запереть</button>
+    <button id="wallMenuMakeDoor">🚪 Сделать дверью</button>
+    <button id="wallMenuMakeWindow">🪟 Сделать окном</button>
+    <button id="wallMenuMakeSecret">🕵️ Сделать секретной</button>
+    <button id="wallMenuMakeNormalDoor">👁️ Раскрыть (обычная дверь)</button>
+    <button id="wallMenuUnsetSpecial">Вернуть обычной стеной</button>
     <button id="wallMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить стену</button>
   </div>
 
@@ -968,6 +979,6 @@
   </div>
 
   <button id="gridEditDone"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg> Готово — красный квадрат тащит сетку, его край меняет размер клетки</button>
-
+
 </body>
 </html>
