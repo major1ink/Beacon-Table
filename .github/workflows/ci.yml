@@ -41,5 +41,8 @@ jobs:
       - name: task test
         run: task test
 
+      - name: task web:build:check
+        run: task web:build:check
+
       - name: task lint
         run: task lint
