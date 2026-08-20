@@ -82,6 +82,19 @@ export async function initVTT({ canvasId, role, playerId }) {
 
   ctx.applyCameraTransform = () => applyCameraTransform(world, app.screen.width, app.screen.height, ctx.scene, ctx.camera);
 
+  // Pixi снимает размер обёртки РОВНО ОДИН РАЗ — в сеттере resizeTo внутри
+  // app.init() — и дальше пересчитывает его только по window.resize (см.
+  // pixi.js/lib/app/ResizePlugin: слушатель вешается на globalThis, больше
+  // ничего размер не трогает). А обёртка меняется и без ресайза окна:
+  // страница игрока дорисовывает под канвасом док кубов уже ПОСЛЕ initVTT
+  // (см. pages/player.js), у ДМ раскрываются/схлопываются панели рейла.
+  // Канвас тогда так и остаётся прежней высоты — с инлайновыми width/height
+  // в пикселях, то есть вылезая за обёртку и накрывая собой то, что под ней
+  // (именно так у игрока и "пропадала" панель бросков). ResizeObserver
+  // закрывает ровно этот случай: окно тут ни при чём, меняется сам блок.
+  const resizeHost = canvas.parentElement;
+  if (resizeHost) new ResizeObserver(() => app.resize()).observe(resizeHost);
+
   // sideMenu — общая колонка иконок-кнопок у правого края канваса (см.
   // side-menu.js): 🔊 громкость заводит здесь же audio.js, 🎲 кубы —
   // pages/dm.js, отдельной соседней иконкой (не внутри панели громкости).

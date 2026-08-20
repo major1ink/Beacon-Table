@@ -559,16 +559,15 @@
     #diceLog:empty { display: none; } /* не занимать место, пока не было ни одного броска */
     .dice-log-row { font-size: 11px; }
 
-    /* ---- кнопки/поле броска кубов — содержимое монтируется JS-ом
-       (dm.js) внутрь меню громкости справа от канваса, см. audio.js ---- */
-    .dice-controls-menu { display: flex; flex-direction: column; gap: 6px; }
-    .dice-controls-menu .dice-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
-    .dice-controls-menu .dice-buttons button { padding: 4px 7px; font-size: 11px; }
-    .dice-controls-menu .dice-custom { display: flex; gap: 4px; }
-    .dice-controls-menu .dice-custom input {
-      flex: 1 1 auto; min-width: 0; background: #1c1c24; border: 1px solid #3a3a45; color: #eee;
-      border-radius: 6px; padding: 4px 6px; font-size: 11px;
-    }
+    /* ---- лоток кубов (.dice-tray, см. web/src/dice.js и theme.css) —
+       монтируется JS-ом (dm.js) в свою иконку бокового меню справа от
+       канваса, см. vtt/side-menu.js. Тут только сжатие под узкую панель:
+       общая вёрстка/поведение — те же, что у нижнего дока игрока. ---- */
+    .dice-controls-menu .dice-buttons { gap: 4px; }
+    .dice-controls-menu .dice-buttons button { padding: 4px 8px; font-size: 11px; }
+    .dice-controls-menu .dice-pool button { padding: 3px 8px; font-size: 11px; }
+    .dice-controls-menu .dice-custom input { padding: 4px 6px; font-size: 11px; }
+    .dice-controls-menu .dice-custom [data-roll-custom] { padding: 4px 10px; font-size: 11px; }
 
     /* ---- экран "не удалось подключиться" ---- */
     #authFailedOverlay {

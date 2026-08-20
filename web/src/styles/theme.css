@@ -273,3 +273,53 @@
 .catalog-target { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; width: 100%; margin-top: 4px; }
 .catalog-target select { flex: 1 1 auto; min-width: 0; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 3px 5px; font-size: 11px; }
 .catalog-target button { padding: 3px 8px; font-size: 12px; }
+
+/* ---- .dice-tray — общий "лоток" бросков кубов (см. web/src/dice.js):
+   кнопки-счётчики кубиков, модификатор, поле формулы, кнопка "Бросить".
+   Одна вёрстка на все страницы, где он монтируется (боковое меню ДМ,
+   нижний док игрока) — страницы дальше только подкручивают размеры под
+   своё место (см. #diceDock в player.html, .dice-controls-menu в dm.html).
+   ---- */
+.dice-tray { display: flex; flex-direction: column; gap: 6px; }
+.dice-tray .dice-buttons { display: flex; flex-wrap: wrap; gap: 5px; }
+.dice-tray .dice-buttons button {
+  position: relative; cursor: pointer; padding: 6px 11px; border: 1px solid transparent; border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.dice-tray .dice-buttons button:hover { background: var(--surface-hover); }
+/* .has — в пуле уже есть кубики этого вида: подсвечиваем акцентом, а
+   количество (со второго кубика) вешаем бейджем в угол — сама подпись
+   кнопки остаётся "d6", чтобы ряд не прыгал по ширине от кликов. */
+.dice-tray .dice-buttons button.has { background: var(--accent-bg); border-color: var(--accent); color: var(--text); }
+.dice-tray .dice-count {
+  position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 3px;
+  box-sizing: border-box; border-radius: 999px; background: var(--accent); color: #fff;
+  font-size: 10px; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums;
+}
+.dice-tray .dice-count:empty { display: none; }
+
+.dice-tray .dice-pool { display: flex; align-items: center; gap: 5px; }
+.dice-tray .dice-pool button {
+  cursor: pointer; padding: 4px 9px; border: none; border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px; line-height: 1.35;
+}
+.dice-tray .dice-pool button:hover { background: var(--surface-hover); }
+.dice-tray .dice-pool [data-clear] { margin-left: auto; color: var(--text-dim); }
+.dice-tray .dice-mod-value {
+  min-width: 30px; text-align: center; font-size: 12px; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.dice-tray .dice-mod-value.has { color: var(--text); }
+
+.dice-tray .dice-custom { display: flex; gap: 5px; }
+.dice-tray .dice-custom input {
+  flex: 1 1 auto; min-width: 0; background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius); padding: 6px 8px; font-size: 12px;
+}
+.dice-tray .dice-custom input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring-accent); }
+.dice-tray .dice-custom [data-roll-custom] {
+  cursor: pointer; flex: 0 0 auto; padding: 6px 13px; border: none; border-radius: var(--radius);
+  background: var(--accent); color: #fff; font: inherit; font-size: 12px;
+}
+.dice-tray .dice-custom [data-roll-custom]:hover { background: var(--accent-hover); }
