@@ -34,12 +34,25 @@ export function createManualFogLayer(ctx) {
     if (!areas.length) return;
 
     if (ctx.isDM) {
+      const scale = ctx.world.scale.x || 1;
       for (const area of areas) {
         if (area.points.length < 3) continue;
         dmOutline.poly(area.points).fill({ color: 0x8bc3ff, alpha: 0.08 });
         dashedPolyline(dmOutline, area.points, 6, 4, true);
       }
-      dmOutline.stroke({ width: 2 / (ctx.world.scale.x || 1), color: 0x8bc3ff, alpha: 0.6 });
+      dmOutline.stroke({ width: 2 / scale, color: 0x8bc3ff, alpha: 0.6 });
+      // Кружки-ручки на каждой вершине — та же идиома, что у стен (см.
+      // layers/walls.js), тут же за них хватает мышью interaction.js для
+      // переформовки/переноса фигуры — только пока активен сам инструмент
+      // "Туман" (вне его правка тумана заблокирована, см. requirement 1).
+      if (ctx.tool === "fog") {
+        for (const area of areas) {
+          if (area.points.length < 3) continue;
+          for (const p of area.points) {
+            dmOutline.circle(p.x, p.y, 5 / scale).fill(0xffffff).stroke({ width: 1.5 / scale, color: 0x8bc3ff });
+          }
+        }
+      }
       return;
     }
 

@@ -347,6 +347,12 @@ document.addEventListener("vtt:toolChanged", (e) => {
   fogBtn.classList.toggle("active", e.detail === "fog");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
+  // подсказка в панели "Инструменты" — только для выбранного инструмента (см. dm.html:data-hint-tool)
+  // "" тут не сработает — .hint[data-hint-tool]{display:none} в <style> и
+  // так победит пустую инлайн-строку, нужен явный display, отличный от none
+  document.querySelectorAll("[data-hint-tool]").forEach((el) => {
+    el.style.display = el.dataset.hintTool === e.detail ? "block" : "none";
+  });
 });
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
@@ -450,6 +456,9 @@ function closeWallPointMenu() {
 document.addEventListener("vtt:wallPointContextMenu", (e) => {
   closeTokenMenu();
   closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  closeBuildingMenu();
   menuWallIds = [...new Set(e.detail.refs.map((r) => r.wallId))];
   wallPointMenu.style.left = e.detail.pageX + "px";
   wallPointMenu.style.top = e.detail.pageY + "px";
@@ -459,6 +468,185 @@ document.addEventListener("vtt:wallPointContextMenu", (e) => {
 wallPointMenuDelete.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:removeWallPoint", { detail: { wallIds: menuWallIds } }));
   closeWallPointMenu();
+};
+
+// ================= меню фигуры ручного тумана (ПКМ внутри контура) =================
+// Раньше ПКМ сразу удалял фигуру без подтверждения — теперь фигуру можно ещё
+// и двигать/переформовывать (см. interaction.js), поэтому снос вынесен в
+// меню, как у токена/значка заметки, а не остаётся единственным ПКМ-действием.
+const fogAreaMenu = document.getElementById("fogAreaMenu");
+const fogAreaMenuDelete = document.getElementById("fogAreaMenuDelete");
+let menuFogAreaId = null;
+
+function closeFogAreaMenu() {
+  fogAreaMenu.style.display = "none";
+  menuFogAreaId = null;
+}
+
+document.addEventListener("vtt:fogAreaContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeWallMenu();
+  closeBuildingMenu();
+  menuFogAreaId = e.detail.id;
+  fogAreaMenu.style.left = e.detail.pageX + "px";
+  fogAreaMenu.style.top = e.detail.pageY + "px";
+  fogAreaMenu.style.display = "block";
+});
+
+fogAreaMenuDelete.onclick = () => {
+  if (!menuFogAreaId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeFogArea", { detail: { id: menuFogAreaId } }));
+  closeFogAreaMenu();
+};
+
+// ================= меню стены (ПКМ по линии, не по концу) =================
+// Раньше ПКМ рядом со стеной сразу сносил её без подтверждения — теперь
+// середину стены можно ещё и кликнуть, чтобы вставить точку (см.
+// interaction.js:splitWallAt), так что снос вынесен в меню, как у фигуры
+// тумана выше. Плюс тут же — классификация сегмента (дверь/окно/секретная) и
+// управление дверью (открыть-закрыть/запереть-отпереть, см.
+// domain.Wall.Door/DoorState/Window) — набор видимых кнопок зависит от
+// текущего состояния стены (menuWall, из detail — см. interaction.js:
+// vtt:wallContextMenu, передаёт объект стены тем же приёмом, что и
+// vtt:tokenContextMenu передаёт токен).
+const wallMenu = document.getElementById("wallMenu");
+const wallMenuToggleOpen = document.getElementById("wallMenuToggleOpen");
+const wallMenuToggleLock = document.getElementById("wallMenuToggleLock");
+const wallMenuMakeDoor = document.getElementById("wallMenuMakeDoor");
+const wallMenuMakeWindow = document.getElementById("wallMenuMakeWindow");
+const wallMenuMakeSecret = document.getElementById("wallMenuMakeSecret");
+const wallMenuMakeNormalDoor = document.getElementById("wallMenuMakeNormalDoor");
+const wallMenuUnsetSpecial = document.getElementById("wallMenuUnsetSpecial");
+const wallMenuDelete = document.getElementById("wallMenuDelete");
+let menuWallId = null;
+let menuWall = null;
+
+function closeWallMenu() {
+  wallMenu.style.display = "none";
+  menuWallId = null;
+  menuWall = null;
+}
+
+document.addEventListener("vtt:wallContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeBuildingMenu();
+  menuWallId = e.detail.id;
+  menuWall = e.detail.wall || null;
+
+  const isDoor = !!(menuWall && menuWall.door);
+  const isSecret = isDoor && menuWall.door === "secret";
+  const isWindow = !!(menuWall && menuWall.window);
+  const isPlain = !isDoor && !isWindow;
+  // Одно и то же меню открывается из двух разных инструментов (см.
+  // interaction.js: vtt:wallContextMenu, поле tool) — структурные пункты
+  // (классификация/удаление сегмента) доступны ТОЛЬКО в "Стена" (там же
+  // interaction.js вообще не открывает это меню в других инструментах,
+  // кроме "Выбор" — и то только когда на сегменте уже есть дверь); пункты
+  // состояния двери (открыть/закрыть/запереть) — только в "Выбор", т.к.
+  // управление уже существующей дверью не гейтится режимом стены (см. план
+  // задачи: "Управление уже созданными дверями осуществляется... без
+  // изменений").
+  const isWallMode = e.detail.tool === "wall";
+  const isSelectMode = e.detail.tool === "select";
+
+  wallMenuToggleOpen.style.display = isSelectMode && isDoor ? "flex" : "none";
+  wallMenuToggleOpen.textContent = menuWall && menuWall.doorState === "open" ? "🚪 Закрыть" : "🚪 Открыть";
+  wallMenuToggleLock.style.display = isSelectMode && isDoor ? "flex" : "none";
+  wallMenuToggleLock.textContent = menuWall && menuWall.doorState === "locked" ? "🔓 Отпереть" : "🔒 Запереть";
+  wallMenuMakeDoor.style.display = isWallMode && isPlain ? "flex" : "none";
+  wallMenuMakeWindow.style.display = isWallMode && isPlain ? "flex" : "none";
+  wallMenuMakeSecret.style.display = isWallMode && isDoor && !isSecret ? "flex" : "none";
+  wallMenuMakeNormalDoor.style.display = isWallMode && isSecret ? "flex" : "none";
+  wallMenuUnsetSpecial.style.display = isWallMode && (isDoor || isWindow) ? "flex" : "none";
+  wallMenuDelete.style.display = isWallMode ? "flex" : "none";
+
+  wallMenu.style.left = e.detail.pageX + "px";
+  wallMenu.style.top = e.detail.pageY + "px";
+  wallMenu.style.display = "block";
+});
+
+wallMenuToggleOpen.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:toggleDoor", { detail: { id: menuWallId } }));
+  closeWallMenu();
+};
+wallMenuToggleLock.onclick = () => {
+  if (!menuWallId || !menuWall) return;
+  const locked = menuWall.doorState !== "locked";
+  document.dispatchEvent(new CustomEvent("vtt:setDoorLock", { detail: { id: menuWallId, locked } }));
+  closeWallMenu();
+};
+wallMenuMakeDoor.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "door" } }));
+  closeWallMenu();
+};
+wallMenuMakeWindow.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallWindow", { detail: { id: menuWallId, window: true } }));
+  closeWallMenu();
+};
+wallMenuMakeSecret.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "secret" } }));
+  closeWallMenu();
+};
+wallMenuMakeNormalDoor.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "door" } }));
+  closeWallMenu();
+};
+wallMenuUnsetSpecial.onclick = () => {
+  if (!menuWallId) return;
+  // Стена могла быть либо дверью (Door!==""), либо окном (Window===true) —
+  // не знаем какой именно, поэтому сбрасываем оба поля разом (см.
+  // room.go:applyMutation — установка одного и так сбрасывает другое, тут
+  // просто гарантируем чистый результат независимо от исходного состояния).
+  document.dispatchEvent(new CustomEvent("vtt:setWallDoor", { detail: { id: menuWallId, door: "" } }));
+  document.dispatchEvent(new CustomEvent("vtt:setWallWindow", { detail: { id: menuWallId, window: false } }));
+  closeWallMenu();
+};
+wallMenuDelete.onclick = () => {
+  if (!menuWallId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeWall", { detail: { id: menuWallId } }));
+  closeWallMenu();
+};
+
+// ================= меню здания (ПКМ внутри контура) =================
+// Раньше ПКМ сразу удалял здание без подтверждения — теперь, как и у фигуры
+// тумана/стены, снос вынесен в меню (см. interaction.js:
+// vtt:buildingContextMenu), чтобы случайный ПКМ во время осмотра карты в
+// режиме "Здание" не сносил контур мгновенно.
+const buildingMenu = document.getElementById("buildingMenu");
+const buildingMenuDelete = document.getElementById("buildingMenuDelete");
+let menuBuildingId = null;
+
+function closeBuildingMenu() {
+  buildingMenu.style.display = "none";
+  menuBuildingId = null;
+}
+
+document.addEventListener("vtt:buildingContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  menuBuildingId = e.detail.id;
+  buildingMenu.style.left = e.detail.pageX + "px";
+  buildingMenu.style.top = e.detail.pageY + "px";
+  buildingMenu.style.display = "block";
+});
+
+buildingMenuDelete.onclick = () => {
+  if (!menuBuildingId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeBuilding", { detail: { id: menuBuildingId } }));
+  closeBuildingMenu();
 };
 
 // ================= меню значка заметки (ПКМ по свитку на карте) =================
@@ -475,6 +663,9 @@ function closeNoteMarkerMenu() {
 document.addEventListener("vtt:noteMarkerContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  closeBuildingMenu();
   menuNoteMarkerId = e.detail.id;
   noteMarkerMenu.style.left = e.detail.pageX + "px";
   noteMarkerMenu.style.top = e.detail.pageY + "px";
@@ -501,6 +692,9 @@ function updateLightToggleBtnLabel() {
 document.addEventListener("vtt:tokenContextMenu", (e) => {
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  closeBuildingMenu();
   const { id, token, pageX, pageY } = e.detail;
   menuTokenId = id;
   menuCharacterId = token.characterId || "";
@@ -1758,6 +1952,9 @@ document.addEventListener("mousedown", (e) => {
   if (tokenMenu.style.display === "block" && !tokenMenu.contains(e.target)) closeTokenMenu();
   if (wallPointMenu.style.display === "block" && !wallPointMenu.contains(e.target)) closeWallPointMenu();
   if (noteMarkerMenu.style.display === "flex" && !noteMarkerMenu.contains(e.target)) closeNoteMarkerMenu();
+  if (fogAreaMenu.style.display === "block" && !fogAreaMenu.contains(e.target)) closeFogAreaMenu();
+  if (wallMenu.style.display === "block" && !wallMenu.contains(e.target)) closeWallMenu();
+  if (buildingMenu.style.display === "block" && !buildingMenu.contains(e.target)) closeBuildingMenu();
 });
 
 // ===================================================================

@@ -68,6 +68,17 @@ export function createBuildingsLayer(ctx) {
         dashedPolyline(dmOutline, b.points, 6, 4, true);
       }
       dmOutline.stroke({ width: 2 / scale, color: 0xffb454, alpha: 0.7 });
+      // Точки-ручки на каждой вершине — та же идиома, что у стен/тумана (см.
+      // layers/walls.js, layers/manual-fog.js), тут же за них хватает мышью
+      // interaction.js для переформовки контура — только пока активен сам
+      // инструмент "Здание" (вне его правка заблокирована, см. requirement 1).
+      if (ctx.tool === "building") {
+        for (const b of buildings) {
+          for (const p of b.points) {
+            dmOutline.circle(p.x, p.y, 5 / scale).fill(0xffffff).stroke({ width: 1.5 / scale, color: 0xffb454 });
+          }
+        }
+      }
       return;
     }
 

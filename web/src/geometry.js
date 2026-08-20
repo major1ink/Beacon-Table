@@ -59,12 +59,21 @@ export function computeVisibilityPolygon(ox, oy, radius, walls) {
 // distToSegment — расстояние от точки до отрезка (для поиска ближайшей
 // стены под курсором).
 export function distToSegment(px, py, x1, y1, x2, y2) {
+  const { cx, cy } = closestPointOnSegment(px, py, x1, y1, x2, y2);
+  return Math.hypot(px - cx, py - cy);
+}
+
+// closestPointOnSegment — ближайшая к (px,py) точка НА отрезке (x1,y1)-(x2,y2)
+// (проекция, зажатая в [0,1] по длине отрезка) — {cx,cy}. Используется и
+// distToSegment (нужно только расстояние), и вставкой новой точки в стену
+// (splitWallAt в interaction.js — там нужна сама точка на линии, а не
+// сырая позиция курсора, иначе новая вершина "спрыгивает" со стены).
+export function closestPointOnSegment(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
   const lenSq = dx * dx + dy * dy;
   let t = lenSq > 0 ? ((px - x1) * dx + (py - y1) * dy) / lenSq : 0;
   t = Math.max(0, Math.min(1, t));
-  const cx = x1 + t * dx, cy = y1 + t * dy;
-  return Math.hypot(px - cx, py - cy);
+  return { cx: x1 + t * dx, cy: y1 + t * dy };
 }
 
 // wallNear — id ближайшей стены к (x,y) в пределах screenPx экранных
@@ -177,6 +186,106 @@ export function weldWalls(wallList, eps = 12) {
   });
 }
 
+// ---- двери/окна в стенах (domain.Wall.Door/DoorState/Window, как в Foundry —
+// см. web/src/vtt/layers/doors.js, interaction.js) ----
+
+// wallBlocksSight — блокирует ли этот сегмент обзор ПРЯМО СЕЙЧАС: окно —
+// никогда, дверь — только пока не открыта (closed/locked блокируют как
+// обычная стена, open — нет), обычная стена — всегда. Используется
+// vision-fog.js ПЕРЕД raycasting'ом (фильтрует стены до weldWalls), а не
+// внутри самого computeVisibilityPolygon — так открытая дверь/окно просто не
+// участвуют в лучах вообще, без отдельной ветки в геометрии.
+export function wallBlocksSight(w) {
+  if (w.window) return false;
+  if (w.door && w.doorState === "open") return false;
+  return true;
+}
+
+// wallBlocksMovement — блокирует ли этот сегмент ФИЗИЧЕСКОЕ перемещение
+// токена прямо сейчас: обычная стена и окно — всегда (окно, в отличие от
+// wallBlocksSight, сквозь него видно, но не пройти — это стекло, а не
+// проём), дверь — пока не открыта (closed/locked блокируют как обычная
+// стена, open — нет). Используется clampMoveByWalls ниже — только для
+// драга СВОЕГО токена игроком (см. interaction.js); у ДМ перемещение любых
+// токенов ничем не ограничено, эта функция там не дёргается.
+export function wallBlocksMovement(w) {
+  if (w.door) return w.doorState !== "open";
+  return true;
+}
+
+// segSegIntersectT — параметр t пересечения отрезка A(ax,ay)->B(bx,by) с
+// отрезком C(cx,cy)->D(dx,dy) (t и u оба в [0,1]), либо null, если отрезки
+// не пересекаются (в т.ч. параллельны/коллинеарны). В отличие от
+// raySegmentT выше (луч из точки в бесконечность против отрезка, для
+// raycasting видимости), тут ОБА отрезка конечные — нужен именно факт
+// пересечения пути перемещения со стеной, а не первая стена на луче.
+function segSegIntersectT(ax, ay, bx, by, cx, cy, dx, dy) {
+  const rX = bx - ax, rY = by - ay;
+  const sX = dx - cx, sY = dy - cy;
+  const det = rX * sY - rY * sX;
+  if (Math.abs(det) < 1e-9) return null;
+  const qpX = cx - ax, qpY = cy - ay;
+  const t = (qpX * sY - qpY * sX) / det;
+  const u = (qpX * rY - qpY * rX) / det;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return t;
+}
+
+// clampMoveByWalls — прямой путь ОТ (fromX,fromY) К (toX,toY) для токена
+// игрока (токен считается точкой в его центре — того же приближения
+// достаточно для клетчатой сетки, к которой он и так примагничен: стены
+// обычно идут по границам клеток, поэтому "войти в клетку за стеной"
+// надёжно ловится пересечением центральной линии пути), проверяется на
+// пересечение с каждой блокирующей стеной/закрытой дверью/окном (см.
+// wallBlocksMovement). Если путь пересекает хотя бы одну — движение
+// останавливается чуть НЕ доходя до неё (epsPx отступ назад вдоль пути):
+// без отступа токен на следующем кадре стартовал бы РОВНО на линии стены и
+// застревал бы там навсегда — путь "от точки на самой стене" тут же снова
+// пересекал бы её на t=0. Берётся САМАЯ БЛИЗКАЯ по пути преграда (наименьший
+// t), не первая встреченная при переборе walls.
+export function clampMoveByWalls(fromX, fromY, toX, toY, walls, epsPx = 4) {
+  let bestT = 1;
+  for (const id in walls) {
+    const w = walls[id];
+    if (!wallBlocksMovement(w)) continue;
+    const t = segSegIntersectT(fromX, fromY, toX, toY, w.x1, w.y1, w.x2, w.y2);
+    if (t != null && t < bestT) bestT = t;
+  }
+  if (bestT >= 1) return { x: toX, y: toY };
+  const dist = Math.hypot(toX - fromX, toY - fromY);
+  const stopT = dist > 0 ? Math.max(0, bestT - epsPx / dist) : 0;
+  return { x: fromX + (toX - fromX) * stopT, y: fromY + (toY - fromY) * stopT };
+}
+
+// wallMidpoint — точка значка двери (середина сегмента).
+export function wallMidpoint(w) {
+  return { x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2 };
+}
+
+// doorAt — id ближайшей двери (по значку в СЕРЕДИНЕ стены, не по всей линии)
+// к (x,y) в пределах screenPx экранных px, либо null. includeSecret=false —
+// не учитывать секретные двери (клиентский хит-тест для игрока и для чужого
+// клика ДМ мимо инструмента "выбор"; настоящая защита секретных/запертых
+// дверей — на сервере, см. service.Room.handleToggleDoor). walls: { [id]:
+// {x1,y1,x2,y2,door,...} }.
+export function doorAt(x, y, walls, scale, includeSecret, screenPx = 16) {
+  const threshold = screenPx / scale;
+  let best = null,
+    bestDist = threshold;
+  for (const id in walls) {
+    const w = walls[id];
+    if (!w.door) continue;
+    if (w.door === "secret" && !includeSecret) continue;
+    const { x: mx, y: my } = wallMidpoint(w);
+    const d = Math.hypot(mx - x, my - y);
+    if (d < bestDist) {
+      best = id;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
 // wallVertexNear — ближайшая вершина к (x,y) в пределах screenPx экранных
 // пикселей, либо null. Та же идиома, что wallNear, но для точек, не стен
 // целиком — используется для драга точки и ПКМ-меню "удалить точку".
@@ -235,6 +344,30 @@ export function fogAreaAt(x, y, fogAreas) {
   return null;
 }
 
+// fogVertexNear — ближайшая вершина фигуры ручного тумана к (x,y) в пределах
+// screenPx экранных пикселей, либо null — {areaId, index, x, y}. Та же идиома,
+// что wallVertexNear, но точки фигуры тумана не группируются между разными
+// фигурами (в отличие от стен, углы разных облаков тумана не обязаны
+// склеиваться) — index прямо указывает на area.points[index], которую
+// перетаскивание в interaction.js подменяет на новую позицию (переформовка
+// контура).
+export function fogVertexNear(x, y, fogAreas, scale, screenPx = 10) {
+  const threshold = screenPx / scale;
+  let best = null, bestDist = threshold;
+  for (const id in fogAreas) {
+    const area = fogAreas[id];
+    for (let i = 0; i < area.points.length; i++) {
+      const p = area.points[i];
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < bestDist) {
+        best = { areaId: id, index: i, x: p.x, y: p.y };
+        bestDist = d;
+      }
+    }
+  }
+  return best;
+}
+
 // buildingAt — id здания, содержащего точку (x,y), либо null. Та же идиома,
 // что fogAreaAt (см. domain.Building — точки замкнутого контура, без
 // дублирования первой точки в конце). Используется и для ПКМ-удаления (см.
@@ -246,6 +379,27 @@ export function buildingAt(x, y, buildings) {
     if (b.points.length >= 3 && pointInPolygon(x, y, b.points)) return id;
   }
   return null;
+}
+
+// buildingVertexNear — ближайшая вершина контура здания к (x,y) в пределах
+// screenPx экранных пикселей, либо null — {buildingId, index, x, y}. Та же
+// идиома, что и fogVertexNear/wallVertexNear — используется для перетаскивания
+// отдельной вершины здания инструментом "Здание" (см. interaction.js).
+export function buildingVertexNear(x, y, buildings, scale, screenPx = 10) {
+  const threshold = screenPx / scale;
+  let best = null, bestDist = threshold;
+  for (const id in buildings) {
+    const b = buildings[id];
+    for (let i = 0; i < b.points.length; i++) {
+      const p = b.points[i];
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < bestDist) {
+        best = { buildingId: id, index: i, x: p.x, y: p.y };
+        bestDist = d;
+      }
+    }
+  }
+  return best;
 }
 
 // tokenAt — id токена под точкой (x,y), либо null. tokens: { [id]: {x,y,size} }.

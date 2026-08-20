@@ -22,6 +22,8 @@
     }
     label { display: flex; align-items: center; gap: 6px; }
     .hint { opacity: 0.55; font-size: 11px; line-height: 1.5; }
+    /* подсказки по инструментам рисования — по умолчанию скрыты, показывается только подсказка выбранного инструмента (см. pages/dm.js:vtt:toolChanged) */
+    .hint[data-hint-tool] { display: none; }
 
     /* ---- каркас: плавающий рейл + плавающая панель + канвас ----
        Рейл/панель остаются flex-колонками в потоке #appBody (канвас по
@@ -137,6 +139,40 @@
     }
     #wallPointMenu button { width: 100%; background: var(--danger); }
     #wallPointMenu button:hover { background: var(--danger-hover); }
+
+    #fogAreaMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    #fogAreaMenu button { width: 100%; display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start; background: var(--danger); }
+    #fogAreaMenu button:hover { background: var(--danger-hover); }
+
+    #buildingMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    #buildingMenu button { width: 100%; display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start; background: var(--danger); }
+    #buildingMenu button:hover { background: var(--danger-hover); }
+
+    #wallMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    #wallMenu button { width: 100%; display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start; }
+    #wallMenu button + button { margin-top: 4px; }
+    #wallMenuToggleOpen { background: var(--accent); }
+    #wallMenuToggleOpen:hover { background: #6a5ae0; }
+    #wallMenuDelete { background: var(--danger); }
+    #wallMenuDelete:hover { background: var(--danger-hover); }
 
     #noteMarkerMenu {
       position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
@@ -540,10 +576,10 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-7Zh-f6oG.js"></script>
+  <script type="module" crossorigin src="/assets/dm-DMeifB2w.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-Zkc90Izu.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-3nongrBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-C5YsgANZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-CmwVsWO4.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-CyFmcI4N.js">
   <link rel="modulepreload" crossorigin href="/assets/combat-panel-CBd2OuXc.js">
@@ -615,12 +651,17 @@
         <header class="panel-header"><h3>Инструменты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <button id="attackBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="16" y2="8"/><line x1="14" y1="6" x2="18" y2="10"/><line x1="12" y1="4" x2="20" y2="12"/></svg> Атака</button>
-          <button id="wallBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="10"/><line x1="15" y1="5" x2="15" y2="10"/><line x1="6" y1="10" x2="6" y2="15"/><line x1="12" y1="10" x2="12" y2="15"/><line x1="18" y1="10" x2="18" y2="15"/><line x1="9" y1="15" x2="9" y2="19"/><line x1="15" y1="15" x2="15" y2="19"/></svg> Стены</button>
-          <button id="buildingBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11L12 4l8 7"/><path d="M6 10v10h12V10"/><rect x="10" y="14" width="4" height="6"/></svg> Здание</button>
-          <button id="fogBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01.4-8 5.5 5.5 0 0110.4 1A3.5 3.5 0 0117 16H7z"/><line x1="5" y1="19" x2="19" y2="19"/></svg> Туман</button>
+          <button id="wallBtn" class="tool-btn" title="Клик/протяжка — перетащить вершину или вставить точку на стене. Ctrl+клик — нарисовать новую стену"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="10"/><line x1="15" y1="5" x2="15" y2="10"/><line x1="6" y1="10" x2="6" y2="15"/><line x1="12" y1="10" x2="12" y2="15"/><line x1="18" y1="10" x2="18" y2="15"/><line x1="9" y1="15" x2="9" y2="19"/><line x1="15" y1="15" x2="15" y2="19"/></svg> Стены</button>
+          <button id="buildingBtn" class="tool-btn" title="Клик — перетащить вершину контура. Ctrl+клик — нарисовать новое здание"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11L12 4l8 7"/><path d="M6 10v10h12V10"/><rect x="10" y="14" width="4" height="6"/></svg> Здание</button>
+          <button id="fogBtn" class="tool-btn" title="Клик/протяжка — перетащить точку или фигуру тумана. Ctrl+протяжка — нарисовать новую фигуру"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01.4-8 5.5 5.5 0 0110.4 1A3.5 3.5 0 0117 16H7z"/><line x1="5" y1="19" x2="19" y2="19"/></svg> Туман</button>
           <button id="rulerBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg> Линейка</button>
           <div class="section-divider"></div>
-          <p class="hint">Линейка — ЛКМ и тяни, отпустил — замер исчезает; расстояние в единицах текущей сетки (см. настройки сцены → сетка). Стены рисуются цепочкой: клик — точка, клик — следующий сегмент от неё; Esc/двойной клик/ПКМ — закончить. Точки рядом друг с другом прилипают, образуя ровный угол. В инструменте "выбор" точку можно перетащить — двигаются сразу все стены её угла. Здание — та же цепочка, но обязательно замкнутая: клик рядом со стартовой точкой (она увеличивается, когда точек уже достаточно) замыкает контур и сохраняет здание; Esc/двойной клик/ПКМ до замыкания — отмена без сохранения. Замкнутое здание скрывает у игроков всё, что внутри контура, непрозрачной "крышей" — снимается целиком, как только внутрь заходит видимый токен; ПКМ внутри контура — удалить здание. ЛКМ таскает · ПКМ на точке стены — меню "удалить точку" · ПКМ на самой стене — удалить её целиком · ПКМ на токене/тумане — меню/удалить · средняя кнопка — пан · колесо — зум</p>
+          <p class="hint">ЛКМ таскает токены и точки стен/зданий (двигаются сразу все стены её угла) · ПКМ на токене — меню/удалить · средняя кнопка — пан · колесо — зум.</p>
+          <p class="hint" data-hint-tool="attack">Атака — клик по токену-атакующему, затем по токену-цели — анимация удара.</p>
+          <p class="hint" data-hint-tool="wall">Стены рисуются цепочкой: Ctrl+клик — начать новую стену, клик — точка, клик — следующий сегмент от неё; Esc/двойной клик/ПКМ — закончить рисование. Точки рядом друг с другом прилипают, образуя ровный угол. ЛКМ таскает вершину · ПКМ на точке стены — меню "удалить точку" · ПКМ на самой стене — удалить её целиком.</p>
+          <p class="hint" data-hint-tool="building">Здание — та же цепочка, но обязательно замкнутая: Ctrl+клик — начать новое, клик рядом со стартовой точкой (она увеличивается, когда точек уже достаточно) замыкает контур и сохраняет здание; Esc/двойной клик/ПКМ до замыкания — отмена без сохранения. Замкнутое здание скрывает у игроков всё, что внутри контура, непрозрачной "крышей" — снимается целиком, как только внутрь заходит видимый токен; ПКМ внутри контура — удалить здание.</p>
+          <p class="hint" data-hint-tool="fog">Туман — Ctrl+протяжка рисует новую фигуру; клик/протяжка на точке или фигуре — переместить её; ПКМ на фигуре — меню/удалить.</p>
+          <p class="hint" data-hint-tool="ruler">Линейка — ЛКМ и тяни, отпустил — замер исчезает; расстояние в единицах текущей сетки (см. настройки сцены → сетка).</p>
         </div>
       </section>
 
@@ -928,6 +969,25 @@
 
   <div id="wallPointMenu">
     <button id="wallPointMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить точку стены</button>
+  </div>
+
+  <div id="fogAreaMenu">
+    <button id="fogAreaMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить фигуру тумана</button>
+  </div>
+
+  <div id="buildingMenu">
+    <button id="buildingMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить здание</button>
+  </div>
+
+  <div id="wallMenu">
+    <button id="wallMenuToggleOpen">🚪 Открыть</button>
+    <button id="wallMenuToggleLock">🔒 Запереть</button>
+    <button id="wallMenuMakeDoor">🚪 Сделать дверью</button>
+    <button id="wallMenuMakeWindow">🪟 Сделать окном</button>
+    <button id="wallMenuMakeSecret">🕵️ Сделать секретной</button>
+    <button id="wallMenuMakeNormalDoor">👁️ Раскрыть (обычная дверь)</button>
+    <button id="wallMenuUnsetSpecial">Вернуть обычной стеной</button>
+    <button id="wallMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить стену</button>
   </div>
 
   <div id="noteMarkerMenu">

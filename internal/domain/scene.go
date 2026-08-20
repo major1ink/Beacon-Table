@@ -85,12 +85,28 @@ type TokenLight struct {
 // Wall — отрезок, блокирующий обзор. Не секрет — уходит всем клиентам
 // одинаково (это геометрия карты, а не скрытая информация), в отличие от
 // Token.Hidden/NoteMarker. Видимость (line-of-sight) считается на клиенте.
+//
+// Door/DoorState/Window — дверь и окно в стене (как в Foundry): Door — ""
+// (глухая стена) | "door" (обычная дверь) | "secret" (секретная — клиент
+// прячет её значок и хит-тест от роли player, см. web/src/vtt/layers/doors.js
+// и geometry.js:doorAt; сам Wall при этом летит в PublicScene как обычно —
+// см. коммент выше про "не секрет", секретность тут чисто клиентского
+// рендера ради простоты). DoorState — "closed"/"open"/"locked", осмысленно
+// только когда Door != "" (сервер сам проставляет "closed" по умолчанию при
+// первом выставлении Door, см. service.Room.applyMutation:"set_wall_door").
+// Window — сегмент НИКОГДА не блокирует обзор (см.
+// web/src/geometry.js:wallBlocksSight), во всём остальном обычная стена.
+// Door и Window взаимоисключающие — сервер сам сбрасывает одно при
+// выставлении другого (см. room.go: "set_wall_door"/"set_wall_window").
 type Wall struct {
-	ID string  `json:"id"`
-	X1 float64 `json:"x1"`
-	Y1 float64 `json:"y1"`
-	X2 float64 `json:"x2"`
-	Y2 float64 `json:"y2"`
+	ID        string  `json:"id"`
+	X1        float64 `json:"x1"`
+	Y1        float64 `json:"y1"`
+	X2        float64 `json:"x2"`
+	Y2        float64 `json:"y2"`
+	Door      string  `json:"door,omitempty"`
+	DoorState string  `json:"doorState,omitempty"`
+	Window    bool    `json:"window,omitempty"`
 }
 
 // Point — вершина многоугольника FogArea.
