@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import { paintMulti } from "../light-geometry.js";
+import { cutMulti, fillMulti } from "../light-geometry.js";
 import { computeVisionPlanWithFallback } from "../vision-plan.js";
 
 // ---- освещение (см. README, раздел про свет) ----
@@ -90,32 +90,24 @@ export function createVisionFogLayer(ctx) {
     if (!dimIslands.length) return; // света нет — сплошная тьма как уже залито
 
     // revealDim (все острова разом) — то, что видно хотя бы тускло.
-    // Вырезаем целиком из ОДНОЙ базовой заливки тьмы (дыры — обратно
-    // темнотой, см. refillStyle) — тут работает старый трюк: darkness это
-    // ОДНА fill-инструкция (rect() чуть выше), Pixi Graphics.cut() вешает
-    // дыру именно на неё, и сколько бы островов ни было — все их cut()'ы
-    // корректно накапливаются на этой единственной инструкции через
-    // hole.addPath (см. node_modules/pixi.js/lib/scene/graphics/shared/
-    // GraphicsContext.js:cut). Дальше dimTint решает, насколько ярко.
-    paintMulti(darkness, dimIslands.map((d) => d.poly), w, h, "cut", null, { color: DARK_COLOR, alpha: DARK_ALPHA });
+    // Вырезаем целиком из ОДНОЙ базовой заливки тьмы (rect() чуть выше);
+    // дыры островов возвращаются заплатками тьмы (refillStyle). Порядок
+    // инструкций внутри — забота cutMulti: Pixi'шный cut() сам выбирает,
+    // какую заливку дырявить, и на этом легко получить чужую (см. "ПРАВИЛО
+    // РАБОТЫ С Pixi cut()" в light-geometry.js). Дальше dimTint решает,
+    // насколько ярко.
+    cutMulti(darkness, dimIslands.map((d) => d.poly), w, h, { color: DARK_COLOR, alpha: DARK_ALPHA });
 
-    // dimTint — а вот тут ОДНОЙ инструкцией не обойтись: у каждого острова
-    // своя часть revealBright, которую нужно вырезать ИМЕННО из заливки
-    // ЭТОГО острова, а не из чужой. Pixi'шный cut() вешает дыру только на
-    // последнюю fill-инструкцию контекста (та же ссылка на GraphicsContext.js
-    // выше) — поэтому на каждый остров идёт СВОЯ пара fill()+cut() подряд,
-    // без единого fill() между ними от соседнего острова: cut() яркой части
-    // всегда попадает точно в только что нарисованную заливку своего
-    // острова, а не в чужую/самую последнюю. Раньше это было сломано:
-    // сначала заливались ВСЕ острова разом, потом ВСЕ cut()'ы разом — все
-    // они доставались только последнему острову, и яркий свет у любого
-    // источника, кроме последнего нарисованного, не работал вообще (см.
-    // историю правки этого файла).
+    // dimTint — тусклая дымка. Здесь ОДНОЙ инструкцией не обойтись: у
+    // каждого острова своя часть revealBright, которую нужно вырезать ИМЕННО
+    // из заливки ЭТОГО острова, а не из чужой — поэтому на каждый остров
+    // идёт свой fillMulti, и он же уносит яркие куски в тот же единственный
+    // cut() (extraCuts). Раньше остров и его яркие куски рисовались двумя
+    // отдельными вызовами, и второй cut() по той же заливке дотягивался до
+    // СОСЕДНЕГО острова — на карте это выглядело как треугольные клинья
+    // не пойми откуда.
     for (const { poly, bright } of dimIslands) {
-      paintMulti(dimTint, [poly], w, h, "fill", { color: DARK_COLOR, alpha: DIM_ALPHA });
-      if (bright.length) {
-        paintMulti(dimTint, bright, w, h, "cut", null, { color: DARK_COLOR, alpha: DIM_ALPHA });
-      }
+      fillMulti(dimTint, [poly], w, h, { color: DARK_COLOR, alpha: DIM_ALPHA }, bright, { color: DARK_COLOR, alpha: DIM_ALPHA });
     }
   }
 
