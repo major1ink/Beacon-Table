@@ -347,6 +347,12 @@ document.addEventListener("vtt:toolChanged", (e) => {
   fogBtn.classList.toggle("active", e.detail === "fog");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
+  // подсказка в панели "Инструменты" — только для выбранного инструмента (см. dm.html:data-hint-tool)
+  // "" тут не сработает — .hint[data-hint-tool]{display:none} в <style> и
+  // так победит пустую инлайн-строку, нужен явный display, отличный от none
+  document.querySelectorAll("[data-hint-tool]").forEach((el) => {
+    el.style.display = el.dataset.hintTool === e.detail ? "block" : "none";
+  });
 });
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
