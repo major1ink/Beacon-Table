@@ -2,7 +2,8 @@
 // не менялась, только глобальные вызовы app.js заменены на импорты.
 import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
-import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
+import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
+import { openSheetDock } from "../sheet-dock.js";
 import {
   fetchMe,
   apiLogout,
@@ -17,12 +18,71 @@ import { icon } from "../icons.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 
-// openCharacterSheet — лист персонажа по умолчанию открывается ВНУТРИ
-// страницы плавающим окном (см. floating-window.js), как в Foundry; 🗗 в его
-// шапке выносит в настоящее отдельное окно браузера для тех, кому нужно
-// держать лист на втором мониторе отдельно от стола.
+// openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
+// БОКОВОЙ КОЛОНКЕ слева от карты (см. sheet-dock.js): за столом лист держат
+// открытым всю игру (ХП, ячейки, ресурсы отмечают по ходу боя), и плавающее
+// окно для этого приходилось бы постоянно оттаскивать с карты. Кнопка ⧉ в
+// шапке дока переносит тот же лист в плавающее окно (floating-window.js), а
+// уже оттуда 🗗 — в настоящее отдельное окно браузера, для второго монитора.
+//
+// Если этот персонаж УЖЕ вынесен в плавающее окно, клик по чипу не тащит его
+// обратно в док, а просто поднимает окно наверх — openFloatingWindow с тем
+// же key делает ровно это.
 function openCharacterSheet(c) {
-  openFloatingWindow({ key: "char-" + c.id, title: c.name, url: `/character-sheet.html?id=${c.id}` });
+  const key = "char-" + c.id;
+  const url = `/character-sheet.html?id=${c.id}`;
+  if (isFloatingWindowOpen(key)) {
+    openFloatingWindow({ key, title: c.name, url });
+    return;
+  }
+  openSheetDock(document.getElementById("sheetDock"), {
+    key,
+    title: c.name,
+    url,
+    // Док отнимает ширину у карты — канвас должен перемериться сразу, а не
+    // ждать, пока сработает ResizeObserver внутри vtt (см. vtt/index.js:
+    // "vtt:relayout" — там же, почему на один только наблюдатель полагаться
+    // нельзя).
+    onLayoutChange: () => document.dispatchEvent(new CustomEvent("vtt:relayout")),
+  });
+}
+
+// renderCharDock — ряд компактных "чипов" своих персонажей в топбаре (см.
+// player.html: #charDock): аватар + имя, клик открывает лист. Раньше до
+// листа надо было идти через модалку "Мои персонажи" — а лист за игру
+// открывают чаще, чем правят список персонажей. Модалка остаётся местом,
+// где персонажей заводят/правят/удаляют, док — местом, где их открывают.
+// chars — уже загруженный список, если он у вызывающего есть (renderChars),
+// иначе тянем сами.
+async function renderCharDock(chars) {
+  const dock = document.getElementById("charDock");
+  let list = chars;
+  if (!list) {
+    try {
+      list = await fetchCharacters();
+    } catch {
+      return; // сеть моргнула — оставляем прошлый ряд, он не мешает
+    }
+  }
+  dock.innerHTML = "";
+  for (const c of list) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "char-chip";
+    chip.title = `${c.name} — открыть лист персонажа`;
+    const avatar = document.createElement("span");
+    avatar.className = "char-chip-avatar";
+    // Видео-аватар (webm/mp4 токен-арт) как background не покажется —
+    // такому персонажу оставляем ту же букву-заглушку, что и безаватарному.
+    if (c.avatarUrl && !isVideoUrl(c.avatarUrl)) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
+    else avatar.textContent = (c.name || "?").trim().charAt(0).toUpperCase();
+    const name = document.createElement("span");
+    name.className = "char-chip-name";
+    name.textContent = c.name;
+    chip.append(avatar, name);
+    chip.onclick = () => openCharacterSheet(c);
+    dock.appendChild(chip);
+  }
 }
 
 let me = null;
@@ -43,11 +103,20 @@ let vtt = null;
   document.getElementById("topbarUsername").textContent = me.username;
   document.getElementById("app").classList.add("ready");
 
+  // Лоток кубов — ДО initVTT, и отдельным контейнером от лога: сам лоток
+  // строкой в доке внизу, лог — плавающей плашкой над картой (см.
+  // player.html), чтобы высота дока не прыгала от каждого броска. Порядок
+  // важен: док задаёт высоту, которая остаётся канвасу, а Pixi снимает её
+  // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
+  // через замыкание на vtt — до конца boot() кликать всё равно негде.
+  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg), document.getElementById("diceLog"));
+  renderCharDock();
+
   vtt = await initVTT({ canvasId: "scene", role: "player", playerId: me.id });
-  initDiceRoller(document.getElementById("diceDock"), vtt.send);
   // Справочник — та же боковая колонка канваса, что и у ДМ (см. pages/dm.js —
   // тот же sticky, см. комментарий там), первая иконка тут (игрок кубы
-  // бросает через #diceDock снизу, не через sideMenu).
+  // бросает через #diceDock снизу, не через sideMenu — у него это основной
+  // инструмент, и он всегда на виду, а не за иконкой).
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
   mountCompendiumMenu(compendiumPanel, { role: "player" });
 
@@ -157,6 +226,7 @@ async function renderChars() {
     charsList.textContent = "Не удалось загрузить: " + err.message;
     return;
   }
+  renderCharDock(chars);
   charsList.innerHTML = "";
   if (chars.length === 0) {
     const empty = document.createElement("div");

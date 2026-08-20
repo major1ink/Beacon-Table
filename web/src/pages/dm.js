@@ -66,10 +66,11 @@ let vtt;
   vtt.cueAudio.addEventListener("ended", handleCueEnded);
   // Кубы — отдельная иконка 🎲 в той же боковой колонке, что и 🔊 громкость
   // (см. vtt/side-menu.js — vtt.sideMenu тоже появляется только теперь).
-  // Сама панель — только кнопки/поле формулы; лог результатов остаётся
-  // отдельно, в #diceLog сверху канваса (см. dm.html) — initDiceRoller
-  // поддерживает раздельные контейнеры именно ради этого случая.
-  const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы");
+  // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
+  // формулы, "Бросить", см. dice.js); лог результатов остаётся отдельно, в
+  // #diceLog сверху канваса (см. dm.html) — initDiceRoller поддерживает
+  // раздельные контейнеры именно ради этого случая.
+  const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240 });
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
