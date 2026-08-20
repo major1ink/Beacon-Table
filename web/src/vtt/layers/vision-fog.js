@@ -1,7 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import { computeVisibilityPolygon, weldWalls, pointInPolygon, wallBlocksSight } from "../../geometry.js";
 import { worldSize } from "../camera.js";
-import { unionAll, intersectMulti, differenceMulti, unionMulti, worldRect, paintMulti, gridUnitsToWorld } from "../light-geometry.js";
+import { unionAll, intersectMulti, differenceMulti, unionMulti, worldRect, paintMulti, gridUnitsToWorld, quantizePoints } from "../light-geometry.js";
 
 // ---- освещение (см. README, раздел про свет) ----
 //
@@ -28,6 +28,11 @@ const SIGHT_MARGIN = 50; // запас поверх диагонали карт�
 const DARK_ALPHA = 0.96; // совсем не освещено
 const DIM_ALPHA = 0.55; // освещено тускло — не тьма, но и не "видно как есть"
 const DARK_COLOR = 0x06060a;
+// QUANTUM_LADDER — шаги сетки, к которой прижимаются точки рейкастинга перед
+// булевой алгеброй (см. quantizePoints в light-geometry.js и rebuild ниже).
+// Первый — рабочий (0.25px, визуально неотличимо), остальные — аварийные
+// повторы, если на точном polygon-clipping всё-таки упал.
+const QUANTUM_LADDER = [0.25, 1, 4];
 
 // Line-of-sight/туман войны — САМОЕ ГЛАВНОЕ место переезда (см. план,
 // раздел "Корневой фикс"). В старом Canvas2D-движке computeVisibilityPolygon
@@ -79,11 +84,35 @@ export function createVisionFogLayer(ctx) {
   // без единого мига, пока следующий пересчёт (следующий кадр драга) не
   // спасёт положение сам.
   function rebuild() {
-    let plan;
-    try {
-      plan = computePlan();
-    } catch (err) {
-      console.error("beacon: сбой пересчёта освещения (vision-fog computePlan) — оставляю прошлый кадр как есть:", err, {
+    // Каскад по QUANTUM_LADDER — страховка поверх основной защиты
+    // (квантование входа, см. quantizePoints в light-geometry.js). Основная
+    // снимает подавляющее большинство падений polygon-clipping, но
+    // гарантии не даёт: библиотека может споткнуться на любой достаточно
+    // невезучей геометрии. Раньше единственное падение означало ранний
+    // return — и, поскольку геометрия сцены между кадрами почти не меняется,
+    // СЛЕДУЮЩИЙ кадр падал ровно так же. Освещение намертво зависало на
+    // последнем удачном кадре (в консоль сыпался один и тот же стек, а
+    // токены визуально переставали двигаться — их позиции обновляет этот же
+    // пересчёт), пока ДМ не менял стены на что-то попроще.
+    //
+    // Повтор на более грубом кванте — это ДРУГОЙ вход для той же
+    // библиотеки: точки прижимаются к более редкой сетке, вырожденные
+    // случаи схлопываются, расчёт проходит. Цена — доли пикселя точности
+    // границы света, и только в тех редких кадрах, где точный квант не
+    // сработал. Кадры, где всё хорошо (обычный случай), не платят ничего:
+    // цикл выходит на первой же итерации.
+    let plan = null;
+    let lastErr = null;
+    for (const quantum of QUANTUM_LADDER) {
+      try {
+        plan = computePlan(quantum);
+        break;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    if (!plan) {
+      console.error("beacon: сбой пересчёта освещения (vision-fog computePlan) — оставляю прошлый кадр как есть:", lastErr, {
         tokens: ctx.scene.tokens,
         walls: ctx.scene.walls,
         globalLight: ctx.scene.globalLight,
@@ -96,7 +125,7 @@ export function createVisionFogLayer(ctx) {
   // computePlan — чистый расчёт, НИКАКИХ обращений к darkness/dimTint. Может
   // кинуть исключение (polygon-clipping на вырожденной геометрии) — это
   // нормально, ловится в rebuild().
-  function computePlan() {
+  function computePlan(quantum) {
     // Только не-DM экран — DM должен видеть весь стол целиком, всегда, вне
     // зависимости от света (ориентир для редактирования, как и со стенами/
     // hidden-токенами). Ручные fogAreas (layers/manual-fog.js) рисуются
@@ -105,7 +134,7 @@ export function createVisionFogLayer(ctx) {
     if (ctx.scene.fogOfWar === false) return { skip: true };
 
     const { w, h } = worldSize(ctx.scene);
-    const empty = { skip: false, w, h, revealDim: [], revealBright: [] };
+    const empty = { skip: false, w, h, dimIslands: [] };
 
     // weldWalls — склеивает почти-совпадающие концы стен ПЕРЕД raycasting'ом
     // (см. geometry.js): без этого щель в пару пикселей на углу комнаты
@@ -145,8 +174,13 @@ export function createVisionFogLayer(ctx) {
     const sightTokens = tokens.filter((t) => !t.lightOnly);
     if (sightTokens.length === 0) return empty; // одни факелы без наблюдателя — светить некому
 
+    // ray — ЕДИНСТВЕННАЯ точка входа в рейкастинг в этом файле: сразу
+    // санитарит результат под текущий quantum (см. quantizePoints), чтобы
+    // ни один сырой многоугольник не утёк в булеву алгебру мимо обработки.
+    const ray = (x, y, radius) => quantizePoints(computeVisibilityPolygon(x, y, radius, walls), quantum);
+
     const sightRadius = Math.hypot(w, h) + SIGHT_MARGIN;
-    const visionPolys = sightTokens.map((t) => computeVisibilityPolygon(t.x, t.y, sightRadius, walls)).filter((p) => p.length >= 3);
+    const visionPolys = sightTokens.map((t) => ray(t.x, t.y, sightRadius)).filter((p) => p.length >= 3);
     const visionMulti = unionAll(visionPolys);
     if (!visionMulti.length) return empty;
 
@@ -159,7 +193,14 @@ export function createVisionFogLayer(ctx) {
 
     // buildings/buildingsMulti — контуры зданий для clipLightByBuildings
     // ниже (НЕ для raycasting'а, см. коммент у walls выше).
-    const buildings = Object.values(ctx.scene.buildings || {}).filter((b) => b.points.length >= 3);
+    // Контуры зданий прижимаем к ТОЙ ЖЕ сетке, что и лучи (quantizePoints) —
+    // иначе вершина здания и упёршийся в неё луч расходились бы на доли
+    // пикселя, а такие "почти совпадающие, но не совпавшие" точки — ровно
+    // тот случай, на котором polygon-clipping и спотыкается.
+    const buildings = Object.values(ctx.scene.buildings || {})
+      .filter((b) => b.points.length >= 3)
+      .map((b) => ({ points: quantizePoints(b.points, quantum) }))
+      .filter((b) => b.points.length >= 3);
     const buildingsMulti = buildings.length ? unionAll(buildings.map((b) => b.points)) : [];
 
     // clipLightByBuildings — здание блокирует свет БЕЗ единого лишнего луча
@@ -192,7 +233,7 @@ export function createVisionFogLayer(ctx) {
       dimMulti = worldRect(w, h);
     } else {
       const dimEntries = lightTokens
-        .map((t) => ({ token: t, poly: computeVisibilityPolygon(t.x, t.y, gridUnitsToWorld(grid, Math.max(t.light.dim || 0, t.light.bright || 0)), walls) }))
+        .map((t) => ({ token: t, poly: ray(t.x, t.y, gridUnitsToWorld(grid, Math.max(t.light.dim || 0, t.light.bright || 0))) }))
         .filter((e) => e.poly.length >= 3);
       dimMulti = clipLightByBuildings(dimEntries);
     }
@@ -204,7 +245,7 @@ export function createVisionFogLayer(ctx) {
     } else {
       const brightEntries = lightTokens
         .filter((t) => (t.light.bright || 0) > 0)
-        .map((t) => ({ token: t, poly: computeVisibilityPolygon(t.x, t.y, gridUnitsToWorld(grid, t.light.bright), walls) }))
+        .map((t) => ({ token: t, poly: ray(t.x, t.y, gridUnitsToWorld(grid, t.light.bright)) }))
         .filter((e) => e.poly.length >= 3);
       brightMulti = clipLightByBuildings(brightEntries);
     }
@@ -213,7 +254,30 @@ export function createVisionFogLayer(ctx) {
     if (!revealDim.length) return empty;
     const revealBright = brightMulti.length ? intersectMulti(visionMulti, brightMulti) : [];
 
-    return { skip: false, w, h, revealDim, revealBright };
+    // dimIslands — revealDim, но каждый отдельный "остров" (одна дыра могла
+    // распасться на несколько несмежных кусков — стены дробят даже свет
+    // ОДНОГО факела, а уж несколько факелов в разных углах карты почти
+    // всегда дают больше одного острова) уже со СВОИМ кусочком revealBright
+    // внутри него (см. paintPlan — там на пару fill()+cut() надо ровно по
+    // одному острову за раз, иначе Pixi Graphics.cut() перепутает остров).
+    // Пересечение считаем ЛОКАЛЬНО: один остров (обёрнутый в [poly] — уже
+    // готовый MultiPolygon из одного элемента) против revealBright — вход
+    // ограничен размером ЭТОГО острова, не всей карты. Первая версия фикса
+    // считала вместо этого differenceMulti(worldRect(w,h), revealDim) — вычитание
+    // острова(-ов) из прямоугольника ВСЕЙ карты целиком: на картах со
+    // сложной геометрией стен (много изрезанных islands) polygon-clipping
+    // на такой операции валится ("Unable to find segment ... in SweepLine
+    // tree", переполнение стека в isExteriorRing на большом числе вложенных
+    // дыр) — ловится в try/catch (см. rebuild()), но КАЖДЫЙ кадр подряд, то
+    // есть освещение зависает на последнем удачном кадре навсегда, пока
+    // геометрия сцены не поменяется на что-то попроще. Локальный per-island
+    // intersect на порядки меньше и без этой патологии.
+    const dimIslands = revealDim.map((poly) => ({
+      poly,
+      bright: revealBright.length ? intersectMulti([poly], revealBright) : [],
+    }));
+
+    return { skip: false, w, h, dimIslands };
   }
 
   // paintPlan — только рисование, готовым результатом computePlan(). Не
@@ -223,25 +287,37 @@ export function createVisionFogLayer(ctx) {
     clearAll();
     if (plan.skip) return; // DM/выключенный туман войны — совсем без тьмы
 
-    const { w, h, revealDim, revealBright } = plan;
+    const { w, h, dimIslands } = plan;
     darkness.rect(0, 0, w, h).fill({ color: DARK_COLOR, alpha: DARK_ALPHA });
-    if (!revealDim.length) return; // света нет — сплошная тьма как уже залито
+    if (!dimIslands.length) return; // света нет — сплошная тьма как уже залито
 
-    // revealDim — то, что видно хотя бы тускло: пересечение обзора токенов
-    // со светом. Вырезаем его из базовой тьмы целиком (дыры — обратно
-    // темнотой, см. refillStyle) — дальше dimTint решает, насколько ярко.
-    paintMulti(darkness, revealDim, w, h, "cut", null, { color: DARK_COLOR, alpha: DARK_ALPHA });
+    // revealDim (все острова разом) — то, что видно хотя бы тускло.
+    // Вырезаем целиком из ОДНОЙ базовой заливки тьмы (дыры — обратно
+    // темнотой, см. refillStyle) — тут работает старый трюк: darkness это
+    // ОДНА fill-инструкция (rect() чуть выше), Pixi Graphics.cut() вешает
+    // дыру именно на неё, и сколько бы островов ни было — все их cut()'ы
+    // корректно накапливаются на этой единственной инструкции через
+    // hole.addPath (см. node_modules/pixi.js/lib/scene/graphics/shared/
+    // GraphicsContext.js:cut). Дальше dimTint решает, насколько ярко.
+    paintMulti(darkness, dimIslands.map((d) => d.poly), w, h, "cut", null, { color: DARK_COLOR, alpha: DARK_ALPHA });
 
-    // dimTint — полностью покрывает revealDim полупрозрачной дымкой, потом
-    // вырезает из НЕЁ revealBright (пересечение обзора с яркой частью
-    // света) — в вырезанном месте dimTint прозрачен, и через него видна уже
-    // полностью убранная тьма снизу (darkness), то есть чистая картинка.
-    // Порядок именно такой (сначала залить весь revealDim, потом вырезать
-    // яркую часть), а не наоборот — иначе пришлось бы вычитать
-    // многоугольники (revealDim минус revealBright) руками.
-    paintMulti(dimTint, revealDim, w, h, "fill", { color: DARK_COLOR, alpha: DIM_ALPHA });
-    if (revealBright.length) {
-      paintMulti(dimTint, revealBright, w, h, "cut", null, { color: DARK_COLOR, alpha: DIM_ALPHA });
+    // dimTint — а вот тут ОДНОЙ инструкцией не обойтись: у каждого острова
+    // своя часть revealBright, которую нужно вырезать ИМЕННО из заливки
+    // ЭТОГО острова, а не из чужой. Pixi'шный cut() вешает дыру только на
+    // последнюю fill-инструкцию контекста (та же ссылка на GraphicsContext.js
+    // выше) — поэтому на каждый остров идёт СВОЯ пара fill()+cut() подряд,
+    // без единого fill() между ними от соседнего острова: cut() яркой части
+    // всегда попадает точно в только что нарисованную заливку своего
+    // острова, а не в чужую/самую последнюю. Раньше это было сломано:
+    // сначала заливались ВСЕ острова разом, потом ВСЕ cut()'ы разом — все
+    // они доставались только последнему острову, и яркий свет у любого
+    // источника, кроме последнего нарисованного, не работал вообще (см.
+    // историю правки этого файла).
+    for (const { poly, bright } of dimIslands) {
+      paintMulti(dimTint, [poly], w, h, "fill", { color: DARK_COLOR, alpha: DIM_ALPHA });
+      if (bright.length) {
+        paintMulti(dimTint, bright, w, h, "cut", null, { color: DARK_COLOR, alpha: DIM_ALPHA });
+      }
     }
   }
 
