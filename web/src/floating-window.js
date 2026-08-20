@@ -170,6 +170,14 @@ export function openFloatingWindow({ key, title, url, popoutFeatures = "width=10
   return el;
 }
 
+// isFloatingWindowOpen — открыто ли сейчас окно с таким key. Нужно тем, у
+// кого для той же сущности есть ВТОРОЕ место показа (лист персонажа: боковой
+// док у игрока, см. sheet-dock.js) — чтобы не открывать копию рядом с уже
+// вынесенным окном.
+export function isFloatingWindowOpen(key) {
+  return openWindows.has(key);
+}
+
 // postToOpenWindows — форвардит message в iframe каждого сейчас открытого
 // плавающего окна, чей key начинается с keyPrefix. Нужно панели "Компендиум"
 // (catalog.js) — она сама живёт в iframe и не видит postMessage, который

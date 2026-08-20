@@ -197,6 +197,21 @@ export async function initVTT({ canvasId, role, playerId }) {
   }
   new ResizeObserver(onResize).observe(canvas.parentElement || canvas);
   window.addEventListener("resize", onResize);
+  // "vtt:relayout" — раскладку страницы поменяло не окно, а сама страница:
+  // у игрока слева открылся/закрылся/растянулся док листа персонажа (см.
+  // sheet-dock.js), и обёртка канваса ужалась на его ширину. Формально это
+  // ловят два ResizeObserver'а выше, но полагаться на них тут нельзя по двум
+  // причинам: доставка колбэка привязана к кадру отрисовки (пока вкладка не
+  // рисует кадры — молчат вообще), и порядок двух независимых наблюдателей
+  // между собой ничем не гарантирован, а camera-пересчёт обязан идти ПОСЛЕ
+  // app.resize() — иначе он посчитает по старому app.screen и карта останется
+  // сдвинутой/обрезанной. Явное событие делает оба шага сразу и в нужном
+  // порядке; повторный вызов от опоздавшего ResizeObserver безвреден
+  // (app.resize() на неизменившемся размере — no-op для renderer).
+  document.addEventListener("vtt:relayout", () => {
+    app.resize();
+    onResize();
+  });
   ctx.applyCameraTransform();
 
   createInteraction(ctx);

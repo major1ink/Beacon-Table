@@ -50,7 +50,12 @@
     }
     .char-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    #canvasWrap { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
+    /* #stage — ряд "лист персонажа слева | карта справа". Док (см.
+       web/src/sheet-dock.js) карту не перекрывает, а ужимает: канвас меряет
+       СВОЮ обёртку (#canvasWrap) через ResizeObserver (см. vtt/index.js),
+       так что открытие/закрытие/растягивание дока Pixi отрабатывает сам. */
+    #stage { flex: 1 1 auto; min-height: 0; display: flex; }
+    #canvasWrap { flex: 1 1 auto; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
     /* canvas абсолютным позиционированием ВЫНУТ из потока намеренно: Pixi
        выставляет ему инлайновые width/height в пикселях (autoDensity), и
        пока канвас в потоке, высота #canvasWrap зависит от него, а он —
@@ -180,12 +185,12 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/player-CHBYCUtd.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-G57AFaqs.js">
+  <script type="module" crossorigin src="/assets/player-mU66dFX8.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BVL7DnaC.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-3nongrBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-Dv_k31Nl.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-DaiWEVd8.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-VI1JcH4Z.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-gTlKe7Vr.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>
@@ -199,13 +204,16 @@
       <button id="settingsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg> Настройки</button>
       <button id="logoutBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
     </div>
-    <div id="canvasWrap">
-      <canvas id="scene"></canvas>
-      <div id="diceLog"></div>
-      <div id="zoomHud">
-        <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-        <button id="zoomResetBtn" title="Сбросить вид"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>
-        <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+    <div id="stage">
+      <aside id="sheetDock"></aside>
+      <div id="canvasWrap">
+        <canvas id="scene"></canvas>
+        <div id="diceLog"></div>
+        <div id="zoomHud">
+          <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <button id="zoomResetBtn" title="Сбросить вид"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>
+          <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        </div>
       </div>
     </div>
     <div id="diceDock"></div>

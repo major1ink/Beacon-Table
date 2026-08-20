@@ -24,6 +24,7 @@ import {
 import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
 import { initItemPicker } from "../item-picker.js";
+import { enhanceRolls } from "../inline-rolls.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -306,6 +307,20 @@ function refreshComputed() {
   for (const fn of computedRefs) fn();
 }
 
+// renderEditTabs — полная пересборка бланка (все вкладки разом). Только
+// целиком: computedRefs выше собирается со всех вкладок сразу, и чистить его
+// перед отрисовкой ОДНОЙ вкладки нельзя — потерялись бы ссылки остальных
+// трёх. Вызывается при загрузке, после импорта из LSS и при возврате из
+// режима чтения (там правятся ХП/ячейки/ресурсы — бланк должен показать уже
+// новые числа).
+function renderEditTabs() {
+  computedRefs.length = 0;
+  renderTab1();
+  renderTab2();
+  renderTab3();
+  renderTab4();
+}
+
 function rollBtn(getFormula, label) {
   if (readOnly) return null;
   return h("button", {
@@ -368,10 +383,7 @@ function applyLssFile(rawText, msgEl) {
   msgEl.textContent = `Импортировано${name ? `: «${name}»` : ""}.` + (warnings.length ? " " + warnings.join(" ") : "");
   msgEl.classList.add("ok");
   scheduleSave();
-  renderTab1();
-  renderTab2();
-  renderTab3();
-  renderTab4();
+  renderEditTabs();
 }
 
 function importSection() {
@@ -1037,6 +1049,7 @@ async function loadInventory() {
     inventory = [];
   }
   renderTab5();
+  if (mode === "view") renderView();
 }
 
 function saveInventoryEntry(e, patch) {
@@ -1130,6 +1143,741 @@ function renderTab5() {
   root.append(listSection, addSection);
 }
 
+// ==================== режим чтения ====================
+//
+// Лист открывается СНАЧАЛА здесь, и только кнопка "Редактировать" в шапке
+// пускает в бланк с полями ввода (renderTab1..5 выше). Причина — разные
+// задачи: бланк заполняют раз в несколько уровней, а читают его каждый ход,
+// и за столом с него нужны не поля ввода, а крупные числа и большие цели
+// для клика.
+//
+// Что режим чтения УМЕЕТ менять (всё, что расходуется по ходу боя, — иначе
+// пришлось бы прыгать в правку за каждой потраченной ячейкой): ХП и
+// временные ХП, опыт, монеты, спасброски от смерти, истощение,
+// вдохновение, ячейки заклинаний, ресурсы класса, количество/надетость
+// предметов инвентаря. Всё остальное (характеристики, владения, тексты
+// способностей, состав оружия и заклинаний) — только для чтения.
+//
+// Формулы PHB (модификаторы, бонусы навыков/спасбросков, СЛ заклинаний,
+// пассивное восприятие) те же самые, что и в бланке — считаются теми же
+// функциями rules-блока в начале файла, отдельной копии правил тут нет.
+
+// mode — "view" (по умолчанию при каждом открытии листа) | "edit".
+// Осознанно НЕ запоминается между открытиями: лист всегда открывается на
+// чтение, правка — явное действие.
+let mode = "view";
+
+// vRefresh — точечные обновления чисел режима чтения (ХП, опыт, счётчики
+// ресурсов): пересобирать весь экран на каждый клик по лампочке — терять
+// прокрутку и фокус в поле быстрого ввода. Список живёт ровно одну
+// отрисовку — renderView() очищает его первым делом.
+let vRefresh = [];
+function refreshView() {
+  for (const fn of vRefresh) fn();
+}
+
+// parseQuickValue — разбор "быстрого ввода" числовых полей режима чтения:
+// "+5"/"-5" — прибавить/отнять от текущего значения, "17" — поставить ровно
+// 17. Возвращает { delta, value }, где delta === null означает "введено
+// абсолютное значение" (важно для ХП: урон дельтой сначала съедает временные
+// ХП, а прямая установка числа — нет, см. applyHp). null — введено что-то
+// другое, вызывающий откатывает поле.
+function parseQuickValue(raw, current) {
+  // Минус из русской раскладки/типографики ("−", "–", "—") приводим к
+  // обычному дефису: на телефоне и при копипасте из чата прилетает и такое.
+  const t = String(raw || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[‒–—―−]/g, "-");
+  if (!t) return null;
+  if (/^[+-]\d+$/.test(t)) {
+    const delta = parseInt(t, 10);
+    return { delta, value: current + delta };
+  }
+  if (/^\d+$/.test(t)) return { delta: null, value: parseInt(t, 10) };
+  return null;
+}
+
+// quickInput — узкое поле быстрого ввода (см. parseQuickValue). Значение
+// применяется по Enter или потере фокуса и поле сразу очищается: это не
+// "поле со значением", а команда — текущее число всегда видно рядом крупно.
+function quickInput(getCurrent, apply, opts) {
+  const inp = h(
+    "input",
+    Object.assign(
+      {
+        type: "text",
+        inputmode: "numeric",
+        autocomplete: "off",
+        placeholder: "+5",
+        title: "«+5» — прибавить, «-5» — отнять, «17» — поставить ровно",
+      },
+      opts || {}
+    )
+  );
+  function commit() {
+    const parsed = parseQuickValue(inp.value, getCurrent());
+    inp.value = "";
+    if (!parsed) return;
+    apply(parsed);
+    scheduleSave();
+    refreshView();
+  }
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+      inp.blur();
+    } else if (e.key === "Escape") {
+      inp.value = "";
+      inp.blur();
+    }
+  });
+  // Enter выше уже вызвал commit и снял фокус — сюда долетит второй раз, но
+  // поле к этому моменту пустое и parseQuickValue вернёт null.
+  inp.addEventListener("blur", commit);
+  return inp;
+}
+
+function stepBtn(label, cls, onclick) {
+  return h("button", { type: "button", class: cls, text: label, onclick });
+}
+
+// vPips — ряд "лампочек" расходуемого ресурса: заполненная = ещё есть,
+// погасшая = потрачена. Клик работает в обе стороны той же логикой, что
+// лампы бланка (см. bulbRow): по заполненной крайней — гасит по неё
+// включительно, по погасшей — зажигает по неё включительно.
+function vPips(total, getFilled, setFilled, opts) {
+  const o = opts || {};
+  const wrap = h("div", { class: "v-pips" });
+  const render = () => {
+    wrap.innerHTML = "";
+    const filled = getFilled();
+    for (let i = 0; i < total; i++) {
+      const isFilled = i < filled;
+      wrap.appendChild(
+        h("button", {
+          type: "button",
+          class: "v-pip" + (isFilled ? "" : " spent") + (o.tone ? " tone-" + o.tone : "") + (o.round ? " round" : ""),
+          title: o.title || String(i + 1),
+          onclick: () => {
+            setFilled(filled > i ? i : i + 1);
+            scheduleSave();
+            render();
+            refreshView();
+          },
+        })
+      );
+    }
+  };
+  render();
+  return wrap;
+}
+
+// parseSlots — колонка ячеек заклинаний хранится свободным текстом
+// ("4" или "4/2" — всего/использовано, см. domain.SpellcastingInfo). Пипсы
+// показываем, только если строка разбирается; всё остальное ("2 + 1 от
+// подкласса" и прочая ручная запись) остаётся текстом как есть.
+function parseSlots(raw) {
+  const t = String(raw || "").trim();
+  if (!t) return null;
+  const both = /^(\d+)\s*\/\s*(\d+)$/.exec(t);
+  if (both) {
+    const total = parseInt(both[1], 10);
+    return { total, used: Math.min(parseInt(both[2], 10), total) };
+  }
+  const one = /^(\d+)$/.exec(t);
+  if (one) return { total: parseInt(one[1], 10), used: 0 };
+  return null;
+}
+function formatSlots(total, used) {
+  return used > 0 ? `${total}/${used}` : String(total);
+}
+
+// vText — блок свободного текста листа с кликабельными формулами внутри
+// (см. inline-rolls.js): "1к8+3" в описании способности бросается кликом,
+// как в карточке монстра. Пустой текст секции не создаёт вовсе.
+function vText(title, value, opts) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const body = h("div", { class: "v-text", text });
+  enhanceRolls(body, sendRoll);
+  const o = opts || {};
+  return h("details", { class: "v-fold v-card", open: o.open !== false }, [h("summary", { text: title }), body]);
+}
+
+function vCard(title, children, note) {
+  const kids = [].concat(children).filter(Boolean);
+  if (!kids.length) return null;
+  return h("div", { class: "v-card" }, [
+    h("div", { class: "v-card-head" }, [h("span", { text: title }), note ? h("span", { class: "v-card-note", text: note }) : null]),
+    ...kids,
+  ]);
+}
+
+// vTile — плитка производного числа. formula задан — плитка кликабельна и
+// кидает кубик (инициатива, атака заклинанием); иначе просто число.
+function vTile(label, compute, formula, rollLabel) {
+  const value = h("b", { text: compute() });
+  vRefresh.push(() => (value.textContent = compute()));
+  const inner = [value, h("span", { text: label })];
+  if (!formula) return h("div", { class: "v-tile" }, inner);
+  return h("button", { type: "button", class: "v-tile", title: "Бросить: " + rollLabel, onclick: () => sendRoll(formula(), rollLabel) }, inner);
+}
+
+// ---------- шапка ----------
+
+function vHero() {
+  const isVideoAvatar = /\.(mp4|webm|m4v)(\?|#|$)/i.test(character.avatarUrl || "");
+  const avatar =
+    character.avatarUrl && !isVideoAvatar
+      ? h("img", { class: "v-hero-avatar", src: character.avatarUrl, alt: "" })
+      : h("div", { class: "v-hero-avatar", text: (character.name || "?").trim().charAt(0).toUpperCase() });
+
+  const bits = [];
+  const cls = [sheet.info.class, sheet.info.subclass].filter(Boolean).join(" · ");
+  if (cls) bits.push(cls);
+  bits.push((sheet.info.level || 1) + " ур.");
+  const kind = isClassic() ? sheet.info.race : sheet.info.species;
+  if (kind) bits.push(kind);
+  if (sheet.info.background) bits.push(sheet.info.background);
+  if (sheet.alignment) bits.push(sheet.alignment);
+
+  const xpValue = h("b", { text: String(sheet.info.xp || 0) });
+  vRefresh.push(() => (xpValue.textContent = String(sheet.info.xp || 0)));
+
+  return h("div", { class: "v-card" }, [
+    h("div", { class: "v-hero" }, [
+      avatar,
+      h("div", { class: "v-hero-main" }, [
+        h("div", { class: "v-hero-name", text: character.name || "—" }),
+        h("div", { class: "v-hero-sub", text: bits.join(" · ") }),
+      ]),
+    ]),
+    h("div", { class: "v-quick", style: "margin-top:10px;" }, [
+      h("span", { class: "v-track-name" }, [h("small", { text: "Опыт" }), xpValue]),
+      stepBtn("−100", "minus", () => bumpXp(-100)),
+      quickInput(
+        () => sheet.info.xp || 0,
+        (r) => (sheet.info.xp = Math.max(0, r.value)),
+        { placeholder: "+250", style: "flex:0 1 74px;" }
+      ),
+      stepBtn("+100", "plus", () => bumpXp(100)),
+    ]),
+  ]);
+}
+
+function bumpXp(delta) {
+  sheet.info.xp = Math.max(0, (sheet.info.xp || 0) + delta);
+  scheduleSave();
+  refreshView();
+}
+
+// ---------- ХП ----------
+
+// clampHp — текущие ХП живут в 0..максимум: "в минус" бланк всё равно не
+// умеет (для этого есть отдельный флаг "Умирает", см. domain.CombatStats),
+// а перелечиться выше максимума нельзя по правилам. Максимум не заполнен
+// (0) — не зажимаем сверху вообще, лист ещё не дозаполнен.
+function clampHp(v) {
+  const max = sheet.combat.hpMax || 0;
+  return Math.max(0, max > 0 ? Math.min(max, v) : v);
+}
+
+// applyHp — урон, введённый ДЕЛЬТОЙ ("-7", кнопка −5), сначала съедает
+// временные ХП и только остатком — текущие: за столом иначе этот вычет
+// каждый раз делают в уме. Лечение и прямая установка числа ("17")
+// временных не трогают.
+function applyHp(r) {
+  if (r.delta !== null && r.delta < 0) {
+    let damage = -r.delta;
+    const temp = sheet.combat.hpTemp || 0;
+    const fromTemp = Math.min(temp, damage);
+    if (fromTemp > 0) sheet.combat.hpTemp = temp - fromTemp;
+    damage -= fromTemp;
+    sheet.combat.hpCurrent = clampHp((sheet.combat.hpCurrent || 0) - damage);
+    return;
+  }
+  sheet.combat.hpCurrent = clampHp(r.value);
+}
+
+function bumpHp(delta) {
+  applyHp({ delta, value: (sheet.combat.hpCurrent || 0) + delta });
+  scheduleSave();
+  refreshView();
+}
+
+function vHpCard() {
+  const cur = h("span", { class: "v-hp-big" });
+  const max = h("span", { class: "v-hp-max" });
+  const temp = h("span", { class: "v-hp-temp" });
+  const fill = h("i", {});
+  const update = () => {
+    const c = sheet.combat.hpCurrent || 0;
+    const m = sheet.combat.hpMax || 0;
+    const t = sheet.combat.hpTemp || 0;
+    cur.textContent = String(c);
+    max.textContent = "/ " + (m || "—");
+    temp.textContent = t ? "+" + t + " врем." : "";
+    temp.style.display = t ? "" : "none";
+    const ratio = m > 0 ? Math.max(0, Math.min(1, c / m)) : 0;
+    fill.style.width = (m > 0 ? ratio * 100 : 0).toFixed(1) + "%";
+    fill.style.background = ratio > 0.5 ? "var(--green-bright)" : ratio > 0.25 ? "var(--gold)" : "#d9534f";
+    cur.style.color = m > 0 && c === 0 ? "#d9534f" : "";
+  };
+  vRefresh.push(update);
+  update();
+
+  const hitDice = String(sheet.combat.hitDiceCurrent || sheet.combat.hitDiceTotal || "").trim();
+  const hitDiceEl = hitDice
+    ? h("div", { class: "v-track", style: "border-top:1px solid var(--border);margin-top:8px;" }, [
+        h("span", { class: "v-track-name" }, [h("small", { text: "Кости хитов" }), h("span", { text: hitDice })]),
+      ])
+    : null;
+  if (hitDiceEl) enhanceRolls(hitDiceEl, sendRoll);
+
+  return h("div", { class: "v-card" }, [
+    h("div", { class: "v-hp-row" }, [cur, max, temp]),
+    h("div", { class: "v-bar" }, [fill]),
+    h("div", { class: "v-quick", title: "Урон сначала списывается с временных ХП" }, [
+      stepBtn("−5", "minus", () => bumpHp(-5)),
+      stepBtn("−1", "minus", () => bumpHp(-1)),
+      quickInput(() => sheet.combat.hpCurrent || 0, applyHp),
+      stepBtn("+1", "plus", () => bumpHp(1)),
+      stepBtn("+5", "plus", () => bumpHp(5)),
+    ]),
+    h("div", { class: "v-quick", style: "margin-top:6px;" }, [
+      h("span", { class: "v-track-name", text: "Временные ХП", style: "font-size:11px;color:var(--text-dim);" }),
+      quickInput(
+        () => sheet.combat.hpTemp || 0,
+        (r) => (sheet.combat.hpTemp = Math.max(0, r.value)),
+        { placeholder: "+0", style: "flex:0 1 66px;" }
+      ),
+    ]),
+    hitDiceEl,
+  ]);
+}
+
+// ---------- боевые плитки ----------
+
+function vTilesCard() {
+  const tiles = [
+    vTile("КЗ", () => String(sheet.combat.ac || 0)),
+    vTile("Инициатива", () => fmtMod(abilityMod(sheet.abilities.dex)), () => "1d20" + fmtMod(abilityMod(sheet.abilities.dex)), "Инициатива"),
+    vTile("Скорость", () => String(sheet.combat.speed || 0)),
+    vTile("Пасс. вниман.", () => String(passivePerception(sheet))),
+    vTile("Владение", () => fmtMod(profBonus(sheet.info.level))),
+  ];
+  if (sheet.combat.darkvision) tiles.push(vTile("Тёмн. зрение", () => sheet.combat.darkvision + " ф."));
+  return vCard("Бой", h("div", { class: "v-tiles" }, tiles));
+}
+
+// ---------- состояние ----------
+
+function vStateCard() {
+  const inspBtn = h("button", {
+    type: "button",
+    class: "v-tile",
+    title: "Героическое вдохновение — клик переключает",
+    onclick: () => {
+      sheet.combat.inspiration = !sheet.combat.inspiration;
+      scheduleSave();
+      renderView();
+    },
+  });
+  inspBtn.appendChild(h("b", { html: icon("bulb", { size: 16 }) }));
+  inspBtn.appendChild(h("span", { text: "Вдохновение" }));
+  inspBtn.style.color = sheet.combat.inspiration ? "var(--gold)" : "var(--text-dim)";
+
+  const dyingBtn = h("button", {
+    type: "button",
+    class: "v-tile",
+    title: "Умирает / без сознания — клик переключает",
+    onclick: () => {
+      sheet.combat.isDying = !sheet.combat.isDying;
+      scheduleSave();
+      renderView();
+    },
+  });
+  dyingBtn.appendChild(h("b", { html: icon("moon", { size: 16 }) }));
+  dyingBtn.appendChild(h("span", { text: "При смерти" }));
+  dyingBtn.style.color = sheet.combat.isDying ? "#d9534f" : "var(--text-dim)";
+
+  const conditions = String(sheet.combat.conditions || "").trim();
+
+  return vCard("Состояние", [
+    h("div", { class: "v-track" }, [
+      h("span", { class: "v-track-name" }, [h("small", { text: "Спасбр. от смерти — успехи" })]),
+      vPips(3, () => sheet.combat.deathSaveSuccess || 0, (v) => (sheet.combat.deathSaveSuccess = v), { tone: "good", round: true }),
+    ]),
+    h("div", { class: "v-track" }, [
+      h("span", { class: "v-track-name" }, [h("small", { text: "провалы" })]),
+      vPips(3, () => sheet.combat.deathSaveFail || 0, (v) => (sheet.combat.deathSaveFail = v), { tone: "danger", round: true }),
+    ]),
+    h("div", { class: "v-track" }, [
+      h("span", { class: "v-track-name" }, [h("small", { text: "Истощение" })]),
+      vPips(6, () => sheet.combat.exhaustion || 0, (v) => (sheet.combat.exhaustion = v), { tone: "danger" }),
+    ]),
+    h("div", { class: "v-tiles", style: "margin-top:6px;" }, [inspBtn, dyingBtn]),
+    conditions ? h("div", { class: "v-text", style: "margin-top:8px;", text: conditions }) : null,
+  ]);
+}
+
+// ---------- характеристики и навыки ----------
+
+function vAbilitiesCard() {
+  const grid = h("div", { class: "v-abils" });
+  for (const a of ABILITIES) {
+    const check = () => "1d20" + fmtMod(abilityMod(sheet.abilities[a.key]));
+    const save = () => "1d20" + fmtMod(saveBonus(sheet, a.key));
+    grid.appendChild(
+      h("div", { class: "v-abil" }, [
+        h("div", { class: "v-abil-name", text: a.label }),
+        h("button", {
+          type: "button",
+          class: "v-abil-mod",
+          text: fmtMod(abilityMod(sheet.abilities[a.key])),
+          title: "Проверка: " + a.label,
+          onclick: () => sendRoll(check(), "Проверка — " + a.label),
+        }),
+        h("div", { class: "v-abil-score", text: String(sheet.abilities[a.key] || 10) }),
+        h("button", {
+          type: "button",
+          class: "v-abil-save" + (sheet.saveProf[a.key] ? " prof" : ""),
+          title: "Спасбросок: " + a.label,
+          onclick: () => sendRoll(save(), "Спасбросок — " + a.label),
+        }, [h("span", { class: "v-dot" + (sheet.saveProf[a.key] ? " p1" : "") }), h("span", { text: "сп. " + fmtMod(saveBonus(sheet, a.key)) })]),
+      ])
+    );
+  }
+  return vCard("Характеристики", grid, "клик — бросок");
+}
+
+function vSkillsCard() {
+  const grid = h("div", { class: "v-skills" });
+  for (const s of SKILLS) {
+    const state = sheet.skillProf[s.key] || 0;
+    grid.appendChild(
+      h("button", {
+        type: "button",
+        class: "v-skill" + (state ? " prof" : ""),
+        title: (state === 2 ? "Экспертиза" : state === 1 ? "Владение" : "Без владения") + " · бросок",
+        onclick: () => sendRoll("1d20" + fmtMod(skillBonus(sheet, s)), s.label),
+      }, [
+        h("span", { class: "v-dot" + (state ? " p" + state : "") }),
+        h("span", { class: "v-skill-name", text: s.label }),
+        h("span", { class: "v-skill-val", text: fmtMod(skillBonus(sheet, s)) }),
+      ])
+    );
+  }
+  return vCard("Навыки", grid, "клик — бросок");
+}
+
+// ---------- атаки ----------
+
+function vAttacksCard() {
+  const rows = [];
+  for (const w of sheet.weapons) {
+    const name = String(w.name || "").trim();
+    const damage = String(w.damage || "").trim();
+    const bonusText = String(w.bonus || "").trim();
+    if (!name && !damage && !bonusText) continue;
+    const flat = parseFlatBonus(bonusText);
+    // Числовой бонус ("+5") — кнопка броска атаки; "СЛ 13" и прочий текст
+    // броском персонажа не является (это спасбросок цели), показываем как есть.
+    const hit =
+      flat !== null
+        ? h("button", {
+            type: "button",
+            class: "v-atk-hit",
+            text: fmtMod(flat),
+            title: "Атака: " + (name || "оружие"),
+            onclick: () => sendRoll("1d20" + fmtMod(flat), name || "Атака"),
+          })
+        : bonusText
+          ? h("span", { class: "v-atk-hit", text: bonusText })
+          : null;
+    const dmg = damage ? h("span", { class: "v-atk-dmg", text: damage }) : null;
+    if (dmg) enhanceRolls(dmg, sendRoll);
+    rows.push(
+      h("div", { class: "v-atk" }, [
+        h("span", { class: "v-atk-name" }, [h("span", { text: name || "—" }), w.notes ? h("small", { text: w.notes }) : null]),
+        hit,
+        dmg,
+      ])
+    );
+  }
+  return vCard("Атаки", rows, rows.length ? "клик — бросок" : null);
+}
+
+// ---------- ресурсы и ячейки ----------
+
+function vResourcesCard() {
+  const rows = [];
+  for (const r of sheet.resources) {
+    const name = String(r.name || "").trim();
+    const max = r.max || 0;
+    if (!name && !max) continue;
+    const count = h("span", { class: "v-track-count" });
+    const update = () => (count.textContent = (r.current || 0) + " / " + max);
+    vRefresh.push(update);
+    update();
+    // До 10 делений — лампочки (в бою кликают по ним); больше — только
+    // ±1 и поле быстрого ввода, ряд из 30 лампочек нечитаем.
+    const control =
+      max > 0 && max <= 10
+        ? vPips(max, () => Math.min(r.current || 0, max), (v) => (r.current = v))
+        : h("div", { class: "v-quick" }, [
+            stepBtn("−1", "minus", () => {
+              r.current = Math.max(0, (r.current || 0) - 1);
+              scheduleSave();
+              refreshView();
+            }),
+            quickInput(
+              () => r.current || 0,
+              (q) => (r.current = Math.max(0, max > 0 ? Math.min(max, q.value) : q.value)),
+              { placeholder: "+1", style: "flex:0 1 60px;" }
+            ),
+            stepBtn("+1", "plus", () => {
+              r.current = max > 0 ? Math.min(max, (r.current || 0) + 1) : (r.current || 0) + 1;
+              scheduleSave();
+              refreshView();
+            }),
+          ]);
+    rows.push(
+      h("div", { class: "v-track" }, [
+        h("span", { class: "v-track-name" }, [h("span", { text: name || "Ресурс" }), r.recovery ? h("small", { text: r.recovery }) : null]),
+        count,
+        control,
+      ])
+    );
+  }
+  return vCard("Ресурсы", rows);
+}
+
+function vSlotsCard() {
+  const rows = [];
+  sheet.spellcasting.slotsByLevel.forEach((raw, i) => {
+    const parsed = parseSlots(raw);
+    const text = String(raw || "").trim();
+    if (!parsed && !text) return;
+    const lvl = i + 1;
+    const control = parsed
+      ? vPips(
+          parsed.total,
+          () => {
+            const p = parseSlots(sheet.spellcasting.slotsByLevel[i]) || { total: 0, used: 0 };
+            return p.total - p.used;
+          },
+          (available) => {
+            const p = parseSlots(sheet.spellcasting.slotsByLevel[i]) || { total: 0, used: 0 };
+            sheet.spellcasting.slotsByLevel[i] = formatSlots(p.total, p.total - available);
+          }
+        )
+      : h("span", { class: "v-track-count", text });
+    const count = h("span", { class: "v-track-count" });
+    if (parsed) {
+      const update = () => {
+        const p = parseSlots(sheet.spellcasting.slotsByLevel[i]) || { total: 0, used: 0 };
+        count.textContent = p.total - p.used + " / " + p.total;
+      };
+      vRefresh.push(update);
+      update();
+    }
+    rows.push(h("div", { class: "v-track" }, [h("span", { class: "v-track-name", text: lvl + "-й ур." }), parsed ? count : null, control]));
+  });
+  return vCard("Ячейки заклинаний", rows, rows.length ? "клик — потратить/вернуть" : null);
+}
+
+// ---------- заклинания ----------
+
+function vSpellsCard() {
+  const kids = [];
+  if (sheet.spellcasting.ability) {
+    kids.push(
+      h("div", { class: "v-tiles", style: "margin-bottom:8px;" }, [
+        vTile("Модификатор", () => fmtMod(spellAbilityMod(sheet))),
+        vTile("СЛ спасбр.", () => String(spellSaveDC(sheet) ?? "—")),
+        vTile("Атака", () => fmtMod(spellAtkBonus(sheet) || 0), () => "1d20" + fmtMod(spellAtkBonus(sheet) || 0), "Атака заклинанием"),
+      ])
+    );
+  }
+  const byLevel = new Map();
+  for (const s of sheet.preparedSpells) {
+    const name = String(s.name || "").trim();
+    if (!name) continue;
+    const lvl = s.level || 0;
+    if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+    byLevel.get(lvl).push(s);
+  }
+  for (const lvl of [...byLevel.keys()].sort((a, b) => a - b)) {
+    kids.push(h("div", { class: "v-spell-lvl", text: lvl === 0 ? "Заговоры" : lvl + "-й уровень" }));
+    for (const s of byLevel.get(lvl)) {
+      const meta = [s.castTime, s.range].filter(Boolean).join(" · ");
+      const row = h("div", { class: "v-spell" }, [
+        h("span", { class: "v-spell-name", text: s.name }),
+        s.concentration ? h("span", { class: "v-tag c", text: "К" }) : null,
+        s.ritual ? h("span", { class: "v-tag", text: "Р" }) : null,
+        s.material ? h("span", { class: "v-tag", text: "М" }) : null,
+        meta ? h("span", { class: "v-spell-meta", text: meta }) : null,
+        s.notes ? h("span", { class: "v-spell-meta", text: s.notes }) : null,
+      ]);
+      enhanceRolls(row, sendRoll);
+      kids.push(row);
+    }
+  }
+  return vCard("Заклинания", kids);
+}
+
+// ---------- деньги, настройка, инвентарь ----------
+
+const COIN_FIELDS = [
+  { key: "pp", label: "ПМ" },
+  { key: "gp", label: "ЗМ" },
+  { key: "ep", label: "ЭМ" },
+  { key: "sp", label: "СМ" },
+  { key: "cp", label: "ММ" },
+];
+
+function vMoneyCard() {
+  const grid = h("div", { class: "v-money" });
+  let any = false;
+  for (const c of COIN_FIELDS) {
+    if (sheet.coins[c.key]) any = true;
+    const value = h("b", { text: String(sheet.coins[c.key] || 0) });
+    vRefresh.push(() => (value.textContent = String(sheet.coins[c.key] || 0)));
+    const cell = h("div", { class: "v-money-cell" }, [value, h("span", { text: c.label })]);
+    cell.appendChild(
+      quickInput(
+        () => sheet.coins[c.key] || 0,
+        (r) => (sheet.coins[c.key] = Math.max(0, r.value)),
+        { placeholder: "+0", style: "width:100%;margin-top:4px;font-size:11px;padding:3px 2px;" }
+      )
+    );
+    grid.appendChild(cell);
+  }
+  // Пустой кошелёк на листе 1-го уровня — обычное дело, но карточку из пяти
+  // нулей в самом верху колонки видеть незачем; появится, как только деньги
+  // будут (или их впишут в правке).
+  return any ? vCard("Монеты", grid) : null;
+}
+
+function vAttunementCard() {
+  const rows = sheet.attunementItems
+    .filter((a) => String(a.name || "").trim())
+    .map((a) =>
+      h("div", { class: "v-inv" }, [
+        h("span", { class: "v-inv-name", text: a.name }),
+        h("span", { class: "v-tag" + (a.attuned ? " c" : ""), text: a.attuned ? "настроен" : "нет" }),
+      ])
+    );
+  return vCard("Настройка на предметы", rows);
+}
+
+function vInventoryCard() {
+  // У ДМ, открывшего ЧУЖОЙ лист, эндпоинты инвентаря отдают 404 (см.
+  // renderTab5) — секции просто нет, как и вкладки.
+  if (isAdminView || !inventory.length) return null;
+  const rows = inventory.map((e) => {
+    const qty = h("span", { class: "v-track-count", text: "×" + (e.quantity || 0) });
+    const eq = h("button", {
+      type: "button",
+      class: "v-inv-eq" + (e.equipped ? " on" : ""),
+      title: e.equipped ? "Надето — снять" : "Надеть",
+      html: icon("check", { size: 12 }),
+      onclick: () => {
+        saveInventoryEntry(e, { equipped: !e.equipped });
+        renderView();
+      },
+    });
+    return h("div", { class: "v-inv" }, [
+      h("span", { class: "v-inv-name" }, [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + e.weightLb + " фнт" }) : null]),
+      qty,
+      h("button", {
+        type: "button",
+        class: "v-inv-eq",
+        title: "Потратить одну штуку",
+        html: icon("minus", { size: 12 }),
+        onclick: () => {
+          saveInventoryEntry(e, { quantity: Math.max(0, (e.quantity || 0) - 1) });
+          renderView();
+        },
+      }),
+      h("button", {
+        type: "button",
+        class: "v-inv-eq",
+        title: "Добавить одну штуку",
+        html: icon("plus", { size: 12 }),
+        onclick: () => {
+          saveInventoryEntry(e, { quantity: (e.quantity || 0) + 1 });
+          renderView();
+        },
+      }),
+      eq,
+    ]);
+  });
+  return vCard("Инвентарь", rows, totalWeight() + " фнт");
+}
+
+// ---------- сборка ----------
+
+function renderView() {
+  const root = document.getElementById("viewPanel");
+  vRefresh = [];
+  root.innerHTML = "";
+
+  // Порядок карточек — под УЗКУЮ колонку (боковой док, см. sheet-dock.js): при
+  // одной колонке они лягут сверху вниз ровно в этом порядке, и первым должно
+  // идти то, к чему тянутся чаще всего за ход (ХП → состояние → расходники →
+  // характеристики/навыки/атаки). Три колонки — это уже широкое плавающее
+  // окно, где всё видно разом.
+  const col1 = h("div", { class: "v-stack" }, [vHpCard(), vTilesCard(), vStateCard(), vResourcesCard(), vSlotsCard()]);
+  const col2 = h("div", { class: "v-stack" }, [vAbilitiesCard(), vSkillsCard(), vAttacksCard(), vSpellsCard()]);
+  // Тексты бланка — справочная часть: открытыми держим только те два блока,
+  // куда реально смотрят посреди боя, остальное свёрнуто, чтобы лист не
+  // превращался в простыню.
+  const col3 = h("div", { class: "v-stack" }, [
+    vInventoryCard(),
+    vMoneyCard(),
+    vAttunementCard(),
+    vText("Умения и способности", sheet.features),
+    vText("Видовые черты", sheet.traits),
+    vText("Черты", sheet.feats, { open: false }),
+    vText("Атаки и заклинания", sheet.attacksSpells, { open: false }),
+    vText("Снаряжение", sheet.equipment, { open: false }),
+    vText("Владения, инструменты и языки", [sheet.toolsLanguages, sheet.proficiencyNotes].filter(Boolean).join("\n"), { open: false }),
+    vText("Внешность", sheet.appearance, { open: false }),
+    vText("Предыстория", sheet.background, { open: false }),
+    vText("Черты характера", sheet.personalityTraits, { open: false }),
+    vText("Идеалы", sheet.ideals, { open: false }),
+    vText("Привязанности", sheet.bonds, { open: false }),
+    vText("Слабости", sheet.flaws, { open: false }),
+    vText("Цели и задачи", sheet.goals, { open: false }),
+    vText("Союзники и организации", sheet.allies, { open: false }),
+    vText("Дополнительные способности", sheet.additionalFeatures, { open: false }),
+    vText("Сокровища", sheet.treasure, { open: false }),
+    vText("Заметки", sheet.notes.filter((n) => String(n || "").trim()).join("\n\n"), { open: false }),
+  ]);
+
+  root.appendChild(h("div", { class: "v-stack" }, [vHero(), h("div", { class: "v-cols" }, [col1, col2, col3])]));
+}
+
+// setMode — переключение "чтение ⇄ правка". Обе стороны пересобираются от
+// нуля: в режиме чтения меняются ХП/ячейки/ресурсы, в правке — всё
+// остальное, и вернувшись обратно надо видеть свежие числа, а не то, что
+// было отрисовано при загрузке.
+function setMode(next) {
+  mode = next;
+  document.body.classList.toggle("mode-view", mode === "view");
+  document.getElementById("viewPanel").classList.toggle("active", mode === "view");
+  const btn = document.getElementById("modeBtn");
+  const isView = mode === "view";
+  btn.innerHTML = icon(isView ? "pencil" : "eye", { size: 13 }) + "<span>" + (isView ? "Редактировать" : "Готово") + "</span>";
+  btn.title = isView ? "Открыть бланк для правки" : "Вернуться к режиму чтения";
+  if (isView) renderView();
+  else renderEditTabs();
+}
+
 // ==================== autosave ====================
 
 let saveTimer = null;
@@ -1208,7 +1956,23 @@ function sendRoll(formula, label) {
   rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
 }
 
+// isEmbedded — лист открыт ВНУТРИ страницы стола: боковым доком
+// (sheet-dock.js) или плавающим окном (floating-window.js), то есть в
+// iframe, а не отдельной вкладкой/окном браузера.
+function isEmbedded() {
+  return window.parent !== window;
+}
+
 function showRollResult(data) {
+  // У страницы стола свой лог бросков поверх карты (см. player.html:
+  // #diceLog, dm.html — то же самое), и приходит в него ТОТ ЖЕ самый
+  // roll_result: бросок ретранслируется всей комнате (см.
+  // internal/service/room.go: relayRoll), а сокетов у вкладки теперь два —
+  // страницы и листа. Пока лист жил отдельной вкладкой, это были два разных
+  // экрана; в доке оба лога оказались в паре сантиметров друг от друга и
+  // дублировали строку. Своя подвальная лента остаётся только у листа,
+  // вынесенного в настоящее отдельное окно, — там она единственная.
+  if (isEmbedded()) return;
   const wrap = document.getElementById("rollLogWrap");
   wrap.classList.remove("hidden");
   const log = document.getElementById("rollLog");
@@ -1227,6 +1991,7 @@ function switchTab(n) {
   document.getElementById("tab" + n).classList.add("active");
 }
 document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+document.getElementById("modeBtn").onclick = () => setMode(mode === "view" ? "edit" : "view");
 document.getElementById("closeBtn").onclick = () => {
   // По умолчанию лист открывается ВНУТРИ dm.html/player.html как плавающее
   // окно (см. web/src/floating-window.js) — это iframe, а не отдельная
@@ -1234,7 +1999,7 @@ document.getElementById("closeBtn").onclick = () => {
   // слушает это сообщение и закрывает плавающее окно сам. Если же лист
   // вынесли кнопкой 🗗 в настоящее окно браузера (window.parent === window),
   // ведём себя как раньше.
-  if (window.parent !== window) {
+  if (isEmbedded()) {
     window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
   } else {
     window.close();
@@ -1277,10 +2042,9 @@ function currentId() {
   // просто предупреждает, чей это лист, чтобы не перепутать со своим.
   document.getElementById("readonlyBanner").classList.toggle("shown", isAdminView);
 
-  renderTab1();
-  renderTab2();
-  renderTab3();
-  renderTab4();
+  // Лист всегда открывается на ЧТЕНИЕ (см. setMode/renderView) — бланк с
+  // полями ввода собирается только при первом переходе в правку.
+  setMode("view");
 
   // Инвентарь — только у владельца (см. комментарий renderTab5 выше): у ДМ,
   // открывшего чужой лист, эндпоинты инвентаря вернули бы 404 (авторизация

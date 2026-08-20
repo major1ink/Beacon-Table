@@ -120,12 +120,220 @@
       border-bottom: 1px solid var(--border);
     }
     #readonlyBanner.shown { display: block; }
+
+    /* ================= режим чтения (см. pages/character-sheet.js: renderView)
+       Отдельная вёрстка, а не "тот же бланк с disabled-полями": за столом с
+       листа нужны не поля ввода, а крупные читаемые числа и большие цели для
+       клика — отметить потраченную ячейку, снять ХП, бросить проверку. Всё,
+       что меняется по ходу боя (ХП, ОП, ячейки, ресурсы, спасброски от
+       смерти, истощение, вдохновение, надето/количество в инвентаре),
+       остаётся кликабельным и здесь; всё остальное — только текст.
+       ================= */
+    #viewPanel { display: none; padding: 12px; }
+    #viewPanel.active { display: block; }
+    /* Специфичность 0,2,1 против 0,2,0 у `.tab-panel.active` выше — режим
+       чтения гасит вкладки бланка, не трогая их собственное состояние
+       (вернулся в редактирование — открыта та же вкладка, что была). */
+    body.mode-view .tab-panel { display: none; }
+    body.mode-view .tabs { display: none; }
+    body.mode-view #charTitle { display: none; }
+
+    #modeBtn {
+      display: flex; align-items: center; gap: 5px; padding: 5px 11px; font-size: 12px;
+      background: var(--accent-bg); color: var(--accent); font-weight: 600; border-radius: var(--radius-pill);
+    }
+    #modeBtn:hover { background: var(--accent); color: #fff; }
+    #modeBtn svg { display: block; }
+
+    .v-stack { display: flex; flex-direction: column; gap: 10px; }
+    /* Одна колонка на узком доке (см. sheet-dock.js — ~300-500px), две-три —
+       на широком плавающем окне; auto-fit сам решает по факту ширины. */
+    .v-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; align-items: start; }
+
+    .v-card {
+      background: var(--panel-bg); border: 1px solid var(--border); border-radius: 14px; padding: 11px 12px;
+    }
+    .v-card-head {
+      display: flex; align-items: center; gap: 8px; margin: 0 0 9px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); font-weight: 600;
+    }
+    .v-card-head .v-card-note { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; opacity: 0.8; }
+
+    /* ---- шапка: аватар, имя, класс/вид/предыстория ---- */
+    .v-hero { display: flex; align-items: center; gap: 12px; }
+    .v-hero-avatar {
+      flex: 0 0 auto; width: 54px; height: 54px; border-radius: 16px; object-fit: cover;
+      background: var(--surface) center/cover no-repeat;
+      display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 18px; font-weight: 700;
+    }
+    .v-hero-main { flex: 1 1 auto; min-width: 0; }
+    .v-hero-name { font-size: 17px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+    .v-hero-sub { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; overflow-wrap: anywhere; }
+
+    /* ---- крупные числа (ХП, ОП) ---- */
+    .v-hp-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+    .v-hp-big { font-size: 30px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+    .v-hp-max { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .v-hp-temp {
+      margin-left: auto; font-size: 11.5px; font-weight: 700; color: #7fc4ff;
+      background: rgba(58, 140, 220, 0.18); border-radius: var(--radius-pill); padding: 3px 9px;
+    }
+    .v-bar { height: 7px; border-radius: var(--radius-pill); background: var(--surface); overflow: hidden; margin: 9px 0; }
+    .v-bar > i { display: block; height: 100%; border-radius: var(--radius-pill); transition: width .18s ease, background .18s ease; }
+
+    /* .v-quick — ряд быстрых правок числа: −5 −1 [ввод] +1 +5. Поле принимает
+       и "+5"/"−5" (прибавить/отнять), и просто "17" (поставить ровно). */
+    .v-quick { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .v-quick button {
+      flex: 0 0 auto; min-width: 30px; padding: 5px 8px; font-size: 12px; font-weight: 600;
+      background: var(--surface); color: var(--text); border-radius: 9px; line-height: 1.1;
+    }
+    .v-quick button:hover { background: var(--surface-hover); }
+    .v-quick button.minus:hover { background: var(--danger); color: #fff; }
+    .v-quick button.plus:hover { background: var(--green); color: #fff; }
+    .v-quick input {
+      flex: 1 1 56px; min-width: 52px; width: auto; text-align: center; font-variant-numeric: tabular-nums;
+      background: var(--bg); border-radius: 9px; padding: 5px 4px;
+    }
+
+    /* ---- плитки характеристик боя (КЗ, инициатива, скорость...) ---- */
+    .v-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(66px, 1fr)); gap: 6px; }
+    .v-tile {
+      background: var(--surface); border: 1px solid transparent; border-radius: 12px; padding: 7px 5px;
+      text-align: center; color: var(--text); font: inherit; display: block;
+    }
+    .v-tile b { display: block; font-size: 16px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+    .v-tile span {
+      display: block; font-size: 9px; color: var(--text-dim); text-transform: uppercase;
+      letter-spacing: 0.02em; margin-top: 2px; line-height: 1.25; overflow-wrap: anywhere;
+    }
+    button.v-tile { cursor: pointer; }
+    button.v-tile:hover { background: var(--accent-bg); border-color: var(--accent); }
+    button.v-tile:hover b { color: var(--accent); }
+
+    /* ---- характеристики: модификатор — кнопка проверки, снизу спасбросок ---- */
+    .v-abils { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 7px; }
+    .v-abil { background: var(--surface); border-radius: 14px; padding: 7px 5px 6px; text-align: center; }
+    .v-abil-name {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-dim);
+      line-height: 1.25; overflow-wrap: anywhere;
+    }
+    .v-abil-mod {
+      display: block; width: 100%; padding: 2px 0 0; background: none; color: var(--text);
+      font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; border-radius: 10px;
+    }
+    .v-abil-mod:hover { background: var(--accent-bg); color: var(--accent); }
+    .v-abil-score { font-size: 10.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .v-abil-save {
+      display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%;
+      margin-top: 4px; padding: 3px 0; font-size: 10.5px; color: var(--text-dim); background: var(--bg); border-radius: 8px;
+    }
+    .v-abil-save:hover { background: var(--accent-bg); color: var(--accent); }
+    .v-abil-save.prof { color: var(--text); }
+
+    /* ---- навыки ---- */
+    .v-skills { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px 10px; }
+    .v-skill {
+      display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+      padding: 5px 7px; border-radius: 9px; background: none; color: var(--text); font-size: 12px;
+    }
+    .v-skill:hover { background: var(--accent-bg); }
+    .v-skill:hover .v-skill-val { color: var(--accent); }
+    .v-skill-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+    .v-skill.prof .v-skill-name { color: var(--text); }
+    .v-skill-val { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .v-dot {
+      flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--text-dim); opacity: 0.55;
+    }
+    .v-dot.p1 { background: var(--accent); border-color: var(--accent); opacity: 1; }
+    .v-dot.p2 { background: #fff; border-color: #fff; opacity: 1; box-shadow: 0 0 0 2px var(--accent-bg); }
+
+    /* ---- пипсы: ячейки заклинаний, ресурсы, спасброски от смерти, истощение.
+       Заполненный = ещё есть (не потрачено), погасший = израсходовано. ---- */
+    .v-pips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .v-pip {
+      width: 19px; height: 19px; border-radius: 7px; padding: 0; flex: 0 0 auto;
+      border: 1.5px solid var(--accent); background: var(--accent);
+    }
+    .v-pip.spent { background: transparent; border-color: var(--text-dim); opacity: 0.5; }
+    .v-pip.tone-danger { border-color: var(--danger-hover); background: var(--danger-hover); }
+    .v-pip.tone-danger.spent { background: transparent; border-color: var(--text-dim); }
+    .v-pip.tone-good { border-color: var(--green-bright); background: var(--green-bright); }
+    .v-pip.tone-good.spent { background: transparent; border-color: var(--text-dim); }
+    .v-pip.round { border-radius: 50%; }
+
+    .v-track { display: flex; align-items: center; gap: 8px; padding: 5px 0; flex-wrap: wrap; }
+    .v-track-name { flex: 1 1 110px; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+    .v-track-name small { display: block; color: var(--text-dim); font-size: 10.5px; }
+    .v-track-count { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+    /* ---- атаки ---- */
+    .v-atk { display: flex; align-items: center; gap: 6px; padding: 5px 0; flex-wrap: wrap; }
+    .v-atk + .v-atk { border-top: 1px solid var(--border); }
+    .v-atk-name { flex: 1 1 100px; min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+    .v-atk-name small { display: block; color: var(--text-dim); font-size: 10.5px; }
+    .v-atk-hit {
+      flex: 0 0 auto; padding: 5px 10px; border-radius: 9px; background: var(--surface);
+      font-size: 12.5px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;
+    }
+    .v-atk-hit:hover { background: var(--accent); color: #fff; }
+    .v-atk-dmg { flex: 0 0 auto; font-size: 12px; color: var(--text-dim); }
+
+    /* ---- заклинания ---- */
+    .v-spell-lvl { margin: 8px 0 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+    .v-spell-lvl:first-child { margin-top: 0; }
+    .v-spell { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 12px; flex-wrap: wrap; }
+    .v-spell-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    .v-spell-meta { flex: 0 0 auto; font-size: 10.5px; color: var(--text-dim); }
+    .v-tag {
+      display: inline-block; font-size: 9.5px; line-height: 1; padding: 3px 6px; border-radius: var(--radius-pill);
+      background: var(--surface); color: var(--text-dim);
+    }
+    .v-tag.c { color: #7fc4ff; background: rgba(58, 140, 220, 0.18); }
+
+    /* ---- текстовые блоки листа ---- */
+    .v-text { font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    details.v-fold > summary {
+      cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); font-weight: 600;
+    }
+    details.v-fold > summary::-webkit-details-marker { display: none; }
+    details.v-fold > summary::before {
+      content: ""; width: 0; height: 0; border: 4px solid transparent; border-left-color: currentColor;
+      transition: transform .12s ease; flex: 0 0 auto;
+    }
+    details.v-fold[open] > summary::before { transform: rotate(90deg) translateX(-1px); }
+    details.v-fold[open] > summary { margin-bottom: 8px; }
+
+    /* Инлайн-роллы в текстовых блоках (см. src/inline-rolls.js) — тот же вид,
+       что в бестиарии/книге заклинаний. */
+    .inline-roll {
+      color: var(--accent); text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer;
+    }
+    .inline-roll:hover { color: #fff; background: var(--accent); border-radius: 4px; border-bottom-color: transparent; }
+
+    .v-money { display: grid; grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); gap: 6px; }
+    .v-money-cell { background: var(--surface); border-radius: 10px; padding: 6px 4px; text-align: center; }
+    .v-money-cell b { display: block; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .v-money-cell span { font-size: 9.5px; color: var(--text-dim); }
+
+    .v-inv { display: flex; align-items: center; gap: 7px; padding: 5px 0; font-size: 12px; }
+    .v-inv + .v-inv { border-top: 1px solid var(--border); }
+    .v-inv-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .v-inv-name small { color: var(--text-dim); }
+    .v-inv-eq {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; border-radius: 7px; background: var(--surface);
+      color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+    }
+    .v-inv-eq.on { background: var(--green); color: #fff; }
+    .v-empty { font-size: 11.5px; color: var(--text-dim); }
   </style>
 </head>
 <body>
   <div id="topBar">
     <span id="charTitle">—</span>
     <span id="charSub"></span>
+    <button id="modeBtn" type="button"></button>
     <div class="tabs">
       <button type="button" class="tab-btn active" data-tab="1">Лист</button>
       <button type="button" class="tab-btn" data-tab="2">Портрет</button>
@@ -139,6 +347,7 @@
   <div id="readonlyBanner">✎ Режим ДМ — этот лист принадлежит игроку, изменения сохранятся как обычно.</div>
   <div id="loadingHint">Загрузка…</div>
   <div id="app">
+    <div id="viewPanel"></div>
     <div class="tab-panel active" id="tab1"></div>
     <div class="tab-panel" id="tab2"></div>
     <div class="tab-panel" id="tab3"></div>

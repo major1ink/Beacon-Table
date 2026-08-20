@@ -2,7 +2,8 @@
 // не менялась, только глобальные вызовы app.js заменены на импорты.
 import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
-import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
+import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
+import { openSheetDock } from "../sheet-dock.js";
 import {
   fetchMe,
   apiLogout,
@@ -17,12 +18,33 @@ import { icon } from "../icons.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 
-// openCharacterSheet — лист персонажа по умолчанию открывается ВНУТРИ
-// страницы плавающим окном (см. floating-window.js), как в Foundry; 🗗 в его
-// шапке выносит в настоящее отдельное окно браузера для тех, кому нужно
-// держать лист на втором мониторе отдельно от стола.
+// openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
+// БОКОВОЙ КОЛОНКЕ слева от карты (см. sheet-dock.js): за столом лист держат
+// открытым всю игру (ХП, ячейки, ресурсы отмечают по ходу боя), и плавающее
+// окно для этого приходилось бы постоянно оттаскивать с карты. Кнопка ⧉ в
+// шапке дока переносит тот же лист в плавающее окно (floating-window.js), а
+// уже оттуда 🗗 — в настоящее отдельное окно браузера, для второго монитора.
+//
+// Если этот персонаж УЖЕ вынесен в плавающее окно, клик по чипу не тащит его
+// обратно в док, а просто поднимает окно наверх — openFloatingWindow с тем
+// же key делает ровно это.
 function openCharacterSheet(c) {
-  openFloatingWindow({ key: "char-" + c.id, title: c.name, url: `/character-sheet.html?id=${c.id}` });
+  const key = "char-" + c.id;
+  const url = `/character-sheet.html?id=${c.id}`;
+  if (isFloatingWindowOpen(key)) {
+    openFloatingWindow({ key, title: c.name, url });
+    return;
+  }
+  openSheetDock(document.getElementById("sheetDock"), {
+    key,
+    title: c.name,
+    url,
+    // Док отнимает ширину у карты — канвас должен перемериться сразу, а не
+    // ждать, пока сработает ResizeObserver внутри vtt (см. vtt/index.js:
+    // "vtt:relayout" — там же, почему на один только наблюдатель полагаться
+    // нельзя).
+    onLayoutChange: () => document.dispatchEvent(new CustomEvent("vtt:relayout")),
+  });
 }
 
 // renderCharDock — ряд компактных "чипов" своих персонажей в топбаре (см.
