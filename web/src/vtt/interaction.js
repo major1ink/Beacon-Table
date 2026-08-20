@@ -11,6 +11,7 @@ import {
   fogAreaAt,
   fogVertexNear,
   buildingAt,
+  buildingVertexNear,
   noteMarkerAt,
   gridHandleCell,
   formatDistance,
@@ -148,7 +149,15 @@ export function createInteraction(ctx) {
 
   if (ctx.isDM) {
     // Единый активный инструмент вместо трёх независимых булевых флагов.
-    let tool = "select"; // 'select' | 'attack' | 'wall' | 'building' | 'fog' | 'grid-edit'
+    let tool = "select"; // 'select' | 'attack' | 'wall' | 'building' | 'fog' | 'grid-edit' | 'ruler'
+    // ctx.tool — зеркало локальной `tool` наружу: layers/walls.js,
+    // layers/manual-fog.js и layers/buildings.js читают его, чтобы решить,
+    // рисовать ли кружки-ручки на вершинах (см. setTool ниже — точки
+    // появляются/пропадают СРАЗУ при смене инструмента, ещё до первого
+    // клика). Сами линии/контуры по-прежнему видны ДМ всегда, независимо от
+    // инструмента — гейтится только возможность их редактировать и сами
+    // точки-ручки.
+    ctx.tool = tool;
     let attackFromId = null;
     // wallChainLast — последняя ЗАКОММИЧЕННАЯ точка текущей цепочки стен (см.
     // ниже); wallDragFrom — точка mousedown, пока цепочка ещё не начата (одно
@@ -167,6 +176,10 @@ export function createInteraction(ctx) {
     // округления по одной и той же точке за много шагов подряд.
     let draggingFogVertex = null;
     let draggingFogArea = null;
+    // draggingBuildingPoint — переформовка контура здания инструментом
+    // "Здание" (см. mousedown ниже, аналог draggingFogVertex): тащит ровно
+    // одну вершину, {buildingId, index}.
+    let draggingBuildingPoint = null;
     // buildingChain — вершины ещё НЕ отправленного на сервер здания (см. tool
     // "building" ниже). В отличие от wallChainLast, ничего не коммитится на
     // сервер по ходу рисования — ОДНО сообщение "add_building" со всеми
@@ -194,12 +207,14 @@ export function createInteraction(ctx) {
 
     function setTool(name) {
       tool = name || "select";
+      ctx.tool = tool;
       attackFromId = null;
       wallChainLast = null;
       wallDragFrom = null;
       draggingWallPoint = null;
       draggingFogVertex = null;
       draggingFogArea = null;
+      draggingBuildingPoint = null;
       buildingChain = null;
       fogPath = null;
       gridDragStart = null;
@@ -207,6 +222,13 @@ export function createInteraction(ctx) {
       rulerLine.clear();
       distanceLabel.hide();
       preview.clear();
+      // Смена инструмента сама по себе меняет, что рисовать (точки-ручки на
+      // стенах/тумане/здании — только в СВОЁМ инструменте, см. rationale у
+      // ctx.tool выше) — без этого точки пропадали/появлялись бы только на
+      // следующей реальной правке сцены, а не сразу при переключении.
+      ctx.dirty.walls = true;
+      ctx.dirty.buildings = true;
+      ctx.dirty.manualFog = true;
       // ctx.gridEditActive/ctx.gridEditHandle читает layers/grid.js — сама
       // подсветка "ручки" (красный квадрат) рисуется там на update(), тут
       // только считаем ЕЁ ОДИН РАЗ (по центру вьюпорта — см. gridHandleCell)
@@ -338,20 +360,68 @@ export function createInteraction(ctx) {
       if (e.button !== 0) return; // только ЛКМ — пан на средней, ПКМ на удаление/меню
       const { x, y } = mousePos(e);
 
+      // Стены/здания/туман редактируются ИСКЛЮЧИТЕЛЬНО в своём инструменте
+      // (см. layers/walls.js, layers/manual-fog.js, layers/buildings.js —
+      // там же точки-ручки скрываются, когда инструмент не тот). Внутри
+      // своего инструмента Ctrl — переключатель "рисуем новое" против
+      // "правим существующее": зажат Ctrl — начинаем/продолжаем цепочку
+      // нового сегмента/контура (старое поведение самого инструмента); не
+      // зажат — тащим вершину/вставляем точку/двигаем фигуру, то, что
+      // раньше жило в инструменте "Выбор".
+      const createHeld = e.ctrlKey || e.metaKey;
+
       if (tool === "wall") {
-        // Первый клик/драг цепочки — просто запоминаем точку, стену шлём
-        // только на mouseup (см. там же: сразу драг = одна стена как
-        // раньше, клик = только начало цепочки).
-        if (!wallChainLast) wallDragFrom = snappedPoint(x, y);
+        if (wallChainLast) {
+          // Цепочка уже начата — mousedown тут ничего не делает, каждый
+          // следующий сегмент коммитится по mouseup (см. там же).
+          return;
+        }
+        if (createHeld) {
+          // Первый клик/драг цепочки — просто запоминаем точку, стену шлём
+          // только на mouseup (сразу драг = одна стена, клик = только
+          // начало цепочки).
+          wallDragFrom = snappedPoint(x, y);
+          return;
+        }
+        const vertex = wallVertexNear(x, y, ctx.scene.walls, ctx.world.scale.x || 1);
+        if (vertex) {
+          draggingWallPoint = vertex;
+          return;
+        }
+        // Клик по линии стены (не по её концу) — не двигать существующую
+        // точку, а создать новую прямо тут и сразу утащить её этим же
+        // жестом (см. splitWallAt выше).
+        const wallId = wallNear(x, y, ctx.scene.walls, ctx.world.scale.x || 1);
+        if (wallId) {
+          splitWallAt(wallId, ctx.scene.walls[wallId], x, y);
+        }
         return;
       }
       if (tool === "building") {
-        // Весь commit — по mouseup (клик за кликом), mousedown тут только
-        // проглатывает событие, чтобы не начать драг токена под курсором.
+        if (buildingChain || createHeld) {
+          // Весь commit — по mouseup (клик за кликом), mousedown тут только
+          // проглатывает событие, чтобы не начать драг токена под курсором.
+          return;
+        }
+        const vertex = buildingVertexNear(x, y, ctx.scene.buildings, ctx.world.scale.x || 1);
+        if (vertex) draggingBuildingPoint = vertex;
         return;
       }
       if (tool === "fog") {
-        fogPath = [{ x, y }];
+        if (createHeld) {
+          fogPath = [{ x, y }];
+          return;
+        }
+        const scale = ctx.world.scale.x || 1;
+        const fogVertex = fogVertexNear(x, y, ctx.scene.fogAreas, scale);
+        if (fogVertex) {
+          draggingFogVertex = fogVertex;
+          return;
+        }
+        const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
+        if (fogId) {
+          draggingFogArea = { id: fogId, startX: x, startY: y, original: ctx.scene.fogAreas[fogId].points.map((p) => ({ x: p.x, y: p.y })) };
+        }
         return;
       }
       if (tool === "grid-edit") {
@@ -384,29 +454,15 @@ export function createInteraction(ctx) {
       }
 
       if (tool === "select") {
-        // Клик по значку двери (см. layers/doors.js) — ПЕРЕД проверками
-        // вершины/линии стены ниже: значок сидит РОВНО на линии стены (в её
-        // середине), без этой проверки первой клик по нему попал бы в
-        // splitWallAt (см. wallNear ниже) и воткнул бы лишнюю точку вместо
-        // переключения двери. includeSecret=true — ДМ может кликом
-        // переключить и секретную дверь, не открывая контекстное меню.
+        // Клик по значку двери (см. layers/doors.js) — единственное, что
+        // остаётся доступно в "Выбор" без переключения в режим "Стена":
+        // управление уже созданной дверью (открыть/закрыть) не структурная
+        // правка стены, поэтому не гейтится инструментом "Стена" — см.
+        // includeSecret=true — ДМ может кликом переключить и секретную
+        // дверь, не открывая контекстное меню.
         const doorId = doorAt(x, y, ctx.scene.walls, ctx.world.scale.x || 1, true);
         if (doorId) {
           ctx.send({ type: "toggle_door", id: doorId });
-          return;
-        }
-        const vertex = wallVertexNear(x, y, ctx.scene.walls, ctx.world.scale.x || 1);
-        if (vertex) {
-          draggingWallPoint = vertex;
-          return;
-        }
-        // Клик по линии стены (не по её концу) — не двигать существующую
-        // точку, а создать новую прямо тут и сразу утащить её этим же
-        // жестом (см. splitWallAt выше). Раньше добавить точку посреди
-        // стены было нечем — только удалить стену и провести заново.
-        const wallId = wallNear(x, y, ctx.scene.walls, ctx.world.scale.x || 1);
-        if (wallId) {
-          splitWallAt(wallId, ctx.scene.walls[wallId], x, y);
           return;
         }
       }
@@ -434,7 +490,7 @@ export function createInteraction(ctx) {
         return;
       }
       // Значок заметки перетаскивается только инструментом "выбор" — как и
-      // вершины стен/токены выше, чтобы не мешать рисованию стен/тумана/etc.
+      // токен выше, чтобы не мешать рисованию стен/тумана/здания.
       if (tool === "select") {
         const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers);
         if (markerId && markerId === resizeArmedNoteMarkerId) {
@@ -445,23 +501,6 @@ export function createInteraction(ctx) {
           resizeArmedNoteMarkerId = null;
         } else if (markerId) {
           dragNoteMarkerId = markerId;
-        } else {
-          // Ничего из вышеперечисленного не подцепилось — последняя
-          // проверка: фигура ручного тумана. Сначала её вершина (точечная
-          // переформовка контура), иначе — тело фигуры целиком (перенос) —
-          // тот же приоритет "точка, потом целиком", что у стен выше. Было
-          // вообще нечем двигать/переформовывать нарисованный туман — только
-          // удалить и обвести заново (см. layers/manual-fog.js).
-          const scale = ctx.world.scale.x || 1;
-          const fogVertex = fogVertexNear(x, y, ctx.scene.fogAreas, scale);
-          if (fogVertex) {
-            draggingFogVertex = fogVertex;
-          } else {
-            const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
-            if (fogId) {
-              draggingFogArea = { id: fogId, startX: x, startY: y, original: ctx.scene.fogAreas[fogId].points.map((p) => ({ x: p.x, y: p.y })) };
-            }
-          }
         }
       }
     });
@@ -642,6 +681,21 @@ export function createInteraction(ctx) {
         return;
       }
 
+      if (draggingBuildingPoint) {
+        // Переформовка контура здания — двигает ровно одну вершину;
+        // "add_building" с тем же id — апсерт на сервере (см.
+        // room.go:applyMutation "add_building"), тот же приём, что и у
+        // draggingFogVertex выше.
+        const b = ctx.scene.buildings[draggingBuildingPoint.buildingId];
+        if (b) {
+          b.points[draggingBuildingPoint.index] = { x, y };
+          ctx.dirty.buildings = true;
+          ctx.render();
+          ctx.send({ type: "add_building", building: { id: b.id, points: b.points } });
+        }
+        return;
+      }
+
       if (resizingNoteMarkerId) {
         const m = ctx.scene.noteMarkers[resizingNoteMarkerId];
         if (!m) return;
@@ -692,7 +746,14 @@ export function createInteraction(ctx) {
     });
 
     canvas.addEventListener("mouseup", (e) => {
-      if (tool === "wall") {
+      // wallChainLast/wallDragFrom/buildingChain ставятся ТОЛЬКО при
+      // зажатом Ctrl на mousedown (см. выше) — значит их наличие тут само
+      // по себе означает "идёт рисование нового", и перепроверять Ctrl на
+      // mouseup не нужно: отпустить его посреди цепочки — не отмена (можно
+      // домышить/докликать цепочку без Ctrl, см. rationale у mousedown).
+      // Если ни один из них не взведён — это был жест ПРАВКИ существующего
+      // (draggingWallPoint/draggingBuildingPoint/...), обработка ниже.
+      if (tool === "wall" && (wallChainLast || wallDragFrom)) {
         const { x, y } = mousePos(e);
         const up = snappedPoint(x, y);
         if (!wallChainLast) {
@@ -713,7 +774,7 @@ export function createInteraction(ctx) {
         return;
       }
 
-      if (tool === "building") {
+      if (tool === "building" && (buildingChain || e.ctrlKey || e.metaKey)) {
         const { x, y } = mousePos(e);
         const pt = snappedPoint(x, y);
         if (!buildingChain) {
@@ -769,6 +830,11 @@ export function createInteraction(ctx) {
       if (draggingFogVertex || draggingFogArea) {
         draggingFogVertex = null;
         draggingFogArea = null;
+        return;
+      }
+
+      if (draggingBuildingPoint) {
+        draggingBuildingPoint = null;
         return;
       }
 
@@ -844,12 +910,17 @@ export function createInteraction(ctx) {
       }
     });
 
-    // ПКМ: во время рисования цепочки стен — просто закончить её (не
-    // удалять уже поставленное); на точке стены — меню "удалить точку";
-    // рядом со стеной (не по её концу) — удалить её целиком, как раньше; на
-    // токене — контекстное меню; внутри тумана-фигуры — тоже меню (см.
-    // #fogAreaMenu). Работает всегда, а не только при включённом
-    // соответствующем инструменте (кроме самого первого случая).
+    // ПКМ: во время рисования цепочки стен/здания — просто закончить её (не
+    // удалять уже поставленное). Дальше — структурные действия над
+    // стеной/тумана/зданием (удалить точку, классифицировать сегмент,
+    // снести контур целиком) гейтятся СВОИМ инструментом, как и вся правка
+    // (см. requirement 1 у mousedown выше): вне "Стена"/"Туман"/"Здание"
+    // соответствующий ПКМ просто ничего не делает. Исключение —
+    // управление уже существующей дверью (открыть/закрыть/запереть):
+    // остаётся доступно и в "Выбор" (см. requirement 5, тот же
+    // wallContextMenu, но с урезанным набором пунктов — см.
+    // pages/dm.js:vtt:wallContextMenu). Токен/значок заметки — вне этой
+    // задачи, доступны как и раньше независимо от инструмента.
     canvas.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       const { x, y } = mousePos(e);
@@ -867,29 +938,30 @@ export function createInteraction(ctx) {
         return;
       }
 
-      const vertex = wallVertexNear(x, y, ctx.scene.walls, scale);
-      if (vertex) {
-        document.dispatchEvent(
-          new CustomEvent("vtt:wallPointContextMenu", { detail: { refs: vertex.refs, pageX: e.clientX, pageY: e.clientY } })
-        );
-        return;
+      if (tool === "wall") {
+        const vertex = wallVertexNear(x, y, ctx.scene.walls, scale);
+        if (vertex) {
+          document.dispatchEvent(
+            new CustomEvent("vtt:wallPointContextMenu", { detail: { refs: vertex.refs, pageX: e.clientX, pageY: e.clientY } })
+          );
+          return;
+        }
       }
 
-      // Стена (не по её концу) — тоже меню, а не мгновенное удаление (см.
-      // #wallMenu) — по той же причине, что и у фигуры тумана: середину
-      // стены теперь можно ещё и кликнуть, чтобы вставить точку (см.
-      // splitWallAt выше), так что ПКМ рядом с линией больше не однозначно
-      // "снести", и снос без подтверждения слишком легко словить случайно.
-      const wallId = wallNear(x, y, ctx.scene.walls, scale);
-      if (wallId) {
-        // wall в detail — как у vtt:tokenContextMenu (см. ниже) — меню
-        // (pages/dm.js) читает текущие door/window/doorState, чтобы
-        // показать нужный набор пунктов (сделать дверью/окном, открыть/
-        // закрыть, запереть/отпереть, раскрыть секретную и т.д.).
-        document.dispatchEvent(
-          new CustomEvent("vtt:wallContextMenu", { detail: { id: wallId, wall: ctx.scene.walls[wallId], pageX: e.clientX, pageY: e.clientY } })
-        );
-        return;
+      // Стена (не по её концу): в "Стена" — полное меню (классификация/
+      // удаление сегмента); в "Выбор" — то же меню, но только если на
+      // сегменте уже есть дверь (иначе там нечем управлять, и правка
+      // структуры недоступна — см. requirement 1). tool в detail — чтобы
+      // pages/dm.js показал нужный подмножество пунктов (см. там же).
+      if (tool === "wall" || tool === "select") {
+        const wallId = wallNear(x, y, ctx.scene.walls, scale);
+        const wall = wallId && ctx.scene.walls[wallId];
+        if (wall && (tool === "wall" || wall.door)) {
+          document.dispatchEvent(
+            new CustomEvent("vtt:wallContextMenu", { detail: { id: wallId, wall, tool, pageX: e.clientX, pageY: e.clientY } })
+          );
+          return;
+        }
       }
 
       const hitId = tokenAt(x, y, ctx.scene.tokens);
@@ -903,16 +975,15 @@ export function createInteraction(ctx) {
       }
 
       // Фигура тумана — ПКМ открывает меню (см. web/dm.html #fogAreaMenu),
-      // как у токена/значка заметки, а не удаляет сразу — двигать/
-      // переформовывать её теперь тоже можно (см. mousedown выше), поэтому
-      // ПКМ больше не единственное действие над фигурой, и снос без
-      // подтверждения одним кликом стал слишком легко словить случайно.
-      const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
-      if (fogId) {
-        document.dispatchEvent(
-          new CustomEvent("vtt:fogAreaContextMenu", { detail: { id: fogId, pageX: e.clientX, pageY: e.clientY } })
-        );
-        return;
+      // только в инструменте "Туман" (см. requirement 1).
+      if (tool === "fog") {
+        const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
+        if (fogId) {
+          document.dispatchEvent(
+            new CustomEvent("vtt:fogAreaContextMenu", { detail: { id: fogId, pageX: e.clientX, pageY: e.clientY } })
+          );
+          return;
+        }
       }
 
       // Значок заметки — ПКМ открывает меню (см. web/dm.html #noteMarkerMenu):
@@ -927,10 +998,20 @@ export function createInteraction(ctx) {
         return;
       }
 
-      // Здание удаляется целиком по клику внутри контура (нет отдельных
-      // вершин-ручек, как у стен, — см. domain.Building/README).
-      const buildingId = buildingAt(x, y, ctx.scene.buildings);
-      if (buildingId) ctx.send({ type: "remove_building", id: buildingId });
+      // Здание (клик внутри контура, в отличие от стен — отдельной точки
+      // "конца" тут нет) — ПКМ открывает меню (см. web/dm.html
+      // #buildingMenu), как у фигуры тумана/стены, а не удаляет сразу —
+      // случайный ПКМ во время осмотра карты в инструменте "Здание" не
+      // должен сносить контур без подтверждения. Только в инструменте
+      // "Здание" (см. requirement 1).
+      if (tool === "building") {
+        const buildingId = buildingAt(x, y, ctx.scene.buildings);
+        if (buildingId) {
+          document.dispatchEvent(
+            new CustomEvent("vtt:buildingContextMenu", { detail: { id: buildingId, pageX: e.clientX, pageY: e.clientY } })
+          );
+        }
+      }
     });
 
     // команда из меню точки стены (см. web/dm.html #wallPointMenu) — удаляет
@@ -944,6 +1025,11 @@ export function createInteraction(ctx) {
     // команда из меню фигуры тумана (см. web/dm.html #fogAreaMenu)
     document.addEventListener("vtt:removeFogArea", (e) => {
       ctx.send({ type: "remove_fog_area", id: e.detail.id });
+    });
+
+    // команда из меню здания (см. web/dm.html #buildingMenu)
+    document.addEventListener("vtt:removeBuilding", (e) => {
+      ctx.send({ type: "remove_building", id: e.detail.id });
     });
 
     // команда из меню стены (см. web/dm.html #wallMenu) — удаляет ОДИН

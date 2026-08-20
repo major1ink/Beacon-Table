@@ -452,6 +452,7 @@ document.addEventListener("vtt:wallPointContextMenu", (e) => {
   closeNoteMarkerMenu();
   closeFogAreaMenu();
   closeWallMenu();
+  closeBuildingMenu();
   menuWallIds = [...new Set(e.detail.refs.map((r) => r.wallId))];
   wallPointMenu.style.left = e.detail.pageX + "px";
   wallPointMenu.style.top = e.detail.pageY + "px";
@@ -481,6 +482,7 @@ document.addEventListener("vtt:fogAreaContextMenu", (e) => {
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeWallMenu();
+  closeBuildingMenu();
   menuFogAreaId = e.detail.id;
   fogAreaMenu.style.left = e.detail.pageX + "px";
   fogAreaMenu.style.top = e.detail.pageY + "px";
@@ -526,6 +528,7 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeFogAreaMenu();
+  closeBuildingMenu();
   menuWallId = e.detail.id;
   menuWall = e.detail.wall || null;
 
@@ -533,16 +536,28 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   const isSecret = isDoor && menuWall.door === "secret";
   const isWindow = !!(menuWall && menuWall.window);
   const isPlain = !isDoor && !isWindow;
+  // Одно и то же меню открывается из двух разных инструментов (см.
+  // interaction.js: vtt:wallContextMenu, поле tool) — структурные пункты
+  // (классификация/удаление сегмента) доступны ТОЛЬКО в "Стена" (там же
+  // interaction.js вообще не открывает это меню в других инструментах,
+  // кроме "Выбор" — и то только когда на сегменте уже есть дверь); пункты
+  // состояния двери (открыть/закрыть/запереть) — только в "Выбор", т.к.
+  // управление уже существующей дверью не гейтится режимом стены (см. план
+  // задачи: "Управление уже созданными дверями осуществляется... без
+  // изменений").
+  const isWallMode = e.detail.tool === "wall";
+  const isSelectMode = e.detail.tool === "select";
 
-  wallMenuToggleOpen.style.display = isDoor ? "flex" : "none";
+  wallMenuToggleOpen.style.display = isSelectMode && isDoor ? "flex" : "none";
   wallMenuToggleOpen.textContent = menuWall && menuWall.doorState === "open" ? "🚪 Закрыть" : "🚪 Открыть";
-  wallMenuToggleLock.style.display = isDoor ? "flex" : "none";
+  wallMenuToggleLock.style.display = isSelectMode && isDoor ? "flex" : "none";
   wallMenuToggleLock.textContent = menuWall && menuWall.doorState === "locked" ? "🔓 Отпереть" : "🔒 Запереть";
-  wallMenuMakeDoor.style.display = isPlain ? "flex" : "none";
-  wallMenuMakeWindow.style.display = isPlain ? "flex" : "none";
-  wallMenuMakeSecret.style.display = isDoor && !isSecret ? "flex" : "none";
-  wallMenuMakeNormalDoor.style.display = isSecret ? "flex" : "none";
-  wallMenuUnsetSpecial.style.display = isDoor || isWindow ? "flex" : "none";
+  wallMenuMakeDoor.style.display = isWallMode && isPlain ? "flex" : "none";
+  wallMenuMakeWindow.style.display = isWallMode && isPlain ? "flex" : "none";
+  wallMenuMakeSecret.style.display = isWallMode && isDoor && !isSecret ? "flex" : "none";
+  wallMenuMakeNormalDoor.style.display = isWallMode && isSecret ? "flex" : "none";
+  wallMenuUnsetSpecial.style.display = isWallMode && (isDoor || isWindow) ? "flex" : "none";
+  wallMenuDelete.style.display = isWallMode ? "flex" : "none";
 
   wallMenu.style.left = e.detail.pageX + "px";
   wallMenu.style.top = e.detail.pageY + "px";
@@ -596,6 +611,38 @@ wallMenuDelete.onclick = () => {
   closeWallMenu();
 };
 
+// ================= меню здания (ПКМ внутри контура) =================
+// Раньше ПКМ сразу удалял здание без подтверждения — теперь, как и у фигуры
+// тумана/стены, снос вынесен в меню (см. interaction.js:
+// vtt:buildingContextMenu), чтобы случайный ПКМ во время осмотра карты в
+// режиме "Здание" не сносил контур мгновенно.
+const buildingMenu = document.getElementById("buildingMenu");
+const buildingMenuDelete = document.getElementById("buildingMenuDelete");
+let menuBuildingId = null;
+
+function closeBuildingMenu() {
+  buildingMenu.style.display = "none";
+  menuBuildingId = null;
+}
+
+document.addEventListener("vtt:buildingContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  menuBuildingId = e.detail.id;
+  buildingMenu.style.left = e.detail.pageX + "px";
+  buildingMenu.style.top = e.detail.pageY + "px";
+  buildingMenu.style.display = "block";
+});
+
+buildingMenuDelete.onclick = () => {
+  if (!menuBuildingId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeBuilding", { detail: { id: menuBuildingId } }));
+  closeBuildingMenu();
+};
+
 // ================= меню значка заметки (ПКМ по свитку на карте) =================
 const noteMarkerMenu = document.getElementById("noteMarkerMenu");
 const noteMarkerResizeBtn = document.getElementById("noteMarkerResizeBtn");
@@ -612,6 +659,7 @@ document.addEventListener("vtt:noteMarkerContextMenu", (e) => {
   closeWallPointMenu();
   closeFogAreaMenu();
   closeWallMenu();
+  closeBuildingMenu();
   menuNoteMarkerId = e.detail.id;
   noteMarkerMenu.style.left = e.detail.pageX + "px";
   noteMarkerMenu.style.top = e.detail.pageY + "px";
@@ -640,6 +688,7 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   closeNoteMarkerMenu();
   closeFogAreaMenu();
   closeWallMenu();
+  closeBuildingMenu();
   const { id, token, pageX, pageY } = e.detail;
   menuTokenId = id;
   menuCharacterId = token.characterId || "";
@@ -1899,6 +1948,7 @@ document.addEventListener("mousedown", (e) => {
   if (noteMarkerMenu.style.display === "flex" && !noteMarkerMenu.contains(e.target)) closeNoteMarkerMenu();
   if (fogAreaMenu.style.display === "block" && !fogAreaMenu.contains(e.target)) closeFogAreaMenu();
   if (wallMenu.style.display === "block" && !wallMenu.contains(e.target)) closeWallMenu();
+  if (buildingMenu.style.display === "block" && !buildingMenu.contains(e.target)) closeBuildingMenu();
 });
 
 // ===================================================================

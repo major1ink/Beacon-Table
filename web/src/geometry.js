@@ -381,6 +381,27 @@ export function buildingAt(x, y, buildings) {
   return null;
 }
 
+// buildingVertexNear — ближайшая вершина контура здания к (x,y) в пределах
+// screenPx экранных пикселей, либо null — {buildingId, index, x, y}. Та же
+// идиома, что и fogVertexNear/wallVertexNear — используется для перетаскивания
+// отдельной вершины здания инструментом "Здание" (см. interaction.js).
+export function buildingVertexNear(x, y, buildings, scale, screenPx = 10) {
+  const threshold = screenPx / scale;
+  let best = null, bestDist = threshold;
+  for (const id in buildings) {
+    const b = buildings[id];
+    for (let i = 0; i < b.points.length; i++) {
+      const p = b.points[i];
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < bestDist) {
+        best = { buildingId: id, index: i, x: p.x, y: p.y };
+        bestDist = d;
+      }
+    }
+  }
+  return best;
+}
+
 // tokenAt — id токена под точкой (x,y), либо null. tokens: { [id]: {x,y,size} }.
 export function tokenAt(x, y, tokens) {
   for (const id in tokens) {

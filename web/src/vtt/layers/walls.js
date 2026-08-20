@@ -10,7 +10,10 @@ import { wallVertices } from "../../geometry.js";
 // Поверх линий рисуются кружки-ручки на каждой уникальной вершине
 // (wallVertices — концы стен, сгруппированные по совпадению координат) —
 // видимые точки, за которые ДМ хватает мышью в interaction.js (драг угла
-// целиком, ПКМ — меню "удалить точку").
+// целиком, ПКМ — меню "удалить точку"). Точки (и сама возможность правки)
+// видны, только пока активен инструмент "Стена" (ctx.tool — см. rebuild) —
+// вне его стены заблокированы для редактирования, линии остаются просто
+// ориентиром.
 
 // Цвет линии по типу сегмента (только для ДМ — см. rebuild): обычная стена —
 // как раньше, окно — светлее/прозрачнее (сквозь него видно), дверь/секретная
@@ -47,8 +50,14 @@ export function createWallsLayer(ctx) {
       const w = ctx.scene.walls[id];
       g.moveTo(w.x1, w.y1).lineTo(w.x2, w.y2).stroke({ width: 3 / scale, color: colorForWall(w), cap: "round" });
     }
-    for (const v of wallVertices(ctx.scene.walls)) {
-      g.circle(v.x, v.y, 5 / scale).fill(0xffffff).stroke({ width: 1.5 / scale, color: 0x5dd0ff });
+    // Точки-ручки — только пока активен сам инструмент "Стена" (см.
+    // interaction.js: там же и вся правка/создание стен теперь гейтится
+    // этим инструментом) — вне его стены заблокированы для редактирования,
+    // и точки, за которые раньше можно было бы хвататься, только бы путали.
+    if (ctx.tool === "wall") {
+      for (const v of wallVertices(ctx.scene.walls)) {
+        g.circle(v.x, v.y, 5 / scale).fill(0xffffff).stroke({ width: 1.5 / scale, color: 0x5dd0ff });
+      }
     }
   }
 
