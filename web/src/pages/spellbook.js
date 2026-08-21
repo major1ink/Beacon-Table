@@ -8,7 +8,7 @@
 // блок импорта: разбор экспорта заклинания с ttg.club целиком в
 // web/src/spell-import.js (чистая функция, без побочных эффектов), этот файл
 // только вызывает её и мержит результат в текущую карточку.
-import { fetchMe, fetchSpell, createSpell, updateSpell } from "../api.js";
+import { fetchMe, fetchSpell, createSpell, updateSpell, fetchConditions } from "../api.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
@@ -33,6 +33,7 @@ const LEVEL_OPTIONS = [
 let spellId = null;
 let spell = null; // объект domain.Spell целиком (сервер отдаёт camelCase — см. json-теги)
 let rollWS = null;
+let allConditions = []; // справочник состояний мира — только для выпадашки «Накладывает» (см. statusesField)
 let isAdminView = false; // роль текущего аккаунта (см. boot()) — определяет /ws/dm или /ws/player
 // editMode — по умолчанию карточка открывается в чистом read-режиме, как
 // domain.Monster (см. bestiary.js) — тот же приём и там же обоснование.
@@ -41,6 +42,7 @@ let editMode = false;
 function normalizeSpell(raw) {
   const s = raw && typeof raw === "object" ? raw : {};
   s.tags = Array.isArray(s.tags) ? s.tags : [];
+  s.statuses = Array.isArray(s.statuses) ? s.statuses : [];
   s.level = Number.isFinite(s.level) ? s.level : 0;
   return s;
 }
@@ -64,8 +66,8 @@ function h(tag, attrs, children) {
   return e;
 }
 
-function field(labelText, inputEl) {
-  return h("label", { class: "field" }, [h("span", { text: labelText }), inputEl]);
+function field(labelText, inputEl, title) {
+  return h("label", { class: "field", title }, [h("span", { text: labelText }), inputEl]);
 }
 
 function textInput(get, set, opts) {
@@ -174,6 +176,7 @@ function renderEditView(root) {
         field("Урон", textInput(() => spell.damage, (v) => (spell.damage = v), { placeholder: "8к6 (огонь)" })),
         field("Классы", textInput(() => spell.classes, (v) => (spell.classes = v), { placeholder: "Волшебник, Чародей" })),
       ]),
+      statusesField(),
     ])
   );
 
@@ -247,6 +250,9 @@ function renderReadView(root) {
   root.appendChild(info);
   enhanceRolls(info, sendRoll); // формула урона и т.п. в этих строках — кликабельная
 
+  const statusesBlock = readStatuses();
+  if (statusesBlock) root.appendChild(statusesBlock);
+
   const desc = spell.description && spell.description.trim();
   if (desc) {
     root.appendChild(h("div", { class: "sb-hr" }));
@@ -256,6 +262,124 @@ function renderReadView(root) {
     wireCatalogLinks(body);
     root.appendChild(h("div", { class: "sb-block" }, [h("h3", { class: "sb-section-title", text: "Описание" }), body]));
   }
+}
+
+// statusesField — правка списка «что накладывает» руками (режим ✎). Список
+// состояний мира тянется один раз при загрузке карточки (см. boot) — тем же
+// приёмом, что и остальные подсказки в конструкторах; если он не загрузился,
+// поле всё равно работает, просто без выпадашки.
+function statusesField() {
+  const wrap = h("div", { style: "margin-top:8px;" });
+  const list = h("div", { class: "tag-list" });
+
+  function renderList() {
+    list.innerHTML = "";
+    spell.statuses.forEach((ref, i) => {
+      const roundsInp = h("input", {
+        type: "number",
+        min: "0",
+        value: ref.rounds || 0,
+        style: "width:56px;",
+        title: "Раундов, 0 — по описанию заклинания",
+      });
+      roundsInp.addEventListener("input", () => {
+        const v = parseInt(roundsInp.value, 10);
+        ref.rounds = Number.isNaN(v) ? 0 : v;
+        scheduleSave();
+      });
+      const noteInp = h("input", {
+        type: "text",
+        value: ref.note || "",
+        placeholder: "при провале спасброска",
+        style: "width:170px;",
+      });
+      noteInp.addEventListener("input", () => {
+        ref.note = noteInp.value;
+        scheduleSave();
+      });
+      list.appendChild(
+        h("span", { class: "tag-pill", style: "gap:6px;padding:2px 6px 2px 10px;" }, [
+          ref.name || ref.slug,
+          roundsInp,
+          noteInp,
+          h("button", {
+            type: "button",
+            html: icon("close", { size: 11 }),
+            onclick: () => {
+              spell.statuses.splice(i, 1);
+              scheduleSave();
+              renderList();
+            },
+          }),
+        ])
+      );
+    });
+  }
+  renderList();
+
+  const select = h("select", {});
+  select.appendChild(h("option", { value: "", text: "+ добавить состояние…" }));
+  for (const c of allConditions) {
+    if (!c.slug) continue;
+    select.appendChild(h("option", { value: c.slug, text: `${c.name} (${c.slug})` }));
+  }
+  select.addEventListener("change", () => {
+    const slug = select.value;
+    select.value = "";
+    if (!slug || spell.statuses.some((s) => s.slug === slug)) return;
+    const cond = allConditions.find((c) => c.slug === slug);
+    spell.statuses.push({ slug, name: cond ? cond.name : slug, rounds: (cond && cond.defaultRounds) || 0, note: "" });
+    scheduleSave();
+    renderList();
+  });
+
+  wrap.append(
+    field("Накладывает состояния", select, "Заполняется и импортом из Foundry (effects[] заклинания). Метку всё равно вешает ДМ вручную — сервер спасброски не кидает."),
+    list
+  );
+  return wrap;
+}
+
+// readStatuses — блок «Накладывает состояния» (см. domain.SpellStatusRef).
+// Заполняется импортом из Foundry (effects[] заклинания, см.
+// spell-import.js: mapFoundrySpellStatuses) или руками в режиме правки.
+//
+// Чип кликабелен только у ДМ и только когда карточка открыта внутри
+// dm.html: сама она живёт в iframe плавающего окна и WS-команды слать не
+// может — вместо этого просит топ-документ показать выбор цели и наложить
+// (postMessage "beacon:applySpellStatus", см. web/src/pages/dm.js). У игрока
+// и в отдельном окне браузера это просто справочная строка: сервер всё
+// равно не даст игроку наложить метку (см. Room.authorize).
+function readStatuses() {
+  if (!spell.statuses.length) return null;
+  const canApply = isAdminView && window.parent !== window;
+  const chips = spell.statuses.map((ref) => {
+    const bits = [ref.name || ref.slug];
+    if (ref.rounds) bits.push(`${ref.rounds} р.`);
+    if (ref.note) bits.push(ref.note);
+    const chip = h("span", { class: "tag-pill" + (canApply ? " clickable" : ""), text: bits.join(" · ") });
+    if (canApply) {
+      chip.title = "Наложить это состояние на токен на карте";
+      chip.style.cursor = "pointer";
+      chip.onclick = () =>
+        window.parent.postMessage(
+          {
+            type: "beacon:applySpellStatus",
+            slug: ref.slug,
+            name: ref.name || ref.slug,
+            rounds: ref.rounds || 0,
+            spellName: spell.name || "",
+          },
+          location.origin
+        );
+    }
+    return chip;
+  });
+  return h("div", { class: "sb-block" }, [
+    h("h3", { class: "sb-section-title", text: "Накладывает состояния" }),
+    h("div", { class: "tag-list" }, chips),
+    canApply ? null : h("div", { class: "hint", text: "Наложить метку может только ДМ — из окна ДМ-стола." }),
+  ]);
 }
 
 function tagsField() {
@@ -488,6 +612,13 @@ function currentId() {
   } catch (err) {
     document.getElementById("loadingHint").textContent = "Не удалось загрузить заклинание: " + err.message;
     return;
+  }
+  // Справочник состояний нужен только выпадашке «Накладывает» в режиме
+  // правки — если он не загрузился, карточка всё равно должна открыться.
+  try {
+    allConditions = await fetchConditions();
+  } catch {
+    allConditions = [];
   }
 
   document.getElementById("spellTitle").textContent = spell.name || "Без имени";

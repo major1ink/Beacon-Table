@@ -11,6 +11,9 @@
 // подставляется исходный код Foundry как есть, чтобы ничего не пропадало
 // молча при встрече с незнакомым/будущим значением.
 
+import { foundryStatusToSlug, conditionName } from "./foundry-conditions.js";
+import { effectRounds } from "./condition-import.js";
+
 const SCHOOL_RU = {
   abj: "Ограждение",
   con: "Вызов",
@@ -277,5 +280,50 @@ export function mapFoundrySpellJson(raw) {
     savingThrow: buildSavingThrow(sys),
     damage: buildDamage(sys),
     description: (sys.description && sys.description.value) || "",
+    statuses: mapFoundrySpellStatuses(raw),
   };
+}
+
+// mapFoundrySpellStatuses — какие состояния накладывает заклинание (см.
+// domain.SpellStatusRef). У Foundry это массив effects[] с документами
+// ActiveEffect: у каждого есть statuses: ["restrained"] и своя длительность.
+// В dnd5e v4 («Activities», см. buildCastTime выше про переезд полей)
+// добавился второй слой — system.activities[<id>].effects[] со ссылками
+// {_id} на те же документы; для нашей задачи это ничего не меняет (нам нужен
+// сам набор состояний, а не какая активность его применяет), поэтому просто
+// читаем effects[] напрямую.
+//
+// Автоматически ничего не применяется: сервер не кидает спасброски и не
+// знает целей (в Foundry за это отвечает сторонний MidiQOL, не ядро) —
+// список превращается в кликабельные чипы «Накладывает: …» в карточке
+// заклинания, ДМ вешает метку сам (см. web/src/status-palette.js).
+export function mapFoundrySpellStatuses(raw) {
+  const effects = Array.isArray(raw && raw.effects) ? raw.effects : [];
+  const out = [];
+  const seen = new Set();
+  for (const effect of effects) {
+    const codes = Array.isArray(effect.statuses) ? effect.statuses : [];
+    const rounds = effectRounds(effect.duration);
+    for (const code of codes) {
+      const slug = foundryStatusToSlug(code);
+      if (!slug || seen.has(slug)) continue;
+      seen.add(slug);
+      out.push({
+        slug,
+        name: conditionName(slug),
+        rounds,
+        // Имя эффекта в Foundry часто и есть условие применения («Restrained
+        // (failed save)») — кладём его в заметку, если оно не дублирует
+        // название самого состояния.
+        note: effectNote(effect, slug),
+      });
+    }
+  }
+  return out;
+}
+
+function effectNote(effect, slug) {
+  const name = String(effect.name || effect.label || "").trim();
+  if (!name) return "";
+  return name.toLowerCase() === conditionName(slug).toLowerCase() ? "" : name;
 }

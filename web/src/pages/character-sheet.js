@@ -25,6 +25,7 @@ import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
 import { initItemPicker } from "../item-picker.js";
 import { enhanceRolls } from "../inline-rolls.js";
+import { renderStatusChips } from "../status-palette.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -130,6 +131,11 @@ let readOnly = false;
 // (свой/админский) дёргать при автосохранении, см. doSave().
 let isAdminView = false;
 let rollWS = null;
+// liveStatuses/liveStatusesEl — наложенные состояния этого персонажа (см.
+// domain.AppliedStatus): приходят с сервера в combat_state тем же сокетом,
+// что и броски (см. connectRollSocket), лист их только показывает.
+let liveStatuses = [];
+let liveStatusesEl = null;
 
 // isClassic — система ЭТОГО персонажа (Character.System, см.
 // internal/domain/company.go: SystemDnD5e2014/2024, проставляется один раз
@@ -1519,8 +1525,29 @@ function vStateCard() {
       vPips(6, () => sheet.combat.exhaustion || 0, (v) => (sheet.combat.exhaustion = v), { tone: "danger" }),
     ]),
     h("div", { class: "v-tiles", style: "margin-top:6px;" }, [inspBtn, dyingBtn]),
+    liveStatusesHost(),
     conditions ? h("div", { class: "v-text", style: "margin-top:8px;", text: conditions }) : null,
   ]);
+}
+
+// liveStatusesHost/renderLiveStatuses — блок наложенных состояний (см.
+// domain.AppliedStatus). Только для чтения: свободнотекстовое поле
+// «Состояния» бланка (sheet.combat.conditions, строкой ниже) осталось как
+// было — это заметка игрока, а метки в этом блоке живут на токене/бойце и
+// приходят с сервера (см. connectRollSocket). Своей истины лист не держит —
+// тот же принцип, что у трекера инициативы.
+function liveStatusesHost() {
+  liveStatusesEl = h("div", { class: "v-track", style: "margin-top:8px;display:block;" });
+  renderLiveStatuses();
+  return liveStatusesEl;
+}
+
+function renderLiveStatuses() {
+  if (!liveStatusesEl) return;
+  liveStatusesEl.innerHTML = "";
+  if (liveStatuses.length === 0) return;
+  liveStatusesEl.appendChild(h("small", { text: "Наложено" }));
+  liveStatusesEl.appendChild(renderStatusChips(liveStatuses));
 }
 
 // ---------- характеристики и навыки ----------
@@ -1942,6 +1969,18 @@ function connectRollSocket() {
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
     if (data.type === "roll_result") showRollResult(data);
+    // Наложенные состояния этого персонажа (см. domain.AppliedStatus)
+    // приезжают тем же сокетом в combat_state — сервер уже свёл их с токена
+    // бойца (см. room_statuses.go: statusesOf) и вырезал скрытые от игрока.
+    // Лист их только ПОКАЗЫВАЕТ: вешает и снимает метки ДМ (палитра в меню
+    // токена или в трекере), собственного поля в бланке у них нет — иначе
+    // получилось бы два источника истины. Если персонажа нет в инициативе,
+    // список просто пустой: метка на токене вне боя сюда не долетает.
+    if (data.type === "combat_state") {
+      const mine = (data.combatants || []).find((c) => c.characterId === charId);
+      liveStatuses = (mine && mine.statuses) || [];
+      renderLiveStatuses();
+    }
   };
 }
 

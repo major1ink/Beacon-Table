@@ -1,4 +1,4 @@
-import { Assets, Container, Graphics, Matrix, Text, Texture } from "pixi.js";
+import { Assets, Container, Graphics, Matrix, Sprite, Text, Texture } from "pixi.js";
 import { isVideoUrl } from "../../geometry.js";
 import { dashedCircle } from "../dash.js";
 import { createVideoTexture } from "../video-texture.js";
@@ -98,9 +98,59 @@ export function createTokensLayer(ctx) {
   // могло быть 1×1 (плейсхолдер), и matrix в drawArt посчитан неверно.
   function refreshArtViews(url) {
     const tex = tokenTextureCache.get(url);
+    refreshStatusSprites(url); // значки состояний с этим же URL — см. ниже
     const set = tokenArtViews.get(url);
     if (!tex || !set) return;
     for (const view of set) drawArt(view, view.artSize, view.artShape, tex);
+  }
+
+  // Значки состояний с собственной картинкой (domain.Condition.ImageURL)
+  // грузятся тем же getTokenTexture, что и арт токена, — и ловят ту же
+  // асинхронность: до конца загрузки в кэше лежит Texture.EMPTY. Арт токена
+  // решает это через tokenArtViews + refreshArtViews (перерисовать заливку),
+  // а значок — это обычный Sprite, ему достаточно переприсвоить .texture,
+  // поэтому у него свой маленький реестр, а не общий с заливкой.
+  const statusSprites = new Map(); // url -> Set<Sprite>
+
+  function bindStatusSprite(sprite, url) {
+    sprite.texture = getTokenTexture(url);
+    let set = statusSprites.get(url);
+    if (!set) {
+      set = new Set();
+      statusSprites.set(url, set);
+    }
+    set.add(sprite);
+  }
+
+  function refreshStatusSprites(url) {
+    const tex = tokenTextureCache.get(url);
+    const set = statusSprites.get(url);
+    if (!tex || !set) return;
+    for (const sprite of set) {
+      // Значки пересоздаются на каждое обновление токена (см. drawStatuses),
+      // так что в реестре копятся уже уничтоженные спрайты — вычищаем их
+      // лениво здесь, а не заводим отдельный unregister на каждый рендер.
+      if (sprite.destroyed) {
+        set.delete(sprite);
+        continue;
+      }
+      sprite.texture = tex;
+      fitStatusSprite(sprite);
+    }
+    if (set.size === 0) statusSprites.delete(url);
+  }
+
+  // fitStatusSprite — вписать картинку значка в его кружок, сохранив
+  // пропорции (у Sprite нет аналога drawArt с матрицей — ему просто задаём
+  // размер).
+  function fitStatusSprite(sprite) {
+    const box = sprite.statusBox || 0;
+    if (!box) return;
+    const w = sprite.texture.width || 1;
+    const h = sprite.texture.height || 1;
+    const scale = box / Math.max(w, h);
+    sprite.width = w * scale;
+    sprite.height = h * scale;
   }
 
   // Восстановление после мёртвого декодера: Chrome сам ставит на паузу и
@@ -207,8 +257,108 @@ export function createTokensLayer(ctx) {
     deadIcon.visible = false;
     const label = new Text({ text: "", style: { fill: 0xffffff, fontSize: 12, fontFamily: "sans-serif", align: "center" } });
     label.anchor.set(0.5, 0);
-    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, label);
-    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, lightRings, lightIcon, deadIcon, label, artUrl: null, artSize: 0, artShape: null };
+    // statusLayer — наложенные состояния (domain.AppliedStatus): значки-
+    // кружки по верхней кромке токена плюс, если состояние помечено
+    // Overlay, крупный глиф поверх самого арта — прямой аналог палитры и
+    // overlay-иконки в Foundry. Отдельный Container, а не пачка полей вьюхи:
+    // значков переменное число, они целиком пересоздаются при изменении
+    // набора меток (это происходит только по dirty.tokens, не каждый кадр).
+    const statusLayer = new Container();
+    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, statusLayer, label);
+    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, lightRings, lightIcon, deadIcon, statusLayer, label, artUrl: null, artSize: 0, artShape: null };
+  }
+
+  // MAX_STATUS_BADGES — сколько значков рисуем в ряд, прежде чем свернуть
+  // остальные в «+N»: больше пяти над токеном не читается, а прятать метки
+  // совсем нельзя — по ним ДМ и игроки понимают, что происходит с целью.
+  const MAX_STATUS_BADGES = 5;
+
+  // drawStatuses — перерисовать значки состояний токена. Скрытые метки
+  // (AppliedStatus.Hidden) сюда просто не доезжают: сервер вырезает их из
+  // payload не-ДМ клиентам (см. room_statuses.go: publicToken), так что
+  // фильтровать тут нечего — у ДМ они приходят и рисуются приглушённо.
+  function drawStatuses(view, t, size) {
+    view.statusLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+    const statuses = t.statuses || [];
+    if (statuses.length === 0 || t.lightOnly) return;
+
+    // Overlay-состояние (окаменение/беспамятство) — крупный полупрозрачный
+    // глиф поверх арта. Если их несколько, рисуем только первое: два
+    // наложенных друг на друга глифа во весь токен нечитаемы.
+    const overlay = statuses.find((st) => st.overlay);
+    if (overlay && !t.dead) {
+      const big = statusVisualNode(overlay, size * 1.5);
+      big.alpha = 0.8;
+      view.statusLayer.addChild(big);
+    }
+
+    const shown = statuses.slice(0, statuses.length > MAX_STATUS_BADGES ? MAX_STATUS_BADGES - 1 : MAX_STATUS_BADGES);
+    const hiddenCount = statuses.length - shown.length;
+    const total = shown.length + (hiddenCount > 0 ? 1 : 0);
+    const r = Math.max(5, size * 0.26);
+    const top = -size - r - 2;
+    const startX = -(total - 1) * r;
+
+    shown.forEach((st, i) => {
+      const badge = new Container();
+      badge.position.set(startX + i * 2 * r, top);
+      const bg = new Graphics().circle(0, 0, r).fill({ color: 0x11111a, alpha: 0.85 });
+      bg.stroke({ width: Math.max(1, r * 0.16), color: parseColor(st.color, 0x9aa0a6) });
+      badge.addChild(bg, statusVisualNode(st, r * 1.5));
+      if (st.level) {
+        const lvl = new Text({
+          text: String(st.level),
+          style: { fill: 0xffffff, fontSize: Math.max(7, r * 0.85), fontFamily: "sans-serif", fontWeight: "bold" },
+        });
+        lvl.anchor.set(0.5, 0.5);
+        lvl.position.set(r * 0.7, r * 0.7);
+        badge.addChild(lvl);
+      }
+      if (st.hidden) badge.alpha = 0.55; // видит только ДМ — показываем это глазом
+      view.statusLayer.addChild(badge);
+    });
+
+    if (hiddenCount > 0) {
+      const badge = new Container();
+      badge.position.set(startX + shown.length * 2 * r, top);
+      const bg = new Graphics().circle(0, 0, r).fill({ color: 0x11111a, alpha: 0.85 });
+      bg.stroke({ width: Math.max(1, r * 0.16), color: 0x9aa0a6 });
+      const more = new Text({
+        text: "+" + hiddenCount,
+        style: { fill: 0xffffff, fontSize: Math.max(8, r), fontFamily: "sans-serif" },
+      });
+      more.anchor.set(0.5, 0.5);
+      badge.addChild(bg, more);
+      view.statusLayer.addChild(badge);
+    }
+  }
+
+  // statusVisualNode — «картинка или глиф» одной метки, тот же контракт, что
+  // и в HTML-палитре (web/src/status-palette.js: statusVisual): есть свой
+  // арт — рисуем его, нет — эмодзи из карточки.
+  function statusVisualNode(st, box) {
+    if (st.imageUrl) {
+      const sprite = new Sprite(Texture.EMPTY);
+      sprite.anchor.set(0.5, 0.5);
+      sprite.statusBox = box;
+      bindStatusSprite(sprite, st.imageUrl);
+      fitStatusSprite(sprite);
+      return sprite;
+    }
+    const glyph = new Text({
+      text: st.icon || "❔",
+      style: { fontSize: box, fontFamily: "sans-serif", align: "center" },
+    });
+    glyph.anchor.set(0.5, 0.5);
+    return glyph;
+  }
+
+  // parseColor — "#c0392b" из карточки состояния в число для Pixi. Цвет
+  // приходит из пользовательской карточки, поэтому мусор не должен ронять
+  // отрисовку — отдаём fallback.
+  function parseColor(value, fallback) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(value || "").trim());
+    return m ? parseInt(m[1], 16) : fallback;
   }
 
   function updateTokenView(view, id, t) {
@@ -318,6 +468,8 @@ export function createTokensLayer(ctx) {
     // роль и так однозначно читается по иконке лампочки.
     view.label.text = t.lightOnly ? "" : t.label || "";
     view.label.position.set(0, size + 14);
+
+    drawStatuses(view, t, size);
   }
 
   function syncMap(views, container, data, createView, updateView, onRemove) {

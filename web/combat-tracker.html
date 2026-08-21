@@ -75,6 +75,10 @@
     }
     .combat-row .combat-remove:hover { background: var(--danger-hover); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
+    /* строка чипов наложенных состояний под характеристиками бойца (см.
+       web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
+       общий модуль, тут только отступ строки в карточке */
+    .combat-row-statuses { padding-left: 40px; margin-top: 6px; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
     .combat-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; }
     .combat-row input[type="number"] {

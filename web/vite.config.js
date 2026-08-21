@@ -24,6 +24,7 @@ export default defineConfig({
         spellbook: resolve(__dirname, "spellbook.html"),
         itembook: resolve(__dirname, "itembook.html"),
         referencebook: resolve(__dirname, "referencebook.html"),
+        conditions: resolve(__dirname, "conditions.html"),
         combatTracker: resolve(__dirname, "combat-tracker.html"),
         catalog: resolve(__dirname, "catalog.html"),
       },

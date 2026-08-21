@@ -31,6 +31,9 @@ DM-инструмент для стола, который работает в д
 - Броски кубов
 - Амбиент сцены + плейлисты ДМ
 - Вики-заметки ДМ, бестиарий (личные монстры/NPC), библиотека заклинаний
+- Состояния (ослепление/испуг/истощение…): быстрая палитра ДМ, значки на
+  токенах, отсчёт длительности по раундам, свой конструктор состояний,
+  набор «из коробки» под каждую систему мира
 - Каталог "из коробки" на SRD 5.1/5.2 (CC-BY-4.0)
 - Аккаунты и персонажи
 - Импорт персонажей с сайта LSS
@@ -113,8 +116,8 @@ players can join the same room over the internet with an account.
 
 Highlights: WebGL scene renderer (PixiJS), dynamic lighting & fog of war,
 line-of-sight from tokens, video map backgrounds and animated tokens,
-character sheets & accounts, DM bestiary/spellbook, ambient audio + DM
-playlists, wiki-style DM notes.
+character sheets & accounts, DM bestiary/spellbook, status conditions with a
+Foundry-style token palette, ambient audio + DM playlists, wiki-style DM notes.
 
 The out-of-the-box content catalog ships **SRD 5.1/5.2 content only**
 (CC-BY-4.0/OGL) — no proprietary Wizards of the Coast book content is

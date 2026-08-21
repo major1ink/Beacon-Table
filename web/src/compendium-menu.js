@@ -23,6 +23,11 @@ const FLAT_CATEGORIES = [
   { id: "species", label: "Виды", type: "reference", kind: "species" },
   { id: "background", label: "Предыстории", type: "reference", kind: "background" },
   { id: "trait", label: "Черты", type: "reference", kind: "trait" },
+  // «Состояния» (см. domain.Condition) — свой узел, а не часть справочника:
+  // это не текст для чтения, а карточки, которые вешаются метками на токены
+  // (см. web/src/status-palette.js). Доступны не только ДМ — игроку нужно
+  // прочитать, что на нём висит.
+  { id: "conditions", label: "Состояния", type: "conditions" },
 ];
 
 function catalogUrl({ type, system, kind, category, role, label }) {

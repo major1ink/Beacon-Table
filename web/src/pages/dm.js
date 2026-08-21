@@ -6,6 +6,7 @@ import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
 import { initCombatPanel } from "../combat-panel.js";
+import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import {
   fetchMe,
   apiLogout,
@@ -385,6 +386,10 @@ document.addEventListener("vtt:sceneUpdated", (e) => {
   const globalLight = e.detail.globalLight || "";
   globalLightBrightBtn.classList.toggle("active", globalLight === "bright");
   globalLightDimBtn.classList.toggle("active", globalLight === "dim");
+  // Палитра состояний живёт вне канваса (document.body) и своей истины не
+  // держит — перерисовываем её по каждой свежей сцене, иначе только что
+  // наложенная метка не подсветится в сетке (см. status-palette.js).
+  refreshStatusPalette();
 });
 
 // ================= контекстное меню токена =================
@@ -406,6 +411,7 @@ const tokenMenuLightDim = document.getElementById("tokenMenuLightDim");
 const tokenMenuLightBrightField = document.getElementById("tokenMenuLightBrightField");
 const tokenMenuLightDimField = document.getElementById("tokenMenuLightDimField");
 const tokenMenuLightToggleBtn = document.getElementById("tokenMenuLightToggleBtn");
+const tokenMenuStatusBtn = document.getElementById("tokenMenuStatusBtn");
 const tokenMenuDelete = document.getElementById("tokenMenuDelete");
 let menuTokenId = null;
 let menuCharacterId = ""; // characterId токена в открытом сейчас меню — "" у обычных NPC-токенов
@@ -715,6 +721,9 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   // domain.Token.LightOnly), в остальном доступно любому существу — и
   // игрока, и монстра, и голому NPC-токену без карточки бестиария/листа.
   tokenMenuAddInitiativeBtn.style.display = menuIsLightOnly ? "none" : "flex";
+  // "Состояния" — по тому же признаку, что и инициатива: у токена-лампочки
+  // (domain.Token.LightOnly) состояний не бывает, он не существо.
+  tokenMenuStatusBtn.style.display = menuIsLightOnly ? "none" : "flex";
   // "Лутить" — только у мёртвого токена (кости, см. domain.Token.Dead) с
   // непустым Loot; тумблер CombatState.LootingEnabled тут не проверяем — он
   // ограничивает только ИГРОКОВ (см. authorize в room.go), ДМ раздаёт лут
@@ -766,6 +775,32 @@ tokenMenuAddInitiativeBtn.onclick = () => {
   if (!menuTokenId) return;
   vtt.send({ type: "add_combatant", tokenId: menuTokenId });
   closeTokenMenu();
+};
+
+// tokenMenuStatusBtn — "Состояния": палитра наложения метки прямо с карты,
+// аналог палитры статусов в Token HUD у Foundry (см. status-palette.js —
+// тот же модуль, что и "+" в карточке бойца трекера). Меню токена при этом
+// закрывается: палитра встаёт на его место и дальше живёт сама.
+tokenMenuStatusBtn.onclick = (e) => {
+  if (!menuTokenId) return;
+  const tokenId = menuTokenId; // menuTokenId обнулится в closeTokenMenu ниже
+  const title = menuCharacterLabel;
+  closeTokenMenu();
+  openStatusPalette({
+    x: e.clientX,
+    y: e.clientY,
+    target: { tokenId },
+    send: vtt.send,
+    title,
+    // Читаем метки из ЖИВОЙ сцены на каждый рендер палитры, а не из снимка
+    // токена, с которым открывали меню, — та же причина, что и у
+    // "vtt:toggleTokenLight" ниже: пока палитра открыта, сцена приходит с
+    // сервера ещё много раз.
+    statusesFor: () => {
+      const t = (vtt.getScene().tokens || {})[tokenId];
+      return (t && t.statuses) || [];
+    },
+  });
 };
 
 // tokenMenuLootBtn — "Лутить" (только когда видима, см.
@@ -1820,11 +1855,94 @@ window.addEventListener("message", (e) => {
     e.data.type === "beacon:monsterSaved" ||
     e.data.type === "beacon:spellSaved" ||
     e.data.type === "beacon:itemSaved" ||
-    e.data.type === "beacon:referenceSaved"
+    e.data.type === "beacon:referenceSaved" ||
+    e.data.type === "beacon:conditionSaved"
   ) {
     postToOpenWindows("catalog-", e.data);
+  } else if (e.data.type === "beacon:applySpellStatus") {
+    // Клик по чипу «Накладывает: …» в карточке заклинания (см.
+    // pages/spellbook.js: readStatuses). Сама карточка живёт в iframe и цели
+    // на карте не знает — выбор цели и отправку команды делает эта страница.
+    openSpellStatusPicker(e.data);
   }
 });
+
+// ================= наложение состояния из карточки заклинания =================
+// Выделения токенов в сцене нет как понятия (см. web/src/vtt/interaction.js —
+// там сразу драг, без состояния «выбран»), поэтому цель выбирается списком:
+// все НЕ-световые токены активной сцены, можно отметить несколько сразу
+// (в отличие от Foundry, где HUD работает ровно с одним токеном). Метка
+// вешается с подписью источника «Заклинание «…»» — её видно в подсказке
+// чипа в трекере (см. domain.AppliedStatus.Source).
+const spellStatusPicker = document.getElementById("spellStatusPicker");
+
+function closeSpellStatusPicker() {
+  spellStatusPicker.style.display = "none";
+  spellStatusPicker.innerHTML = "";
+}
+
+function openSpellStatusPicker(payload) {
+  const scene = vtt.getScene();
+  const tokens = Object.values(scene.tokens || {}).filter((t) => !t.lightOnly);
+  spellStatusPicker.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.className = "picker-title";
+  title.textContent = `«${payload.name}»${payload.rounds ? ` · ${payload.rounds} р.` : ""} — на кого?`;
+  spellStatusPicker.appendChild(title);
+
+  if (tokens.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "На активной сцене нет ни одного токена.";
+    spellStatusPicker.appendChild(empty);
+  }
+
+  const checks = [];
+  for (const t of tokens) {
+    const row = document.createElement("label");
+    row.className = "picker-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = t.id;
+    const av = document.createElement("span");
+    av.className = "picker-avatar";
+    if (t.image) av.style.backgroundImage = `url("${t.image}")`;
+    else av.style.background = t.color || "#555";
+    const name = document.createElement("span");
+    name.textContent = t.label || "Без имени";
+    row.append(cb, av, name);
+    checks.push(cb);
+    spellStatusPicker.appendChild(row);
+  }
+
+  const foot = document.createElement("div");
+  foot.className = "picker-foot";
+  const apply = document.createElement("button");
+  apply.type = "button";
+  apply.textContent = "Наложить";
+  apply.onclick = () => {
+    for (const cb of checks) {
+      if (!cb.checked) continue;
+      vtt.send({
+        type: "apply_status",
+        tokenId: cb.value,
+        statusSlug: payload.slug,
+        rounds: payload.rounds || 0,
+        source: payload.spellName ? `Заклинание «${payload.spellName}»` : "",
+      });
+    }
+    closeSpellStatusPicker();
+  };
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = "Отмена";
+  cancel.onclick = closeSpellStatusPicker;
+  foot.append(apply, cancel);
+  spellStatusPicker.appendChild(foot);
+
+  spellStatusPicker.style.display = "flex";
+}
 
 // ================= "Хаб лута" ДМ (domain.LootHub) =================
 // Живёт вне сцены/боя (см. internal/service/room.go: hubPayload) — приходит

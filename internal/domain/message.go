@@ -143,6 +143,40 @@ type ClientMsg struct {
 	// "roll_dice".
 	Note string `json:"note,omitempty"`
 
+	// ---- состояния (см. domain.Condition, AppliedStatus, service.Room:
+	// handleApplyStatus и соседи) ----
+	//
+	// Цель ЛЮБОЙ из команд ниже — ОДНА из двух: TokenID (токен на активной
+	// сцене — ПКМ-меню токена) либо CombatantID (карточка бойца в трекере,
+	// в т.ч. ещё не вытащенная на карту). Оба поля уже объявлены выше и
+	// переиспользуются, как ID у команд стен.
+	//
+	// StatusSlug — какое состояние трогаем ("blinded", см. Condition.Slug);
+	// цель "apply_status"/"remove_status"/"set_status_level"/
+	// "set_status_rounds". "clear_statuses" его не использует — снимает все.
+	// Само имя/иконку/цвет клиент не присылает: сервер сам резолвит карточку
+	// справочника и делает снимок (тем же принципом недоверия клиенту, что и
+	// "hub_add_item"/"add_combatant").
+	StatusSlug string `json:"statusSlug,omitempty"`
+	// Level — уровень многоуровневого состояния (истощение 1-6), для
+	// "apply_status"/"set_status_level". 0/отсутствие — обычный тумблер;
+	// потолок клампит сервер по Condition.Levels. Для "set_status_level"
+	// значение 0 означает «снять метку целиком» (клик по первой лампе, тот
+	// же приём, что у спасбросков от смерти).
+	Level *int `json:"level,omitempty"`
+	// Rounds — длительность в раундах для "apply_status"/"set_status_rounds";
+	// 0 — бессрочно. nil в "apply_status" означает «взять
+	// Condition.DefaultRounds из карточки».
+	Rounds *int `json:"rounds,omitempty"`
+	// Hidden — метка видна только ДМ (см. AppliedStatus.Hidden), только для
+	// "apply_status". nil — как в карточке (то есть видна всем).
+	Hidden *bool `json:"hidden,omitempty"`
+	// Source — подпись «откуда прилетело» для "apply_status" («Заклинание
+	// «Огненный шар»»). Показываемый текст со стороны клиента — сервер, как
+	// и с Label у "roll_dice"/Note у "hub_add_item", не проверяет его смысл,
+	// только ограничивает длину.
+	Source string `json:"source,omitempty"`
+
 	// TokenX/TokenY — только для "place_combatant_token": куда на активной
 	// сцене поставить новый токен (мировые координаты, см.
 	// web/src/vtt/camera.js: screenToWorld) — ДМ вытащил карточку бойца из

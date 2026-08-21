@@ -16,6 +16,10 @@ const (
 	maxSpellLongText  = 20000 // описание — импортированный HTML бывает длинным
 	maxSpellShortText = 300   // время накладывания/дистанция/спасбросок и т.п.
 	maxSpellTags      = 30
+	// maxSpellStatuses — сколько состояний максимум может накладывать одно
+	// заклинание (см. domain.SpellStatusRef). Не правило, а тот же санитарный
+	// предел, что и у тегов: в реальном экспорте Foundry их единицы.
+	maxSpellStatuses = 12
 )
 
 // SpellService — общая на весь стол библиотека карточек заклинаний (см.
@@ -76,6 +80,31 @@ func sanitizeSpell(s domain.Spell) domain.Spell {
 	if s.Level > 9 {
 		s.Level = 9
 	}
+	// Statuses (см. domain.SpellStatusRef) — список «что накладывает».
+	// Slug приводим к каноничному виду тем же нормализатором, что и карточка
+	// состояния (см. conditions.go: NormalizeConditionSlug): иначе "Prone",
+	// набранный руками, не сойдётся с "prone" из импорта Foundry. Записи без
+	// slug'а выбрасываем — ссылаться им не на что.
+	if len(s.Statuses) > maxSpellStatuses {
+		s.Statuses = s.Statuses[:maxSpellStatuses]
+	}
+	refs := make([]domain.SpellStatusRef, 0, len(s.Statuses))
+	for _, ref := range s.Statuses {
+		ref.Slug = NormalizeConditionSlug(ref.Slug)
+		if ref.Slug == "" {
+			continue
+		}
+		ref.Name = clampRunes(strings.TrimSpace(ref.Name), maxSpellShortText)
+		ref.Note = clampRunes(strings.TrimSpace(ref.Note), maxSpellShortText)
+		if ref.Rounds < 0 {
+			ref.Rounds = 0
+		}
+		if ref.Rounds > maxStatusRounds {
+			ref.Rounds = maxStatusRounds
+		}
+		refs = append(refs, ref)
+	}
+	s.Statuses = refs
 	return s
 }
 

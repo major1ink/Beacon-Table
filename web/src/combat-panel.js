@@ -18,6 +18,7 @@
 // диспатчат его в одном и том же формате, откуда взято неважно.
 import { fetchBestiary, fetchAdminCharacters } from "./api.js";
 import { icon } from "./icons.js";
+import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
 
 export function initCombatPanel({ send, els }) {
   let latestCombat = { active: false, round: 0, currentId: "", combatants: [] };
@@ -169,6 +170,36 @@ export function initCombatPanel({ send, els }) {
 
       row.append(top, stats);
 
+      // ---- наложенные состояния (см. domain.AppliedStatus) ----
+      // Метки приходят в combat_state уже разрешёнными: если за бойцом стоит
+      // токен, сервер отдаёт метки ТОКЕНА (см. room_statuses.go: statusesOf)
+      // — панель ничего не сводит сама и не знает, где они физически лежат.
+      // "+" открывает ту же палитру, что и ПКМ-меню токена на карте.
+      const statusRow = document.createElement("div");
+      statusRow.className = "combat-row-statuses";
+      statusRow.appendChild(
+        renderStatusChips(cmb.statuses || [], {
+          addTitle: "Наложить состояние",
+          onAdd: (e) =>
+            openStatusPalette({
+              x: e.clientX,
+              y: e.clientY,
+              target: { combatantId: cmb.id },
+              send,
+              title: cmb.name,
+              // Функция, а не готовый массив: пока палитра открыта, придёт
+              // ещё несколько combat_state, и читать метки надо в момент
+              // отрисовки (см. комментарий в status-palette.js).
+              statusesFor: () => {
+                const fresh = latestCombat.combatants.find((c) => c.id === cmb.id);
+                return (fresh && fresh.statuses) || [];
+              },
+            }),
+          onRemove: (st) => send({ type: "remove_status", combatantId: cmb.id, statusSlug: st.slug }),
+        })
+      );
+      row.appendChild(statusRow);
+
       // ---- спасброски от смерти — только у игрового персонажа (characterId)
       // с HP<=0. У монстра/безликого NPC (нет characterId) спасбросков не
       // бывает — сервер убирает его из инициативы сразу, как только HP
@@ -190,6 +221,10 @@ export function initCombatPanel({ send, els }) {
   document.addEventListener("vtt:combatState", (e) => {
     latestCombat = e.detail;
     renderPanel();
+    // Палитра состояний, если она сейчас открыта, живёт вне этой панели
+    // (document.body) — её надо перерисовать отдельно, иначе после наложения
+    // метки ячейка не подсветится до следующего открытия.
+    refreshStatusPalette();
   });
 
   els.startBtn.onclick = () => send({ type: "start_combat" });

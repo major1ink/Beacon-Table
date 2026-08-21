@@ -20,7 +20,14 @@ import assert from "node:assert/strict";
 
 // Pixi при импорте читает navigator (определение окружения/GPU). Канвас и
 // WebGL для GraphicsContext не нужны — он чистая структура данных.
-globalThis.navigator = globalThis.navigator || { userAgent: "node" };
+// В Node 22 у globalThis.navigator появился собственный getter без сеттера —
+// прежнее `globalThis.navigator = ...` роняло весь файл ещё до первого
+// теста ("Cannot set property navigator of #<Object> which has only a
+// getter"). Присваиваем только если свойства нет вовсе, иначе — оставляем
+// родное navigator Node'ы, Pixi устраивает и оно.
+if (!globalThis.navigator) {
+  Object.defineProperty(globalThis, "navigator", { value: { userAgent: "node" }, configurable: true });
+}
 globalThis.self = globalThis.self || globalThis;
 
 const { GraphicsContext } = await import("pixi.js");

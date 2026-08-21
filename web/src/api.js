@@ -255,6 +255,33 @@ export async function deleteReference(id) {
   return apiFetch(`/api/references/${id}`, { method: "DELETE" });
 }
 
+// ---- состояния (ослепление/испуг/истощение и самодельные метки ДМ), общая
+// на весь стол библиотека — web/conditions.html (конструктор), палитра
+// быстрого наложения (web/src/status-palette.js), узел "Состояния" в
+// компендиуме. Та же схема доступа, что у справочника: читают и правят все
+// залогиненные, а вот НАЛОЖЕНИЕ метки на токен/бойца — WS-команды и только
+// у ДМ (см. internal/service/room_statuses.go).
+//
+// Набор зависит от системы запущенного мира (см.
+// internal/app.CompanyManager.Launch: systemdata/conditions/<system>) —
+// клиенту фильтровать ничего не нужно, сервер и так отдаёт только то, что
+// относится к текущему миру.
+export async function fetchConditions() {
+  return apiFetch("/api/conditions");
+}
+export async function fetchCondition(id) {
+  return apiFetch(`/api/conditions/${id}`);
+}
+export async function createCondition(name) {
+  return apiFetch("/api/conditions", { method: "POST", body: JSON.stringify({ name }) });
+}
+export async function updateCondition(id, cond) {
+  return apiFetch(`/api/conditions/${id}`, { method: "PUT", body: JSON.stringify(cond) });
+}
+export async function deleteCondition(id) {
+  return apiFetch(`/api/conditions/${id}`, { method: "DELETE" });
+}
+
 // Загрузка файла (карта, токен-арт, аватар персонажа или ассет карты) на
 // сервер, возвращает {url}. kind — "maps"/"audio"/"props" (только ДМ) или
 // "tokens" (любой авторизованный аккаунт — сюда же грузят аватары

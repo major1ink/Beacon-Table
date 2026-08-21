@@ -74,6 +74,10 @@
     }
     .combat-row .combat-remove:hover { background: var(--danger-hover); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
+    /* строка чипов наложенных состояний под характеристиками бойца (см.
+       web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
+       общий модуль, тут только отступ строки в карточке */
+    .combat-row-statuses { padding-left: 40px; margin-top: 6px; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
     .combat-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; }
     .combat-row input[type="number"] {
@@ -102,10 +106,11 @@
     .bulb.filled { background: var(--accent); border-color: var(--accent); }
     .bulb.filled.fail { background: var(--danger); border-color: var(--danger); }
   </style>
-  <script type="module" crossorigin src="/assets/combatTracker-DrwIbHUW.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-BVL7DnaC.js">
+  <script type="module" crossorigin src="/assets/combatTracker-BwsbjdWh.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BQXXM-FP.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-3nongrBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DufSbF65.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-DSktftUm.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-B9r1R_6h.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>
