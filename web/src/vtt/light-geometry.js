@@ -160,29 +160,109 @@ function clampRing(ring, w, h) {
   return flat;
 }
 
-// paintMulti — рисует MultiPolygon на Pixi Graphics чистой геометрией (без
-// блендов/масок — этот проект уже наступал на баги обоих подходов, см.
-// комментарий в vision-fog.js). mode "cut" вырезает дыру в уже залитой
-// фигуре, mode "fill" закрашивает style. Кольца полигона, кроме первого
-// (outer), — дыры ВНУТРИ него; они всегда противоположны внешнему кольцу по
-// смыслу (дыра в вырезанном месте — снова закрашена, дыра в закрашенном —
-// снова вырезана). Для "дыра в cut()" нужен refillStyle (чем закрасить
-// обратно) — если не задан, дыра просто остаётся как есть (не трогаем).
-export function paintMulti(g, multi, w, h, mode, style, refillStyle) {
+// ---- ПРАВИЛО РАБОТЫ С Pixi cut() (нарушение = кривые тени на экране) ----
+//
+// Graphics.cut() не принимает "из чего вырезать" — он сам ищет цель среди
+// инструкций контекста, и делает это так (node_modules/pixi.js/lib/scene/
+// graphics/shared/GraphicsContext.js:cut):
+//
+//   for (let i = 0; i < 2; i++) {
+//     const lastInstruction = this.instructions[this.instructions.length-1-i];
+//     ...
+//     if (lastInstruction.data.hole) { lastInstruction.data.hole.addPath(p); }
+//     else { lastInstruction.data.hole = p; break; }          // <-- break ТОЛЬКО здесь
+//   }
+//
+// Отсюда два капкана, на оба этот проект уже наступал:
+//
+//   1. Любая fill-инструкция, вклиненная МЕЖДУ вырезами, перехватывает
+//      следующий cut() на себя. Заплатка "закрасить дыру острова обратно
+//      тьмой" — это именно такая вклиненная заливка: остров, который
+//      рисуется сразу после неё, не вырезается из тьмы вообще и остаётся
+//      чёрным пятном с резкими прямыми краями.
+//   2. ПОВТОРНЫЙ cut() по заливке, у которой дыра уже есть, не
+//      останавливается (нет break) и лезет ещё и в ПРЕДПОСЛЕДНЮЮ инструкцию —
+//      то есть вешает дыру на ЧУЖУЮ, соседнюю фигуру. Дыра при этом лежит
+//      вне её контура, earcut соединяет её с внешним кольцом перемычкой, и
+//      на экране появляется тонкий треугольный "клин" из ниоткуда.
+//
+// Отсюда правило, которое соблюдают функции ниже: НА ОДНУ ЗАЛИВКУ — РОВНО
+// ОДИН cut(), и между заливкой и её cut() не должно быть других инструкций.
+// Несколько колец вырезаются не несколькими cut(), а одним — Pixi копит
+// подряд идущие poly() в один путь (_activePath чистится только в fill/cut),
+// и такой путь уезжает в дыру целиком, как несколько subpath'ов.
+
+// cutRings — вырезать НАБОР колец из последней fill-инструкции ровно одним
+// cut() (см. правило выше). Возвращает false, если вырезать было нечего —
+// тогда cut() не зовётся вообще, иначе он вырезал бы вырожденный остаток
+// пути от предыдущей инструкции.
+function cutRings(g, rings) {
+  let any = false;
+  for (const ring of rings) {
+    if (ring.length < 8) continue; // меньше 4 точек (8 чисел) в замкнутом кольце — вырожденная/схлопнувшаяся фигура
+    g.poly(ring);
+    any = true;
+  }
+  if (any) g.cut();
+  return any;
+}
+
+// ringsOf — MultiPolygon -> { outers, holes } в плоском формате Pixi, с
+// отсеянными вырожденными кольцами. Кольца полигона, кроме первого (outer),
+// это дыры ВНУТРИ него — по смыслу они всегда противоположны внешнему
+// кольцу (дыра в вырезанном месте — снова закрашена, дыра в закрашенном —
+// снова вырезана).
+function ringsOf(multi, w, h) {
+  const outers = [];
+  const holes = [];
   for (const poly of multi) {
     if (!poly || !poly.length) continue;
     const outer = clampRing(poly[0], w, h); // плоский [x,y,x,y,...], см. clampRing
-    if (outer.length < 8) continue; // меньше 4 точек (8 чисел) в замкнутом кольце — вырожденная/схлопнувшаяся фигура
-    if (mode === "cut") g.poly(outer).cut();
-    else g.poly(outer).fill(style);
+    if (outer.length < 8) continue;
+    outers.push(outer);
     for (let i = 1; i < poly.length; i++) {
       const hole = clampRing(poly[i], w, h);
-      if (hole.length < 8) continue;
-      if (mode === "cut") {
-        if (refillStyle) g.poly(hole).fill(refillStyle);
-      } else {
-        g.poly(hole).cut();
-      }
+      if (hole.length >= 8) holes.push(hole);
     }
+  }
+  return { outers, holes };
+}
+
+// cutMulti — вырезать MultiPolygon из уже залитой фигуры (у vision-fog.js
+// это сплошная заливка тьмы). Сначала ОДНИМ cut() уходят все внешние
+// кольца, и только потом — заплатки refillStyle на дыры островов: заливка,
+// поставленная раньше, перехватила бы вырез следующего острова (капкан №1 в
+// правиле выше). На порядок рисования это не влияет — cut() не рисует, он
+// правит уже созданную заливку, так что заплатки как ложились поверх тьмы,
+// так и ложатся. Без refillStyle дыры просто остаются вырезанными.
+export function cutMulti(g, multi, w, h, refillStyle) {
+  const { outers, holes } = ringsOf(multi, w, h);
+  cutRings(g, outers);
+  if (!refillStyle) return;
+  for (const hole of holes) g.poly(hole).fill(refillStyle);
+}
+
+// fillMulti — закрасить MultiPolygon style'ом, вырезав его собственные дыры.
+// extraCuts — дополнительные MultiPolygon'ы, которые надо вырезать из ТОЙ ЖЕ
+// заливки (у vision-fog.js это ярко освещённые куски внутри тускло
+// освещённого острова). Они идут в тот же единственный cut(), а не отдельным
+// вызовом: второй cut() по той же заливке — это капкан №2 из правила выше,
+// и именно он рисовал клинья-призраки поверх соседнего острова.
+export function fillMulti(g, multi, w, h, style, extraCuts = [], extraRefillStyle = null) {
+  for (const poly of multi) {
+    if (!poly || !poly.length) continue;
+    const outer = clampRing(poly[0], w, h);
+    if (outer.length < 8) continue;
+    const own = [];
+    for (let i = 1; i < poly.length; i++) {
+      const hole = clampRing(poly[i], w, h);
+      if (hole.length >= 8) own.push(hole);
+    }
+    const extra = ringsOf(extraCuts, w, h);
+    g.poly(outer).fill(style);
+    cutRings(g, own.concat(extra.outers));
+    // Дыра внутри вырезанного куска — снова часть заливки, возвращаем
+    // заплаткой ПОСЛЕ cut() (до него она перехватила бы этот же cut()).
+    if (extraRefillStyle) for (const hole of extra.holes) g.poly(hole).fill(extraRefillStyle);
   }
 }

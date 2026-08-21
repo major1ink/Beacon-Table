@@ -29,9 +29,23 @@ tasks:
       - go run ./cmd/beacon-table
 
   test:
+    desc: Прогнать тесты — Go + фронтенд
+    cmds:
+      - task: test:go
+      - task: test:web
+
+  test:go:
     desc: Прогнать тесты Go
     cmds:
       - go test ./...
+
+  test:web:
+    desc: Тесты фронтенда (node --test)
+    dir: web
+    deps:
+      - web:install
+    cmds:
+      - npm test
 
   vet:
     desc: go vet
@@ -76,6 +90,39 @@ tasks:
     cmds:
       - npm run build
 
+  web:build:check:
+    desc: >-
+      Убедиться, что закоммиченная сборка (cmd/beacon-table/static/)
+      соответствует исходникам web/src. Пересобирает фронт и падает, если
+      результат отличается от того, что лежит в git.
+    # Зачем: static/ — build output, но он КОММИТИТСЯ (см. CONTRIBUTING —
+    # иначе `go build ./cmd/beacon-table` с //go:embed static не соберётся
+    # без Node.js). Значит его легко забыть пересобрать, а merge может тихо
+    # взять чужую версию бандла при конфликте — и на стол уезжает фронт
+    # СТАРЕЕ исходников. Ровно так и случилось: фикс освещения (квантование
+    # точек перед polygon-clipping) жил в web/src, а игрокам ехал бандл без
+    # него, и консоль сыпала "Unable to find segment ... in SweepLine tree".
+    # Ни один тест этого не ловил — тесты гоняют исходники, а не сборку.
+    cmds:
+      - task: web:build
+      # Сравниваем свежую сборку с тем, что УЖЕ в индексе (git diff), а не с
+      # HEAD: иначе локально, когда пересобранный фронт добавлен в индекс, но
+      # ещё не закоммичен, задача падала бы на собственной же корректной
+      # сборке. В CI (чистый checkout, индекс == HEAD) смысл тот же.
+      # Отдельно ловим новые файлы: смена хеша в имени бандла — это
+      # untracked-файл, в git diff его не видно.
+      - |
+        CHANGED=$(git diff --name-status -- cmd/beacon-table/static)
+        UNTRACKED=$(git ls-files --others --exclude-standard -- cmd/beacon-table/static)
+        if [ -n "$CHANGED" ] || [ -n "$UNTRACKED" ]; then
+          echo "Закоммиченная сборка фронтенда отстала от web/src."
+          echo "Свежая сборка уже разложена по cmd/beacon-table/static —"
+          echo "осталось закоммитить её вместе с изменениями в web/src."
+          [ -n "$CHANGED" ] && echo "$CHANGED"
+          [ -n "$UNTRACKED" ] && echo "$UNTRACKED" | sed "s/^/?? /"
+          exit 1
+        fi
+
   web:dev:
     desc: Запустить фронтенд в режиме разработки (vite dev)
     dir: web
@@ -99,9 +146,10 @@ tasks:
       - task: lint:web
 
   check:
-    desc: Полная проверка перед PR — fmt:fix, vet, test, lint
+    desc: Полная проверка перед PR — fmt:fix, vet, test, lint, свежесть сборки фронта
     cmds:
       - task: fmt:fix
       - task: vet
       - task: test
       - task: lint
+      - task: web:build:check

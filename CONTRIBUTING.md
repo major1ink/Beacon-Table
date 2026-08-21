@@ -17,6 +17,7 @@ go run ./cmd/beacon-table
 cd web
 npm install
 npm run build   # результат нужно закоммитить вместе с изменениями в web/src
+npm test        # тесты фронтенда (node --test)
 ```
 
 Подробности архитектуры, слоёв, зависимостей — в разработке.
