@@ -309,6 +309,28 @@ function buildArmorClass(sys) {
   return `${armor.value}`;
 }
 
+// buildArmorModifiers — та же броня, но той частью, которую приложение
+// умеет ПОСЧИТАТЬ (см. internal/domain/modifier.go и Item.Modifiers): лист
+// персонажа применит это, когда предмет отмечен «надет».
+//
+// Доспех задаёт КД целиком (mode "set"), щит прибавляет (mode "add") — это
+// не «правила D&D в коде», а перевод двух полей чужого формата в наши два:
+// какое число и как оно относится к базовому КД, в экспорте Foundry указано
+// явно (system.type.value). «+ Лов (макс 2)» в число не ложится — модификатор
+// Ловкости у каждого свой, — и остаётся текстом в поле ArmorClass рядом; так
+// ДМ видит полную формулировку, а лист считает ту часть, что однозначна.
+function buildArmorModifiers(sys) {
+  const armor = sys.armor || {};
+  if (armor.value === null || armor.value === undefined) return [];
+  const type = sys.type && sys.type.value;
+  const value = String(armor.value);
+  if (type === "shield") return [{ target: "ac", mode: "add", value, period: "", note: "щит" }];
+  if (type === "light" || type === "medium" || type === "heavy") {
+    return [{ target: "ac", mode: "set", value, period: "", note: "доспех" }];
+  }
+  return [];
+}
+
 // buildType — единственная по-настоящему "разветвлённая по типу предмета"
 // часть модуля: Foundry отдаёт item.type (weapon/equipment/consumable/tool/
 // loot/container/...) на верхнем уровне, а конкретный подвид — уже в
@@ -371,6 +393,7 @@ export function mapFoundryItemJson(raw) {
     activation: buildActivation(primaryActivation(sys)),
     damage: raw.type === "weapon" ? buildDamage(sys.damage) : "",
     armorClass: raw.type === "equipment" ? buildArmorClass(sys) : "",
+    modifiers: raw.type === "equipment" ? buildArmorModifiers(sys) : [],
     properties: raw.type === "weapon" ? buildWeaponProperties(sys) : "",
     charges: buildCharges(sys.uses),
     description: (sys.description && sys.description.value) || "",

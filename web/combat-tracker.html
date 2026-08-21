@@ -79,6 +79,10 @@
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
        общий модуль, тут только отступ строки в карточке */
     .combat-row-statuses { padding-left: 40px; margin-top: 6px; }
+    /* КД: поле с базой + стрелка с эффективным значением, когда его меняют
+       состояния (см. web/src/combat-panel.js и domain.Modifier) */
+    .combat-ac-group { display: flex; align-items: center; gap: 4px; }
+    .combat-ac-eff { font-size: 11px; color: var(--amber); white-space: nowrap; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
     .combat-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; }
     .combat-row input[type="number"] {

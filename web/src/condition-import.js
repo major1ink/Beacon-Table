@@ -15,13 +15,20 @@
 //      делаются из его эффектов (это же попутно даёт список того, что
 //      накладывает заклинание, — см. spell-import.js: mapFoundrySpellStatuses).
 //
-// ЧТО МЫ НАМЕРЕННО ТЕРЯЕМ. changes[] — движок модификации листа актёра
-// (mode ADD/OVERRIDE/UPGRADE/…) — не переносится в механику, а
-// РАСШИФРОВЫВАЕТСЯ В ТЕКСТ поля Mechanics: Beacon Table не считает КД,
-// спасброски и модификаторы (см. большой комментарий в domain/condition.go).
-// Так ничего не пропадает молча — ДМ видит «system.attributes.ac.bonus +2»
-// человеческими словами и применяет это за столом сам.
+// ЧТО ПРОИСХОДИТ С changes[]. Массив изменений листа актёра
+// (mode ADD/OVERRIDE/UPGRADE/…) разбирается на ДВЕ части:
+//
+//   * то, что ложится на наши цели (см. internal/domain/modifier.go:
+//     ModifierTargetLabels) — КД, скорость, максимум хитов, характеристики —
+//     становится настоящими Modifier'ами, и приложение их применяет;
+//   * всё остальное (бонусы к конкретным видам атак, владения, флаги
+//     системы dnd5e) РАСШИФРОВЫВАЕТСЯ В ТЕКСТ поля Mechanics — там оно
+//     видно ДМ человеческими словами, но применяет его за столом человек.
+//
+// Так ничего не пропадает молча и при этом в домен не заезжает модель
+// правил dnd5e: ключей у Foundry сотни, наших целей — дюжина.
 import { foundryStatusToSlug, conditionName, defaultIcon, normalizeSlug } from "./foundry-conditions.js";
+import { MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, PERIOD_NONE } from "./modifiers.js";
 
 // CHANGE_MODE_RU — режимы ActiveEffect.changes[].mode из Foundry
 // (CONST.ACTIVE_EFFECT_MODES): 0 CUSTOM, 1 MULTIPLY, 2 ADD, 3 DOWNGRADE,
@@ -61,6 +68,57 @@ const CHANGE_KEY_RU = {
 function ruKey(key) {
   const k = String(key || "").trim();
   return Object.prototype.hasOwnProperty.call(CHANGE_KEY_RU, k) ? CHANGE_KEY_RU[k] : k;
+}
+
+// CHANGE_KEY_TARGET — ключи dnd5e, которые ложатся на НАШИ цели (см.
+// internal/domain/modifier.go). Только они превращаются в применяемые
+// Modifier'ы; остальные ключи уходят текстом в Mechanics (см. шапку файла).
+const CHANGE_KEY_TARGET = {
+  "system.attributes.ac.bonus": "ac",
+  "system.attributes.ac.value": "ac",
+  "system.attributes.ac.flat": "ac",
+  "system.attributes.movement.walk": "speed",
+  "system.attributes.hp.max": "hp.max",
+  "system.attributes.init.bonus": "initiative",
+  "system.abilities.str.value": "abilities.str",
+  "system.abilities.dex.value": "abilities.dex",
+  "system.abilities.con.value": "abilities.con",
+  "system.abilities.int.value": "abilities.int",
+  "system.abilities.wis.value": "abilities.wis",
+  "system.abilities.cha.value": "abilities.cha",
+};
+
+// CHANGE_MODE_TARGET — режимы Foundry (CONST.ACTIVE_EFFECT_MODES) в наши.
+// MULTIPLY (1) и CUSTOM (0) сознательно не поддерживаем: умножение — это
+// уже вычисление от базы, которое зависит от порядка и от того, что считать
+// базой, а CUSTOM у Foundry вообще означает «спроси систему правил». Такие
+// изменения остаются текстом в Mechanics.
+const CHANGE_MODE_TARGET = { 2: MODE_ADD, 5: MODE_SET, 4: MODE_MIN, 3: MODE_MAX };
+
+// changeToModifier — одно изменение Foundry в наш Modifier, либо null, если
+// оно на нашу модель не ложится (незнакомый ключ, неподдерживаемый режим,
+// значение-формула вроде "@abilities.dex.mod" — у нас нет её контекста).
+function changeToModifier(ch) {
+  const target = CHANGE_KEY_TARGET[String(ch.key || "").trim()];
+  const mode = CHANGE_MODE_TARGET[ch.mode];
+  if (!target || !mode) return null;
+  const value = String(ch.value ?? "").trim();
+  if (!/^[+-]?\d+$/.test(value)) return null;
+  return { target, mode, value, period: PERIOD_NONE, note: "" };
+}
+
+// mapFoundryChanges — разбор changes[] на применяемые модификаторы и остаток
+// текстом. Возвращает { modifiers, leftover } — вызывающий кладёт первое в
+// Condition.Modifiers, второе в Mechanics.
+export function mapFoundryChanges(changes) {
+  const modifiers = [];
+  const leftover = [];
+  for (const ch of Array.isArray(changes) ? changes : []) {
+    const mod = changeToModifier(ch);
+    if (mod) modifiers.push(mod);
+    else leftover.push(ch);
+  }
+  return { modifiers, leftover };
 }
 
 // describeChanges — changes[] одной строкой на изменение. Пустой массив даёт
@@ -126,6 +184,8 @@ export function mapFoundryEffect(effect) {
   const name = String(effect.name || effect.label || "").trim() || conditionName(slug) || "Без имени";
   const rounds = effectRounds(effect.duration);
   const img = String(effect.img || effect.icon || "").trim();
+  // changes[] — на две части: применяемое и остаток текстом (см. шапку).
+  const { modifiers, leftover } = mapFoundryChanges(effect.changes);
   return {
     name,
     slug,
@@ -140,7 +200,8 @@ export function mapFoundryEffect(effect) {
     levels: 0,
     defaultRounds: rounds,
     description: cleanDescription(effect.description),
-    mechanics: describeChanges(effect.changes),
+    modifiers,
+    mechanics: describeChanges(leftover),
     source: "Foundry VTT",
     tags: img ? ["импорт", "foundry:" + img.split("/").pop()] : ["импорт"],
   };

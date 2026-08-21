@@ -195,6 +195,14 @@ func snapshotStatus(slug string, cond *domain.Condition) domain.AppliedStatus {
 		// палитре; глиф при этом остаётся в снимке запасным вариантом — на
 		// случай, если картинка не загрузится.
 		st.ImageURL = cond.ImageURL
+		// Модификаторы копируются в метку, а не читаются из карточки по
+		// ссылке — см. domain.AppliedStatus.Modifiers: правка карточки
+		// посреди боя не должна задним числом менять цифры уже висящих
+		// меток. Копия слайса, а не разделяемая ссылка: карточка приходит из
+		// репозитория и может быть общим объектом кэша.
+		if len(cond.Modifiers) > 0 {
+			st.Modifiers = append([]domain.Modifier(nil), cond.Modifiers...)
+		}
 	}
 	return st
 }
@@ -273,6 +281,7 @@ func (r *Room) putStatus(tgt statusTarget, slug string, cond *domain.Condition, 
 		// или сменить глиф уже после того, как метка повисла.
 		snap := snapshotStatus(slug, cond)
 		st.Name, st.Icon, st.ImageURL, st.Color, st.Overlay = snap.Name, snap.Icon, snap.ImageURL, snap.Color, snap.Overlay
+		st.Modifiers = snap.Modifiers // повторное наложение освежает и цифры
 		st.Rounds = rounds
 		st.Hidden = hidden
 		if source != "" {
@@ -436,6 +445,77 @@ func (r *Room) tickStatuses(cmb *domain.Combatant) (changed bool, sceneID string
 	}
 	*list = kept
 	return true, sceneID
+}
+
+// ---- применение модификаторов (см. domain.Modifier) ----
+
+// effectiveStat — базовое число бойца плюс все ПОСТОЯННЫЕ модификаторы его
+// меток. Тонкий слой над чистой domain.ApplyModifiers: собрать список
+// модификаторов со всех висящих на бойце меток и отдать его туда.
+//
+// Считается на лету при каждой рассылке, а не хранится: метки приходят и
+// уходят, и второе поле «эффективный КД» рядом с базовым немедленно начало
+// бы врать (тот же принцип, что у порядка инициативы — он тоже всегда
+// считается заново, см. sortedCombatantIDs).
+func (r *Room) effectiveStat(cmb *domain.Combatant, base int, target string) int {
+	statuses := r.statusesOf(cmb)
+	if len(statuses) == 0 {
+		return base
+	}
+	mods := make([]domain.Modifier, 0, len(statuses))
+	for _, st := range statuses {
+		mods = append(mods, st.Modifiers...)
+	}
+	return domain.ApplyModifiers(base, target, mods)
+}
+
+// applyPeriodicModifiers — разовые изменения хитов в начале/конце хода
+// бойца: «горит — 1к6», «регенерация — +5», «яд — 3». Вызывается из
+// handleTurnStep и только в активном бою.
+//
+// Формула бросается НАСТОЯЩИМ роллером комнаты и уходит в общий лог
+// (relayRoll), как любой другой бросок за столом — иначе игроки видели бы,
+// что хиты просто уменьшились, без объяснения на сколько и почему. Знак
+// задаёт сама формула: «-1d6» — урон, «5» — лечение (см. dice.go: ведущий
+// минус формулой поддерживается).
+//
+// Итог применяется тем же путём, что и ручная правка HP в трекере (см.
+// handleSetCombatantHP): те же побочные эффекты — сброс спасбросков от
+// смерти при выходе в плюс, смерть монстра/NPC при нуле. Поэтому боец
+// может прямо здесь исчезнуть из трекера — вызывающий обязан это учитывать
+// (см. комментарий в handleTurnStep).
+func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
+	if cmb == nil || r.dice == nil {
+		return
+	}
+	statuses := r.statusesOf(cmb)
+	delta := 0
+	for _, st := range statuses {
+		for _, m := range st.Modifiers {
+			if m.Period != period || m.Target != domain.ModifierTargetHPCurrent {
+				continue
+			}
+			formula := normalizeDiceFormula(m.Value)
+			result, err := r.dice.Roll(formula)
+			if err != nil {
+				// Кривую формулу («1к6 огнём» с текстом внутри) молча
+				// пропускаем: карточку из-за неё ронять нечего, а ДМ увидит,
+				// что урон не идёт, и поправит значение в конструкторе.
+				continue
+			}
+			label := st.Name
+			if m.Note != "" {
+				label += " (" + m.Note + ")"
+			}
+			r.relayRoll(cmb.Name, formula, label, result)
+			delta += result.Total
+		}
+	}
+	if delta == 0 {
+		return
+	}
+	next := cmb.HPCurrent + delta
+	r.handleSetCombatantHP(cmb.ID, &next, nil)
 }
 
 // publicStatuses — версия списка меток для конкретной роли: не-ДМ не должен

@@ -5,15 +5,18 @@
 // h()/textInput/mdBlock-конструктор, тот же debounce-автосейв, тот же
 // read/edit-тумблер и «Клонировать» для карточек каталога «из коробки».
 //
-// «Умный бланк»: сервер (internal/domain/condition.go) правил не знает и
-// механику состояния НЕ применяет — поле «Механика» это текст для глаз ДМ,
-// а не движок (в отличие от ActiveEffect.changes в Foundry, см. комментарий
-// там же). Импорт — web/src/condition-import.js.
+// Два разных блока, которые легко перепутать: «Изменения» — то, что
+// приложение реально применяет числами (см. internal/domain/modifier.go и
+// modifier-editor.js), «Механика» — то, что в числа не ложится
+// (преимущество/помеха, автопровалы) и остаётся текстом для глаз ДМ.
+// Правил приложение по-прежнему не знает: список изменений составляет
+// человек или импорт (web/src/condition-import.js), а не вывод из описания.
 import { fetchMe, fetchCondition, createCondition, updateCondition, fetchConditions, uploadFile } from "../api.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { normalizeSlug, DEFAULT_ICONS } from "../foundry-conditions.js";
+import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
 
 // ==================== state ====================
 
@@ -29,6 +32,7 @@ function normalizeCondition(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
   c.tags = Array.isArray(c.tags) ? c.tags : [];
   c.riders = Array.isArray(c.riders) ? c.riders : [];
+  c.modifiers = Array.isArray(c.modifiers) ? c.modifiers : [];
   return c;
 }
 
@@ -182,12 +186,19 @@ function renderEditView(root) {
         ]),
       ]),
       glyphPicker(),
+      slugConflictWarning(),
       h("div", { class: "row" }, [
         field(
           "Slug",
           textInput(
             () => condition.slug,
-            (v) => (condition.slug = normalizeSlug(v)),
+            (v) => {
+              condition.slug = normalizeSlug(v);
+              // Перерисовка нужна ради предупреждения о дубле (см.
+              // slugConflictWarning) — поле при этом не теряет фокус, потому
+              // что renderApp пересобирает секцию целиком уже после ввода.
+              queueMicrotask(renderApp);
+            },
             { placeholder: "blinded" }
           ),
           "Машинный ключ состояния: по нему метка ссылается на карточку, по нему же сопоставляется импорт из Foundry (там это код вида blinded/prone/exhaustion). Латиница, цифры и дефис."
@@ -216,6 +227,17 @@ function renderEditView(root) {
     ])
   );
 
+  // ---- изменения, которые приложение реально применяет ----
+  root.appendChild(
+    h("div", { class: "section" }, [
+      h("h3", { text: "Изменения" }),
+      renderModifierEditor(condition.modifiers, scheduleSave, {
+        hint:
+          "Применяется, пока метка висит: постоянные — к КД/скорости/характеристикам в трекере и на листе персонажа, «в начале/конце хода» — разовым броском по текущим хитам (виден в общем логе). Преимущество, помеха и автопровалы сюда не ложатся — им место в «Механике» ниже.",
+      }),
+    ])
+  );
+
   root.appendChild(
     h("div", { class: "section" }, [
       h("h3", { text: "Механика" }),
@@ -238,6 +260,24 @@ function renderEditView(root) {
 
   root.appendChild(mdBlock("Описание", () => condition.description, (v) => (condition.description = v)));
   root.appendChild(importSection());
+}
+
+// slugConflictWarning — предупреждение «этот slug уже занят другой
+// карточкой». Дубль не ошибка для сервера (он просто берёт первую по
+// алфавиту, см. domain.Condition.Slug), но за столом это выглядит как
+// «состояние не работает»: метка вешается с чужими изменениями и чужим
+// именем. Проверяем по списку мира, загруженному при открытии карточки.
+function slugConflictWarning() {
+  const slug = (condition.slug || "").trim();
+  if (!slug) return null;
+  const others = allConditions.filter((c) => c.slug === slug && c.id !== condition.id);
+  if (others.length === 0) return null;
+  return h("p", {
+    class: "cond-note",
+    style: "color: var(--amber);",
+    text:
+      "Такой slug уже есть у карточки «" + others[0].name + "». Метка найдёт только одну из них — поменяй slug, иначе состояние будет вешаться с чужими изменениями.",
+  });
 }
 
 // glyphPicker — быстрый выбор глифа из того же набора, которым пользуется
@@ -381,6 +421,16 @@ function renderReadView(root) {
       ]),
     ])
   );
+
+  if (condition.modifiers.length) {
+    root.appendChild(h("div", { class: "ib-hr" }));
+    root.appendChild(
+      h("div", { class: "ib-block" }, [
+        h("h3", { class: "ib-section-title", text: "Изменения" }),
+        ...condition.modifiers.map((m) => h("div", { class: "ib-line", text: describeModifier(m) })),
+      ])
+    );
+  }
 
   if (condition.mechanics) {
     root.appendChild(h("div", { class: "ib-hr" }));
@@ -586,6 +636,8 @@ function currentId() {
     document.getElementById("loadingHint").textContent = "Не удалось загрузить состояние: " + err.message;
     return;
   }
+  ensureModifierEditorCSS();
+  await loadModifierTargets(); // справочник целей для таблицы «Изменения»
   // Список нужен только для выпадашки зависимых состояний — если он не
   // загрузился, карточка всё равно должна открыться.
   try {

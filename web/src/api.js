@@ -269,6 +269,13 @@ export async function deleteReference(id) {
 export async function fetchConditions() {
   return apiFetch("/api/conditions");
 }
+// fetchModifierTargets — закрытый список того, что модификатор умеет менять
+// (см. internal/domain/modifier.go: ModifierTargetLabels). Не содержимое
+// стола, а описание формата — нужен конструкторам состояний и предметов,
+// чтобы список целей не дублировался константой в JS.
+export async function fetchModifierTargets() {
+  return apiFetch("/api/modifier-targets");
+}
 export async function fetchCondition(id) {
   return apiFetch(`/api/conditions/${id}`);
 }

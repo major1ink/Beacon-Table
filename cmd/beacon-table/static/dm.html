@@ -405,6 +405,10 @@
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
        общий модуль, тут только отступ строки в карточке */
     .combat-row-statuses { padding-left: 40px; margin-top: 6px; }
+    /* КД: поле с базой + стрелка с эффективным значением, когда его меняют
+       состояния (см. web/src/combat-panel.js и domain.Modifier) */
+    .combat-ac-group { display: flex; align-items: center; gap: 4px; }
+    .combat-ac-eff { font-size: 11px; color: var(--amber); white-space: nowrap; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
     .combat-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; }
     /* Числа не влезали в узкие инпуты — во-первых, Chrome/Edge рисуют внутри
@@ -600,17 +604,19 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-DIynJCfX.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-BQXXM-FP.js">
+  <script type="module" crossorigin src="/assets/dm-JI8GD5vz.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BC-wWyIL.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-3nongrBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-CTl1ZZIY.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-BiSBilsF.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-CfA1zhUA.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-DSktftUm.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-B9r1R_6h.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BCMn8RXc.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-DbWfriwK.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CEyfkVW5.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-D4FZCO_d.js">
-  <link rel="modulepreload" crossorigin href="/assets/toolbar-DSPA7UN6.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-Y5M2kYl9.js">
+  <link rel="modulepreload" crossorigin href="/assets/toolbar-C5Zzauv9.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-Yla3M6Gc.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>

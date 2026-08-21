@@ -126,6 +126,10 @@ export function initCombatPanel({ send, els }) {
       acInput.type = "number";
       acInput.min = "0";
       acInput.className = "combat-ac";
+      // В поле — БАЗОВЫЙ КД (его ДМ и правит), а если состояния его меняют
+      // (см. domain.Modifier), сервер присылает ещё и acEffective —
+      // показываем разницу подписью рядом, а не подменяем число в поле,
+      // иначе правка затирала бы базу результатом.
       acInput.title = "Класс доспеха";
       acInput.value = cmb.ac ?? 0;
       acInput.onchange = () => {
@@ -164,9 +168,22 @@ export function initCombatPanel({ send, els }) {
       hpGroup.className = "combat-hp-group";
       hpGroup.append(hpCurInput, hpSep, hpMaxInput);
 
+      // acWrap — поле КД плюс, если состояния его меняют, стрелка с
+      // эффективным значением («14 → 12»).
+      const acWrap = document.createElement("div");
+      acWrap.className = "combat-ac-group";
+      acWrap.appendChild(acInput);
+      if (cmb.acEffective !== undefined && cmb.acEffective !== cmb.ac) {
+        const eff = document.createElement("span");
+        eff.className = "combat-ac-eff";
+        eff.textContent = "→ " + cmb.acEffective;
+        eff.title = "КД с учётом наложенных состояний";
+        acWrap.appendChild(eff);
+      }
+
       const stats = document.createElement("div");
       stats.className = "combat-row-stats";
-      stats.append(stat("Иниц.", initInput), stat("КД", acInput), stat("HP", hpGroup));
+      stats.append(stat("Иниц.", initInput), stat("КД", acWrap), stat("HP", hpGroup));
 
       row.append(top, stats);
 

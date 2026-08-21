@@ -833,6 +833,18 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	name = r.uniqueCombatantName(name)
 
 	mod := abilityMod(dexScore)
+	// Модификаторы инициативы от состояний, УЖЕ висящих на токене (ДМ мог
+	// пометить монстра до того, как бросил инициативу) — см.
+	// domain.ModifierTargetInitiative. Задним числом уже брошенную
+	// инициативу ничто не пересчитывает: это разовый бросок, а не
+	// производное число.
+	if t, _ := r.findToken(tokenID); t != nil {
+		mods := make([]domain.Modifier, 0, len(t.Statuses))
+		for _, st := range t.Statuses {
+			mods = append(mods, st.Modifiers...)
+		}
+		mod = domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
+	}
 	formula := fmt.Sprintf("1d20%+d", mod)
 	initiative := 0.0
 	if result, err := r.dice.Roll(formula); err == nil {
@@ -1191,13 +1203,30 @@ func (r *Room) handleTurnStep(dir int) {
 			r.combat.Round--
 		}
 	}
-	r.combat.CurrentID = order[idx]
-	// Ход перешёл к бойцу — отсчитываем длительности его меток состояний
-	// (см. room_statuses.go: tickStatuses — тикаем только вперёд и только в
-	// активном бою). Рассылка сцены нужна лишь если метки лежали на токене и
-	// действительно поменялись — combat_state уходит всё равно, ниже.
+	// Периодические модификаторы «в конце хода» — тому, чей ход только что
+	// закончился, ДО смены текущего бойца (см. room_statuses.go:
+	// applyPeriodicModifiers). Только вперёд и только в активном бою: шаг
+	// назад — отмена ошибки ДМ, а не течение времени.
 	if r.combat.Active && dir > 0 {
+		r.applyPeriodicModifiers(r.combat.Combatants[r.combat.CurrentID], domain.ModifierPeriodTurnEnd)
+	}
+
+	r.combat.CurrentID = order[idx]
+
+	if r.combat.Active && dir > 0 {
+		// Ход перешёл к бойцу: сначала разовый урон/лечение «в начале хода»
+		// (горение, регенерация, яд), потом отсчёт длительностей — иначе
+		// метка с последним оставшимся раундом успела бы истечь до того, как
+		// сработать в свой последний ход.
+		//
+		// applyPeriodicModifiers может УБИТЬ бойца (тот же путь, что и
+		// ручная правка HP в трекере) — тогда он исчезает из r.combat и
+		// killMonsterCombatant сам переставляет CurrentID; поэтому дальше
+		// работаем по свежему чтению из map, а не по сохранённому указателю.
+		r.applyPeriodicModifiers(r.combat.Combatants[r.combat.CurrentID], domain.ModifierPeriodTurnStart)
 		if changed, sceneID := r.tickStatuses(r.combat.Combatants[r.combat.CurrentID]); changed {
+			// Рассылка сцены нужна лишь если метки лежали на токене и
+			// действительно поменялись — combat_state уходит всё равно, ниже.
 			if sceneID != "" {
 				r.markDirty(sceneID)
 				r.broadcastAll()
@@ -1277,10 +1306,16 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		}
 		if isDM {
 			entry["ac"] = cmb.AC
+			// acEffective — КД с учётом постоянных модификаторов висящих
+			// меток (см. domain.Modifier, room_statuses.go: effectiveStat).
+			// Отдельным полем рядом с базовым, а не вместо него: в трекере
+			// ДМ правит именно базу, а видеть должен оба числа («14 → 12»).
+			entry["acEffective"] = r.effectiveStat(cmb, cmb.AC, domain.ModifierTargetAC)
 		}
 		if isDM || r.combat.ShowHP {
 			entry["hpCurrent"] = cmb.HPCurrent
 			entry["hpMax"] = cmb.HPMax
+			entry["hpMaxEffective"] = r.effectiveStat(cmb, cmb.HPMax, domain.ModifierTargetHPMax)
 			entry["deathSaveSuccess"] = cmb.DeathSaveSuccess
 			entry["deathSaveFail"] = cmb.DeathSaveFail
 		}

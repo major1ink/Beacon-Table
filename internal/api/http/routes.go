@@ -110,6 +110,8 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/references/{id}", a.handleReferenceUpdate)
 	mux.HandleFunc("DELETE /api/references/{id}", a.handleReferenceDelete)
 
+	mux.HandleFunc("GET /api/modifier-targets", a.handleModifierTargets)
+
 	mux.HandleFunc("GET /api/conditions", a.handleConditionsList)
 	mux.HandleFunc("POST /api/conditions", a.handleConditionCreate)
 	mux.HandleFunc("GET /api/conditions/{id}", a.handleConditionGet)

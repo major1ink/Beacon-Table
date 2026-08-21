@@ -18,6 +18,7 @@
 // себя по свежим данным (см. refreshOpenPalette).
 import { fetchConditions } from "./api.js";
 import { icon } from "./icons.js";
+import { describeModifier, loadModifierTargets } from "./modifier-editor.js";
 
 // ---- CSS ----
 // Стили инжектятся из JS, а не лежат в dm.html, потому что палитра нужна
@@ -242,7 +243,7 @@ export async function openStatusPalette({ x, y, target, send, statusesFor, title
   openPalette = { el, target, send, statusesFor, title, detailSlug: "", filter: "" };
   positionPalette(el, x, y);
   el.textContent = "Загрузка…";
-  await loadConditions();
+  await Promise.all([loadConditions(), loadModifierTargets()]);
   if (!openPalette || openPalette.el !== el) return; // успели закрыть, пока грузились
   renderPalette(openPalette);
   positionPalette(el, x, y);
@@ -381,6 +382,15 @@ function detailBlock(cond, applied, state) {
   h.textContent = cond.name;
   box.appendChild(h);
 
+  // Сначала то, что приложение реально применяет (см. domain.Modifier), —
+  // ДМ должен видеть, что метка не просто значок; потом текстовая механика
+  // (преимущество/помеха и прочее неарифметическое).
+  for (const m of cond.modifiers || []) {
+    const line = document.createElement("p");
+    line.textContent = "▸ " + describeModifier(m);
+    line.style.color = "var(--text)";
+    box.appendChild(line);
+  }
   if (cond.mechanics) {
     const p = document.createElement("p");
     p.textContent = cond.mechanics;

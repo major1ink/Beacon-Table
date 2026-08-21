@@ -104,6 +104,7 @@ func sanitizeCondition(c domain.Condition) domain.Condition {
 	c.Icon = clampRunes(strings.TrimSpace(c.Icon), 8)
 	c.Description = clampRunes(c.Description, maxConditionLongText)
 	c.Mechanics = clampRunes(c.Mechanics, maxConditionText)
+	c.Modifiers = sanitizeModifiers(c.Modifiers)
 	if c.Levels < 0 {
 		c.Levels = 0
 	}

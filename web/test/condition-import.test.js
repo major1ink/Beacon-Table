@@ -61,7 +61,7 @@ test("эффект внутри предмета даёт карточку со�
   assert.ok(cards[0].tags.includes("foundry:paralysis.svg"));
 });
 
-test("одиночный ActiveEffect: overlay, changes[] в текст, коды ядра Foundry", () => {
+test("одиночный ActiveEffect: overlay, changes[] в модификаторы, коды ядра Foundry", () => {
   const raw = {
     name: "Blinded",
     img: "icons/svg/blind.svg",
@@ -79,9 +79,13 @@ test("одиночный ActiveEffect: overlay, changes[] в текст, код�
   assert.equal(card.defaultRounds, 3);
   assert.equal(card.overlay, true);
   assert.equal(card.description, "<p>Не видит.</p>", "пустая обёртка вычищена");
-  // changes[] НЕ применяются как механика (см. domain/condition.go) — они
-  // расшифровываются словами.
-  assert.equal(card.mechanics, "КД: прибавить -2; скорость: заменить на 0");
+  // Оба изменения ложатся на наши цели, значит становятся применяемыми
+  // модификаторами, а не текстом (см. condition-import.js: mapFoundryChanges).
+  assert.deepEqual(
+    card.modifiers.map((x) => `${x.target}/${x.mode}/${x.value}`),
+    ["ac/add/-2", "speed/set/0"]
+  );
+  assert.equal(card.mechanics, "", "текстового остатка тут быть не должно — всё разобрано в числа");
 });
 
 test("массив документов: дубли по slug схлопываются", () => {
