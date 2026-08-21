@@ -14,6 +14,7 @@ import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
+import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
 
 // ==================== state ====================
 
@@ -28,6 +29,7 @@ let editMode = false;
 function normalizeItem(raw) {
   const it = raw && typeof raw === "object" ? raw : {};
   it.tags = Array.isArray(it.tags) ? it.tags : [];
+  it.modifiers = Array.isArray(it.modifiers) ? it.modifiers : [];
   return it;
 }
 
@@ -166,6 +168,17 @@ function renderEditView(root) {
     ])
   );
 
+  // ---- изменения, которые даёт НАДЕТЫЙ предмет (см. domain.Modifier) ----
+  root.appendChild(
+    h("div", { class: "section" }, [
+      h("h3", { text: "Изменения, пока предмет надет" }),
+      renderModifierEditor(item.modifiers, scheduleSave, {
+        hint:
+          "Лист персонажа применяет это, когда предмет отмечен «надет» в инвентаре: КД, скорость, характеристики. Поле «Класс доспеха» выше — текстовая формулировка целиком («14 + Лов (макс 2)»), а тут — та её часть, которую приложение умеет посчитать; заполнять оба не обязательно.",
+      }),
+    ])
+  );
+
   // ---- описание ----
   root.appendChild(mdBlock("Описание", () => item.description, (v) => (item.description = v)));
 
@@ -215,6 +228,7 @@ function readInfoGrid() {
   add("Класс доспеха:", item.armorClass);
   add("Свойства:", item.properties);
   add("Заряды:", item.charges);
+  for (const m of item.modifiers) add("Пока надет:", describeModifier(m));
   return wrap;
 }
 
@@ -456,6 +470,8 @@ function currentId() {
     document.getElementById("loadingHint").textContent = "Не указан id предмета (?id=...).";
     return;
   }
+  ensureModifierEditorCSS();
+  await loadModifierTargets(); // справочник целей для таблицы «Изменения»
   try {
     item = normalizeItem(await fetchItem(itemId));
   } catch (err) {

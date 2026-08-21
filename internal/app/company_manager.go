@@ -23,6 +23,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/repository/conditionfile"
 	"beacon-table/internal/repository/itemfile"
 	"beacon-table/internal/repository/localfs"
 	"beacon-table/internal/repository/monsterfile"
@@ -49,6 +50,7 @@ type ActiveWorld struct {
 	Spells     service.SpellService
 	Items      service.ItemService
 	References service.ReferenceService
+	Conditions service.ConditionService
 	Notes      service.NoteService
 	Playlists  service.PlaylistService
 	Assets     service.AssetService
@@ -238,6 +240,15 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		referencefile.NewStore(filepath.Join(dataRoot, "references")),
 		referencefile.NewSystemStore(m.systemFS, "systemdata/references/"+company.System),
 	)
+	// conditionRepo — библиотека состояний, тот же каталог «из коробки» +
+	// пользовательская библиотека, что и у остальных четырёх. Подпапка
+	// systemdata/conditions/<system> — единственное место, где реализовано
+	// требование «статусы делятся по игровым системам»: у мира на D&D 2014
+	// своё истощение, у мира на 2024 — своё.
+	conditionRepo := conditionfile.NewCatalog(
+		conditionfile.NewStore(filepath.Join(dataRoot, "conditions")),
+		conditionfile.NewSystemStore(m.systemFS, "systemdata/conditions/"+company.System),
+	)
 	assetRepo := localfs.NewStore(uploadsRoot, uploadsURL)
 	if err := assetRepo.EnsureDirs(); err != nil {
 		return err
@@ -246,7 +257,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	characterRepo := sqlite.NewCharacterStore(m.db, company.ID, company.System)
 	playlistRepo := sqlite.NewPlaylistStore(m.db, company.ID)
 
-	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo)
+	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo)
 	if err != nil {
 		return err
 	}
@@ -265,6 +276,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Spells:     service.NewSpellService(spellRepo),
 		Items:      service.NewItemService(itemRepo),
 		References: service.NewReferenceService(referenceRepo),
+		Conditions: service.NewConditionService(conditionRepo),
 		Notes:      service.NewNoteService(noteRepo),
 		Playlists:  service.NewPlaylistService(playlistRepo),
 		Assets:     service.NewAssetService(assetRepo),

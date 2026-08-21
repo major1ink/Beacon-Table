@@ -59,6 +59,66 @@ type Token struct {
 	// (не только наличие тут записей) регулируется общим тумблером стола
 	// CombatState.LootingEnabled — см. там же.
 	Loot []InventoryEntry `json:"loot,omitempty"`
+	// Statuses — наложенные состояния этого конкретного токена (ослепление,
+	// испуг, истощение — см. AppliedStatus и domain.Condition). Живут именно
+	// на токене, а не на карточке монстра/персонажа: стая из пяти гоблинов
+	// — пять независимых наборов меток, как и пять независимых Loot выше.
+	// Токен — ИСТОЧНИК ИСТИНЫ для своего инстанса: у бойца инициативы,
+	// связанного с этим токеном (Combatant.TokenID), собственных меток нет,
+	// трекер читает и правит эти (см. service.Room.statusesOf) — тем же
+	// принципом сквозной связи токен↔боец, что уже работает у Token.Dead.
+	Statuses []AppliedStatus `json:"statuses,omitempty"`
+}
+
+// AppliedStatus — ОДНА наложенная метка состояния на токене (Token.Statuses)
+// или на бойце инициативы без токена (Combatant.Statuses). Аналог документа
+// ActiveEffect в Foundry, но без движка changes (почему — см. большой
+// комментарий в domain/condition.go).
+//
+// Slug — ссылка на карточку справочника (Condition.Slug), а Name/Icon/Color —
+// СНИМОК её полей на момент наложения: тот же приём, что у MonsterSpellRef,
+// InventoryEntry и NoteMarker.Label — удаление или правка карточки не
+// оставляет висящую на токене метку безымянной. Снимок делает сервер, не
+// клиент (см. service.Room.handleApplyStatus) — цифры и подписи от
+// недоверенного клиента мы не берём, как и у "hub_add_item"/"add_combatant".
+type AppliedStatus struct {
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+	// Icon — глиф-эмодзи (см. Condition.Icon), ImageURL — свой арт вместо
+	// него, если он у карточки задан. Клиент рисует картинку, когда она
+	// есть, и глиф в остальных случаях (в том числе если картинка не
+	// загрузилась) — поэтому снимок несёт оба поля, а не одно из них.
+	Icon     string `json:"icon,omitempty"`
+	ImageURL string `json:"imageUrl,omitempty"`
+	Color    string `json:"color,omitempty"`
+	// Overlay — снимок Condition.Overlay: рисовать во весь токен, а не
+	// значком по кромке (см. web/src/vtt/layers/tokens.js).
+	Overlay bool `json:"overlay,omitempty"`
+	// Level — текущий уровень многоуровневого состояния (истощение 1-6), 0 у
+	// обычного тумблера. Потолок — Condition.Levels, его проверяет сервер.
+	Level int `json:"level,omitempty"`
+	// Rounds — сколько раундов метке ещё висеть, 0 — бессрочно (пока ДМ не
+	// снимет). Тикает ТОЛЬКО в активном бою и только в начале хода того, на
+	// ком метка висит (см. service.Room.tickStatuses) — это семантика 5e
+	// «до конца твоего следующего хода», а не foundry-шный счётчик от раунда
+	// наложения.
+	Rounds int `json:"rounds,omitempty"`
+	// Source — откуда прилетело («Заклинание «Удержание личности»»), аналог
+	// ActiveEffect.origin в Foundry, но простой подписью, а не ссылкой на
+	// документ: она нужна ДМ глазами, а не коду.
+	Source string `json:"source,omitempty"`
+	// Hidden — метку видит только ДМ. Как и Token.Hidden, это НЕ клиентское
+	// сокрытие стилями: сервер физически вырезает такие метки из payload
+	// не-ДМ клиентам (см. service.Room.sceneFor/combatPayload).
+	Hidden bool `json:"hidden,omitempty"`
+	// Modifiers — СНИМОК Condition.Modifiers на момент наложения (см.
+	// domain.Modifier), тем же приёмом, что имя и иконка выше. Снимок, а не
+	// ссылка, здесь особенно важен: правка карточки состояния посреди боя не
+	// должна задним числом менять цифры на уже висящих метках — иначе ДМ,
+	// поправивший «горит» с 1к6 на 2к6, незаметно для себя переписал бы
+	// урон, который уже идёт по всем горящим на карте. Освежается при
+	// повторном наложении того же состояния (см. service.Room.putStatus).
+	Modifiers []Modifier `json:"modifiers,omitempty"`
 }
 
 // TokenLight — настройки источника света у токена (факел/фонарь/костёр — тот

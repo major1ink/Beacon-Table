@@ -45,6 +45,17 @@ type Combatant struct {
 	Seq              int64 `json:"seq,omitempty"`
 	DeathSaveSuccess int   `json:"deathSaveSuccess,omitempty"` // 0-3
 	DeathSaveFail    int   `json:"deathSaveFail,omitempty"`    // 0-3
+	// Statuses — наложенные состояния бойца (см. domain.AppliedStatus),
+	// НО только для бойца БЕЗ токена на сцене: добавленного из бестиария/
+	// списка персонажей через «+ Добавить», которого ДМ ещё не вытащил на
+	// карту. Как только у бойца есть TokenID, источником истины становится
+	// Token.Statuses (см. комментарий там), а это поле не используется —
+	// сервер всегда ходит через одну точку, service.Room.statusesOf, и
+	// клиенту в combat_state отдаёт уже разрешённый набор. Два поля вместо
+	// одного — потому что метки должны переживать и удаление токена с карты
+	// (боец остаётся в инициативе), и жизнь токена вне боя (метку можно
+	// повесить, вообще не открывая трекер).
+	Statuses []AppliedStatus `json:"statuses,omitempty"`
 }
 
 // CombatState — трекер инициативы всего стола (см. README/план: не

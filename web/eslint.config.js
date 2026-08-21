@@ -19,8 +19,9 @@ export default [
     },
   },
   {
-    // vite.config.js и тесты (node:test) исполняются в Node, а не в браузере.
-    files: ["vite.config.js", "test/**/*.js"],
+    // vite.config.js, тесты (node:test) и служебные скрипты (scripts/)
+    // исполняются в Node, а не в браузере.
+    files: ["vite.config.js", "test/**/*.js", "scripts/**/*.js", "scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         ...globals.node,

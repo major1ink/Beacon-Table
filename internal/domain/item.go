@@ -53,6 +53,17 @@ type Item struct {
 	Properties string `json:"properties,omitempty"` // "лёгкое, фехтовальное" и т.п. свойства оружия/доспеха
 	Charges    string `json:"charges,omitempty"`    // "3 заряда, восстанавливает 1к3 на рассвете"
 
+	// Modifiers — что предмет даёт в числах, ПОКА НАДЕТ (см. domain.Modifier
+	// и InventoryEntry.Equipped): «КД 14» у кольчуги, «+2 к КД» у щита,
+	// «+2 к Силе» у пояса великанов. Применяет их лист персонажа (см.
+	// web/src/pages/character-sheet.js) — он и так считает производные числа
+	// по формулам PHB, это ещё одно слагаемое в том же расчёте.
+	//
+	// ArmorClass выше при этом остаётся: там текстовая формулировка целиком
+	// («14 + Лов (макс 2)»), которую человек читает, а здесь — та её часть,
+	// которую приложение умеет посчитать. Заполнять оба поля не обязательно.
+	Modifiers []Modifier `json:"modifiers,omitempty"`
+
 	Description string   `json:"description,omitempty"` // markdown/HTML — рендерится тем же marked, что и заметки ДМ (см. web/src/notes/markdown.js)
 	Tags        []string `json:"tags,omitempty"`
 

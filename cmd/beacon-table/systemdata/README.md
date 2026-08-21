@@ -1,21 +1,22 @@
 # Каталог "из коробки"
 
-Монстры, заклинания, предметы и справочник отсюда зашиваются в бинарник на
+Монстры, заклинания, предметы, справочник и состояния отсюда зашиваются в бинарник на
 этапе компиляции (`//go:embed systemdata` в [`main.go`](../main.go)) и
 попадают в общий список рядом с пользовательской библиотекой мира
 (`data/bestiary/` — или `data/companies/<id>/bestiary/` для не-легаси миров,
-аналогично `spells/`/`items/`/`references/`, см.
+аналогично `spells/`/`items/`/`references/`/`conditions/`, см.
 `internal/app.CompanyManager.rootsFor`) как карточки только для чтения — их
 нельзя редактировать или удалять через приложение, только клонировать в свою
 библиотеку и редактировать уже копию. См.
 `internal/repository/monsterfile/system.go`,
 `internal/repository/spellfile/system.go`,
-`internal/repository/itemfile/system.go` и
-`internal/repository/referencefile/system.go`.
+`internal/repository/itemfile/system.go`,
+`internal/repository/referencefile/system.go` и
+`internal/repository/conditionfile/system.go`.
 
 ## Подпапка на систему
 
-Внутри `bestiary/`, `spells/`, `items/`, `references/` — по одной подпапке на
+Внутри `bestiary/`, `spells/`, `items/`, `references/`, `conditions/` — по одной подпапке на
 каждую поддерживаемую систему (`internal/domain/company.go`:
 `SystemDnD5e2014` = `"dnd5e-2014"`, `SystemDnD5e2024` = `"dnd5e-2024"`). Какой
 мир (компания) запущен — такая подпапка и подключается как каталог "из
@@ -28,16 +29,32 @@
 ## Формат файла
 
 Один файл — одна карточка, JSON с теми же полями, что и у обычной карточки
-(`internal/domain/monster.go` / `spell.go` / `item.go` / `reference.go`),
-только без `"id"` и `"updatedAt"` — оба поля сервер проставляет сам при
-чтении (id — из имени файла, updatedAt здесь не имеет смысла, у карточек "из
-коробки" его нет в ответе API).
+(`internal/domain/monster.go` / `spell.go` / `item.go` / `reference.go` /
+`condition.go`), только без `"id"` и `"updatedAt"` — оба поля сервер
+проставляет сам при чтении (id — из имени файла, updatedAt здесь не имеет
+смысла, у карточек "из коробки" его нет в ответе API).
 
 - `systemdata/bestiary/<system>/<slug>.json` → id монстра будет `sys-<slug>`
 - `systemdata/spells/<system>/<slug>.json` → id заклинания будет `sys-<slug>`
 - `systemdata/items/<system>/<slug>.json` → id предмета будет `sys-<slug>`
 - `systemdata/references/<system>/<slug>.json` → id записи справочника
   (класс/архетип/происхождение/вид/черта — см. поле `"kind"`) будет `sys-<slug>`
+- `systemdata/conditions/<system>/<slug>.json` → id состояния будет `sys-<slug>`
+
+У состояния, кроме описания, бывает `"modifiers"` — то, что приложение
+применяет числами (см. `internal/domain/modifier.go`): `{"target":
+"speed", "mode": "set", "value": "0"}` у схваченности, `{"target":
+"hp.current", "mode": "add", "value": "-1к6", "period": "turn-start"}` у
+горения. Всё, что в числа не ложится (преимущество, помеха, автопровалы),
+остаётся текстом в `"mechanics"`.
+
+У состояний имя файла ОБЯЗАНО совпадать с полем `"slug"` внутри
+(`prone.json` ↔ `"slug": "prone"`) — это не требование кода, а соглашение
+каталога: slug — машинный ключ, по которому наложенная метка и импорт из
+Foundry находят карточку (см. `internal/domain/condition.go`), и разъехавшись
+с именем файла он превращается в источник путаницы. Сами slug'и взяты из
+кодов системы `dnd5e` в Foundry (`blinded`, `prone`, `exhaustion`…), чтобы
+импортированные эффекты сопоставлялись автоматически.
 
 `<slug>` — латиницей, без пробелов (`goblin.json`, не `Гоблин.json`) — это
 техническое имя файла, не то, что видит игрок (то, что видит игрок — поле

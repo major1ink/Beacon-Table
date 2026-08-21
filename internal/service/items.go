@@ -67,6 +67,9 @@ func sanitizeItem(it domain.Item) domain.Item {
 	it.Properties = clampRunes(it.Properties, maxItemLongText)
 	it.Charges = clampRunes(it.Charges, maxItemShortText)
 	it.Description = clampRunes(it.Description, maxItemLongText)
+	// Modifiers — что предмет даёт, пока надет (см. domain.Modifier); тот же
+	// санитайзер, что и у карточки состояния.
+	it.Modifiers = sanitizeModifiers(it.Modifiers)
 	if it.WeightLb < 0 {
 		it.WeightLb = 0
 	}

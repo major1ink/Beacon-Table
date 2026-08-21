@@ -11,6 +11,7 @@
 //   - monsterfile — Monster поверх файлов .json, по одному на монстра
 //   - spellfile — Spell поверх файлов .json, по одному на заклинание
 //   - itemfile — Item поверх файлов .json, по одному на предмет
+//   - conditionfile — Condition поверх файлов .json, по одному на состояние
 //   - localfs   — Asset поверх файловой системы (загруженные карты/токены/аудио)
 //   - memory    — in-memory реализации для unit-тестов service-слоя
 package repository
@@ -201,6 +202,20 @@ type ReferenceRepository interface {
 	Create(ctx context.Context, id string, ref *domain.Reference) error
 	// Update возвращает false, если записи с таким id нет.
 	Update(ctx context.Context, id string, ref *domain.Reference) (bool, error)
+	Delete(ctx context.Context, id string) error
+}
+
+// ConditionRepository — библиотека карточек состояний (ослепление/испуг/
+// истощение и самодельные метки ДМ — см. domain.Condition), общая на весь
+// стол, файл-на-состояние (см. internal/repository/conditionfile) — тот же
+// принцип, что и ReferenceRepository: не привязана к ДМ, игрок тоже читает
+// её (чтобы понимать, что на нём висит) и может завести своё состояние.
+type ConditionRepository interface {
+	List(ctx context.Context) ([]*domain.Condition, error)
+	Get(ctx context.Context, id string) (*domain.Condition, error)
+	Create(ctx context.Context, id string, c *domain.Condition) error
+	// Update возвращает false, если карточки с таким id нет.
+	Update(ctx context.Context, id string, c *domain.Condition) (bool, error)
 	Delete(ctx context.Context, id string) error
 }
 

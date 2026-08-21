@@ -69,6 +69,11 @@ type Room struct {
 	// handleHubAddItem) — тем же принципом недоверия клиенту, что и у
 	// characters/monsters выше.
 	items repository.ItemRepository
+	// conditions — только для чтения, нужен, чтобы "apply_status" сам
+	// подтянул имя/иконку/цвет/уровни/зависимые состояния из карточки
+	// справочника (см. room_statuses.go: lookupCondition, snapshotStatus) —
+	// тем же принципом недоверия клиенту, что и items выше.
+	conditions repository.ConditionRepository
 
 	scenes         map[string]*domain.SceneState // все сцены комнаты, ключ — SceneState.ID
 	sceneOrder     []string                      // порядок сцен в переключателе DM
@@ -114,11 +119,11 @@ type Room struct {
 
 // NewRoom поднимает комнату из sceneRepo (все сцены с прошлого запуска,
 // каждая со своими стенами/туманом/токенами, плюс трекер инициативы и хаб
-// лута) и запускает её actor-горутину. characterRepo/monsterRepo/itemRepo —
-// см. Room.characters/Room.monsters/Room.items, только для чтения (кроме
-// точечных мутаций инвентаря персонажа при луте, см. handleHubTakeItem/
-// handleLootTakeItem).
-func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository) (*Room, error) {
+// лута) и запускает её actor-горутину. characterRepo/monsterRepo/itemRepo/
+// conditionRepo — см. Room.characters/Room.monsters/Room.items/
+// Room.conditions, только для чтения (кроме точечных мутаций инвентаря
+// персонажа при луте, см. handleHubTakeItem/handleLootTakeItem).
+func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository) (*Room, error) {
 	rs, err := sceneRepo.Load(context.Background())
 	if err != nil {
 		return nil, err
@@ -137,6 +142,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		characters:     characterRepo,
 		monsters:       monsterRepo,
 		items:          itemRepo,
+		conditions:     conditionRepo,
 		scenes:         rs.Scenes,
 		sceneOrder:     rs.SceneOrder,
 		currentSceneID: rs.CurrentSceneID,
@@ -331,6 +337,28 @@ func (r *Room) run() {
 			case "loot_take_item":
 				r.handleLootTakeItem(im.from, im.msg)
 				continue
+
+			// ---- наложенные состояния (см. domain.AppliedStatus,
+			// room_statuses.go) — своя ветка мутаций, потому что цель команды
+			// может лежать и в сцене (Token.Statuses), и в трекере
+			// (Combatant.Statuses): куда именно писать и что рассылать,
+			// решает resolveStatusTarget/commitStatuses, а не общий
+			// applyMutation+broadcastAll внизу.
+			case "apply_status":
+				r.handleApplyStatus(im.msg)
+				continue
+			case "remove_status":
+				r.handleRemoveStatus(im.msg)
+				continue
+			case "set_status_level":
+				r.handleSetStatusLevel(im.msg)
+				continue
+			case "set_status_rounds":
+				r.handleSetStatusRounds(im.msg)
+				continue
+			case "clear_statuses":
+				r.handleClearStatuses(im.msg)
+				continue
 			}
 			r.applyMutation(im.msg)
 			r.broadcastAll()
@@ -421,9 +449,18 @@ func (r *Room) Shutdown() {
 // сцены в зависимости от того, DM он или зритель.
 func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 	tokens := make(map[string]*domain.Token)
+	isDM := c.Role() == domain.RoleDM
 	for id, t := range r.scene.Tokens {
-		if c.Role() == domain.RoleDM || !t.Hidden {
+		switch {
+		case isDM:
 			tokens[id] = t
+		case t.Hidden:
+			// токен целиком вырезан из payload — как и раньше
+		default:
+			// Скрытые метки состояний (AppliedStatus.Hidden) вырезаются тем
+			// же принципом, что и hidden-токен: физически из payload, а не
+			// стилями на клиенте (см. room_statuses.go: publicToken).
+			tokens[id] = publicToken(t)
 		}
 	}
 	// noteMarkers — личный инструмент ДМ (см. domain.NoteMarker), никогда не
@@ -431,7 +468,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 	// HiddenAsset, а полная фильтрация, тем же принципом, что и
 	// broadcastSceneList для списка сцен.
 	noteMarkers := map[string]*domain.NoteMarker{}
-	if c.Role() == domain.RoleDM {
+	if isDM {
 		noteMarkers = r.scene.NoteMarkers
 	}
 	return &domain.PublicScene{
@@ -796,6 +833,18 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	name = r.uniqueCombatantName(name)
 
 	mod := abilityMod(dexScore)
+	// Модификаторы инициативы от состояний, УЖЕ висящих на токене (ДМ мог
+	// пометить монстра до того, как бросил инициативу) — см.
+	// domain.ModifierTargetInitiative. Задним числом уже брошенную
+	// инициативу ничто не пересчитывает: это разовый бросок, а не
+	// производное число.
+	if t, _ := r.findToken(tokenID); t != nil {
+		mods := make([]domain.Modifier, 0, len(t.Statuses))
+		for _, st := range t.Statuses {
+			mods = append(mods, st.Modifiers...)
+		}
+		mod = domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
+	}
 	formula := fmt.Sprintf("1d20%+d", mod)
 	initiative := 0.0
 	if result, err := r.dice.Roll(formula); err == nil {
@@ -1097,7 +1146,13 @@ func (r *Room) handlePlaceCombatantToken(id string, x, y float64) {
 		ID: tokenID, X: x, Y: y, Size: gridSize / 2,
 		Label: cmb.Name, Image: cmb.Image, Color: cmb.Color,
 		OwnerID: cmb.OwnerID, CharacterID: cmb.CharacterID, MonsterID: cmb.MonsterID,
+		// Метки состояний, повешенные на бойца ДО того, как он попал на
+		// карту, переезжают на токен — с этого момента источник истины он
+		// (см. room_statuses.go), собственный список бойца обнуляем, чтобы
+		// не осталось второй копии.
+		Statuses: cmb.Statuses,
 	}
+	cmb.Statuses = nil
 	cmb.TokenID = tokenID
 	r.markDirty(r.currentSceneID)
 	r.markCombatDirty()
@@ -1148,7 +1203,36 @@ func (r *Room) handleTurnStep(dir int) {
 			r.combat.Round--
 		}
 	}
+	// Периодические модификаторы «в конце хода» — тому, чей ход только что
+	// закончился, ДО смены текущего бойца (см. room_statuses.go:
+	// applyPeriodicModifiers). Только вперёд и только в активном бою: шаг
+	// назад — отмена ошибки ДМ, а не течение времени.
+	if r.combat.Active && dir > 0 {
+		r.applyPeriodicModifiers(r.combat.Combatants[r.combat.CurrentID], domain.ModifierPeriodTurnEnd)
+	}
+
 	r.combat.CurrentID = order[idx]
+
+	if r.combat.Active && dir > 0 {
+		// Ход перешёл к бойцу: сначала разовый урон/лечение «в начале хода»
+		// (горение, регенерация, яд), потом отсчёт длительностей — иначе
+		// метка с последним оставшимся раундом успела бы истечь до того, как
+		// сработать в свой последний ход.
+		//
+		// applyPeriodicModifiers может УБИТЬ бойца (тот же путь, что и
+		// ручная правка HP в трекере) — тогда он исчезает из r.combat и
+		// killMonsterCombatant сам переставляет CurrentID; поэтому дальше
+		// работаем по свежему чтению из map, а не по сохранённому указателю.
+		r.applyPeriodicModifiers(r.combat.Combatants[r.combat.CurrentID], domain.ModifierPeriodTurnStart)
+		if changed, sceneID := r.tickStatuses(r.combat.Combatants[r.combat.CurrentID]); changed {
+			// Рассылка сцены нужна лишь если метки лежали на токене и
+			// действительно поменялись — combat_state уходит всё равно, ниже.
+			if sceneID != "" {
+				r.markDirty(sceneID)
+				r.broadcastAll()
+			}
+		}
+	}
 	r.markCombatDirty()
 	r.broadcastCombat()
 }
@@ -1214,13 +1298,24 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 			"id": cmb.ID, "tokenId": cmb.TokenID, "name": cmb.Name, "image": cmb.Image,
 			"color": cmb.Color, "ownerId": cmb.OwnerID, "characterId": cmb.CharacterID,
 			"monsterId": cmb.MonsterID, "initiative": cmb.Initiative,
+			// statuses — уже разрешённый набор меток (с токена бойца, если
+			// токен есть, см. room_statuses.go: statusesOf) и уже без
+			// скрытых, если клиент не ДМ. Не секрет сам по себе, в отличие
+			// от AC/HP ниже: игроки должны видеть, что вожак напуган.
+			"statuses": publicStatuses(r.statusesOf(cmb), isDM),
 		}
 		if isDM {
 			entry["ac"] = cmb.AC
+			// acEffective — КД с учётом постоянных модификаторов висящих
+			// меток (см. domain.Modifier, room_statuses.go: effectiveStat).
+			// Отдельным полем рядом с базовым, а не вместо него: в трекере
+			// ДМ правит именно базу, а видеть должен оба числа («14 → 12»).
+			entry["acEffective"] = r.effectiveStat(cmb, cmb.AC, domain.ModifierTargetAC)
 		}
 		if isDM || r.combat.ShowHP {
 			entry["hpCurrent"] = cmb.HPCurrent
 			entry["hpMax"] = cmb.HPMax
+			entry["hpMaxEffective"] = r.effectiveStat(cmb, cmb.HPMax, domain.ModifierTargetHPMax)
 			entry["deathSaveSuccess"] = cmb.DeathSaveSuccess
 			entry["deathSaveFail"] = cmb.DeathSaveFail
 		}

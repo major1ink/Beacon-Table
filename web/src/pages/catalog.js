@@ -24,6 +24,7 @@ import {
   fetchSpells, createSpell, updateSpell, deleteSpell,
   fetchItems, createItem, updateItem, deleteItem,
   fetchReferences, createReference, updateReference, deleteReference,
+  fetchConditions, createCondition, updateCondition, deleteCondition,
   fetchAdminCharacters, fetchAdminCharacter, updateAdminCharacterSheet,
   fetchCharacters, fetchCharacter, updateCharacterSheet,
 } from "../api.js";
@@ -31,6 +32,7 @@ import { mapFoundryMonsterJson } from "../monster-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
+import { mapFoundryConditionBatch } from "../condition-import.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 
 const qs = new URLSearchParams(location.search);
@@ -198,6 +200,27 @@ const CONFIGS = {
     savedMessageType: "beacon:referenceSaved",
     extraFilter: kind ? (ref) => classifyReferenceKind(ref.kind) === kind : null,
   },
+  conditions: {
+    fetchAll: fetchConditions,
+    createOne: createCondition,
+    updateOne: updateCondition,
+    deleteOne: deleteCondition,
+    keyPrefix: "condition",
+    detailUrl: (id, o) => `/conditions.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
+    batchMap: mapFoundryConditionBatch,
+    batchEmptyMsg: "Не удалось распознать ни одного эффекта (нужен документ ActiveEffect из Foundry VTT или предмет/существо с массивом effects).",
+    // avatar+avatarText: у состояния картинка чаще всего не загружена, а
+    // задан эмодзи-глиф (domain.Condition.Icon) — показываем в кружке его,
+    // а не прочерк, чтобы список читался так же, как палитра.
+    avatar: true,
+    avatarText: (c) => c.icon || "❔",
+    searchHay: (c) => [c.name, c.slug, c.source, ...(c.tags || [])],
+    badge: (c) => (c.levels > 1 ? `${c.levels} ур.` : c.slug || ""),
+    createPlaceholder: "Имя нового состояния",
+    emptyUser: "Своих состояний пока нет — создай или импортируй первое ниже.",
+    deleteConfirm: (c) => `Удалить «${c.name}» из библиотеки? Уже наложенные метки останутся висеть на токенах, но потеряют описание.`,
+    savedMessageType: "beacon:conditionSaved",
+  },
 };
 const cfg = CONFIGS[type];
 
@@ -249,7 +272,7 @@ function buildRow(x) {
     const avatar = document.createElement("div");
     avatar.className = "catalog-avatar";
     if (x.imageUrl) avatar.style.backgroundImage = `url("${x.imageUrl}")`;
-    else avatar.textContent = "—";
+    else avatar.textContent = cfg.avatarText ? cfg.avatarText(x) : "—";
     row.appendChild(avatar);
   }
   const name = document.createElement("div");

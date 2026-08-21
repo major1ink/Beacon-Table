@@ -11,6 +11,7 @@
 // проверяет, только хранит присланный JSON целиком.
 import {
   fetchMe,
+  fetchItems,
   fetchCharacter,
   updateCharacterSheet,
   fetchAdminCharacter,
@@ -25,6 +26,8 @@ import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
 import { initItemPicker } from "../item-picker.js";
 import { enhanceRolls } from "../inline-rolls.js";
+import { renderStatusChips } from "../status-palette.js";
+import { applyModifiers, explainModifiers, collectModifiers, ABILITY_TARGETS, TARGET_AC, TARGET_SPEED, TARGET_HP_MAX } from "../modifiers.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -66,6 +69,49 @@ function abilityMod(score) {
 function fmtMod(n) {
   return n >= 0 ? "+" + n : String(n);
 }
+
+// ---- применение изменений (см. internal/domain/modifier.go) ----
+// Лист и так считает производные числа сам (модификаторы характеристик,
+// бонус владения, спасброски, СЛ заклинаний — весь rules-блок вокруг), так
+// что надетая экипировка и висящие состояния — просто ещё одно слагаемое в
+// том же расчёте. Правил приложение при этом не знает: ЧТО именно даёт
+// кольчуга или ослепление, записано в карточке предмета/состояния человеком
+// или импортом, а здесь это только складывается.
+
+// activeModifiers — всё, что сейчас действует на персонажа: изменения от
+// НАДЕТЫХ предметов инвентаря плюс изменения от наложенных состояний.
+// Считается на каждое обращение, а не кэшируется: и то и другое меняется
+// прямо во время просмотра листа (галочка «надето», метка из трекера).
+function activeModifiers() {
+  const equipped = inventory
+    .filter((e) => e.equipped && e.itemId && itemCatalog.has(e.itemId))
+    .map((e) => ({ name: e.name, modifiers: itemCatalog.get(e.itemId).modifiers }));
+  return collectModifiers([...equipped, ...liveStatuses]);
+}
+
+// abilityScore — значение характеристики С УЧЁТОМ изменений. Именно его
+// читает весь rules-блок ниже, поэтому «+2 к Силе» от пояса сам собой
+// доезжает и до модификатора, и до спасбросков, и до навыков, и до
+// грузоподъёмности. Поля ввода характеристик при этом показывают БАЗУ —
+// правит игрок её, а не результат.
+function abilityScore(sheet, key) {
+  return applyModifiers(sheet.abilities[key] || 0, ABILITY_TARGETS[key], activeModifiers());
+}
+function effectiveAC(sheet) {
+  return applyModifiers(sheet.combat.ac || 0, TARGET_AC, activeModifiers());
+}
+function effectiveSpeed(sheet) {
+  return applyModifiers(sheet.combat.speed || 0, TARGET_SPEED, activeModifiers());
+}
+function effectiveHPMax(sheet) {
+  return applyModifiers(sheet.combat.hpMax || 0, TARGET_HP_MAX, activeModifiers());
+}
+// modifierHint — подсказка «из чего сложилось» для плитки; пустая строка,
+// если ничего не применилось (тогда подсказку не показываем вовсе).
+function modifierHint(target, base) {
+  const parts = explainModifiers(target, activeModifiers());
+  return parts.length ? `база ${base}; ${parts.join("; ")}` : "";
+}
 // Бонус владения по уровню — единая таблица PHB 2024, одна на всех, не
 // зависит от класса.
 function profBonus(level) {
@@ -74,10 +120,10 @@ function profBonus(level) {
 }
 function skillBonus(sheet, skill) {
   const state = sheet.skillProf[skill.key] || 0; // 0 нет / 1 владение / 2 экспертиза
-  return abilityMod(sheet.abilities[skill.ability]) + profBonus(sheet.info.level) * state;
+  return abilityMod(abilityScore(sheet, skill.ability)) + profBonus(sheet.info.level) * state;
 }
 function saveBonus(sheet, abilityKey) {
-  return abilityMod(sheet.abilities[abilityKey]) + (sheet.saveProf[abilityKey] ? profBonus(sheet.info.level) : 0);
+  return abilityMod(abilityScore(sheet, abilityKey)) + (sheet.saveProf[abilityKey] ? profBonus(sheet.info.level) : 0);
 }
 function passivePerception(sheet) {
   const perception = SKILLS.find((s) => s.key === "perception");
@@ -87,17 +133,17 @@ function passivePerception(sheet) {
 // (значение) фут., прыжок в высоту = 3 + модификатор Силы фут. При Силе 10
 // это даёт "10 фут."/"3 фут." — ровно дефолты пустого бланка.
 function carryCapacity(sheet) {
-  return (sheet.abilities.str || 0) * 15;
+  return abilityScore(sheet, "str") * 15;
 }
 function longJumpFt(sheet) {
-  return sheet.abilities.str || 0;
+  return abilityScore(sheet, "str");
 }
 function highJumpFt(sheet) {
-  return 3 + abilityMod(sheet.abilities.str);
+  return 3 + abilityMod(abilityScore(sheet, "str"));
 }
 function spellAbilityMod(sheet) {
   const a = sheet.spellcasting.ability;
-  return a ? abilityMod(sheet.abilities[a]) : 0;
+  return a ? abilityMod(abilityScore(sheet, a)) : 0;
 }
 function spellSaveDC(sheet) {
   return sheet.spellcasting.ability ? 8 + profBonus(sheet.info.level) + spellAbilityMod(sheet) : null;
@@ -130,6 +176,17 @@ let readOnly = false;
 // (свой/админский) дёргать при автосохранении, см. doSave().
 let isAdminView = false;
 let rollWS = null;
+// liveStatuses/liveStatusesEl — наложенные состояния этого персонажа (см.
+// domain.AppliedStatus): приходят с сервера в combat_state тем же сокетом,
+// что и броски (см. connectRollSocket), лист их только показывает.
+let liveStatuses = [];
+// itemCatalog — карточки библиотеки предметов по id, нужны РОВНО для одного:
+// достать Item.Modifiers надетых вещей (см. activeModifiers). Записи
+// инвентаря хранят только снимок имени/веса (см. domain.InventoryEntry), а
+// цифры «пока надет» должны быть свежими — ДМ поправил кольчугу, и КД
+// пересчитался у всех, а не только у новых владельцев.
+let itemCatalog = new Map();
+let liveStatusesEl = null;
 
 // isClassic — система ЭТОГО персонажа (Character.System, см.
 // internal/domain/company.go: SystemDnD5e2014/2024, проставляется один раз
@@ -502,7 +559,7 @@ function renderTab1() {
       h("div", { class: "ability-head" }, [
         h("span", { class: "ability-name", text: a.label }),
         numberInput(scoreGet, scoreSet, { min: 1, max: 30 }),
-        computed("мод.", () => fmtMod(abilityMod(sheet.abilities[a.key]))),
+        computed("мод.", () => fmtMod(abilityMod(abilityScore(sheet, a.key)))),
       ]),
       h("div", { class: "save-row" }, [
         profToggleBool(() => sheet.saveProf[a.key], (v) => (sheet.saveProf[a.key] = v)),
@@ -531,7 +588,7 @@ function renderTab1() {
         field("КЗ (AC)", numberInput(() => sheet.combat.ac, (v) => (sheet.combat.ac = v))),
         field("Скорость", numberInput(() => sheet.combat.speed, (v) => (sheet.combat.speed = v))),
         field("Тёмное зрение", numberInput(() => sheet.combat.darkvision, (v) => (sheet.combat.darkvision = v), { min: 0, placeholder: "0" })),
-        field("Инициатива", computed("", () => fmtMod(abilityMod(sheet.abilities.dex)))),
+        field("Инициатива", computed("", () => fmtMod(abilityMod(abilityScore(sheet, "dex"))))),
         field("Пасс. восприятие", computed("", () => String(passivePerception(sheet)))),
       ]),
       h("div", { class: "row" }, [
@@ -1048,12 +1105,25 @@ async function loadInventory() {
   } catch {
     inventory = [];
   }
+  // Карточки каталога нужны только ради Item.Modifiers надетых вещей (см.
+  // activeModifiers) — тянем их вместе с инвентарём и одним запросом, а не
+  // по одной на запись. Не загрузились — лист просто работает без учёта
+  // экипировки, как до появления изменений.
+  try {
+    const items = await fetchItems();
+    itemCatalog = new Map(items.map((it) => [it.id, it]));
+  } catch {
+    itemCatalog = new Map();
+  }
   renderTab5();
   if (mode === "view") renderView();
 }
 
 function saveInventoryEntry(e, patch) {
   Object.assign(e, patch);
+  // Снять/надеть — это смена КЗ и прочих производных чисел (см.
+  // activeModifiers), а не только галочка в таблице.
+  if ("equipped" in patch && mode === "view") refreshView();
   updateCharacterInventoryItem(charId, e.id, e.quantity, e.equipped, e.notes).catch((err) => alert("Не удалось сохранить: " + err.message));
 }
 
@@ -1317,11 +1387,24 @@ function vCard(title, children, note) {
 
 // vTile — плитка производного числа. formula задан — плитка кликабельна и
 // кидает кубик (инициатива, атака заклинанием); иначе просто число.
-function vTile(label, compute, formula, rollLabel) {
+function vTile(label, compute, formula, rollLabel, hint) {
   const value = h("b", { text: compute() });
+  // hint — «из чего сложилось число» (см. modifierHint): пересчитывается
+  // вместе со значением, иначе после смены экипировки подсказка врала бы.
+  const applyHint = (node) => {
+    if (!hint) return node;
+    const set = () => {
+      const t = hint();
+      if (t) node.title = t;
+      else node.removeAttribute("title");
+    };
+    set();
+    vRefresh.push(set);
+    return node;
+  };
   vRefresh.push(() => (value.textContent = compute()));
   const inner = [value, h("span", { text: label })];
-  if (!formula) return h("div", { class: "v-tile" }, inner);
+  if (!formula) return applyHint(h("div", { class: "v-tile" }, inner));
   return h("button", { type: "button", class: "v-tile", title: "Бросить: " + rollLabel, onclick: () => sendRoll(formula(), rollLabel) }, inner);
 }
 
@@ -1380,7 +1463,10 @@ function bumpXp(delta) {
 // а перелечиться выше максимума нельзя по правилам. Максимум не заполнен
 // (0) — не зажимаем сверху вообще, лист ещё не дозаполнен.
 function clampHp(v) {
-  const max = sheet.combat.hpMax || 0;
+  // Потолок — эффективный максимум (см. effectiveHPMax): «максимум хитов
+  // вдвое» от истощения или «+10 к максимуму» от заклинания меняют именно
+  // его, а поле в бланке остаётся базой, как и у КЗ.
+  const max = effectiveHPMax(sheet);
   return Math.max(0, max > 0 ? Math.min(max, v) : v);
 }
 
@@ -1414,7 +1500,7 @@ function vHpCard() {
   const fill = h("i", {});
   const update = () => {
     const c = sheet.combat.hpCurrent || 0;
-    const m = sheet.combat.hpMax || 0;
+    const m = effectiveHPMax(sheet);
     const t = sheet.combat.hpTemp || 0;
     cur.textContent = String(c);
     max.textContent = "/ " + (m || "—");
@@ -1462,9 +1548,13 @@ function vHpCard() {
 
 function vTilesCard() {
   const tiles = [
-    vTile("КЗ", () => String(sheet.combat.ac || 0)),
-    vTile("Инициатива", () => fmtMod(abilityMod(sheet.abilities.dex)), () => "1d20" + fmtMod(abilityMod(sheet.abilities.dex)), "Инициатива"),
-    vTile("Скорость", () => String(sheet.combat.speed || 0)),
+    // КЗ/Скорость показывают ЭФФЕКТИВНОЕ значение — с учётом надетой
+    // экипировки и висящих состояний (см. activeModifiers); в подсказке
+    // видно, из чего оно сложилось. Правится по-прежнему база: в режиме
+    // правки поле «КЗ (AC)» — это именно она.
+    vTile("КЗ", () => String(effectiveAC(sheet)), null, null, () => modifierHint(TARGET_AC, sheet.combat.ac || 0)),
+    vTile("Инициатива", () => fmtMod(abilityMod(abilityScore(sheet, "dex"))), () => "1d20" + fmtMod(abilityMod(abilityScore(sheet, "dex"))), "Инициатива"),
+    vTile("Скорость", () => String(effectiveSpeed(sheet)), null, null, () => modifierHint(TARGET_SPEED, sheet.combat.speed || 0)),
     vTile("Пасс. вниман.", () => String(passivePerception(sheet))),
     vTile("Владение", () => fmtMod(profBonus(sheet.info.level))),
   ];
@@ -1519,8 +1609,29 @@ function vStateCard() {
       vPips(6, () => sheet.combat.exhaustion || 0, (v) => (sheet.combat.exhaustion = v), { tone: "danger" }),
     ]),
     h("div", { class: "v-tiles", style: "margin-top:6px;" }, [inspBtn, dyingBtn]),
+    liveStatusesHost(),
     conditions ? h("div", { class: "v-text", style: "margin-top:8px;", text: conditions }) : null,
   ]);
+}
+
+// liveStatusesHost/renderLiveStatuses — блок наложенных состояний (см.
+// domain.AppliedStatus). Только для чтения: свободнотекстовое поле
+// «Состояния» бланка (sheet.combat.conditions, строкой ниже) осталось как
+// было — это заметка игрока, а метки в этом блоке живут на токене/бойце и
+// приходят с сервера (см. connectRollSocket). Своей истины лист не держит —
+// тот же принцип, что у трекера инициативы.
+function liveStatusesHost() {
+  liveStatusesEl = h("div", { class: "v-track", style: "margin-top:8px;display:block;" });
+  renderLiveStatuses();
+  return liveStatusesEl;
+}
+
+function renderLiveStatuses() {
+  if (!liveStatusesEl) return;
+  liveStatusesEl.innerHTML = "";
+  if (liveStatuses.length === 0) return;
+  liveStatusesEl.appendChild(h("small", { text: "Наложено" }));
+  liveStatusesEl.appendChild(renderStatusChips(liveStatuses));
 }
 
 // ---------- характеристики и навыки ----------
@@ -1528,7 +1639,7 @@ function vStateCard() {
 function vAbilitiesCard() {
   const grid = h("div", { class: "v-abils" });
   for (const a of ABILITIES) {
-    const check = () => "1d20" + fmtMod(abilityMod(sheet.abilities[a.key]));
+    const check = () => "1d20" + fmtMod(abilityMod(abilityScore(sheet, a.key)));
     const save = () => "1d20" + fmtMod(saveBonus(sheet, a.key));
     grid.appendChild(
       h("div", { class: "v-abil" }, [
@@ -1536,11 +1647,11 @@ function vAbilitiesCard() {
         h("button", {
           type: "button",
           class: "v-abil-mod",
-          text: fmtMod(abilityMod(sheet.abilities[a.key])),
+          text: fmtMod(abilityMod(abilityScore(sheet, a.key))),
           title: "Проверка: " + a.label,
           onclick: () => sendRoll(check(), "Проверка — " + a.label),
         }),
-        h("div", { class: "v-abil-score", text: String(sheet.abilities[a.key] || 10) }),
+        h("div", { class: "v-abil-score", text: String(abilityScore(sheet, a.key) || 10), title: modifierHint(ABILITY_TARGETS[a.key], sheet.abilities[a.key] || 10) }),
         h("button", {
           type: "button",
           class: "v-abil-save" + (sheet.saveProf[a.key] ? " prof" : ""),
@@ -1942,6 +2053,22 @@ function connectRollSocket() {
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
     if (data.type === "roll_result") showRollResult(data);
+    // Наложенные состояния этого персонажа (см. domain.AppliedStatus)
+    // приезжают тем же сокетом в combat_state — сервер уже свёл их с токена
+    // бойца (см. room_statuses.go: statusesOf) и вырезал скрытые от игрока.
+    // Лист их только ПОКАЗЫВАЕТ: вешает и снимает метки ДМ (палитра в меню
+    // токена или в трекере), собственного поля в бланке у них нет — иначе
+    // получилось бы два источника истины. Если персонажа нет в инициативе,
+    // список просто пустой: метка на токене вне боя сюда не долетает.
+    if (data.type === "combat_state") {
+      const mine = (data.combatants || []).find((c) => c.characterId === charId);
+      liveStatuses = (mine && mine.statuses) || [];
+      renderLiveStatuses();
+      // Метки несут изменения (см. domain.AppliedStatus.Modifiers) — от них
+      // зависят КЗ, скорость и всё, что считается от характеристик, поэтому
+      // пересчитываем числа режима чтения, а не только строку чипов.
+      if (mode === "view") refreshView();
+    }
   };
 }
 

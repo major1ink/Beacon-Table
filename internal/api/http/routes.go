@@ -110,6 +110,14 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/references/{id}", a.handleReferenceUpdate)
 	mux.HandleFunc("DELETE /api/references/{id}", a.handleReferenceDelete)
 
+	mux.HandleFunc("GET /api/modifier-targets", a.handleModifierTargets)
+
+	mux.HandleFunc("GET /api/conditions", a.handleConditionsList)
+	mux.HandleFunc("POST /api/conditions", a.handleConditionCreate)
+	mux.HandleFunc("GET /api/conditions/{id}", a.handleConditionGet)
+	mux.HandleFunc("PUT /api/conditions/{id}", a.handleConditionUpdate)
+	mux.HandleFunc("DELETE /api/conditions/{id}", a.handleConditionDelete)
+
 	// /upload и /assets — без ограничения метода в паттерне (как и раньше):
 	// /upload сам проверяет r.Method == POST и пишет 405 иначе; /assets
 	// отвечает только на GET по факту использования, но исторически не

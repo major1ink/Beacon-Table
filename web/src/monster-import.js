@@ -28,6 +28,7 @@
 // activation.type "bonus" и попадёт в "Бонусные действия" вместо "Особенностей"
 // — визуально это те же textarea в редакторе карточки монстра (bestiary.js),
 // одна правка вручную (вырезать/вставить абзац) при необходимости.
+import { CONDITION_RU } from "./foundry-conditions.js";
 
 function ru(dict, code) {
   if (!code) return "";
@@ -78,12 +79,12 @@ const DAMAGE_TYPE_RU = {
   lightning: "электричество", necrotic: "некротический", piercing: "колющий", poison: "яд",
   psychic: "психическая энергия", radiant: "излучение", slashing: "рубящий", thunder: "звук",
 };
-const CONDITION_RU = {
-  blinded: "ослепление", charmed: "очарование", deafened: "глухота", exhaustion: "истощение",
-  frightened: "испуг", grappled: "схват", incapacitated: "недееспособность", invisible: "невидимость",
-  paralyzed: "паралич", petrified: "окаменение", poisoned: "отравление", prone: "положение ничком",
-  restrained: "опутанность", stunned: "ошеломление", unconscious: "беспамятство",
-};
+// CONDITION_RU переехал в общий foundry-conditions.js: та же таблица нужна
+// теперь и палитре состояний, и импорту эффектов заклинания, и импорту
+// самих карточек состояний — держать четыре копии смысла нет (в отличие от
+// DAMAGE_TYPE_RU выше, который остаётся локальной копией в каждом
+// импортёре: там таблица — часть перевода конкретного формата, а не общий
+// словарь состояний).
 const LANGUAGE_RU = {
   common: "Общий", dwarvish: "Дварфский", elvish: "Эльфийский", giant: "Великаний", gnomish: "Гномий",
   goblin: "Гоблинский", halfling: "Полуросличий", orc: "Орочий", abyssal: "Бездны", celestial: "Небесный",
