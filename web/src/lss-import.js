@@ -139,6 +139,50 @@ export function applyLssImport(sheet, parsed, targetIsClassic) {
     if (v) sheet.physical[key] = v;
   }
 
+  // ---- характеристики, спасброски, владения навыками ----
+  const stats = data.stats || {};
+  for (const a of ["str", "dex", "con", "int", "wis", "cha"]) {
+    const score = stats[a] && stats[a].score;
+    if (typeof score === "number") sheet.abilities[a] = score;
+  }
+  const saves = data.saves || {};
+  for (const a of ["str", "dex", "con", "int", "wis", "cha"]) {
+    const isProf = saves[a] && saves[a].isProf;
+    if (typeof isProf === "boolean") sheet.saveProf[a] = isProf;
+  }
+  // data.abilities — более новый/полный набор навыков: isProf проставлен
+  // явно у каждого (включая непрофильные — false/0). data.skills — тот же
+  // список навыков, но isProf присутствует только у отмеченных владений
+  // (см. пример файла из задачи: оба объекта есть одновременно, ключи с
+  // пробелом как в LSS — "sleight of hand", "animal handling" — маппим на
+  // camelCase ключи SKILLS в character-sheet.js).
+  const SKILL_KEY_MAP = {
+    athletics: "athletics",
+    acrobatics: "acrobatics",
+    "sleight of hand": "sleightOfHand",
+    stealth: "stealth",
+    investigation: "investigation",
+    history: "history",
+    arcana: "arcana",
+    nature: "nature",
+    religion: "religion",
+    perception: "perception",
+    survival: "survival",
+    medicine: "medicine",
+    insight: "insight",
+    "animal handling": "animalHandling",
+    performance: "performance",
+    intimidation: "intimidation",
+    deception: "deception",
+    persuasion: "persuasion",
+  };
+  const skillsSrc = Object.keys(data.abilities || {}).length ? data.abilities : data.skills;
+  for (const [lssKey, sheetKey] of Object.entries(SKILL_KEY_MAP)) {
+    const entry = skillsSrc && skillsSrc[lssKey];
+    if (!entry || entry.isProf === undefined) continue;
+    sheet.skillProf[sheetKey] = entry.isProf === true || entry.isProf === 1 ? 1 : 0;
+  }
+
   // ---- заклинательная статистика ----
   const spellCode = spellsInfo.base && spellsInfo.base.code;
   if (spellCode) sheet.spellcasting.ability = spellCode;
