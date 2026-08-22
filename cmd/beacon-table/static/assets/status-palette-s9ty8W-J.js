@@ -1,4 +1,4 @@
-import{c as M}from"./api-BC-wWyIL.js";import{i as z}from"./icons-3nongrBp.js";import{l as $,d as I}from"./modifier-editor-BCMn8RXc.js";const _=`
+import{c as M}from"./api-D5p_uwOr.js";import{i as z}from"./icons-3nongrBp.js";import{l as $,d as I}from"./modifier-editor-efiEoGxv.js";const _=`
 .status-palette {
   position: fixed; z-index: 60; width: 296px; max-height: 72vh; overflow: auto;
   display: flex; flex-direction: column; gap: 8px; padding: 10px;

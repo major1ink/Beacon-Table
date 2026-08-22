@@ -8,7 +8,7 @@
 // блок импорта: разбор экспорта предмета из Foundry VTT целиком в
 // web/src/item-import.js (чистая функция, без побочных эффектов), этот файл
 // только вызывает её и мержит результат в текущую карточку.
-import { fetchMe, fetchItem, createItem, updateItem, uploadFile } from "../api.js";
+import { fetchMe, fetchItem, createItem, updateItem, deleteItem, uploadFile } from "../api.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryItemJson } from "../item-import.js";
@@ -454,6 +454,29 @@ cloneBtn.onclick = async () => {
   }
 };
 
+// deleteBtn — то же подтверждение и тот же API-вызов, что и у кнопки-корзины
+// в списке библиотеки (см. pages/catalog.js: buildRow.delBtn), только отсюда
+// удаляется уже открытая карточка: после успеха окно закрывается само (как
+// closeBtn выше), библиотека узнаёт об этом через тот же beacon:itemSaved,
+// которым сохранение сообщает о себе панели "Предметы" (см. doSave).
+const deleteBtn = document.getElementById("deleteBtn");
+deleteBtn.onclick = async () => {
+  if (!confirm(`Удалить «${item.name || "Без имени"}» из библиотеки?`)) return;
+  deleteBtn.disabled = true;
+  try {
+    await deleteItem(itemId);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "beacon:itemSaved", id: itemId }, location.origin);
+      window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
+    } else {
+      window.close();
+    }
+  } catch (err) {
+    alert("Не удалось удалить: " + err.message);
+    deleteBtn.disabled = false;
+  }
+};
+
 function currentId() {
   return new URLSearchParams(location.search).get("id");
 }
@@ -485,6 +508,7 @@ function currentId() {
     // равно откажет 403), вместо неё бейдж + "Клонировать" (см. cloneBtn выше).
     editMode = false;
     editToggleBtn.style.display = "none";
+    deleteBtn.style.display = "none";
     cloneBtn.classList.add("visible");
     const pill = document.createElement("span");
     pill.className = "sys-pill";

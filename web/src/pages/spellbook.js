@@ -8,7 +8,7 @@
 // блок импорта: разбор экспорта заклинания с ttg.club целиком в
 // web/src/spell-import.js (чистая функция, без побочных эффектов), этот файл
 // только вызывает её и мержит результат в текущую карточку.
-import { fetchMe, fetchSpell, createSpell, updateSpell, fetchConditions } from "../api.js";
+import { fetchMe, fetchSpell, createSpell, updateSpell, deleteSpell, fetchConditions } from "../api.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
@@ -591,6 +591,28 @@ cloneBtn.onclick = async () => {
   }
 };
 
+// deleteBtn — тот же приём, что и в itembook.js: подтверждение, DELETE,
+// сообщить панели "Заклинания" (beacon:spellSaved — тот же тип, что и
+// сохранение, refresh() в pages/catalog.js просто перезапросит список) и
+// закрыть окно.
+const deleteBtn = document.getElementById("deleteBtn");
+deleteBtn.onclick = async () => {
+  if (!confirm(`Удалить «${spell.name || "Без имени"}» из библиотеки?`)) return;
+  deleteBtn.disabled = true;
+  try {
+    await deleteSpell(spellId);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "beacon:spellSaved", id: spellId }, location.origin);
+      window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
+    } else {
+      window.close();
+    }
+  } catch (err) {
+    alert("Не удалось удалить: " + err.message);
+    deleteBtn.disabled = false;
+  }
+};
+
 function currentId() {
   return new URLSearchParams(location.search).get("id");
 }
@@ -627,6 +649,7 @@ function currentId() {
     // равно откажет 403), вместо неё бейдж + "Клонировать" (см. cloneBtn выше).
     editMode = false;
     editToggleBtn.style.display = "none";
+    deleteBtn.style.display = "none";
     cloneBtn.classList.add("visible");
     const pill = document.createElement("span");
     pill.className = "sys-pill";

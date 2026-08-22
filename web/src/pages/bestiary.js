@@ -7,7 +7,7 @@
 // только хранит присланный JSON. Единственная посчитанная здесь на клиенте
 // величина — модификатор характеристики (та же формула, что и в
 // character-sheet.js: floor((score-10)/2)).
-import { fetchMe, fetchMonster, createMonster, updateMonster, uploadFile } from "../api.js";
+import { fetchMe, fetchMonster, createMonster, updateMonster, deleteMonster, uploadFile } from "../api.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -707,6 +707,28 @@ cloneBtn.onclick = async () => {
   }
 };
 
+// deleteBtn — тот же приём, что и в itembook.js/spellbook.js: подтверждение,
+// DELETE, сообщить панели "Бестиарий" (beacon:monsterSaved — refresh() в
+// pages/catalog.js просто перезапросит список) и закрыть окно. Тот же текст
+// предупреждения о токенах, что и в cfg.deleteConfirm списка (pages/catalog.js).
+const deleteBtn = document.getElementById("deleteBtn");
+deleteBtn.onclick = async () => {
+  if (!confirm(`Удалить «${monster.name || "Без имени"}» из бестиария? Это необратимо (уже расставленные токены останутся на карте, но перестанут открывать статблок).`)) return;
+  deleteBtn.disabled = true;
+  try {
+    await deleteMonster(monsterId);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "beacon:monsterSaved", id: monsterId }, location.origin);
+      window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
+    } else {
+      window.close();
+    }
+  } catch (err) {
+    alert("Не удалось удалить: " + err.message);
+    deleteBtn.disabled = false;
+  }
+};
+
 document.getElementById("closeBtn").onclick = () => {
   // Плавающее окно (обычный случай, см. floating-window.js) — iframe, не
   // умеет window.close() сам, сообщаем родителю; вынесенное 🗗-кнопкой в
@@ -746,6 +768,7 @@ function currentId() {
     // равно откажет 403), вместо неё бейдж + "Клонировать" (см. cloneBtn выше).
     editMode = false;
     editToggleBtn.style.display = "none";
+    deleteBtn.style.display = "none";
     cloneBtn.classList.add("visible");
     const pill = document.createElement("span");
     pill.className = "sys-pill";

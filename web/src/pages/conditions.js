@@ -11,7 +11,7 @@
 // (преимущество/помеха, автопровалы) и остаётся текстом для глаз ДМ.
 // Правил приложение по-прежнему не знает: список изменений составляет
 // человек или импорт (web/src/condition-import.js), а не вывод из описания.
-import { fetchMe, fetchCondition, createCondition, updateCondition, fetchConditions, uploadFile } from "../api.js";
+import { fetchMe, fetchCondition, createCondition, updateCondition, deleteCondition, fetchConditions, uploadFile } from "../api.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
@@ -615,6 +615,25 @@ cloneBtn.onclick = async () => {
   }
 };
 
+// deleteBtn — тот же приём, что и в itembook.js/spellbook.js/bestiary.js.
+const deleteBtn = document.getElementById("deleteBtn");
+deleteBtn.onclick = async () => {
+  if (!confirm(`Удалить «${condition.name || "Без имени"}» из библиотеки? Уже наложенные метки останутся висеть на токенах, но потеряют описание.`)) return;
+  deleteBtn.disabled = true;
+  try {
+    await deleteCondition(conditionId);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "beacon:conditionSaved", id: conditionId }, location.origin);
+      window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
+    } else {
+      window.close();
+    }
+  } catch (err) {
+    alert("Не удалось удалить: " + err.message);
+    deleteBtn.disabled = false;
+  }
+};
+
 function currentId() {
   return new URLSearchParams(location.search).get("id");
 }
@@ -650,6 +669,7 @@ function currentId() {
   if (condition.system) {
     editMode = false;
     editToggleBtn.style.display = "none";
+    deleteBtn.style.display = "none";
     cloneBtn.classList.add("visible");
     const pill = document.createElement("span");
     pill.className = "sys-pill";

@@ -10,7 +10,7 @@
 // D&D, только хранит присланный JSON. Импорт — разбор пака Foundry VTT
 // целиком в web/src/reference-import.js (чистая функция, батчевая — см. её
 // комментарий), этот файл только вызывает её и мержит результат.
-import { fetchMe, fetchReference, createReference, updateReference, uploadFile } from "../api.js";
+import { fetchMe, fetchReference, createReference, updateReference, deleteReference, uploadFile } from "../api.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
@@ -320,6 +320,25 @@ cloneBtn.onclick = async () => {
   }
 };
 
+// deleteBtn — тот же приём, что и в itembook.js/spellbook.js/bestiary.js/conditions.js.
+const deleteBtn = document.getElementById("deleteBtn");
+deleteBtn.onclick = async () => {
+  if (!confirm(`Удалить «${reference.name || "Без имени"}» из библиотеки?`)) return;
+  deleteBtn.disabled = true;
+  try {
+    await deleteReference(referenceId);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "beacon:referenceSaved", id: referenceId }, location.origin);
+      window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
+    } else {
+      window.close();
+    }
+  } catch (err) {
+    alert("Не удалось удалить: " + err.message);
+    deleteBtn.disabled = false;
+  }
+};
+
 function currentId() {
   return new URLSearchParams(location.search).get("id");
 }
@@ -346,6 +365,7 @@ function currentId() {
   if (reference.system) {
     editMode = false;
     editToggleBtn.style.display = "none";
+    deleteBtn.style.display = "none";
     cloneBtn.classList.add("visible");
     const pill = document.createElement("span");
     pill.className = "sys-pill";
