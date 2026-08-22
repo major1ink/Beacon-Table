@@ -8,6 +8,31 @@
   <style>
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { display: flex; align-items: center; justify-content: center; }
+
+    /* Заставка на весь экран (public/splash.svg — вектор, поэтому cover не
+       мылит на больших экранах). position: fixed + inset: 0, а не background
+       у body: карточка входа лежит выше по z-index и ничего не наследует от
+       фона. Заменить картинку = положить свой файл вместо web/public/splash.svg. */
+    #splash {
+      position: fixed; inset: 0; z-index: 0;
+      /* 30%, а не center: заставка 16:9, и на портретном экране cover режет её
+         по бокам — при центрировании маяк уезжает за кадр целиком. 30% —
+         крайняя точка, при которой маяк целиком остаётся в кадре даже на
+         узком телефоне (390×844); на экранах шире 16:9 обрезки по горизонтали
+         нет вовсе, так что смещение там ни на что не влияет. */
+      background: var(--bg) url("/splash.svg") 30% center / cover no-repeat;
+    }
+    #box { position: relative; z-index: 1; }
+
+    /* Версия сервера (GET /api/version, см. cmd/beacon-table/version.go) — в
+       углу поверх заставки, а не внутри карточки: служебная подпись не должна
+       разрывать блок «вход/регистрация». Пустой, пока ответ не пришёл —
+       поэтому без плейсхолдера в разметке. */
+    #appVersion {
+      position: fixed; z-index: 1; right: 12px; bottom: 10px;
+      font-size: 11px; letter-spacing: 0.02em; color: var(--text-dim);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    }
     #box {
       background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 28px 30px; width: 300px;
@@ -42,6 +67,8 @@
   </style>
 </head>
 <body>
+  <div id="splash"></div>
+
   <div id="box">
     <h1>Beacon Table</h1>
     <div id="subtitle">стол для НРИ — локально и через интернет</div>
@@ -77,6 +104,8 @@
       <div id="registerMsg" class="msg"></div>
     </form>
   </div>
+
+  <div id="appVersion"></div>
 
   <script type="module" src="/src/pages/index.js"></script>
 </body>

@@ -1,6 +1,18 @@
 // Перенос inline-скрипта static/index.html — механически, логика не
 // менялась, только глобальные вызовы app.js заменены на import из api.js.
-import { fetchMe, apiLogin, apiRegister, apiLogout } from "../api.js";
+import { fetchMe, apiLogin, apiRegister, apiLogout, fetchVersion } from "../api.js";
+
+// Версия сервера в углу экрана (см. cmd/beacon-table/version.go): тег релиза
+// у сборок GoReleaser, иначе short commit hash. Тянем сразу при загрузке, а не
+// по клику как в dm.js/player.js — на экране входа некуда прятать, и это
+// единственное место, где версию видно ДО авторизации (эндпойнт публичный).
+// Молча оставляем пусто при ошибке: не удалось узнать версию — не повод
+// пугать надписью на экране логина, форма входа при этом рабочая.
+fetchVersion()
+  .then(({ version }) => {
+    document.getElementById("appVersion").textContent = version;
+  })
+  .catch(() => {});
 
 const tabLoginBtn = document.getElementById("tabLoginBtn");
 const tabRegisterBtn = document.getElementById("tabRegisterBtn");

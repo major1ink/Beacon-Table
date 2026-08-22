@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+<!-- Заставка экрана входа (web/index.html, #splash). Построена из маяка
+     docs/assets/logo.svg, но скомпонована под широкий экран: маяк сдвинут в
+     левую треть, чтобы его не закрывала центрированная форма входа.
+     preserveAspectRatio="slice" + width/height:100% в CSS дают тот же эффект,
+     что background-size: cover, но без замыливания на 4K — это вектор.
+     Заменить заставку = положить свой файл вместо этого (public/ копируется
+     в static/ как есть, см. web/vite.config.js). -->
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0.35" y2="1">
+    <stop offset="0%" stop-color="#0b1220"/>
+    <stop offset="55%" stop-color="#101018"/>
+    <stop offset="100%" stop-color="#07070b"/>
+  </linearGradient>
+  <linearGradient id="tower" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#f0e6d2"/>
+    <stop offset="100%" stop-color="#cbb98f"/>
+  </linearGradient>
+  <linearGradient id="lamp" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#fbbf4c"/>
+    <stop offset="100%" stop-color="#c9701f"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#ffe6a8" stop-opacity="0.85"/>
+    <stop offset="100%" stop-color="#ffe6a8" stop-opacity="0"/>
+  </radialGradient>
+  <!-- Дальнее зарево от лампы, растянутое по всему полотну: даёт тёплый
+       градиент слева и держит правую половину тёмной под форму входа. -->
+  <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#f3b93a" stop-opacity="0.20"/>
+    <stop offset="45%" stop-color="#7c6cf0" stop-opacity="0.07"/>
+    <stop offset="100%" stop-color="#7c6cf0" stop-opacity="0"/>
+  </radialGradient>
+  <!-- Виньетка — притемняет края и центр-право, чтобы стеклянная карточка
+       входа читалась поверх заставки при любом соотношении сторон. -->
+  <radialGradient id="vignette" cx="50%" cy="45%" r="75%">
+    <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+    <stop offset="65%" stop-color="#000" stop-opacity="0.18"/>
+    <stop offset="100%" stop-color="#000" stop-opacity="0.62"/>
+  </radialGradient>
+</defs>
+
+<rect width="1600" height="900" fill="url(#sky)"/>
+<ellipse cx="470" cy="330" rx="820" ry="620" fill="url(#halo)"/>
+
+<!-- Звёзды: редкая россыпь, разной яркости — фон не выглядит плоской заливкой -->
+<g fill="#e8ecf5">
+  <circle cx="1180" cy="118" r="1.8" opacity="0.55"/><circle cx="1355" cy="243" r="1.3" opacity="0.38"/>
+  <circle cx="1508" cy="96" r="2.1" opacity="0.5"/><circle cx="1268" cy="392" r="1.2" opacity="0.3"/>
+  <circle cx="1442" cy="345" r="1.5" opacity="0.42"/><circle cx="1092" cy="266" r="1.4" opacity="0.34"/>
+  <circle cx="1560" cy="452" r="1.2" opacity="0.28"/><circle cx="1330" cy="60" r="1.6" opacity="0.45"/>
+  <circle cx="905" cy="140" r="1.5" opacity="0.36"/><circle cx="1015" cy="60" r="1.9" opacity="0.44"/>
+  <circle cx="812" cy="238" r="1.2" opacity="0.26"/><circle cx="1188" cy="500" r="1.3" opacity="0.24"/>
+  <circle cx="132" cy="128" r="1.6" opacity="0.34"/><circle cx="60" cy="300" r="1.3" opacity="0.26"/>
+  <circle cx="248" cy="58" r="1.4" opacity="0.3"/><circle cx="690" cy="92" r="1.7" opacity="0.4"/>
+</g>
+
+<!-- Маяк: геометрия 1:1 из docs/assets/logo.svg (там viewBox 680×680),
+     сдвинута в левую треть и слегка увеличена. -->
+<g transform="translate(120,120) scale(0.98)">
+  <circle cx="340" cy="215" r="145" fill="url(#glow)"/>
+  <g stroke="#f3b93a" stroke-linecap="round">
+    <line x1="289" y1="94" x2="340" y2="235" stroke-width="6" opacity="0.4"/>
+    <line x1="391" y1="94" x2="340" y2="235" stroke-width="6" opacity="0.4"/>
+    <line x1="244" y1="120" x2="340" y2="235" stroke-width="5" opacity="0.3"/>
+    <line x1="436" y1="120" x2="340" y2="235" stroke-width="5" opacity="0.3"/>
+    <line x1="340" y1="85" x2="340" y2="235" stroke-width="9" opacity="0.8"/>
+  </g>
+  <polygon points="387.6,282.5 340,310 292.4,282.5 292.4,227.5 340,200 387.6,227.5" fill="url(#lamp)" stroke="#7a4a12" stroke-width="3"/>
+  <g stroke="#a5590f" stroke-width="2" opacity="0.55">
+    <line x1="340" y1="255" x2="387.6" y2="282.5"/><line x1="340" y1="255" x2="340" y2="310"/>
+    <line x1="340" y1="255" x2="292.4" y2="282.5"/><line x1="340" y1="255" x2="292.4" y2="227.5"/>
+    <line x1="340" y1="255" x2="340" y2="200"/><line x1="340" y1="255" x2="387.6" y2="227.5"/>
+  </g>
+  <polygon points="340,163 308,201 372,201" fill="url(#tower)"/>
+  <rect x="296" y="298" width="88" height="16" rx="3" fill="url(#tower)"/>
+  <polygon points="313,314 367,314 403,562 277,562" fill="url(#tower)"/>
+  <line x1="313" y1="380" x2="367" y2="380" stroke="#a99668" stroke-width="4"/>
+  <line x1="305" y1="460" x2="375" y2="460" stroke="#a99668" stroke-width="4"/>
+  <rect x="326" y="500" width="28" height="62" rx="2" fill="#7a6a48"/>
+</g>
+
+<!-- Скала под маяком + горизонт: маяк не висит в пустоте -->
+<path d="M0 760 L180 742 L300 690 L400 656 L520 652 L640 690 L860 730 L1600 748 L1600 900 L0 900 Z" fill="#0a0a10"/>
+<path d="M0 766 L180 748 L300 696 L400 662 L520 658 L640 696 L860 736 L1600 754" fill="none" stroke="#3a4256" stroke-width="3" opacity="0.5"/>
+
+<rect width="1600" height="900" fill="url(#vignette)"/>
+</svg>

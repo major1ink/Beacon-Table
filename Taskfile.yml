@@ -26,7 +26,7 @@ tasks:
   run:
     desc: Запустить сервер (go run)
     cmds:
-      - go run ./cmd/beacon-table
+      - go run -buildvcs=true ./cmd/beacon-table
 
   test:
     desc: Прогнать тесты — Go + фронтенд
