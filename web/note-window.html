@@ -57,6 +57,12 @@
     .note-render { font-size: 15px; line-height: 1.7; overflow-wrap: break-word; }
     .note-render h1, .note-render h2, .note-render h3 { margin: 0.8em 0 0.35em; line-height: 1.3; }
     .note-render h1:first-child, .note-render h2:first-child, .note-render h3:first-child { margin-top: 0; }
+    /* раздел, на который вела ссылка (см. note-window.js: scrollToSection) */
+    .note-render .section-target {
+      background: color-mix(in srgb, var(--accent) 22%, transparent);
+      border-radius: 6px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent);
+      transition: background .4s ease, box-shadow .4s ease;
+    }
     .note-render h1 { font-size: 1.7em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
     .note-render h2 { font-size: 1.35em; }
     .note-render h3 { font-size: 1.15em; opacity: 0.9; }

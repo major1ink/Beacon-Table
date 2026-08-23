@@ -24,6 +24,8 @@ const editArea = document.getElementById("editArea");
 mountNoteToolbar(document.getElementById("editToolbar"), editArea);
 
 let notesList = [];
+// pendingSection — раздел, на котором надо открыть заметку (см. scrollToSection).
+let pendingSection = "";
 let note = null;
 let editing = false;
 
@@ -48,7 +50,26 @@ function render() {
     // inline-rolls.js). Обход текста, а не делегированный обработчик, —
     // поэтому на каждую перерисовку.
     enhanceRolls(body, sendRoll);
+    scrollToSection();
   }
+}
+
+// scrollToSection — открыть заметку сразу на нужном разделе (pendingSection).
+// Раздел приходит хэшем в адресе (#Название): так ссылка на СТРАНИЦУ журнала
+// Foundry, которая у нас стала разделом «## Название» внутри заметки,
+// попадает не в начало длинного текста, а куда вела (см.
+// web/src/catalog-links.js: openEntry).
+function scrollToSection() {
+  const wanted = pendingSection.trim().toLowerCase();
+  if (!wanted) return;
+  const heading = [...body.querySelectorAll("h1, h2, h3, h4")].find(
+    (h) => h.textContent.trim().toLowerCase() === wanted
+  );
+  if (!heading) return;
+  heading.scrollIntoView({ block: "start" });
+  // Короткая подсветка: без неё непонятно, почему текст открылся с середины.
+  heading.classList.add("section-target");
+  setTimeout(() => heading.classList.remove("section-target"), 2000);
 }
 
 // ---- броски из текста заметки ----
@@ -75,7 +96,8 @@ function sendRoll(formula, label) {
   rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label }));
 }
 
-async function loadNote(id, { edit = false } = {}) {
+async function loadNote(id, { edit = false, section = "" } = {}) {
+  pendingSection = section;
   msg.textContent = "";
   try {
     note = await fetchNote(id);
@@ -85,7 +107,7 @@ async function loadNote(id, { edit = false } = {}) {
   }
   loadingHint.style.display = "none";
   contentArea.style.display = "block";
-  history.replaceState(null, "", "/note-window.html?id=" + id);
+  history.replaceState(null, "", "/note-window.html?id=" + id + (section ? "#" + encodeURIComponent(section) : ""));
   editing = edit;
   render();
   // Список нужен только для резолва вики-ссылок — не блокируем сам показ
@@ -165,5 +187,5 @@ deleteBtn.onclick = async () => {
     return;
   }
   connectRollSocket();
-  await loadNote(id);
+  await loadNote(id, { section: decodeURIComponent(location.hash.slice(1)) });
 })();

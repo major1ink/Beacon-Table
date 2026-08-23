@@ -61,11 +61,16 @@ function matchByName(list, name, folder) {
   return sameName[0];
 }
 
-function openEntry(kind, id, name) {
+// openEntry — section (только у заметок) — раздел внутри целевой заметки:
+// страница журнала Foundry у нас становится разделом «## Название» (см.
+// internal/foundry/journal.go), и ссылка на неё должна открывать заметку
+// сразу на нужном месте. Передаётся хэшем в URL — его читает note-window.js.
+function openEntry(kind, id, name, section) {
   const cfg = KIND_CONFIG[kind];
   if (!cfg) return;
+  const url = cfg.urlFor(id) + (section ? "#" + encodeURIComponent(section) : "");
   window.parent.postMessage(
-    { type: "beacon:openFloatingWindow", key: cfg.keyPrefix + "-" + id, title: name, url: cfg.urlFor(id) },
+    { type: "beacon:openFloatingWindow", key: cfg.keyPrefix + "-" + id, title: name, url },
     location.origin
   );
 }
@@ -85,6 +90,6 @@ export function wireCatalogLinks(containerEl) {
     const list = await listFor(kind);
     const found = matchByName(list, name, a.dataset.folder);
     if (!found) return; // карточки с таким именем нет в текущей библиотеке — ссылка просто ничего не делает, не ошибка
-    openEntry(kind, found.id, found.name || found.title);
+    openEntry(kind, found.id, found.name || found.title, a.dataset.section);
   });
 }

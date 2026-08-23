@@ -71,22 +71,36 @@ func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journ
 func pageBody(ctx context.Context, page map[string]any, assets *Assets) string {
 	switch strings.ToLower(asString(page["type"])) {
 	case "image":
-		src := assets.URL(ctx, domain.AssetKindNotes, asString(page["src"]))
+		ref := asString(page["src"])
+		src := assets.URL(ctx, domain.AssetKindNotes, ref)
 		caption := asString(page["image"])
 		if m := asMap(page["image"]); m != nil {
 			caption = asString(m["caption"])
 		}
 		if src == "" {
-			return ""
+			return missingFileNote("иллюстрация не перенесена", ref)
 		}
 		return fmt.Sprintf("![%s](%s)", caption, src)
 	case "video", "pdf":
-		src := assets.URL(ctx, domain.AssetKindNotes, asString(page["src"]))
+		ref := asString(page["src"])
+		src := assets.URL(ctx, domain.AssetKindNotes, ref)
 		if src == "" {
-			return ""
+			return missingFileNote("файл не перенесён", ref)
 		}
 		return fmt.Sprintf("[%s](%s)", asString(page["name"]), src)
 	default:
 		return assets.RewriteHTML(ctx, domain.AssetKindNotes, digString(page, "text", "content"))
 	}
+}
+
+// missingFileNote — след от страницы, чей файл не нашёлся в архиве модуля
+// (ссылка на арт, который модуль не распространяет, или на ассет самого
+// Foundry). Пустой раздел с одним заголовком выглядит как поломка импорта —
+// пусть в тексте будет видно, чего именно не хватает и откуда оно бралось.
+func missingFileNote(phrase, ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return fmt.Sprintf("*(%s — в модуле не указан файл)*", phrase)
+	}
+	return fmt.Sprintf("*(%s — в архиве модуля нет файла `%s`)*", phrase, ref)
 }

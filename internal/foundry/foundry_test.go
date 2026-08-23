@@ -425,6 +425,54 @@ func TestMapJournal(t *testing.T) {
 	}
 }
 
+// TestMapJournalMissingImage — страница-иллюстрация, файла которой в архиве
+// нет (модуль ссылается на арт, которого не распространяет). Пустой раздел с
+// одним заголовком выглядел бы как поломка импорта — в тексте должно быть
+// видно, чего не хватает.
+func TestMapJournalMissingImage(t *testing.T) {
+	_, assets := testModule(t)
+	doc := Doc{
+		"name":  "Иллюстрации",
+		"pages": []any{map[string]any{"name": "Обложка", "type": "image", "src": "modules/other/art/cover.webp"}},
+	}
+	content := MapJournal(context.Background(), doc, "", assets).Content
+	if !strings.Contains(content, "## Обложка") {
+		t.Fatalf("заголовок раздела потерялся: %q", content)
+	}
+	if !strings.Contains(content, "иллюстрация не перенесена") || !strings.Contains(content, "art/cover.webp") {
+		t.Fatalf("нет следа от ненайденного файла: %q", content)
+	}
+}
+
+// TestAssetsLocateFallback — путь в документе не всегда совпадает с тем, что
+// в архиве: другой регистр или файл переехал в другую подпапку при сборке.
+// Ищем по индексу архива, иначе картинки теряются на ровном месте.
+func TestAssetsLocateFallback(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "assets", "art"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "art", "Обложка.webp"), []byte("webp"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mod := &Module{Manifest: &Manifest{ID: "m"}, Dir: dir, Root: dir}
+	assets := NewAssets(mod, &memStore{}, "foundry/m")
+	ctx := context.Background()
+
+	// Другой регистр в пути.
+	if got := assets.URL(ctx, domain.AssetKindNotes, "modules/m/Assets/Art/Обложка.webp"); got == "" {
+		t.Fatal("файл с другим регистром пути не нашёлся")
+	}
+	// Файл лежит не там, где написано, но имя в архиве единственное.
+	if got := assets.URL(ctx, domain.AssetKindNotes, "modules/m/images/Обложка.webp"); got == "" {
+		t.Fatal("файл не нашёлся по имени")
+	}
+	// Чего в архиве нет — того нет, чужую картинку подставлять нельзя.
+	if got := assets.URL(ctx, domain.AssetKindNotes, "modules/m/art/Карта.webp"); got != "" {
+		t.Fatalf("подставился посторонний файл: %q", got)
+	}
+}
+
 // TestPackFolders — папки компендиума (документы "!folders!…") не должны
 // попадать в содержимое пака, а должны собираться в дерево путей: журнал из
 // вложенной папки ложится в такую же папку библиотеки заметок.
@@ -491,7 +539,7 @@ func TestLinkIndexRewrite(t *testing.T) {
 		{
 			"вставка страницы без подписи берёт имя раздела",
 			`@Embed[Compendium.mod.phb.JournalEntry.jrnA.JournalEntryPage.pageB inline]`,
-			`<a class="catalog-ref" data-kind="note" data-name="Приложение D: правила" data-folder="Модуль/Правила/Приложения">Перемещение через существ</a>`,
+			`<a class="catalog-ref" data-kind="note" data-name="Приложение D: правила" data-folder="Модуль/Правила/Приложения" data-section="Перемещение через существ">Перемещение через существ</a>`,
 		},
 		{
 			"старый формат ссылки на компендиум",

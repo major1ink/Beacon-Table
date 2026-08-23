@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -43,6 +44,8 @@ type Assets struct {
 	folder string // подпапка библиотеки, "foundry/<id модуля>"
 	cache  map[string]string
 	count  int
+	index  *moduleFiles // ленивый обход архива, см. fileIndex
+
 	// Missing — сколько ссылок не нашлось в архиве. Это норма, а не ошибка:
 	// половина иконок в модулях ссылается на ассеты самого Foundry
 	// ("icons/svg/mystery-man.svg"), которых у нас нет и быть не может.
@@ -153,7 +156,60 @@ func (a *Assets) locate(ref string) (string, bool) {
 			}
 		}
 	}
+	// Путь в документе не сошёлся с тем, что в архиве. Так бывает чаще, чем
+	// хотелось бы: в документе "Assets/Карта.webp", в архиве "assets/карта.webp"
+	// (на Linux это разные пути), или файл переехал в другую подпапку при
+	// сборке релиза. Ищем по индексу архива — сначала по пути без учёта
+	// регистра, потом по одному только имени файла, и только если такое имя
+	// в архиве единственное (иначе рискуем подставить чужую картинку).
+	index := a.fileIndex()
+	for _, v := range variants {
+		if target, ok := index.byPath[strings.ToLower(v)]; ok {
+			return target, true
+		}
+	}
+	if target, ok := index.byName[strings.ToLower(path.Base(clean))]; ok && target != "" {
+		return target, true
+	}
 	return "", false
+}
+
+// fileIndex — все файлы распакованного модуля, по пути и по имени (оба ключа
+// в нижнем регистре). Строится один раз на импорт и только если хоть один
+// путь не сошёлся напрямую: обход архива на несколько тысяч файлов дешевле
+// потерянных картинок, но делать его всегда незачем.
+func (a *Assets) fileIndex() *moduleFiles {
+	if a.index != nil {
+		return a.index
+	}
+	idx := &moduleFiles{byPath: map[string]string{}, byName: map[string]string{}}
+	root := a.mod.Root
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return nil
+		}
+		key := strings.ToLower(filepath.ToSlash(rel))
+		idx.byPath[key] = p
+		name := strings.ToLower(d.Name())
+		if _, exists := idx.byName[name]; exists {
+			idx.byName[name] = "" // имя не уникально — по нему больше не ищем
+			return nil
+		}
+		idx.byName[name] = p
+		return nil
+	})
+	a.index = idx
+	return idx
+}
+
+// moduleFiles — см. Assets.fileIndex.
+type moduleFiles struct {
+	byPath map[string]string
+	byName map[string]string
 }
 
 // htmlSrc — ссылки на файлы внутри HTML-текста (страницы журнала). Только

@@ -193,6 +193,12 @@ func anchor(target LinkTarget, label string) string {
 	if target.Kind == "note" && target.Folder != "" {
 		attrs += ` data-folder="` + html.EscapeString(target.Folder) + `"`
 	}
+	// Ссылка вела на страницу журнала — у нас это раздел внутри заметки
+	// (см. MapJournal): открываем заметку и подсвечиваем нужный раздел, а не
+	// бросаем читателя в начало длинного текста.
+	if target.Section != "" {
+		attrs += ` data-section="` + html.EscapeString(target.Section) + `"`
+	}
 	return "<a " + attrs + ">" + html.EscapeString(label) + "</a>"
 }
 
