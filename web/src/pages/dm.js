@@ -47,6 +47,7 @@ import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
+import { enhanceRolls } from "../inline-rolls.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
@@ -1942,7 +1943,21 @@ function renderNoteDetail() {
     noteEditArea.focus();
   } else {
     noteRenderView.innerHTML = renderNoteHtml(selectedNote.content);
+    // Формулы в тексте — кликабельные, как в статблоках и карточках (см.
+    // inline-rolls.js). Импорт модуля Foundry специально приводит свои
+    // [[/r 2d6]] к обычной формуле ради этого (см. internal/foundry/rolls.go).
+    // Не делегированный обработчик, а обход текста — поэтому вызываем на
+    // каждую перерисовку, а не один раз при загрузке страницы.
+    enhanceRolls(noteRenderView, sendNoteRoll);
   }
+}
+
+// sendNoteRoll — бросок из текста заметки уходит в общий лог стола тем же
+// сообщением, что и кнопки панели кубов (см. dice.js).
+function sendNoteRoll(formula, label) {
+  if (!vtt) return;
+  const title = selectedNote && selectedNote.title;
+  vtt.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
 }
 
 async function openNote(id, { edit = false } = {}) {

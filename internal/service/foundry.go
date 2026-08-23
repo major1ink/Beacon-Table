@@ -257,7 +257,7 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 			})
 		default:
 			assets.RewriteDoc(ctx, e.Doc)
-			foundry.RewriteDocLinks(e.Doc, links)
+			foundry.RewriteDocMacros(e.Doc, links)
 			result.Docs[e.Target] = append(result.Docs[e.Target], e.Doc)
 		}
 	}

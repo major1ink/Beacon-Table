@@ -9,6 +9,7 @@ import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
+import { enhanceRolls } from "../inline-rolls.js";
 
 const titleBar = document.getElementById("noteTitleBar");
 const editToggleBtn = document.getElementById("editToggleBtn");
@@ -43,7 +44,35 @@ function render() {
     editArea.focus();
   } else {
     body.innerHTML = renderNoteHtml(note.content);
+    // Формулы в тексте — кликабельные, как в карточках библиотек (см.
+    // inline-rolls.js). Обход текста, а не делегированный обработчик, —
+    // поэтому на каждую перерисовку.
+    enhanceRolls(body, sendRoll);
   }
+}
+
+// ---- броски из текста заметки ----
+// Своя WS-связь, как у карточек предмета/заклинания (см. itembook.js:
+// connectRollSocket): эта страница живёт отдельным окном и общего сокета
+// стола не видит. Результат уходит в общий лог стола (его увидят все) и
+// показывается тут же строкой — своего лога у окна заметки нет.
+let rollWS = null;
+
+function connectRollSocket() {
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  rollWS = new WebSocket(`${scheme}//${location.host}/ws/dm`);
+  rollWS.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    if (data.type !== "roll_result") return;
+    const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
+    msg.textContent = `${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}`;
+  };
+}
+
+function sendRoll(formula, label) {
+  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
+  const title = note && note.title;
+  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label }));
 }
 
 async function loadNote(id, { edit = false } = {}) {
@@ -135,5 +164,6 @@ deleteBtn.onclick = async () => {
     loadingHint.textContent = "Не указан id заметки (?id=...).";
     return;
   }
+  connectRollSocket();
   await loadNote(id);
 })();

@@ -136,11 +136,16 @@ func (ix *LinkIndex) Lookup(id string) (LinkTarget, bool) {
 	return t, ok
 }
 
-// Rewrite заменяет в тексте все макросы-обогатители на ссылки Beacon Table.
-// Цель не нашлась (ссылка на непереносимый документ, на другой модуль, на
-// документ мира) — остаётся только подпись: лучше просто текст, чем
-// «@UUID[Compendium.…]» посреди абзаца.
+// Rewrite переводит в тексте ВСЕ макросы Foundry: ссылки на документы — в
+// ссылки Beacon Table (ниже), инлайн-броски — в обычный текст формулы или
+// фразу проверки (см. RewriteRolls). Цель ссылки не нашлась (непереносимый
+// документ, другой модуль, документ мира) — остаётся только подпись: лучше
+// просто текст, чем «@UUID[Compendium.…]» посреди абзаца.
 func (ix *LinkIndex) Rewrite(text string) string {
+	return RewriteRolls(ix.rewriteLinks(text))
+}
+
+func (ix *LinkIndex) rewriteLinks(text string) string {
 	if !strings.Contains(text, "@") {
 		return text
 	}
@@ -191,12 +196,12 @@ func anchor(target LinkTarget, label string) string {
 	return "<a " + attrs + ">" + html.EscapeString(label) + "</a>"
 }
 
-// RewriteDocLinks проходит по всем строкам документа и переводит найденные в
+// RewriteDocMacros проходит по всем строкам документа и переводит найденные в
 // них макросы. Именно по всем: описания в схеме dnd5e лежат в разных местах
 // (system.description.value, system.unidentified.description, тексты
 // эффектов, страницы журнала), и перечислять их поимённо — гарантированно
 // что-нибудь забыть.
-func RewriteDocLinks(doc Doc, ix *LinkIndex) {
+func RewriteDocMacros(doc Doc, ix *LinkIndex) {
 	if ix == nil {
 		return
 	}

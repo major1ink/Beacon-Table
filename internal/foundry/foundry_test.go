@@ -525,7 +525,7 @@ func TestLinkIndexRewrite(t *testing.T) {
 // TestRewriteDocLinks — макросы лежат в разных полях схемы (описание
 // предмета, текст эффекта, вложенный предмет актёра), поэтому обход
 // документа рекурсивный.
-func TestRewriteDocLinks(t *testing.T) {
+func TestRewriteDocMacros(t *testing.T) {
 	ix := &LinkIndex{targets: map[string]LinkTarget{"spl1": {Kind: "spell", Name: "Свет"}}}
 	doc := Doc{
 		"name":   "Жезл",
@@ -534,7 +534,7 @@ func TestRewriteDocLinks(t *testing.T) {
 			map[string]any{"name": "Заряд", "system": map[string]any{"description": map[string]any{"value": `см. @UUID[Compendium.mod.spells.Item.spl1]`}}},
 		},
 	}
-	RewriteDocLinks(doc, ix)
+	RewriteDocMacros(doc, ix)
 
 	if got := digString(doc, "system", "description", "value"); !strings.Contains(got, `data-kind="spell"`) {
 		t.Fatalf("описание не переписано: %q", got)
@@ -542,6 +542,53 @@ func TestRewriteDocLinks(t *testing.T) {
 	nested := asMap(asSlice(doc["items"])[0])
 	if got := digString(nested, "system", "description", "value"); !strings.Contains(got, `>Свет</a>`) {
 		t.Fatalf("вложенный документ не переписан: %q", got)
+	}
+}
+
+// TestRewriteRolls — инлайн-броски Foundry. Формула должна остаться
+// формулой (её делает кликабельной клиент, см. web/src/inline-rolls.js), а
+// проверки и спасброски — стать человеческой фразой.
+func TestRewriteRolls(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"обычный бросок", `нанеси [[/r 2d6 + 3]] урона`, `нанеси 2d6 + 3 урона`},
+		{"бросок с подписью", `[[/r 1d8]]{урон молнией}`, `урон молнией (1d8)`},
+		{"бросок без команды", `[[2d10]]`, `2d10`},
+		{"флейвор после # отбрасывается", `[[/r 1d4 # яд]]`, `1d4`},
+		{"скрытый бросок ДМ — та же формула", `[[/gmr 1d100]]`, `1d100`},
+		{"спасбросок позиционно", `[[/save dex 15]]`, `спасбросок: Лов (СЛ 15)`},
+		{"спасбросок именованными аргументами", `[[/save ability=con dc=13]]`, `спасбросок: Тел (СЛ 13)`},
+		{"концентрация", `[[/concentration 10]]`, `спасбросок: концентрация (СЛ 10)`},
+		{"проверка навыка", `[[/check skill=ste dc=12]]`, `проверка: Скрытность (СЛ 12)`},
+		{"проверка характеристики", `[[/check str 20]]`, `проверка: Сил (СЛ 20)`},
+		{"навык отдельной командой", `[[/skill acr]]`, `проверка: Акробатика`},
+		{"урон с типом", `[[/damage 2d6 fire]]`, `2d6 (огонь)`},
+		{"лечение", `[[/heal 2d4]]`, `2d4`},
+		{"своя подпись важнее фразы", `[[/save dex 15]]{СЛ 15 Ловкость}`, `СЛ 15 Ловкость`},
+		// Модули часто пишут «на [[/save con 15]] saving throw» — второе
+		// «спасбросок» подряд не нужно, слово уже есть в самом тексте.
+		{
+			"текст сам называет бросок",
+			`must succeed on a [[/save con 15]] saving throw or fall`,
+			`must succeed on a Тел (СЛ 15) saving throw or fall`,
+		},
+		{
+			"то же для проверки, через тег",
+			`make a [[/check ste 12]]<strong> check</strong>`,
+			`make a Скрытность (СЛ 12)<strong> check</strong>`,
+		},
+		{"экранированный амперсанд у &Reference", `состояние &amp;Reference[Prone]`, `состояние Prone`},
+		{"незнакомая команда без подписи исчезает", `а[[/item Меч]]б`, `аб`},
+		{"ссылка на правило системы", `состояние &Reference[condition=prone]{Ничком}`, `состояние Ничком`},
+		{"текст без макросов не трогаем", `просто 2d6 в тексте`, `просто 2d6 в тексте`},
+	}
+	for _, c := range cases {
+		if got := RewriteRolls(c.in); got != c.want {
+			t.Errorf("%s:\n получили %q\n ожидали  %q", c.name, got, c.want)
+		}
 	}
 }
 
