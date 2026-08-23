@@ -112,6 +112,11 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/modifier-targets", a.handleModifierTargets)
 
+	// Импорт компендиумов Foundry VTT по ссылке на манифест — только ДМ,
+	// см. foundry_handlers.go.
+	mux.HandleFunc("POST /api/foundry/inspect", a.handleFoundryInspect)
+	mux.HandleFunc("POST /api/foundry/import", a.handleFoundryImport)
+
 	mux.HandleFunc("GET /api/conditions", a.handleConditionsList)
 	mux.HandleFunc("POST /api/conditions", a.handleConditionCreate)
 	mux.HandleFunc("GET /api/conditions/{id}", a.handleConditionGet)

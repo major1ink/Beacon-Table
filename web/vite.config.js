@@ -27,6 +27,7 @@ export default defineConfig({
         conditions: resolve(__dirname, "conditions.html"),
         combatTracker: resolve(__dirname, "combat-tracker.html"),
         catalog: resolve(__dirname, "catalog.html"),
+        foundryImport: resolve(__dirname, "foundry-import.html"),
       },
     },
   },

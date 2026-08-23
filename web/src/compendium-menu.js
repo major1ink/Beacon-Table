@@ -119,4 +119,23 @@ export function mountCompendiumMenu(panelEl, { role }) {
 
   panelEl.appendChild(buildRoot(true, "Beacon Table", role, true));
   panelEl.appendChild(buildRoot(false, "Пользовательские", role, false));
+
+  // Импорт целого пакета Foundry VTT по ссылке на манифест (см.
+  // web/foundry-import.html). Только у ДМ: импорт ходит с сервера в
+  // интернет, пишет файлы в библиотеку загрузок и заводит сцены — тот же
+  // набор прав, что и у остальных ДМ-инструментов (сервер откажет игроку
+  // 403-м, см. handleFoundryInspect).
+  if (role === "dm") {
+    panelEl.appendChild(
+      leafNode("＋ Импорт из Foundry VTT", () =>
+        openFloatingWindow({
+          key: "foundry-import",
+          title: "Импорт из Foundry VTT",
+          url: "/foundry-import.html",
+          width: 560,
+          height: 640,
+        })
+      )
+    );
+  }
 }

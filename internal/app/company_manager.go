@@ -54,6 +54,12 @@ type ActiveWorld struct {
 	Notes      service.NoteService
 	Playlists  service.PlaylistService
 	Assets     service.AssetService
+	// Foundry — импорт компендиумов из пакетов Foundry VTT (см.
+	// service.FoundryService). Собран поверх Assets/Room/Playlists/Notes
+	// этого же мира: импорт кладёт файлы в его библиотеку загрузок и заводит
+	// сцены в его комнате, поэтому пересобирается вместе со всем остальным
+	// при переключении мира.
+	Foundry service.FoundryService
 }
 
 // CompanyManager — держит список миров и то, какой из них сейчас запущен на
@@ -267,6 +273,10 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		return err
 	}
 
+	notes := service.NewNoteService(noteRepo)
+	playlists := service.NewPlaylistService(playlistRepo)
+	assets := service.NewAssetService(assetRepo)
+
 	world := &ActiveWorld{
 		Company:    company,
 		Room:       room,
@@ -277,9 +287,14 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Items:      service.NewItemService(itemRepo),
 		References: service.NewReferenceService(referenceRepo),
 		Conditions: service.NewConditionService(conditionRepo),
-		Notes:      service.NewNoteService(noteRepo),
-		Playlists:  service.NewPlaylistService(playlistRepo),
-		Assets:     service.NewAssetService(assetRepo),
+		Notes:      notes,
+		Playlists:  playlists,
+		Assets:     assets,
+		// Кэш скачанных модулей — в данных этой компании: файлы там
+		// временные (чистятся по TTL, см. foundry.Cache), но лежать рядом с
+		// остальными данными мира им уместнее, чем в системном temp, который
+		// на некоторых хостингах живёт в оперативной памяти.
+		Foundry: service.NewFoundryService(filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists, notes),
 	}
 
 	m.mu.Lock()

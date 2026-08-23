@@ -43,6 +43,19 @@ function mapOne(raw, classNameByIdentifier) {
     const parentName = classNameByIdentifier[sys.classIdentifier] || sys.classIdentifier || "";
     return { name, kind: "архетип", parentName, source, imageUrl, description: (sys.description && sys.description.value) || "" };
   }
+  // Вид и предыстория — те же узлы дерева компендиума, что «Виды» и
+  // «Предыстории» (см. compendium-taxonomy.js: REFERENCE_GROUPS), и такие же
+  // текстовые карточки, как класс: у dnd5e это документы Item подтипов
+  // race/species (имя поменялось в редакции 2024) и background. Приезжают
+  // при импорте пака целиком (см. web/src/pages/foundry-import.js) — в
+  // одиночном экспорте с ttg.club их не бывает, поэтому появились позже
+  // остальных.
+  if (raw.type === "race" || raw.type === "species") {
+    return { name, kind: "вид", parentName: "", source, imageUrl, description: (sys.description && sys.description.value) || "" };
+  }
+  if (raw.type === "background") {
+    return { name, kind: "происхождение", parentName: "", source, imageUrl, description: (sys.description && sys.description.value) || "" };
+  }
   if (raw.type === "feat") {
     let description = (sys.description && sys.description.value) || "";
     // requirements — свободный текст вроде "Жрец 7" (класс+уровень, с

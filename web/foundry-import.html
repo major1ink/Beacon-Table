@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beacon Table — Импорт из Foundry VTT</title>
+  <link rel="stylesheet" href="/src/styles/theme.css" />
+  <style>
+    /* Тот же каркас "шапка + прокручиваемое тело", что у catalog.html —
+       страница открывается тем же openFloatingWindow. */
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12.5px; display: flex; flex-direction: column;
+    }
+    button { cursor: pointer; border: none; border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; padding: 8px 10px; transition: background .12s ease; }
+    button:hover:not(:disabled) { background: var(--surface-hover); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    button.primary { background: var(--accent); color: #fff; }
+    input[type="text"] {
+      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 7px 10px; font: inherit; width: 100%;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    .hint { opacity: 0.6; font-size: 11px; line-height: 1.5; margin: 0; }
+    .error { color: var(--danger, #e06c75); }
+
+    #topBar {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+      border-bottom: 1px solid var(--border); background: var(--panel-bg);
+    }
+    #topBar .title { font-weight: 700; font-size: 15px; margin-right: auto; }
+    #closeBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
+
+    #app { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    #urlForm { display: flex; gap: 6px; }
+    #urlForm input { flex: 1 1 auto; }
+    #urlForm button { flex: 0 0 auto; }
+
+    .section { display: flex; flex-direction: column; gap: 8px; }
+    .section h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+
+    .pack-row {
+      display: flex; align-items: baseline; gap: 8px; padding: 7px 8px;
+      border-radius: 8px; background: var(--panel-bg); border: 1px solid var(--border);
+    }
+    .pack-row label { display: flex; align-items: baseline; gap: 8px; flex: 1 1 auto; cursor: pointer; }
+    .pack-row .pack-name { font-weight: 600; }
+    .pack-row .pack-meta { opacity: .55; font-size: 11px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      font-size: 10.5px; padding: 1px 6px; border-radius: 999px;
+      background: var(--surface); opacity: .85; white-space: nowrap;
+    }
+    .targets { display: flex; flex-wrap: wrap; gap: 10px; }
+    .targets label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+    #log {
+      white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px; line-height: 1.5; background: var(--panel-bg);
+      border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 0;
+      max-height: 240px; overflow-y: auto;
+    }
+    #log:empty { display: none; }
+    .row { display: flex; gap: 8px; align-items: center; }
+  </style>
+</head>
+<body>
+  <div id="topBar">
+    <span class="title">Импорт из Foundry VTT</span>
+    <button id="closeBtn" type="button" title="Закрыть"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+  </div>
+  <div id="app">
+    <p class="hint">
+      Вставь ссылку на манифест модуля или системы Foundry VTT (файл
+      <code>module.json</code> / <code>system.json</code> — её дают на странице модуля).
+      Сервер скачает архив этой версии, распакует и разложит содержимое по разделам стола:
+      карточки — в библиотеки, сцены — в переключатель сцен, музыку — в плейлисты ДМ,
+      журналы — в заметки, картинки и треки — в библиотеку загрузок.
+    </p>
+    <form id="urlForm">
+      <input type="text" id="manifestUrl" placeholder="https://example.com/modules/my-module/module.json" spellcheck="false" />
+      <button type="submit" id="inspectBtn" class="primary">Проверить</button>
+    </form>
+    <p class="hint" id="status"></p>
+
+    <div class="section" id="packsSection" style="display:none;">
+      <h3>Что импортировать</h3>
+      <div class="targets" id="targets"></div>
+      <div class="section" id="packs"></div>
+      <div class="row">
+        <button type="button" id="importBtn" class="primary">Импортировать выбранное</button>
+        <button type="button" id="cancelBtn" style="display:none;">Остановить</button>
+      </div>
+      <p class="hint">
+        Дубли не проверяются: каждый импорт заводит новые карточки, даже если запись с таким
+        именем уже есть в библиотеке.
+      </p>
+    </div>
+
+    <pre id="log"></pre>
+  </div>
+
+  <script type="module" src="/src/pages/foundry-import.js"></script>
+</body>
+</html>

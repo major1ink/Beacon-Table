@@ -289,6 +289,30 @@ export async function deleteCondition(id) {
   return apiFetch(`/api/conditions/${id}`, { method: "DELETE" });
 }
 
+// ---- импорт компендиумов из пакетов Foundry VTT (только ДМ, см.
+// internal/api/http/foundry_handlers.go, web/foundry-import.html) ----
+
+// inspectFoundryPackage — разведка по ссылке на манифест: сервер скачивает
+// и распаковывает архив (первый вызов может идти минуты — модуль с картами
+// весит сотни мегабайт) и отдаёт {id,title,version,packs:[{name,label,type,
+// count,targets:{раздел:сколько},error}]}. Распакованный модуль остаётся в
+// кэше сервера, поэтому последующий importFoundryPack по той же ссылке уже
+// не ходит в сеть.
+export async function inspectFoundryPackage(url) {
+  return apiFetch("/api/foundry/inspect", { method: "POST", body: JSON.stringify({ url }) });
+}
+
+// importFoundryPack — импорт ОДНОГО пака. targets — какие разделы брать
+// ("items"/"spells"/"monsters"/"references"/"conditions"/"scenes"/
+// "playlists"/"notes"), пусто — все. Возвращает {docs:{раздел:[документы
+// Foundry]}, applied:{раздел:сколько}, skipped, assets, warnings}: сцены,
+// плейлисты и заметки сервер уже разложил сам (applied), а документы
+// карточек приезжают сырыми — их маппят те же функции, что и импорт
+// одиночного файла (см. web/src/item-import.js и соседей).
+export async function importFoundryPack(url, pack, targets) {
+  return apiFetch("/api/foundry/import", { method: "POST", body: JSON.stringify({ url, pack, targets }) });
+}
+
 // Загрузка файла (карта, токен-арт, аватар персонажа или ассет карты) на
 // сервер, возвращает {url}. kind — "maps"/"audio"/"props" (только ДМ) или
 // "tokens" (любой авторизованный аккаунт — сюда же грузят аватары
