@@ -14,11 +14,11 @@
 // не разрастается до сотен мегабайт на большом модуле.
 import {
   fetchMe, inspectFoundryPackage, importFoundryPack,
-  createItem, updateItem,
-  createSpell, updateSpell,
-  createMonster, updateMonster,
-  createReference, updateReference,
-  createCondition, updateCondition,
+  fetchItems, createItem, updateItem,
+  fetchSpells, createSpell, updateSpell,
+  fetchBestiary, createMonster, updateMonster,
+  fetchReferences, createReference, updateReference,
+  fetchConditions, createCondition, updateCondition,
   fetchNotes, fetchNote, createNote, updateNote,
 } from "../api.js";
 import { mapFoundryItemJson } from "../item-import.js";
@@ -43,12 +43,14 @@ function itemArt(doc) {
 
 // TARGETS — разделы стола, по которым разъезжается пакет. Порядок задаёт и
 // порядок галочек, и порядок импорта внутри пака.
+// fetchAll у карточек — не только для галочки в отчёте: по этому списку
+// импорт проверяет, нет ли такой карточки в библиотеке уже (см. importCards).
 const TARGETS = [
-  { id: "monsters", label: "Существа", createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt },
-  { id: "spells", label: "Заклинания", createOne: createSpell, updateOne: updateSpell, mapOne: mapFoundrySpellJson },
-  { id: "items", label: "Снаряжение", createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },
-  { id: "references", label: "Справочник", createOne: createReference, updateOne: updateReference, mapBatch: mapFoundryReferenceBatch },
-  { id: "conditions", label: "Состояния", createOne: createCondition, updateOne: updateCondition, mapBatch: mapFoundryConditionBatch },
+  { id: "monsters", label: "Существа", fetchAll: fetchBestiary, createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt },
+  { id: "spells", label: "Заклинания", fetchAll: fetchSpells, createOne: createSpell, updateOne: updateSpell, mapOne: mapFoundrySpellJson },
+  { id: "items", label: "Снаряжение", fetchAll: fetchItems, createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },
+  { id: "references", label: "Справочник", fetchAll: fetchReferences, createOne: createReference, updateOne: updateReference, mapBatch: mapFoundryReferenceBatch },
+  { id: "conditions", label: "Состояния", fetchAll: fetchConditions, createOne: createCondition, updateOne: updateCondition, mapBatch: mapFoundryConditionBatch },
   // Заметки: текст и папку готовит сервер (см. service.FoundryImport.Notes),
   // но заводит их эта страница — потому что заметка с тем же названием в той
   // же папке может уже существовать, и что с ней делать, решает ДМ (см.
@@ -72,10 +74,10 @@ let cancelled = false;
 // packProgress — сколько паков уже позади из скольких; нужен importCards,
 // чтобы посчитать общую долю (см. setProgress).
 let packProgress = { done: 0, total: 1 };
-// noteConflictDefault — ответ ДМ «применить ко всем» из диалога про
-// совпавшую заметку ("overwrite" | "duplicate" | "skip"); сбрасывается на
-// каждый запуск импорта.
-let noteConflictDefault = null;
+// conflictDefaults — ответ ДМ «так же поступать с остальными» из диалога о
+// совпавшей записи, ПО РАЗДЕЛАМ: id раздела → "overwrite" | "duplicate" |
+// "skip" (см. resolveConflict). Сбрасывается на каждый запуск импорта.
+let conflictDefaults = {};
 
 // ==================== DOM ====================
 
@@ -260,7 +262,7 @@ importBtn.addEventListener("click", async () => {
 
   running = true;
   cancelled = false;
-  noteConflictDefault = null;
+  conflictDefaults = {};
   importBtn.disabled = true;
   urlInput.disabled = true;
   inspectBtn.disabled = true;
@@ -310,7 +312,9 @@ importBtn.addEventListener("click", async () => {
       const docs = (result.docs || {})[t.id] || [];
       if (!docs.length) continue;
       const stats = await importCards(t, docs, p);
-      total.created += stats.ok;
+      total.created += stats.created;
+      total.updated += stats.updated;
+      total.skipped += stats.skipped;
       total.failed += stats.failed;
       if (cancelled) break;
     }
@@ -326,7 +330,7 @@ importBtn.addEventListener("click", async () => {
   const summary =
     (cancelled ? "Остановлено. " : "Готово. ") +
     `Создано: ${total.created}, сцен и плейлистов: ${total.applied}, ` +
-    (total.updated ? `перезаписано заметок: ${total.updated}, ` : "") +
+    (total.updated ? `перезаписано: ${total.updated}, ` : "") +
     (total.skipped ? `пропущено без изменений: ${total.skipped}, ` : "") +
     `файлов перенесено: ${total.assets}` +
     (total.failed ? `, ошибок: ${total.failed} (подробности в журнале ниже и в консоли браузера)` : "");
@@ -338,11 +342,42 @@ importBtn.addEventListener("click", async () => {
   notifySaved();
 });
 
+// cardKey — по чему считаем, что «такая карточка уже есть». Имя (без учёта
+// регистра и лишних пробелов) — то, что видит ДМ в списке и по чему на
+// карточку ссылаются описания (см. web/src/catalog-links.js). У состояний
+// ключ машинный — slug: именно им состояние вешается на токен, и два
+// «Ослепления» с одним slug'ом — точно одна и та же карточка.
+function cardKey(target, card) {
+  if (target.id === "conditions" && card.slug) return "slug:" + String(card.slug).trim().toLowerCase();
+  return (card.name || "").trim().toLowerCase();
+}
+
+// sameCard — импорт НИЧЕГО не изменит в существующей карточке: каждое поле,
+// которое он собирается записать, уже там такое же. Сравниваем только
+// importируемые поля — то, что ДМ дописал сам (свои теги, заметки в
+// описании соседних полей), карточку «изменившейся» не делает.
+function sameCard(existing, mapped) {
+  for (const [key, value] of Object.entries(mapped)) {
+    const before = existing[key];
+    const isComposite = (v) => v !== null && typeof v === "object";
+    if (isComposite(value) || isComposite(before)) {
+      if (JSON.stringify(before ?? null) !== JSON.stringify(value ?? null)) return false;
+      continue;
+    }
+    if (String(before ?? "") !== String(value ?? "")) return false;
+  }
+  return true;
+}
+
 // importCards — маппинг и заведение карточек одного раздела. Батчевые
 // мапперы (справочник, состояния) получают весь пак разом: архетипу нужно
 // найти класс-родителя среди соседей, а состояния схлопываются по slug (см.
 // reference-import.js/condition-import.js).
+//
+// Совпадения разбираются так же, как у заметок (см. importNotes): точно
+// такая же карточка пропускается молча, отличающаяся — как решит ДМ.
 async function importCards(target, docs, pack) {
+  const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
   const mapped = target.mapBatch
     ? target.mapBatch(docs)
     : docs.map((doc) => {
@@ -356,10 +391,18 @@ async function importCards(target, docs, pack) {
         }
       });
 
-  let ok = 0;
-  let failed = 0;
   const list = mapped.filter(Boolean);
-  failed += mapped.length - list.length;
+  stats.failed += mapped.length - list.length;
+
+  let index;
+  try {
+    index = new Map((await target.fetchAll()).map((x) => [cardKey(target, x), x]));
+  } catch (err) {
+    log(`  ${target.label}: не удалось прочитать библиотеку — ${err.message}`);
+    stats.failed += list.length;
+    return stats;
+  }
+
   for (let i = 0; i < list.length; i++) {
     if (cancelled) break;
     const card = list[i];
@@ -367,17 +410,79 @@ async function importCards(target, docs, pack) {
       setStatus(`${pack.label || pack.name} → ${target.label}: ${i + 1} из ${list.length}…`, { busy: true });
       setProgress((packProgress.done + (i + 1) / list.length) / packProgress.total);
     }
+
+    const key = cardKey(target, card);
+    const existing = index.get(key);
+    let action = "create";
+    if (existing) {
+      if (sameCard(existing, card)) {
+        stats.skipped++;
+        continue;
+      }
+      action = await resolveConflict(target, {
+        title: card.name,
+        // Карточку каталога «из коробки» сервер править не даст (см.
+        // itemfile.Catalog: ErrForbidden) — перезапись для неё не предлагается.
+        allowOverwrite: !existing.system,
+        where: existing.system ? "каталог «из коробки»" : "библиотека мира",
+        existingInfo: describeCard(existing),
+        incomingInfo: describeCard(card),
+      });
+      if (action === "stop") {
+        cancelled = true;
+        break;
+      }
+      if (action === "skip") {
+        stats.skipped++;
+        continue;
+      }
+    }
+
     try {
-      const created = await target.createOne(card.name);
-      await target.updateOne(created.id, Object.assign({}, created, card));
-      ok++;
+      if (action === "overwrite") {
+        await target.updateOne(existing.id, Object.assign({}, existing, card));
+        stats.updated++;
+      } else {
+        const created = await target.createOne(card.name);
+        const saved = await target.updateOne(created.id, Object.assign({}, created, card));
+        // Копию кладём в индекс, только если ключа там ещё нет: иначе
+        // следующая такая же карточка сравнивалась бы с копией, а не с
+        // оригиналом.
+        if (!index.has(key)) index.set(key, saved || Object.assign({ id: created.id }, card));
+        stats.created++;
+      }
     } catch (err) {
-      failed++;
+      stats.failed++;
       console.warn(`[${pack.name}] ${card.name}: ${err.message}`);
     }
   }
-  log(`  ${target.label}: ${ok} из ${docs.length}` + (failed ? `, не удалось ${failed}` : ""));
-  return { ok, failed };
+
+  log(`  ${target.label}: ${statsLine(stats)} (из ${docs.length})`);
+  return stats;
+}
+
+// describeCard — чем карточки отличаются, одной строкой для диалога. Полный
+// diff тут не нужен: ДМ решает «перезаписать своим модулем или нет», а не
+// вычитывает изменения по полям.
+function describeCard(card) {
+  const parts = [];
+  if (card.type) parts.push(String(card.type));
+  if (card.kind) parts.push(String(card.kind));
+  if (card.level !== undefined && card.level !== null) parts.push(`круг ${card.level}`);
+  if (card.cr) parts.push("CR " + card.cr);
+  if (card.slug) parts.push(card.slug);
+  const description = String(card.description || "");
+  parts.push(`описание ${description.length} символов`);
+  if (card.updatedAt) parts.push("изменена " + formatWhen(card.updatedAt));
+  return parts.join(", ");
+}
+
+function statsLine(stats) {
+  const parts = [`создано ${stats.created}`];
+  if (stats.updated) parts.push(`перезаписано ${stats.updated}`);
+  if (stats.skipped) parts.push(`пропущено ${stats.skipped}`);
+  if (stats.failed) parts.push(`ошибок ${stats.failed}`);
+  return parts.join(", ");
 }
 
 // ==================== заметки ====================
@@ -430,7 +535,12 @@ async function importNotes(notes, pack) {
         stats.skipped++;
         continue;
       }
-      action = noteConflictDefault || (await askNoteConflict(note, current));
+      action = await resolveConflict(TARGET_BY_ID.notes, {
+        title: note.title,
+        where: note.folder ? `папка «${note.folder}»` : "корень библиотеки",
+        existingInfo: `${(current.content || "").length} символов, изменена ${formatWhen(current.updatedAt)}`,
+        incomingInfo: `${note.content.length} символов`,
+      });
       if (action === "stop") {
         cancelled = true;
         break;
@@ -461,25 +571,32 @@ async function importNotes(notes, pack) {
     }
   }
 
-  const parts = [`создано ${stats.created}`];
-  if (stats.updated) parts.push(`перезаписано ${stats.updated}`);
-  if (stats.skipped) parts.push(`пропущено ${stats.skipped}`);
-  if (stats.failed) parts.push(`ошибок ${stats.failed}`);
-  log(`  Заметки ДМ: ${parts.join(", ")} (из ${notes.length})`);
+  log(`  Заметки ДМ: ${statsLine(stats)} (из ${notes.length})`);
   return stats;
 }
 
-// askNoteConflict — диалог «заметка уже есть, но отличается». confirm() тут
-// не годится: вариантов больше двух, да и показать, ЧЕМ отличается (папка,
-// размер, дата), надо. Возвращает "overwrite" | "duplicate" | "skip" |
-// "stop"; галочка «ко всем остальным» запоминается в noteConflictDefault.
-function askNoteConflict(note, existing) {
+// resolveConflict — что делать с совпавшей записью: ответ «ко всем
+// остальным» для этого раздела помнится с прошлого раза (conflictDefaults),
+// иначе спрашиваем. Дефолт хранится ПО РАЗДЕЛАМ: «перезаписывать все
+// заметки» — не то же самое, что «перезаписывать все статблоки».
+async function resolveConflict(target, info) {
+  const remembered = conflictDefaults[target.id];
+  // Запомненная перезапись не годится для карточки каталога «из коробки» —
+  // её сервер править не даст, спрашиваем заново.
+  if (remembered && (remembered !== "overwrite" || info.allowOverwrite !== false)) return remembered;
+  return askConflict(target, info);
+}
+
+// askConflict — диалог «такая запись уже есть, но отличается». confirm() тут
+// не годится: вариантов больше двух, да и показать, ЧЕМ отличается, надо.
+// Возвращает "overwrite" | "duplicate" | "skip" | "stop".
+function askConflict(target, { title, where, existingInfo, incomingInfo, allowOverwrite = true }) {
   return new Promise((resolve) => {
     const overlay = h("div", { class: "modal-overlay" });
-    const applyAll = h("input", { type: "checkbox", id: "noteConflictAll" });
+    const applyAll = h("input", { type: "checkbox" });
 
     const finish = (action) => {
-      if (applyAll.checked && action !== "stop") noteConflictDefault = action;
+      if (applyAll.checked && action !== "stop") conflictDefaults[target.id] = action;
       overlay.remove();
       document.removeEventListener("keydown", onKey);
       resolve(action);
@@ -491,26 +608,27 @@ function askNoteConflict(note, existing) {
     const button = (label, action, primary) =>
       h("button", { class: primary ? "primary" : "", text: label, onclick: () => finish(action) });
 
+    const buttons = [];
+    if (allowOverwrite) buttons.push(button("Перезаписать", "overwrite", true));
+    buttons.push(button("Оставить обе", "duplicate", !allowOverwrite));
+    buttons.push(button("Пропустить", "skip"));
+    buttons.push(button("Остановить импорт", "stop"));
+
     overlay.appendChild(
       h("div", { class: "modal" }, [
-        h("h3", { text: "Такая заметка уже есть" }),
+        h("h3", { text: `${target.label}: такая запись уже есть` }),
         h("p", { class: "hint" }, [
-          `«${note.title}» в папке «${note.folder || "корень библиотеки"}» уже существует, ` +
-            "но содержимое отличается от того, что в модуле.",
+          `«${title}» уже есть (${where}), но отличается от того, что в модуле.` +
+            (allowOverwrite ? "" : " Карточка каталога «из коробки» доступна только для чтения — перезаписать её нельзя."),
         ]),
         h("dl", { class: "modal-diff" }, [
-          h("dt", { text: "В библиотеке" }),
-          h("dd", { text: `${(existing.content || "").length} символов, изменена ${formatWhen(existing.updatedAt)}` }),
+          h("dt", { text: "Сейчас" }),
+          h("dd", { text: existingInfo }),
           h("dt", { text: "В модуле" }),
-          h("dd", { text: `${note.content.length} символов` }),
+          h("dd", { text: incomingInfo }),
         ]),
-        h("div", { class: "modal-buttons" }, [
-          button("Перезаписать", "overwrite", true),
-          button("Оставить обе", "duplicate"),
-          button("Пропустить", "skip"),
-          button("Остановить импорт", "stop"),
-        ]),
-        h("label", { class: "modal-all" }, [applyAll, "Так же поступать со всеми остальными"]),
+        h("div", { class: "modal-buttons" }, buttons),
+        h("label", { class: "modal-all" }, [applyAll, `Так же поступать с остальными: ${target.label.toLowerCase()}`]),
       ])
     );
     document.body.appendChild(overlay);
