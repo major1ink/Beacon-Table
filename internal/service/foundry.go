@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"beacon-table/internal/domain"
@@ -109,6 +110,13 @@ type foundryService struct {
 	assets    AssetService
 	room      RoomService
 	playlists PlaylistService
+
+	// links — индекс перекрёстных ссылок модуля (см. foundry.LinkIndex),
+	// ключ — папка распакованного модуля. Строится обходом ВСЕХ паков, а
+	// импорт идёт пак за паком — без кэша каждый пак перечитывал бы весь
+	// модуль заново.
+	linksMu sync.Mutex
+	links   map[string]*foundry.LinkIndex
 }
 
 // foundryHTTPTimeout — потолок на скачивание манифеста и архива. Модуль с
@@ -129,7 +137,22 @@ func NewFoundryService(cacheDir string, assets AssetService, room RoomService, p
 		assets:    assets,
 		room:      room,
 		playlists: playlists,
+		links:     map[string]*foundry.LinkIndex{},
 	}
+}
+
+// linkIndex — индекс перекрёстных ссылок этого модуля, с кэшем по папке
+// распаковки (кэш модуля живёт два часа, см. foundry.Cache — индекс живёт
+// столько же, сколько процесс, и это тот же порядок).
+func (s *foundryService) linkIndex(mod *foundry.Module, moduleTitle string) *foundry.LinkIndex {
+	s.linksMu.Lock()
+	defer s.linksMu.Unlock()
+	if ix, ok := s.links[mod.Dir]; ok {
+		return ix
+	}
+	ix := foundry.BuildLinkIndex(mod, moduleTitle)
+	s.links[mod.Dir] = ix
+	return ix
 }
 
 func (s *foundryService) Inspect(ctx context.Context, manifestURL string) (*FoundryPackage, error) {
@@ -192,6 +215,10 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 		packLabel = pack.Name
 	}
 	assets := foundry.NewAssets(mod, &assetSaver{assets: s.assets, account: account}, "foundry/"+sanitizeFolderName(packageID))
+	// Ссылки внутри текстов («см. @UUID[…]{Перемещение через существ}») —
+	// на документы этого же модуля: переводим их в ссылки Beacon Table, пока
+	// известно, что куда едет (см. foundry.LinkIndex).
+	links := s.linkIndex(mod, moduleTitle)
 
 	wanted := make(map[string]bool, len(targets))
 	for _, t := range targets {
@@ -223,9 +250,14 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 			// заметка тут не создаётся: см. FoundryImport.Notes.
 			folder := foundry.NoteFolder(moduleTitle, packLabel, contents.Folders.Path(foundry.DocFolderID(e.Doc)))
 			journal := foundry.MapJournal(ctx, e.Doc, folder, assets)
-			result.Notes = append(result.Notes, FoundryNote{Folder: journal.Folder, Title: journal.Title, Content: journal.Content})
+			result.Notes = append(result.Notes, FoundryNote{
+				Folder:  journal.Folder,
+				Title:   journal.Title,
+				Content: links.Rewrite(journal.Content),
+			})
 		default:
 			assets.RewriteDoc(ctx, e.Doc)
+			foundry.RewriteDocLinks(e.Doc, links)
 			result.Docs[e.Target] = append(result.Docs[e.Target], e.Doc)
 		}
 	}

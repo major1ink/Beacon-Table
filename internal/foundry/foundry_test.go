@@ -466,6 +466,122 @@ func TestNoteFolderDepthClamp(t *testing.T) {
 	}
 }
 
+// TestLinkIndexRewrite — перекрёстные ссылки модуля: @UUID/@Embed внутри
+// текстов должны становиться ссылками Beacon Table на те же документы, а не
+// оставаться макросами Foundry в абзаце.
+func TestLinkIndexRewrite(t *testing.T) {
+	ix := &LinkIndex{targets: map[string]LinkTarget{
+		"jrnA":  {Kind: "note", Name: "Приложение D: правила", Folder: "Модуль/Правила/Приложения"},
+		"pageB": {Kind: "note", Name: "Приложение D: правила", Folder: "Модуль/Правила/Приложения", Section: "Перемещение через существ"},
+		"spl1":  {Kind: "spell", Name: "Огненный шар"},
+		"itm1":  {Kind: "item", Name: `Меч "Клык"`},
+		"tbl1":  {Name: "Таблица случайностей"}, // переносить некуда — останется текст
+	}}
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			"ссылка на журнал со своей подписью",
+			`см. @UUID[Compendium.mod.phb.JournalEntry.jrnA]{правила боя}`,
+			`см. <a class="catalog-ref" data-kind="note" data-name="Приложение D: правила" data-folder="Модуль/Правила/Приложения">правила боя</a>`,
+		},
+		{
+			"вставка страницы без подписи берёт имя раздела",
+			`@Embed[Compendium.mod.phb.JournalEntry.jrnA.JournalEntryPage.pageB inline]`,
+			`<a class="catalog-ref" data-kind="note" data-name="Приложение D: правила" data-folder="Модуль/Правила/Приложения">Перемещение через существ</a>`,
+		},
+		{
+			"старый формат ссылки на компендиум",
+			`@Compendium[mod.spells.spl1]{Огненный шар}`,
+			`<a class="catalog-ref" data-kind="spell" data-name="Огненный шар">Огненный шар</a>`,
+		},
+		{
+			"кавычки в имени экранируются",
+			`@UUID[Compendium.mod.items.Item.itm1]`,
+			`<a class="catalog-ref" data-kind="item" data-name="Меч &#34;Клык&#34;">Меч &#34;Клык&#34;</a>`,
+		},
+		{
+			"цель есть, но переносить некуда — остаётся подпись",
+			`бросьте по @UUID[Compendium.mod.tables.RollTable.tbl1]{таблице}`,
+			`бросьте по таблице`,
+		},
+		{
+			"чужой модуль — тоже только подпись, без макроса в тексте",
+			`<p>см. @UUID[Compendium.other.pack.JournalEntry.zzz]{другой модуль}</p>`,
+			`<p>см. другой модуль</p>`,
+		},
+		{"текста без макросов не касаемся", `<p>обычный абзац</p>`, `<p>обычный абзац</p>`},
+	}
+	for _, c := range cases {
+		if got := ix.Rewrite(c.in); got != c.want {
+			t.Errorf("%s:\n получили %q\n ожидали  %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestRewriteDocLinks — макросы лежат в разных полях схемы (описание
+// предмета, текст эффекта, вложенный предмет актёра), поэтому обход
+// документа рекурсивный.
+func TestRewriteDocLinks(t *testing.T) {
+	ix := &LinkIndex{targets: map[string]LinkTarget{"spl1": {Kind: "spell", Name: "Свет"}}}
+	doc := Doc{
+		"name":   "Жезл",
+		"system": map[string]any{"description": map[string]any{"value": `даёт @UUID[Compendium.mod.spells.Item.spl1]{Свет}`}},
+		"items": []any{
+			map[string]any{"name": "Заряд", "system": map[string]any{"description": map[string]any{"value": `см. @UUID[Compendium.mod.spells.Item.spl1]`}}},
+		},
+	}
+	RewriteDocLinks(doc, ix)
+
+	if got := digString(doc, "system", "description", "value"); !strings.Contains(got, `data-kind="spell"`) {
+		t.Fatalf("описание не переписано: %q", got)
+	}
+	nested := asMap(asSlice(doc["items"])[0])
+	if got := digString(nested, "system", "description", "value"); !strings.Contains(got, `>Свет</a>`) {
+		t.Fatalf("вложенный документ не переписан: %q", got)
+	}
+}
+
+// TestBuildLinkIndex — индекс строится по всем пакам модуля: ссылка из
+// правил на заклинание из соседнего компендиума должна резолвиться.
+func TestBuildLinkIndex(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("packs/_source/spells/light.json", `{"_key":"!items!spl1","_id":"spl1","name":"Свет","type":"spell","system":{}}`)
+	write("packs/_source/lore/folder.json", `{"_key":"!folders!f1","_id":"f1","name":"Глава 1","type":"JournalEntry","sorting":"a"}`)
+	write("packs/_source/lore/rules.json", `{"_key":"!journal!j1","_id":"j1","name":"Правила","folder":"f1","pages":[{"_id":"p1","name":"Перемещение","type":"text","text":{"content":"текст"}}]}`)
+
+	mod := &Module{
+		Dir:  dir,
+		Root: dir,
+		Manifest: &Manifest{ID: "mod", Title: "Мой модуль", Packs: []Pack{
+			{Name: "spells", Label: "Заклинания", Path: "packs/_source/spells", Type: "Item"},
+			{Name: "lore", Label: "Лор", Path: "packs/_source/lore", Type: "JournalEntry"},
+		}},
+	}
+	ix := BuildLinkIndex(mod, "Мой модуль")
+
+	got := ix.Rewrite(`@UUID[Compendium.mod.spells.Item.spl1]{свет} и @UUID[Compendium.mod.lore.JournalEntry.j1.JournalEntryPage.p1]`)
+	if !strings.Contains(got, `data-kind="spell" data-name="Свет"`) {
+		t.Fatalf("ссылка на заклинание из соседнего пака не собралась: %q", got)
+	}
+	if !strings.Contains(got, `data-folder="Мой модуль/Лор/Глава 1"`) || !strings.Contains(got, `>Перемещение</a>`) {
+		t.Fatalf("ссылка на страницу журнала не собралась: %q", got)
+	}
+}
+
 func TestRewriteHTML(t *testing.T) {
 	_, assets := testModule(t)
 	html := `<p><img src="modules/my-module/icons/goblin.webp"> и <img src='icons/svg/nope.svg'></p>`

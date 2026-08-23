@@ -46,6 +46,7 @@ import {
 import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
+import { wireCatalogLinks } from "../catalog-links.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
@@ -1965,6 +1966,12 @@ function backToNoteList() {
   refreshNotesList(); // заголовок мог поменяться после правки
 }
 document.getElementById("noteBackBtn").onclick = backToNoteList;
+
+// Ссылки .catalog-ref внутри текста заметки — на карточки библиотек и на
+// другие заметки; их эмитит импорт модуля Foundry вместо своих @UUID[…]
+// (см. internal/foundry/links.go). Открываются плавающим окном, как и из
+// описаний карточек.
+wireCatalogLinks(noteRenderView);
 
 // клик по вики-ссылке [[...]] внутри рендера — существующая заметка
 // открывается тут же; для несуществующей предлагаем создать с этим заголовком.

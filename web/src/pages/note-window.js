@@ -8,6 +8,7 @@ import { fetchMe, fetchNotes, fetchNote, createNote, updateNote, deleteNote } fr
 import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
+import { wireCatalogLinks } from "../catalog-links.js";
 
 const titleBar = document.getElementById("noteTitleBar");
 const editToggleBtn = document.getElementById("editToggleBtn");
@@ -64,6 +65,10 @@ async function loadNote(id, { edit = false } = {}) {
     .then((list) => (notesList = list))
     .catch(() => {});
 }
+
+// Ссылки .catalog-ref (импорт модуля Foundry переводит в них свои @UUID[…],
+// см. internal/foundry/links.go) — на карточки библиотек и другие заметки.
+wireCatalogLinks(body);
 
 wireWikiLinks(body, () => notesList, {
   // Как и в боковой панели: относительные ссылки считаются от папки

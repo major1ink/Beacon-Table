@@ -17,13 +17,19 @@
 // (pages/catalog.js: openDetail) — сама эта страница тоже всегда живёт в
 // плавающем окне-iframe, второй уровень вложенности не нужен (см.
 // floating-window.js: все окна — прямые дети топ-документа).
-import { fetchItems, fetchSpells, fetchReferences, fetchBestiary } from "./api.js";
+import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchNotes } from "./api.js";
 
 const KIND_CONFIG = {
   item: { fetchAll: fetchItems, urlFor: (id) => `/itembook.html?id=${id}`, keyPrefix: "item" },
   spell: { fetchAll: fetchSpells, urlFor: (id) => `/spellbook.html?id=${id}`, keyPrefix: "spell" },
   reference: { fetchAll: fetchReferences, urlFor: (id) => `/referencebook.html?id=${id}`, keyPrefix: "reference" },
   monster: { fetchAll: fetchBestiary, urlFor: (id) => `/bestiary.html?id=${id}`, keyPrefix: "monster" },
+  // note — заметки ДМ: у них есть папки, и одноимённые записи в разных
+  // ветках дерева — норма, поэтому такая ссылка несёт ещё и data-folder
+  // (см. matchByName ниже). Появляется при импорте модуля Foundry:
+  // правила ссылаются на другие правила (@UUID[...JournalEntry...]), см.
+  // internal/foundry/links.go.
+  note: { fetchAll: fetchNotes, urlFor: (id) => `/note-window.html?id=${id}`, keyPrefix: "note" },
 };
 
 // listCache — один запрос списка на kind на всё время жизни страницы: одно
@@ -37,6 +43,22 @@ function listFor(kind) {
   if (!cfg) return Promise.resolve([]);
   if (!listCache.has(kind)) listCache.set(kind, cfg.fetchAll().catch(() => []));
   return listCache.get(kind);
+}
+
+// matchByName — найти цель ссылки в списке раздела. Имя сравнивается без
+// учёта регистра и лишних пробелов: ссылка родом из чужого модуля, и
+// требовать побайтового совпадения с тем, что легло в библиотеку, слишком
+// строго. folder (только у заметок) сначала обязателен, а если такой папки
+// уже нет — ДМ мог перенести заметку — берём тёзку из любой папки.
+function matchByName(list, name, folder) {
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const sameName = list.filter((x) => norm(x.name || x.title) === norm(name));
+  if (!sameName.length) return null;
+  if (folder) {
+    const inFolder = sameName.find((x) => norm(x.folder) === norm(folder));
+    if (inFolder) return inFolder;
+  }
+  return sameName[0];
 }
 
 function openEntry(kind, id, name) {
@@ -61,8 +83,8 @@ export function wireCatalogLinks(containerEl) {
     const name = a.dataset.name;
     if (!kind || !name) return;
     const list = await listFor(kind);
-    const found = list.find((x) => x.name === name);
+    const found = matchByName(list, name, a.dataset.folder);
     if (!found) return; // карточки с таким именем нет в текущей библиотеке — ссылка просто ничего не делает, не ошибка
-    openEntry(kind, found.id, found.name);
+    openEntry(kind, found.id, found.name || found.title);
   });
 }
