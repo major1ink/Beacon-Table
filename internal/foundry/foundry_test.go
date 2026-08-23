@@ -116,17 +116,23 @@ func TestReadLevelDB(t *testing.T) {
 	put("!scenes.lights!sc1.l1", `{"_id":"l1","x":50,"y":50,"config":{"bright":10,"dim":20}}`)
 	put("!actors.items!a1.i1", `{"_id":"i1","name":"Ятаган","type":"weapon"}`)
 	put("!actors!a2", `{"_id":"a2","name":"Орк","type":"npc"}`)
-	put("!folders!f1", `{"_id":"f1","name":"Папка"}`)
+	put("!folders!f1", `{"_id":"f1","name":"Папка","type":"Actor","sorting":"a"}`)
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	docs, err := readLevelDB(dir)
+	raw, err := readLevelDB(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Папка приезжает из пака обычной записью и отделяется от содержимого по
+	// служебному ключу "!folders!…" (см. splitFolders).
+	docs, folders := splitFolders(raw)
 	if len(docs) != 3 {
 		t.Fatalf("документов %d, ожидали 3 (папка — не документ): %v", len(docs), docs)
+	}
+	if got := folders.Path("f1"); got != "Папка" {
+		t.Fatalf("папка пака не прочиталась: %q", got)
 	}
 	byName := map[string]Doc{}
 	for _, d := range docs {
@@ -403,7 +409,11 @@ func TestMapJournal(t *testing.T) {
 			map[string]any{"name": "Карта", "type": "image", "src": "modules/my-module/icons/goblin.webp"},
 		},
 	}
-	content := MapJournal(context.Background(), doc, assets)
+	journal := MapJournal(context.Background(), doc, "Мой модуль/Лор", assets)
+	if journal.Title != "Легенды" || journal.Folder != "Мой модуль/Лор" {
+		t.Fatalf("заголовок/папка заметки не те: %+v", journal)
+	}
+	content := journal.Content
 	if !strings.HasPrefix(content, "# Легенды\n") {
 		t.Fatalf("заголовок заметки не первой строкой: %q", content)
 	}
@@ -412,6 +422,47 @@ func TestMapJournal(t *testing.T) {
 	}
 	if !strings.Contains(content, "](/uploads/notes/") {
 		t.Fatalf("картинка страницы не перенеслась: %q", content)
+	}
+}
+
+// TestPackFolders — папки компендиума (документы "!folders!…") не должны
+// попадать в содержимое пака, а должны собираться в дерево путей: журнал из
+// вложенной папки ложится в такую же папку библиотеки заметок.
+func TestPackFolders(t *testing.T) {
+	docs := []Doc{
+		{"_key": "!folders!f1", "_id": "f1", "name": "Глава 1", "type": "JournalEntry", "sorting": "a"},
+		{"_key": "!folders!f2", "_id": "f2", "name": "NPC", "type": "JournalEntry", "sorting": "a", "folder": "f1"},
+		{"_key": "!journal!j1", "_id": "j1", "name": "Трактирщик", "folder": "f2", "pages": []any{}},
+	}
+	content, folders := splitFolders(docs)
+	if len(content) != 1 || asString(content[0]["name"]) != "Трактирщик" {
+		t.Fatalf("папки не отделились от содержимого: %v", content)
+	}
+	if got := folders.Path("f2"); got != "Глава 1/NPC" {
+		t.Fatalf("путь вложенной папки: %q", got)
+	}
+	if got := folders.Path(DocFolderID(content[0])); got != "Глава 1/NPC" {
+		t.Fatalf("папка документа: %q", got)
+	}
+	if got := NoteFolder("Мой модуль", "Лор", "Глава 1/NPC"); got != "Мой модуль/Лор/Глава 1/NPC" {
+		t.Fatalf("папка библиотеки заметок: %q", got)
+	}
+	// Слэш в имени папки модуля не должен превращаться во вложенность.
+	if got := NoteFolder("Мод/уль", "Лор", ""); got != "Мод-уль/Лор" {
+		t.Fatalf("слэш в имени не обезврежен: %q", got)
+	}
+}
+
+// TestNoteFolderDepthClamp — дерево глубже предела библиотеки заметок не
+// теряется, а схлопывается в последнюю папку.
+func TestNoteFolderDepthClamp(t *testing.T) {
+	got := NoteFolder("Модуль", "Пак", "a/b/c/d/e/f/g/h")
+	parts := strings.Split(got, "/")
+	if len(parts) != maxFolderDepth {
+		t.Fatalf("уровней %d, ожидали %d: %q", len(parts), maxFolderDepth, got)
+	}
+	if !strings.Contains(parts[len(parts)-1], "f — g — h") {
+		t.Fatalf("хвост пути потерялся: %q", got)
 	}
 }
 

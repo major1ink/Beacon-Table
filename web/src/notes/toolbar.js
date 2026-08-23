@@ -149,7 +149,7 @@ export function mountNoteToolbar(toolbarEl, textarea) {
     ],
     [
       { label: "🔗", title: "Вставить ссылку", action: () => insertLink(textarea) },
-      { label: "[[·]]", title: "Вставить вики-ссылку на другую заметку", action: () => insertWikiLink(textarea) },
+      { label: "[[·]]", title: "Вставить вики-ссылку на другую заметку — можно с папкой: [[Глава 1/Таверна]]", action: () => insertWikiLink(textarea) },
       { label: "📎", title: "Вставить файл или картинку", action: () => fileInput.click() },
       { label: "▦", title: "Вставить таблицу", action: () => insertTable(textarea) },
       { label: "―", title: "Разделитель", action: () => insertBlock(textarea, "---") },

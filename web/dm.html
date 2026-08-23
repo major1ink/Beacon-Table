@@ -466,6 +466,39 @@
     .note-row:hover { background: var(--surface-hover); border-color: var(--border); }
     .note-row .note-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .note-row .note-meta { font-size: 11px; opacity: 0.5; }
+
+    /* дерево папок библиотеки заметок (domain.Note.Folder) */
+    .note-folder-row {
+      display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 8px;
+      cursor: pointer; user-select: none;
+    }
+    .note-folder-row:hover { background: var(--surface); }
+    .note-folder-row.current { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+    .note-folder-toggle {
+      background: none; border: none; color: inherit; padding: 0; display: flex; cursor: pointer; opacity: .7;
+    }
+    .note-folder-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-folder-count { font-size: 10.5px; opacity: .45; margin-right: auto; }
+    .note-folder-actions { display: none; gap: 2px; }
+    .note-folder-row:hover .note-folder-actions { display: flex; }
+
+    /* «куда попадёт новая заметка» + кнопка создания папки */
+    .note-new-target {
+      display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; opacity: .75;
+    }
+    .note-new-target #newNoteFolderBtn {
+      margin-left: auto; background: var(--surface); border: 1px solid var(--border); color: #eee;
+      border-radius: 8px; padding: 4px 8px; font-size: 11px; cursor: pointer;
+    }
+    .note-new-target #newNoteFolderBtn:hover { background: var(--surface-hover); }
+
+    /* папка открытой заметки */
+    .note-folder-picker { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 11px; opacity: .8; }
+    .note-folder-picker select {
+      flex: 1 1 auto; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: #eee;
+      border-radius: 8px; padding: 5px 8px; font-size: 11.5px;
+    }
+    .note-folder-picker select:focus { outline: none; border-color: var(--accent); }
     #newNoteForm { display: flex; gap: 4px; margin-top: 10px; }
     #newNoteForm input {
       flex: 1 1 auto; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: #eee;
@@ -869,8 +902,15 @@
         <header class="panel-header"><h3>Заметки</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <div id="noteListView">
-            <input type="text" id="noteSearch" placeholder="🔍 Поиск по заголовку…" />
+            <input type="text" id="noteSearch" placeholder="🔍 Поиск по заголовку и папке…" />
             <div id="noteRows" class="note-rows"></div>
+            <div class="note-new-target">
+              <span id="noteCurrentFolder">в корне библиотеки</span>
+              <button type="button" id="noteFolderResetBtn" class="note-icon-btn" title="Создавать в корне библиотеки" style="display:none;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+              </button>
+              <button type="button" id="newNoteFolderBtn" title="Создать папку внутри выбранной">+ Папка</button>
+            </div>
             <form id="newNoteForm">
               <input type="text" id="newNoteTitle" placeholder="Название новой заметки" maxlength="120" />
               <button type="submit" title="Создать заметку">+</button>
@@ -888,10 +928,14 @@
                 <button id="noteDeleteBtn" class="note-icon-btn note-icon-danger" title="Удалить заметку безвозвратно"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
               </div>
             </div>
+            <label class="note-folder-picker">
+              <span>Папка</span>
+              <select id="noteFolderSelect" title="Перенести заметку в другую папку"></select>
+            </label>
             <div id="noteRenderView" class="note-render"></div>
             <div id="noteEditView" style="display:none;">
               <div id="noteToolbar" class="note-toolbar"></div>
-              <textarea id="noteEditArea" placeholder="# Заголовок&#10;&#10;markdown, [[Другая заметка]] — вики-ссылка…"></textarea>
+              <textarea id="noteEditArea" placeholder="# Заголовок&#10;&#10;markdown, [[Другая заметка]] или [[Глава 1/Таверна]] — вики-ссылка…"></textarea>
               <button id="noteSaveBtn" class="primary-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg> Сохранить</button>
             </div>
             <div id="noteMsg"></div>

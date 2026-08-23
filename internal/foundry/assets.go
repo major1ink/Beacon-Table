@@ -2,6 +2,8 @@ package foundry
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/url"
 	"os"
@@ -96,12 +98,28 @@ func (a *Assets) copyFile(ctx context.Context, kind, ref string) string {
 		return ""
 	}
 	defer f.Close()
-	saved, err := a.store.Save(ctx, kind, a.folder, filepath.Base(path), f)
+	saved, err := a.store.Save(ctx, kind, a.folder, assetFileName(ref, path), f)
 	if err != nil {
 		return ""
 	}
 	a.count++
 	return saved
+}
+
+// assetFileName — имя файла в библиотеке загрузок: короткий хэш ИСХОДНОГО
+// пути внутри модуля плюс само имя. Хэш нужен для повторного импорта того же
+// модуля: имя получается одинаковым, хранилище узнаёт уже перенесённый файл
+// (см. service.assetSaver) и отдаёт ту же ссылку, а не плодит копию с новым
+// именем. Без этого повторный импорт менял бы ссылки в тексте заметок, и
+// каждая заметка выглядела бы «изменившейся».
+//
+// Хэш от пути, а не от содержимого: файл читается один раз, потоком в
+// хранилище, и считать по дороге ещё и sha было бы лишней работой ради
+// случая «в модуле два разных файла с одинаковым именем и путём», которого
+// не бывает.
+func assetFileName(ref, path string) string {
+	sum := sha256.Sum256([]byte(strings.TrimPrefix(filepath.ToSlash(ref), "/")))
+	return hex.EncodeToString(sum[:4]) + "-" + filepath.Base(path)
 }
 
 // locate ищет файл в распакованном архиве. В документах путь пишут от корня

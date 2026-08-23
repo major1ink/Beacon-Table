@@ -170,14 +170,40 @@ export async function fetchNotes() {
 export async function fetchNote(id) {
   return apiFetch(`/api/notes/${id}`);
 }
-export async function createNote(content) {
-  return apiFetch("/api/notes", { method: "POST", body: JSON.stringify({ content }) });
+// createNote — folder необязателен ("" / не передан = корень библиотеки, см.
+// domain.Note.Folder).
+export async function createNote(content, folder) {
+  return apiFetch("/api/notes", { method: "POST", body: JSON.stringify({ content, folder: folder || "" }) });
 }
 export async function updateNote(id, content) {
   return apiFetch(`/api/notes/${id}`, { method: "PUT", body: JSON.stringify({ content }) });
 }
+// moveNote — перенос заметки в другую папку. Отдельно от updateNote:
+// содержимое автосейвится по таймеру при наборе текста, папка меняется
+// осознанным действием (см. internal/api/http: handleNoteMove).
+export async function moveNote(id, folder) {
+  return apiFetch(`/api/notes/${id}/folder`, { method: "PUT", body: JSON.stringify({ folder: folder || "" }) });
+}
 export async function deleteNote(id) {
   return apiFetch(`/api/notes/${id}`, { method: "DELETE" });
+}
+
+// ---- папки библиотеки заметок: отдельный список, потому что папка может
+// быть пустой (только что созданная или освободившаяся) и в /api/notes её
+// тогда не видно ----
+export async function fetchNoteFolders() {
+  return apiFetch("/api/note-folders");
+}
+export async function createNoteFolder(folder) {
+  return apiFetch("/api/note-folders", { method: "POST", body: JSON.stringify({ folder }) });
+}
+export async function renameNoteFolder(from, to) {
+  return apiFetch("/api/note-folders", { method: "PUT", body: JSON.stringify({ from, to }) });
+}
+// deleteNoteFolder удаляет папку ВМЕСТЕ с заметками внутри — спрашивать ДМ
+// обязан вызывающий.
+export async function deleteNoteFolder(folder) {
+  return apiFetch(`/api/note-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
 }
 
 // ---- бестиарий ДМ (только ДМ) — web/dm.html: раздел "Бестиарий", web/bestiary.html ----

@@ -20,16 +20,30 @@ import (
 
 // ---- заглушки сервисов мира ----
 
-type fakeAssets struct{ saved []string }
+// fakeAssets — библиотека загрузок в памяти. Хранит то же, что и настоящая
+// (kind/папка/имя → ссылка), потому что импорт на неё опирается: повторный
+// перенос того же файла модуля должен узнаваться по имени и не плодить
+// копию (см. assetSaver).
+type fakeAssets struct {
+	saved  []string
+	byKind map[string][]domain.AssetInfo
+}
 
 func (f *fakeAssets) Upload(_ context.Context, _ *domain.Account, kind, folder, filename string, r io.Reader) (string, error) {
 	if _, err := io.Copy(io.Discard, r); err != nil {
 		return "", err
 	}
+	url := "/uploads/" + kind + "/" + folder + "/" + filename
 	f.saved = append(f.saved, kind+"/"+filename)
-	return "/uploads/" + kind + "/" + folder + "/" + filename, nil
+	if f.byKind == nil {
+		f.byKind = map[string][]domain.AssetInfo{}
+	}
+	f.byKind[kind] = append(f.byKind[kind], domain.AssetInfo{URL: url, Name: filename, Path: folder})
+	return url, nil
 }
-func (f *fakeAssets) List(context.Context) (map[string][]domain.AssetInfo, error) { return nil, nil }
+func (f *fakeAssets) List(context.Context) (map[string][]domain.AssetInfo, error) {
+	return f.byKind, nil
+}
 func (f *fakeAssets) FoldersAll(context.Context) (map[string][]domain.AssetFolder, error) {
 	return nil, nil
 }
@@ -72,17 +86,6 @@ func (f *fakePlaylists) UpdateTrack(context.Context, string, string, string, flo
 }
 func (f *fakePlaylists) DeleteTrack(context.Context, string, string) error       { return nil }
 func (f *fakePlaylists) MoveTrack(context.Context, string, string, string) error { return nil }
-
-type fakeNotes struct{ created []string }
-
-func (f *fakeNotes) List(context.Context) ([]*domain.Note, error)      { return nil, nil }
-func (f *fakeNotes) Get(context.Context, string) (*domain.Note, error) { return nil, nil }
-func (f *fakeNotes) Create(_ context.Context, content string) (*domain.Note, error) {
-	f.created = append(f.created, content)
-	return &domain.Note{ID: "n", Content: content}, nil
-}
-func (f *fakeNotes) Update(context.Context, string, string) (*domain.Note, error) { return nil, nil }
-func (f *fakeNotes) Delete(context.Context, string) error                         { return nil }
 
 // ---- модуль-фикстура ----
 
@@ -144,7 +147,11 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 			`"walls":[{"c":[0,0,100,0]}]}`},
 		{"packs/_source/music/tavern.json", `{"_id":"p1","name":"Таверна","playing":false,` +
 			`"sounds":[{"name":"Лютня","path":"modules/my-module/audio/tavern.ogg","volume":0.4,"repeat":true}]}`},
-		{"packs/_source/lore/legends.json", `{"_id":"j1","name":"Легенды","pages":[{"name":"Пролог","type":"text","text":{"content":"<p>Текст</p>"}}]}`},
+		// Журнал лежит во вложенной папке компендиума — в библиотеке заметок
+		// должна получиться такая же (плюс два верхних уровня: модуль и пак).
+		{"packs/_source/lore/folder-chapter.json", `{"_key":"!folders!f1","_id":"f1","name":"Глава 1","type":"JournalEntry","sorting":"a"}`},
+		{"packs/_source/lore/folder-npc.json", `{"_key":"!folders!f2","_id":"f2","name":"NPC","type":"JournalEntry","sorting":"a","folder":"f1"}`},
+		{"packs/_source/lore/legends.json", `{"_key":"!journal!j1","_id":"j1","name":"Легенды","folder":"f2","pages":[{"name":"Пролог","type":"text","text":{"content":"<p>Текст</p>"}}]}`},
 	}
 
 	var archive []byte
@@ -164,8 +171,7 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	assets := &fakeAssets{}
 	room := &fakeRoom{}
 	playlists := &fakePlaylists{}
-	notes := &fakeNotes{}
-	svc := NewFoundryService(t.TempDir(), assets, room, playlists, notes)
+	svc := NewFoundryService(t.TempDir(), assets, room, playlists)
 	ctx := context.Background()
 	account := &domain.Account{ID: "dm", Role: "admin"}
 
@@ -197,6 +203,20 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 		t.Fatalf("файлов перенесено %d, ожидали 1", res.Assets)
 	}
 
+	// Повторный импорт того же пака не копирует картинку заново и отдаёт ту
+	// же ссылку: иначе каждая карточка и заметка с картинкой выглядела бы
+	// изменившейся при сравнении с уже импортированной (см. assetSaver).
+	again, err := svc.ImportPack(ctx, account, srv.URL+"/module.json", "gear", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imgAgain, _ := again.Docs["items"][0]["img"].(string); imgAgain != img {
+		t.Fatalf("ссылка на картинку изменилась при повторном импорте: %q → %q", img, imgAgain)
+	}
+	if len(assets.saved) != 1 {
+		t.Fatalf("файл сохранён %d раз(а), ожидали 1: %v", len(assets.saved), assets.saved)
+	}
+
 	// Выбор разделов: просим только заклинания — предмет должен отсеяться.
 	res, err = svc.ImportPack(ctx, account, srv.URL+"/module.json", "gear", []string{"spells"})
 	if err != nil {
@@ -225,16 +245,27 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	if !strings.HasPrefix(playlists.lists[0].Tracks[0].URL, "/uploads/audio/") {
 		t.Fatalf("трек не перенесён: %q", playlists.lists[0].Tracks[0].URL)
 	}
-	if _, err := svc.ImportPack(ctx, account, srv.URL+"/module.json", "lore", nil); err != nil {
+	// Журналы сервер НЕ заводит сам (при совпадении с существующей заметкой
+	// решение принимает ДМ, см. FoundryImport.Notes) — только готовит текст
+	// и папку.
+	res, err = svc.ImportPack(ctx, account, srv.URL+"/module.json", "lore", nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notes.created) != 1 || !strings.HasPrefix(notes.created[0], "# Легенды") {
-		t.Fatalf("заметка не завелась: %+v", notes.created)
+	if len(res.Notes) != 1 {
+		t.Fatalf("заметок подготовлено %d, ожидали 1: %+v", len(res.Notes), res.Notes)
+	}
+	note := res.Notes[0]
+	if note.Title != "Легенды" || !strings.HasPrefix(note.Content, "# Легенды") {
+		t.Fatalf("заметка собралась неверно: %+v", note)
+	}
+	if note.Folder != "Мой модуль/Лор/Глава 1/NPC" {
+		t.Fatalf("папка заметки: %q", note.Folder)
 	}
 }
 
 func TestFoundryInspectRejectsBadURL(t *testing.T) {
-	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, &fakeRoom{}, &fakePlaylists{}, &fakeNotes{})
+	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, &fakeRoom{}, &fakePlaylists{})
 	if _, err := svc.Inspect(context.Background(), "file:///etc/passwd"); err == nil {
 		t.Fatal("не-http ссылка должна отклоняться")
 	}

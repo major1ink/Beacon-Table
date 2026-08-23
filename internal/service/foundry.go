@@ -21,9 +21,11 @@ import (
 // клиент, сервер о нём по-прежнему ничего не знает — он достаёт документы из
 // чужого контейнера (LevelDB/NeDB/JSON), переносит файлы из архива в
 // библиотеку загрузок и отдаёт документы клиенту уже с нашими ссылками на
-// картинки. Исключение — сцены, плейлисты и заметки: у них клиентского
-// маппера нет (сцена живёт в Room, плейлист и заметка — в своих сервисах),
-// их сервер раскладывает сам, см. foundry.ServerSideTargets.
+// картинки. Исключение — сцены и плейлисты: у них клиентского маппера нет
+// (сцена живёт в Room, плейлист — в своём сервисе), их сервер раскладывает
+// сам, см. foundry.ServerSideTargets. Журналы посередине: текст заметки и её
+// папку готовит сервер, а заводит клиент — потому что при совпадении с уже
+// существующей заметкой спрашивать надо ДМ (см. FoundryImport.Notes).
 type FoundryService interface {
 	// Inspect — что за пакет по ссылке и что в нём лежит: список паков с
 	// количеством документов по разделам. Архив при этом уже скачивается и
@@ -70,7 +72,13 @@ type FoundryImport struct {
 	// Docs — документы для клиентских мапперов, по разделам: "items",
 	// "spells", "monsters", "references", "conditions".
 	Docs map[string][]foundry.Doc `json:"docs"`
-	// Applied — что сервер завёл сам (сцены/плейлисты/заметки).
+	// Notes — журналы, уже переведённые в текст заметок (картинки из архива
+	// перенесены, папка вычислена), но ещё НЕ заведённые. Их раскладывает
+	// клиент, а не сервер: заметка с таким же названием в той же папке может
+	// уже существовать, и тогда решение — перезаписать, оставить обе или
+	// пропустить — принимает ДМ (см. web/src/pages/foundry-import.js).
+	Notes []FoundryNote `json:"notes,omitempty"`
+	// Applied — что сервер завёл сам (сцены и плейлисты).
 	Applied map[string]int `json:"applied"`
 	// Skipped — документы, которым в Beacon Table места нет (таблицы,
 	// макросы, колоды) или которые отсеяны выбором разделов.
@@ -87,12 +95,20 @@ type FoundryImport struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
+// FoundryNote — одна заметка, подготовленная импортом к заведению клиентом.
+type FoundryNote struct {
+	// Folder — папка библиотеки заметок: «модуль / компендиум / папки
+	// модуля» (см. foundry.NoteFolder и domain.Note.Folder).
+	Folder  string `json:"folder"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
 type foundryService struct {
 	cache     *foundry.Cache
 	assets    AssetService
 	room      RoomService
 	playlists PlaylistService
-	notes     NoteService
 }
 
 // foundryHTTPTimeout — потолок на скачивание манифеста и архива. Модуль с
@@ -106,14 +122,13 @@ const roomImportTimeout = 30 * time.Second
 
 // NewFoundryService — cacheDir: папка под скачанные архивы (чистится по TTL
 // самим кэшем, см. foundry.Cache).
-func NewFoundryService(cacheDir string, assets AssetService, room RoomService, playlists PlaylistService, notes NoteService) FoundryService {
+func NewFoundryService(cacheDir string, assets AssetService, room RoomService, playlists PlaylistService) FoundryService {
 	client := &http.Client{Timeout: foundryHTTPTimeout}
 	return &foundryService{
 		cache:     foundry.NewCache(cacheDir, client),
 		assets:    assets,
 		room:      room,
 		playlists: playlists,
-		notes:     notes,
 	}
 }
 
@@ -137,13 +152,13 @@ func (s *foundryService) Inspect(ctx context.Context, manifestURL string) (*Foun
 		if info.Label == "" {
 			info.Label = p.Name
 		}
-		docs, err := mod.ReadPack(p)
+		contents, err := mod.ReadPack(p)
 		if err != nil {
 			info.Error = err.Error()
 			out.Packs = append(out.Packs, info)
 			continue
 		}
-		for _, e := range foundry.Expand(docs, p.DocType()) {
+		for _, e := range foundry.Expand(contents.Docs, p.DocType()) {
 			info.Count++
 			info.Targets[e.Target]++
 		}
@@ -161,16 +176,22 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 	if !ok {
 		return nil, &domain.ValidationError{Msg: fmt.Sprintf("пака «%s» в этом модуле нет", packName)}
 	}
-	docs, err := mod.ReadPack(pack)
+	contents, err := mod.ReadPack(pack)
 	if err != nil {
 		return nil, &domain.ValidationError{Msg: err.Error()}
 	}
 
 	packageID := mod.Manifest.PackageID()
+	moduleTitle := mod.Manifest.DisplayTitle()
 	if mod.ArchiveManifest != nil && mod.ArchiveManifest.PackageID() != "" {
 		packageID = mod.ArchiveManifest.PackageID()
+		moduleTitle = mod.ArchiveManifest.DisplayTitle()
 	}
-	assets := foundry.NewAssets(mod, assetSaver{assets: s.assets, account: account}, "foundry/"+sanitizeFolderName(packageID))
+	packLabel := pack.Label
+	if packLabel == "" {
+		packLabel = pack.Name
+	}
+	assets := foundry.NewAssets(mod, &assetSaver{assets: s.assets, account: account}, "foundry/"+sanitizeFolderName(packageID))
 
 	wanted := make(map[string]bool, len(targets))
 	for _, t := range targets {
@@ -183,7 +204,7 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 	}
 
 	scenes := make([]*domain.SceneState, 0, 8)
-	for _, e := range foundry.Expand(docs, pack.DocType()) {
+	for _, e := range foundry.Expand(contents.Docs, pack.DocType()) {
 		if e.Target == foundry.TargetSkipped || (len(wanted) > 0 && !wanted[e.Target]) {
 			result.Skipped++
 			continue
@@ -198,11 +219,11 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 			}
 			result.Applied[foundry.TargetPlaylists]++
 		case foundry.TargetNotes:
-			if _, err := s.notes.Create(ctx, foundry.MapJournal(ctx, e.Doc, assets)); err != nil {
-				result.Warnings = appendWarning(result.Warnings, err.Error())
-				continue
-			}
-			result.Applied[foundry.TargetNotes]++
+			// Папка журнала в модуле → папка библиотеки заметок. Сама
+			// заметка тут не создаётся: см. FoundryImport.Notes.
+			folder := foundry.NoteFolder(moduleTitle, packLabel, contents.Folders.Path(foundry.DocFolderID(e.Doc)))
+			journal := foundry.MapJournal(ctx, e.Doc, folder, assets)
+			result.Notes = append(result.Notes, FoundryNote{Folder: journal.Folder, Title: journal.Title, Content: journal.Content})
 		default:
 			assets.RewriteDoc(ctx, e.Doc)
 			result.Docs[e.Target] = append(result.Docs[e.Target], e.Doc)
@@ -288,11 +309,51 @@ func sanitizeFolderName(id string) string {
 // знает про аккаунты) и AssetService (проверяет право грузить в этот раздел
 // библиотеки). Импорт делает ДМ, так что проверка всегда проходит, но идти
 // мимо сервиса ради этого незачем.
+//
+// Плюс к переходнику — узнаёт уже перенесённые файлы: имя файла импорт
+// строит из хэша пути внутри модуля (см. foundry.assetFileName), так что
+// повторный импорт того же модуля не копирует картинки заново и, главное,
+// отдаёт на них ТЕ ЖЕ ссылки. Иначе каждая заметка/карточка с картинкой
+// после второго импорта выглядела бы изменившейся (см. importNotes на
+// клиенте: сравнение содержимого).
 type assetSaver struct {
 	assets  AssetService
 	account *domain.Account
+
+	// known — "kind/папка/имя" → ссылка; строится один раз при первом
+	// сохранении из библиотеки загрузок этого мира.
+	known map[string]string
 }
 
-func (s assetSaver) Save(ctx context.Context, kind, folder, filename string, r io.Reader) (string, error) {
-	return s.assets.Upload(ctx, s.account, kind, folder, filename, r)
+func (s *assetSaver) Save(ctx context.Context, kind, folder, filename string, r io.Reader) (string, error) {
+	if err := s.index(ctx); err != nil {
+		return "", err
+	}
+	key := kind + "/" + folder + "/" + filename
+	if url, ok := s.known[key]; ok {
+		return url, nil // такой файл из этого модуля уже переносили
+	}
+	url, err := s.assets.Upload(ctx, s.account, kind, folder, filename, r)
+	if err != nil {
+		return "", err
+	}
+	s.known[key] = url
+	return url, nil
+}
+
+func (s *assetSaver) index(ctx context.Context) error {
+	if s.known != nil {
+		return nil
+	}
+	s.known = map[string]string{}
+	all, err := s.assets.List(ctx)
+	if err != nil {
+		return err
+	}
+	for kind, items := range all {
+		for _, item := range items {
+			s.known[kind+"/"+item.Path+"/"+item.Name] = item.URL
+		}
+	}
+	return nil
 }

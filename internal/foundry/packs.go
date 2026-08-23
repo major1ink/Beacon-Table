@@ -24,16 +24,25 @@ type Doc map[string]any
 // что мы читаем не то (или что чтение зациклилось).
 const maxDocsPerPack = 100000
 
+// PackContents — прочитанный компендиум: сами документы и дерево папок, по
+// которым они в этом компендиуме разложены. Папки — не документы: в Beacon
+// Table им соответствуют папки библиотеки заметок (см. domain.Note.Folder),
+// а не записи.
+type PackContents struct {
+	Docs    []Doc
+	Folders *Folders
+}
+
 // ReadPack читает один компендиум модуля. Поддерживаются три формата, в
 // которых Foundry за свою историю хранил паки:
 //
 //   - каталог LevelDB (v11 и новее) — бинарный, документы лежат россыпью,
 //     вложенные (предметы актёра, страницы журнала, стены сцены) — отдельными
-//     записями со своим ключом, их надо собирать обратно, см. assemble;
+//     записями со своим ключом, их надо собирать обратно, см. attachEmbedded;
 //   - файл .db формата NeDB (v10 и раньше) — построчный JSON;
 //   - каталог с .json-файлами — так выглядят исходники паков (packs/_source)
 //     у модулей, которые кладут их в релиз рядом со сборкой.
-func (m *Module) ReadPack(p Pack) ([]Doc, error) {
+func (m *Module) ReadPack(p Pack) (*PackContents, error) {
 	path, err := m.packPath(p)
 	if err != nil {
 		return nil, err
@@ -42,16 +51,30 @@ func (m *Module) ReadPack(p Pack) ([]Doc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("пак «%s» не читается: %w", p.Name, err)
 	}
-	if info.IsDir() {
+	var docs []Doc
+	switch {
+	case info.IsDir():
 		if _, err := os.Stat(filepath.Join(path, "CURRENT")); err == nil {
-			return readLevelDB(path)
+			docs, err = readLevelDB(path)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			docs, err = readJSONDir(path)
+			if err != nil {
+				return nil, err
+			}
 		}
-		return readJSONDir(path)
+	case strings.EqualFold(filepath.Ext(path), ".json"):
+		docs, err = readJSONFile(path)
+	default:
+		docs, err = readNeDB(path)
 	}
-	if strings.EqualFold(filepath.Ext(path), ".json") {
-		return readJSONFile(path)
+	if err != nil {
+		return nil, err
 	}
-	return readNeDB(path)
+	content, folders := splitFolders(docs)
+	return &PackContents{Docs: content, Folders: folders}, nil
 }
 
 // packPath — где на диске лежит пак. Path в манифесте пишут по-разному:
@@ -136,10 +159,14 @@ func readLevelDB(dir string) ([]Doc, error) {
 		value []byte
 	}
 	all := make([]parsed, 0, len(entries))
+	keyOf := make(map[string]string, len(entries)) // id документа → его ключ, см. ниже
 	for _, e := range entries {
 		colls, ids, ok := splitPackKey(e.key)
-		if !ok || colls[0] == "folders" {
-			continue // папки — это организация компендиума, а не содержимое
+		if !ok {
+			continue
+		}
+		if len(colls) == 1 {
+			keyOf[ids[0]] = e.key
 		}
 		all = append(all, parsed{colls: colls, ids: ids, value: e.value})
 	}
@@ -153,6 +180,10 @@ func readLevelDB(dir string) ([]Doc, error) {
 			continue // один битый документ не повод ронять весь пак
 		}
 		if len(p.colls) == 1 {
+			// _key — та же служебная пометка, что кладёт в извлечённые json
+			// сам fvtt-cli ("!folders!ID", "!journal!ID"): по ней потом
+			// отличаются документы от папок компендиума, см. splitFolders.
+			doc["_key"] = keyOf[p.ids[0]]
 			if _, exists := byID[p.ids[0]]; !exists {
 				order = append(order, p.ids[0])
 			}

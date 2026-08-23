@@ -294,7 +294,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		// временные (чистятся по TTL, см. foundry.Cache), но лежать рядом с
 		// остальными данными мира им уместнее, чем в системном temp, который
 		// на некоторых хостингах живёт в оперативной памяти.
-		Foundry: service.NewFoundryService(filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists, notes),
+		Foundry: service.NewFoundryService(filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists),
 	}
 
 	m.mu.Lock()

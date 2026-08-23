@@ -19,6 +19,7 @@ import {
   createMonster, updateMonster,
   createReference, updateReference,
   createCondition, updateCondition,
+  fetchNotes, fetchNote, createNote, updateNote,
 } from "../api.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
@@ -48,11 +49,15 @@ const TARGETS = [
   { id: "items", label: "Снаряжение", createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },
   { id: "references", label: "Справочник", createOne: createReference, updateOne: updateReference, mapBatch: mapFoundryReferenceBatch },
   { id: "conditions", label: "Состояния", createOne: createCondition, updateOne: updateCondition, mapBatch: mapFoundryConditionBatch },
+  // Заметки: текст и папку готовит сервер (см. service.FoundryImport.Notes),
+  // но заводит их эта страница — потому что заметка с тем же названием в той
+  // же папке может уже существовать, и что с ней делать, решает ДМ (см.
+  // importNotes).
+  { id: "notes", label: "Заметки ДМ", notes: true },
   // Ниже — то, что раскладывает сам сервер (см. foundry.ServerSideTargets):
   // здесь у них нет ни маппера, ни создания — только галочка и счётчик.
   { id: "scenes", label: "Сцены", server: true },
   { id: "playlists", label: "Плейлисты", server: true },
-  { id: "notes", label: "Заметки ДМ", server: true },
 ];
 const TARGET_BY_ID = Object.fromEntries(TARGETS.map((t) => [t.id, t]));
 
@@ -67,6 +72,10 @@ let cancelled = false;
 // packProgress — сколько паков уже позади из скольких; нужен importCards,
 // чтобы посчитать общую долю (см. setProgress).
 let packProgress = { done: 0, total: 1 };
+// noteConflictDefault — ответ ДМ «применить ко всем» из диалога про
+// совпавшую заметку ("overwrite" | "duplicate" | "skip"); сбрасывается на
+// каждый запуск импорта.
+let noteConflictDefault = null;
 
 // ==================== DOM ====================
 
@@ -251,11 +260,12 @@ importBtn.addEventListener("click", async () => {
 
   running = true;
   cancelled = false;
+  noteConflictDefault = null;
   importBtn.disabled = true;
   urlInput.disabled = true;
   inspectBtn.disabled = true;
   cancelBtn.style.display = "";
-  const total = { created: 0, applied: 0, failed: 0, assets: 0 };
+  const total = { created: 0, applied: 0, updated: 0, skipped: 0, failed: 0, assets: 0 };
 
   for (let packIndex = 0; packIndex < packs.length; packIndex++) {
     const p = packs[packIndex];
@@ -288,8 +298,15 @@ importBtn.addEventListener("click", async () => {
       total.applied += count;
       log(`  ${TARGET_BY_ID[target].label}: ${count} (разложено сервером)`);
     }
+    if ((result.notes || []).length) {
+      const stats = await importNotes(result.notes, p);
+      total.created += stats.created;
+      total.updated += stats.updated;
+      total.skipped += stats.skipped;
+      total.failed += stats.failed;
+    }
     for (const t of TARGETS) {
-      if (t.server) continue;
+      if (t.server || t.notes) continue;
       const docs = (result.docs || {})[t.id] || [];
       if (!docs.length) continue;
       const stats = await importCards(t, docs, p);
@@ -308,7 +325,9 @@ importBtn.addEventListener("click", async () => {
   setProgress();
   const summary =
     (cancelled ? "Остановлено. " : "Готово. ") +
-    `Карточек создано: ${total.created}, сцен/плейлистов/заметок: ${total.applied}, ` +
+    `Создано: ${total.created}, сцен и плейлистов: ${total.applied}, ` +
+    (total.updated ? `перезаписано заметок: ${total.updated}, ` : "") +
+    (total.skipped ? `пропущено без изменений: ${total.skipped}, ` : "") +
     `файлов перенесено: ${total.assets}` +
     (total.failed ? `, ошибок: ${total.failed} (подробности в журнале ниже и в консоли браузера)` : "");
   setStatus(summary);
@@ -359,6 +378,149 @@ async function importCards(target, docs, pack) {
   }
   log(`  ${target.label}: ${ok} из ${docs.length}` + (failed ? `, не удалось ${failed}` : ""));
   return { ok, failed };
+}
+
+// ==================== заметки ====================
+
+// noteKey — по чему считаем, что «такая заметка уже есть»: папка + заголовок.
+// Не по содержимому (тогда любая правка ДМ выглядела бы новой записью) и не
+// по одному заголовку (одноимённые «Обзор» в разных главах — норма).
+function noteKey(folder, title) {
+  return (folder || "") + " " + (title || "").trim().toLowerCase();
+}
+
+// sameNoteText — содержимое совпадает «полностью». Переводы строк и хвостовые
+// пробелы не в счёт: они меняются от одного сохранения в редакторе.
+function sameNoteText(a, b) {
+  const norm = (s) => (s || "").replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "").trim();
+  return norm(a) === norm(b);
+}
+
+// importNotes заводит подготовленные сервером заметки, разбираясь с
+// совпадениями: одинаковую пропускаем молча, различающуюся — как скажет ДМ.
+async function importNotes(notes, pack) {
+  const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
+  let index;
+  try {
+    index = new Map((await fetchNotes()).map((n) => [noteKey(n.folder, n.title), n]));
+  } catch (err) {
+    log(`  Заметки ДМ: не удалось прочитать библиотеку — ${err.message}`);
+    stats.failed += notes.length;
+    return stats;
+  }
+
+  for (let i = 0; i < notes.length; i++) {
+    if (cancelled) break;
+    const note = notes[i];
+    setStatus(`${pack.label || pack.name} → Заметки ДМ: ${i + 1} из ${notes.length}…`, { busy: true });
+    setProgress((packProgress.done + (i + 1) / notes.length) / packProgress.total);
+
+    const existing = index.get(noteKey(note.folder, note.title));
+    let action = "create";
+    if (existing) {
+      let current;
+      try {
+        current = await fetchNote(existing.id);
+      } catch (err) {
+        stats.failed++;
+        console.warn(`[${pack.name}] ${note.title}: ${err.message}`);
+        continue;
+      }
+      if (sameNoteText(current.content, note.content)) {
+        stats.skipped++;
+        continue;
+      }
+      action = noteConflictDefault || (await askNoteConflict(note, current));
+      if (action === "stop") {
+        cancelled = true;
+        break;
+      }
+      if (action === "skip") {
+        stats.skipped++;
+        continue;
+      }
+    }
+
+    try {
+      if (action === "overwrite") {
+        await updateNote(existing.id, note.content);
+        stats.updated++;
+      } else {
+        const created = await createNote(note.content, note.folder);
+        // Дубликат кладём в индекс под тем же ключом только если его там
+        // ещё нет: иначе следующая такая же заметка сравнивалась бы с
+        // копией, а не с оригиналом.
+        if (!index.has(noteKey(note.folder, note.title))) {
+          index.set(noteKey(note.folder, note.title), { id: created.id, title: created.title, folder: created.folder });
+        }
+        stats.created++;
+      }
+    } catch (err) {
+      stats.failed++;
+      console.warn(`[${pack.name}] ${note.title}: ${err.message}`);
+    }
+  }
+
+  const parts = [`создано ${stats.created}`];
+  if (stats.updated) parts.push(`перезаписано ${stats.updated}`);
+  if (stats.skipped) parts.push(`пропущено ${stats.skipped}`);
+  if (stats.failed) parts.push(`ошибок ${stats.failed}`);
+  log(`  Заметки ДМ: ${parts.join(", ")} (из ${notes.length})`);
+  return stats;
+}
+
+// askNoteConflict — диалог «заметка уже есть, но отличается». confirm() тут
+// не годится: вариантов больше двух, да и показать, ЧЕМ отличается (папка,
+// размер, дата), надо. Возвращает "overwrite" | "duplicate" | "skip" |
+// "stop"; галочка «ко всем остальным» запоминается в noteConflictDefault.
+function askNoteConflict(note, existing) {
+  return new Promise((resolve) => {
+    const overlay = h("div", { class: "modal-overlay" });
+    const applyAll = h("input", { type: "checkbox", id: "noteConflictAll" });
+
+    const finish = (action) => {
+      if (applyAll.checked && action !== "stop") noteConflictDefault = action;
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(action);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") finish("skip");
+    };
+
+    const button = (label, action, primary) =>
+      h("button", { class: primary ? "primary" : "", text: label, onclick: () => finish(action) });
+
+    overlay.appendChild(
+      h("div", { class: "modal" }, [
+        h("h3", { text: "Такая заметка уже есть" }),
+        h("p", { class: "hint" }, [
+          `«${note.title}» в папке «${note.folder || "корень библиотеки"}» уже существует, ` +
+            "но содержимое отличается от того, что в модуле.",
+        ]),
+        h("dl", { class: "modal-diff" }, [
+          h("dt", { text: "В библиотеке" }),
+          h("dd", { text: `${(existing.content || "").length} символов, изменена ${formatWhen(existing.updatedAt)}` }),
+          h("dt", { text: "В модуле" }),
+          h("dd", { text: `${note.content.length} символов` }),
+        ]),
+        h("div", { class: "modal-buttons" }, [
+          button("Перезаписать", "overwrite", true),
+          button("Оставить обе", "duplicate"),
+          button("Пропустить", "skip"),
+          button("Остановить импорт", "stop"),
+        ]),
+        h("label", { class: "modal-all" }, [applyAll, "Так же поступать со всеми остальными"]),
+      ])
+    );
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+function formatWhen(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "—" : d.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
 }
 
 // notifySaved — те же сообщения, что шлёт отредактированная карточка:

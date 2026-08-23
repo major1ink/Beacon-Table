@@ -16,9 +16,22 @@ import (
 // notefile.deriveTitle), а содержимое страниц вставляем как пришло.
 //
 // Одна запись журнала = одна заметка, страницы идут подряд разделами: делить
-// на заметку-на-страницу означало бы потерять их порядок и принадлежность
-// (у нас нет папок для заметок, только плоский список).
-func MapJournal(ctx context.Context, d Doc, assets *Assets) string {
+// на заметку-на-страницу означало бы потерять их порядок и принадлежность —
+// папка у заметки одна на всю запись (см. Journal.Folder).
+type Journal struct {
+	// Folder — папка библиотеки заметок (см. domain.Note.Folder): модуль,
+	// компендиум и дерево папок самого модуля, см. NoteFolder.
+	Folder string
+	// Title — заголовок записи. Он же первой строкой в Content ("# …", см.
+	// notefile.deriveTitle) — отдельным полем, потому что по нему клиент
+	// ищет, не лежит ли такая заметка в этой папке уже.
+	Title   string
+	Content string
+}
+
+// MapJournal переводит документ JournalEntry в заметку. folder — куда её
+// класть (см. NoteFolder), пусто — в корень библиотеки.
+func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journal {
 	title := strings.TrimSpace(asString(d["name"]))
 	if title == "" {
 		title = "Запись из Foundry"
@@ -34,7 +47,7 @@ func MapJournal(ctx context.Context, d Doc, assets *Assets) string {
 			b.WriteString(assets.RewriteHTML(ctx, domain.AssetKindNotes, content))
 			b.WriteString("\n")
 		}
-		return b.String()
+		return Journal{Folder: folder, Title: title, Content: b.String()}
 	}
 
 	for _, raw := range pages {
@@ -49,7 +62,7 @@ func MapJournal(ctx context.Context, d Doc, assets *Assets) string {
 		b.WriteString(pageBody(ctx, page, assets))
 		b.WriteString("\n")
 	}
-	return b.String()
+	return Journal{Folder: folder, Title: title, Content: b.String()}
 }
 
 // pageBody — содержимое одной страницы по её типу. Видео/PDF/встроенные

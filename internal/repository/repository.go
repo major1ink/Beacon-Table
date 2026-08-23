@@ -145,10 +145,27 @@ type NoteRepository interface {
 	// не тащим содержимое ради списка).
 	List(ctx context.Context) ([]*domain.Note, error)
 	Get(ctx context.Context, id string) (*domain.Note, error)
-	Create(ctx context.Context, id, content string) error
-	// Update возвращает false, если заметки с таким id нет.
+	// Create кладёт заметку в папку folder ("" — корень, см.
+	// domain.Note.Folder); папка создаётся, если её ещё нет.
+	Create(ctx context.Context, id, folder, content string) error
+	// Update возвращает false, если заметки с таким id нет. Папку не трогает
+	// — правка текста не переносит файл (см. Move).
 	Update(ctx context.Context, id, content string) (bool, error)
+	// Move переносит заметку в другую папку; false, если такой заметки нет.
+	Move(ctx context.Context, id, folder string) (bool, error)
 	Delete(ctx context.Context, id string) error
+
+	// Folders — все папки библиотеки, включая ПУСТЫЕ (тем же соображением,
+	// что и AssetRepository.Folders: только что созданная папка не должна
+	// пропадать из панели до того, как в неё что-то положили).
+	Folders(ctx context.Context) ([]string, error)
+	CreateFolder(ctx context.Context, folder string) error
+	// DeleteFolder удаляет папку СО ВСЕМ содержимым (вложенные папки и
+	// заметки), как AssetRepository.DeleteFolder — предупредить ДМ обязан
+	// вызывающий.
+	DeleteFolder(ctx context.Context, folder string) error
+	// RenameFolder переименовывает/переносит папку вместе с содержимым.
+	RenameFolder(ctx context.Context, from, to string) error
 }
 
 // MonsterRepository — библиотека карточек бестиария ДМ, файл-на-монстра (см.

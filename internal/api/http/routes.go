@@ -84,7 +84,16 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/notes", a.handleNoteCreate)
 	mux.HandleFunc("GET /api/notes/{id}", a.handleNoteGet)
 	mux.HandleFunc("PUT /api/notes/{id}", a.handleNoteUpdate)
+	mux.HandleFunc("PUT /api/notes/{id}/folder", a.handleNoteMove)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.handleNoteDelete)
+
+	// Папки библиотеки заметок (domain.Note.Folder) — настоящие подпапки на
+	// диске, см. internal/repository/notefile. Тот же набор операций и та же
+	// форма эндпоинтов, что у папок библиотеки ассетов ниже.
+	mux.HandleFunc("GET /api/note-folders", a.handleNoteFoldersList)
+	mux.HandleFunc("POST /api/note-folders", a.handleNoteFolderCreate)
+	mux.HandleFunc("PUT /api/note-folders", a.handleNoteFolderRename)
+	mux.HandleFunc("DELETE /api/note-folders", a.handleNoteFolderDelete)
 
 	mux.HandleFunc("GET /api/bestiary", a.handleBestiaryList)
 	mux.HandleFunc("POST /api/bestiary", a.handleMonsterCreate)

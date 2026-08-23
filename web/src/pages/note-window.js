@@ -66,11 +66,15 @@ async function loadNote(id, { edit = false } = {}) {
 }
 
 wireWikiLinks(body, () => notesList, {
+  // Как и в боковой панели: относительные ссылки считаются от папки
+  // открытой заметки (см. resolveWikiTarget).
+  getFolder: () => (note && note.folder) || "",
   onOpen: (id) => loadNote(id),
-  onCreateMissing: async (title) => {
-    if (!confirm(`Заметки «${title}» не существует. Создать?`)) return;
+  onCreateMissing: async (title, folder) => {
+    const where = folder ? ` в папке «${folder}»` : " в корне библиотеки";
+    if (!confirm(`Заметки «${title}» не существует. Создать${where}?`)) return;
     try {
-      const n = await createNote(`# ${title}\n\n`);
+      const n = await createNote(`# ${title}\n\n`, folder);
       await loadNote(n.id, { edit: true });
     } catch (err) {
       alert("Не удалось создать заметку: " + err.message);
