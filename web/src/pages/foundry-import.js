@@ -64,6 +64,9 @@ const selectedPacks = new Set();
 const selectedTargets = new Set(TARGETS.map((t) => t.id));
 let running = false;
 let cancelled = false;
+// packProgress — сколько паков уже позади из скольких; нужен importCards,
+// чтобы посчитать общую долю (см. setProgress).
+let packProgress = { done: 0, total: 1 };
 
 // ==================== DOM ====================
 
@@ -71,22 +74,57 @@ const urlForm = document.getElementById("urlForm");
 const urlInput = document.getElementById("manifestUrl");
 const inspectBtn = document.getElementById("inspectBtn");
 const statusEl = document.getElementById("status");
+const progressEl = document.getElementById("progress");
+const progressBarEl = document.getElementById("progressBar");
 const packsSection = document.getElementById("packsSection");
 const packsEl = document.getElementById("packs");
 const targetsEl = document.getElementById("targets");
 const importBtn = document.getElementById("importBtn");
 const cancelBtn = document.getElementById("cancelBtn");
+const logPane = document.getElementById("logPane");
 const logEl = document.getElementById("log");
+const logClearBtn = document.getElementById("logClearBtn");
 
-function setStatus(text, isError) {
-  statusEl.textContent = text || "";
-  statusEl.classList.toggle("error", !!isError);
+// setStatus — строка состояния. busy рисует рядом крутилку: и разведка
+// (сервер тем временем качает и распаковывает сотню мегабайт), и импорт
+// идут минутами, и без явного признака работы это выглядит как зависание.
+function setStatus(text, { busy = false, error = false } = {}) {
+  statusEl.textContent = "";
+  if (busy) statusEl.appendChild(h("span", { class: "spinner" }));
+  statusEl.appendChild(document.createTextNode(text || ""));
+  statusEl.classList.toggle("error", error);
+}
+
+// setProgress — полоска под строкой состояния. Без аргументов прячет её,
+// с null — «работаем, но сколько осталось, неизвестно» (скачивание архива),
+// с числом 0..1 — обычный прогресс по карточкам.
+function setProgress(value) {
+  if (value === undefined) {
+    progressEl.style.display = "none";
+    progressEl.classList.remove("indeterminate");
+    progressBarEl.style.width = "0";
+    return;
+  }
+  progressEl.style.display = "block";
+  if (value === null) {
+    progressEl.classList.add("indeterminate");
+    progressBarEl.style.width = "";
+    return;
+  }
+  progressEl.classList.remove("indeterminate");
+  progressBarEl.style.width = Math.round(Math.max(0, Math.min(1, value)) * 100) + "%";
 }
 
 function log(line) {
+  logPane.style.display = "flex";
   logEl.textContent += (logEl.textContent ? "\n" : "") + line;
   logEl.scrollTop = logEl.scrollHeight;
 }
+
+logClearBtn.addEventListener("click", () => {
+  logEl.textContent = "";
+  logPane.style.display = "none";
+});
 
 function h(tag, attrs, children) {
   const e = document.createElement(tag);
@@ -112,16 +150,23 @@ urlForm.addEventListener("submit", async (e) => {
   if (!url) return;
   manifestUrl = url;
   inspectBtn.disabled = true;
+  inspectBtn.textContent = "Проверяем…";
   packsSection.style.display = "none";
-  setStatus("Скачиваем и распаковываем пакет… Первый раз это может занять несколько минут — архив модуля тянется целиком.");
+  // Полоска «неизвестно сколько»: сервер качает архив целиком и о ходе
+  // загрузки не отчитывается, но молчащая страница выглядит зависшей.
+  setProgress(null);
+  setStatus("Скачиваем и распаковываем пакет… Первый раз это может занять несколько минут — архив модуля тянется целиком.", { busy: true });
   try {
     pkg = await inspectFoundryPackage(url);
   } catch (err) {
-    setStatus("Не получилось: " + err.message, true);
+    setStatus("Не получилось: " + err.message, { error: true });
+    setProgress();
     return;
   } finally {
     inspectBtn.disabled = false;
+    inspectBtn.textContent = "Проверить";
   }
+  setProgress();
   selectedPacks.clear();
   for (const p of pkg.packs || []) {
     if (!p.error && p.count > 0) selectedPacks.add(p.name);
@@ -188,32 +233,40 @@ function renderPacks() {
 
 cancelBtn.addEventListener("click", () => {
   cancelled = true;
-  setStatus("Останавливаем после текущей карточки…");
+  setStatus("Останавливаем после текущей карточки…", { busy: true });
 });
 
 importBtn.addEventListener("click", async () => {
   if (running) return;
   const packs = (pkg.packs || []).filter((p) => selectedPacks.has(p.name));
   if (!packs.length) {
-    setStatus("Не выбран ни один компендиум.", true);
+    setStatus("Не выбран ни один компендиум.", { error: true });
     return;
   }
   const targets = [...selectedTargets];
   if (!targets.length) {
-    setStatus("Не выбран ни один раздел.", true);
+    setStatus("Не выбран ни один раздел.", { error: true });
     return;
   }
 
   running = true;
   cancelled = false;
   importBtn.disabled = true;
+  urlInput.disabled = true;
+  inspectBtn.disabled = true;
   cancelBtn.style.display = "";
   const total = { created: 0, applied: 0, failed: 0, assets: 0 };
 
-  for (const p of packs) {
+  for (let packIndex = 0; packIndex < packs.length; packIndex++) {
+    const p = packs[packIndex];
     if (cancelled) break;
+    // packProgress — доля уже пройденных паков; внутри пака importCards
+    // добавляет к ней долю своих карточек, чтобы полоска ехала непрерывно,
+    // а не прыгала на границе паков.
+    packProgress = { done: packIndex, total: packs.length };
+    setProgress(packIndex / packs.length);
     log(`— ${p.label || p.name}`);
-    setStatus(`Читаем «${p.label || p.name}»…`);
+    setStatus(`Читаем «${p.label || p.name}»…`, { busy: true });
     let result;
     try {
       result = await importFoundryPack(manifestUrl, p.name, targets);
@@ -249,13 +302,17 @@ importBtn.addEventListener("click", async () => {
 
   running = false;
   importBtn.disabled = false;
+  urlInput.disabled = false;
+  inspectBtn.disabled = false;
   cancelBtn.style.display = "none";
-  setStatus(
+  setProgress();
+  const summary =
     (cancelled ? "Остановлено. " : "Готово. ") +
-      `Карточек создано: ${total.created}, сцен/плейлистов/заметок: ${total.applied}, ` +
-      `файлов перенесено: ${total.assets}` +
-      (total.failed ? `, ошибок: ${total.failed} (подробности в журнале ниже и в консоли браузера)` : "")
-  );
+    `Карточек создано: ${total.created}, сцен/плейлистов/заметок: ${total.applied}, ` +
+    `файлов перенесено: ${total.assets}` +
+    (total.failed ? `, ошибок: ${total.failed} (подробности в журнале ниже и в консоли браузера)` : "");
+  setStatus(summary);
+  log(summary);
   // Списки открытых окон компендиума обновятся сами по этим сообщениям —
   // тот же механизм, которым карточка сообщает о своей правке (см.
   // floating-window.js: postToOpenWindows).
@@ -288,7 +345,8 @@ async function importCards(target, docs, pack) {
     if (cancelled) break;
     const card = list[i];
     if (i % 5 === 0 || i === list.length - 1) {
-      setStatus(`${pack.label || pack.name} → ${target.label}: ${i + 1} из ${list.length}…`);
+      setStatus(`${pack.label || pack.name} → ${target.label}: ${i + 1} из ${list.length}…`, { busy: true });
+      setProgress((packProgress.done + (i + 1) / list.length) / packProgress.total);
     }
     try {
       const created = await target.createOne(card.name);
@@ -313,7 +371,32 @@ function notifySaved() {
 
 // ==================== закрыть / boot ====================
 
+// CLOSE_WARNING — один текст на все три двери наружу: ✕ этой страницы, ✕
+// плавающего окна (его рисует родитель, см. floating-window.js:
+// beaconCloseGuard) и закрытие вкладки браузера.
+const CLOSE_WARNING =
+  "Импорт ещё идёт. Если закрыть окно, он прервётся на текущей карточке — " +
+  "уже созданные записи останутся, остальные не импортируются. Прервать импорт?";
+
+// beaconCloseGuard — контракт с floating-window.js: родитель спрашивает у
+// встроенной страницы, можно ли её закрывать, и показывает вернувшийся текст
+// в confirm. Пусто/нет функции — закрывать молча, как у всех остальных
+// страниц в плавающих окнах.
+window.beaconCloseGuard = () => (running ? CLOSE_WARNING : "");
+
+// Отдельное окно браузера (кнопка 🗗 или открытая напрямую страница): там
+// родителя нет, сторожит стандартный диалог самого браузера. Свой текст он
+// показать не даст — покажет собственную формулировку про несохранённые
+// изменения, это ожидаемо.
+window.addEventListener("beforeunload", (e) => {
+  if (!running) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
+
 document.getElementById("closeBtn").onclick = () => {
+  if (running && !confirm(CLOSE_WARNING)) return;
+  cancelled = true; // импорт остановится на текущей карточке, даже если окно ещё живо
   if (window.parent !== window) {
     window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
   } else {

@@ -1,4 +1,4 @@
-import{k as G,F as J,a0 as Q,u as Z,ah as ee,ai as te,z as T,aj as ne}from"./api-CY8linmZ.js";import{i as ae}from"./index-De8rdl57.js";import{o as N,i as oe,m as se,p as ce,s as P,a as re}from"./compendium-menu-Dz3vM371.js";import{i as x}from"./icons-3nongrBp.js";import"./compendium-taxonomy-BHoDJPfw.js";const _="beacon:sheetDockWidth",ie=300,le=.72;let H=!1;function de(){if(H)return;H=!0;const e=document.createElement("style");e.textContent=`
+import{k as G,F as J,a0 as Q,u as Z,ah as ee,ai as te,z as T,aj as ne}from"./api-CY8linmZ.js";import{i as ae}from"./index-De8rdl57.js";import{o as N,i as oe,m as se,p as ce,s as P,a as re}from"./compendium-menu-Op06GBUG.js";import{i as x}from"./icons-3nongrBp.js";import"./compendium-taxonomy-BHoDJPfw.js";const _="beacon:sheetDockWidth",ie=300,le=.72;let H=!1;function de(){if(H)return;H=!0;const e=document.createElement("style");e.textContent=`
     .sheet-dock {
       flex: 0 0 auto; position: relative; display: none; flex-direction: column;
       min-width: 0; background: var(--panel-bg, #1c1c25);
