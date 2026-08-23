@@ -17,13 +17,19 @@
 // (pages/catalog.js: openDetail) — сама эта страница тоже всегда живёт в
 // плавающем окне-iframe, второй уровень вложенности не нужен (см.
 // floating-window.js: все окна — прямые дети топ-документа).
-import { fetchItems, fetchSpells, fetchReferences, fetchBestiary } from "./api.js";
+import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchNotes } from "./api.js";
 
 const KIND_CONFIG = {
   item: { fetchAll: fetchItems, urlFor: (id) => `/itembook.html?id=${id}`, keyPrefix: "item" },
   spell: { fetchAll: fetchSpells, urlFor: (id) => `/spellbook.html?id=${id}`, keyPrefix: "spell" },
   reference: { fetchAll: fetchReferences, urlFor: (id) => `/referencebook.html?id=${id}`, keyPrefix: "reference" },
   monster: { fetchAll: fetchBestiary, urlFor: (id) => `/bestiary.html?id=${id}`, keyPrefix: "monster" },
+  // note — заметки ДМ: у них есть папки, и одноимённые записи в разных
+  // ветках дерева — норма, поэтому такая ссылка несёт ещё и data-folder
+  // (см. matchByName ниже). Появляется при импорте модуля Foundry:
+  // правила ссылаются на другие правила (@UUID[...JournalEntry...]), см.
+  // internal/foundry/links.go.
+  note: { fetchAll: fetchNotes, urlFor: (id) => `/note-window.html?id=${id}`, keyPrefix: "note" },
 };
 
 // listCache — один запрос списка на kind на всё время жизни страницы: одно
@@ -39,11 +45,32 @@ function listFor(kind) {
   return listCache.get(kind);
 }
 
-function openEntry(kind, id, name) {
+// matchByName — найти цель ссылки в списке раздела. Имя сравнивается без
+// учёта регистра и лишних пробелов: ссылка родом из чужого модуля, и
+// требовать побайтового совпадения с тем, что легло в библиотеку, слишком
+// строго. folder (только у заметок) сначала обязателен, а если такой папки
+// уже нет — ДМ мог перенести заметку — берём тёзку из любой папки.
+function matchByName(list, name, folder) {
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const sameName = list.filter((x) => norm(x.name || x.title) === norm(name));
+  if (!sameName.length) return null;
+  if (folder) {
+    const inFolder = sameName.find((x) => norm(x.folder) === norm(folder));
+    if (inFolder) return inFolder;
+  }
+  return sameName[0];
+}
+
+// openEntry — section (только у заметок) — раздел внутри целевой заметки:
+// страница журнала Foundry у нас становится разделом «## Название» (см.
+// internal/foundry/journal.go), и ссылка на неё должна открывать заметку
+// сразу на нужном месте. Передаётся хэшем в URL — его читает note-window.js.
+function openEntry(kind, id, name, section) {
   const cfg = KIND_CONFIG[kind];
   if (!cfg) return;
+  const url = cfg.urlFor(id) + (section ? "#" + encodeURIComponent(section) : "");
   window.parent.postMessage(
-    { type: "beacon:openFloatingWindow", key: cfg.keyPrefix + "-" + id, title: name, url: cfg.urlFor(id) },
+    { type: "beacon:openFloatingWindow", key: cfg.keyPrefix + "-" + id, title: name, url },
     location.origin
   );
 }
@@ -61,8 +88,8 @@ export function wireCatalogLinks(containerEl) {
     const name = a.dataset.name;
     if (!kind || !name) return;
     const list = await listFor(kind);
-    const found = list.find((x) => x.name === name);
+    const found = matchByName(list, name, a.dataset.folder);
     if (!found) return; // карточки с таким именем нет в текущей библиотеке — ссылка просто ничего не делает, не ошибка
-    openEntry(kind, found.id, found.name);
+    openEntry(kind, found.id, found.name || found.title, a.dataset.section);
   });
 }

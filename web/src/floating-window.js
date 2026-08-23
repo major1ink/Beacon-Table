@@ -120,8 +120,31 @@ export function openFloatingWindow({ key, title, url, popoutFeatures = "width=10
     el.remove();
     openWindows.delete(key);
   }
-  closeBtn.onclick = close;
+  // confirmClose — спросить встроенную страницу, можно ли её закрывать.
+  // Контракт: страница вешает на свой window функцию beaconCloseGuard(),
+  // которая возвращает текст предупреждения, если сейчас закрывать нельзя
+  // ("" или отсутствие функции — можно молча). Нужен страницам с длительным
+  // процессом внутри: закрытие iframe убивает его на полпути, а обычный
+  // beforeunload браузер для удаления iframe не показывает (см.
+  // web/src/pages/foundry-import.js).
+  function confirmClose() {
+    let warning = "";
+    try {
+      const guard = iframe.contentWindow && iframe.contentWindow.beaconCloseGuard;
+      if (typeof guard === "function") warning = guard() || "";
+    } catch {
+      /* всегда тот же origin, сюда не попадём */
+    }
+    return !warning || window.confirm(warning);
+  }
+
+  closeBtn.onclick = () => {
+    if (confirmClose()) close();
+  };
   popoutBtn.onclick = () => {
+    // Вынос в отдельное окно перезагружает страницу с нуля — для процесса
+    // внутри это то же самое, что закрытие, поэтому спрашиваем так же.
+    if (!confirmClose()) return;
     window.open(url, key, popoutFeatures);
     close();
   };

@@ -170,14 +170,40 @@ export async function fetchNotes() {
 export async function fetchNote(id) {
   return apiFetch(`/api/notes/${id}`);
 }
-export async function createNote(content) {
-  return apiFetch("/api/notes", { method: "POST", body: JSON.stringify({ content }) });
+// createNote — folder необязателен ("" / не передан = корень библиотеки, см.
+// domain.Note.Folder).
+export async function createNote(content, folder) {
+  return apiFetch("/api/notes", { method: "POST", body: JSON.stringify({ content, folder: folder || "" }) });
 }
 export async function updateNote(id, content) {
   return apiFetch(`/api/notes/${id}`, { method: "PUT", body: JSON.stringify({ content }) });
 }
+// moveNote — перенос заметки в другую папку. Отдельно от updateNote:
+// содержимое автосейвится по таймеру при наборе текста, папка меняется
+// осознанным действием (см. internal/api/http: handleNoteMove).
+export async function moveNote(id, folder) {
+  return apiFetch(`/api/notes/${id}/folder`, { method: "PUT", body: JSON.stringify({ folder: folder || "" }) });
+}
 export async function deleteNote(id) {
   return apiFetch(`/api/notes/${id}`, { method: "DELETE" });
+}
+
+// ---- папки библиотеки заметок: отдельный список, потому что папка может
+// быть пустой (только что созданная или освободившаяся) и в /api/notes её
+// тогда не видно ----
+export async function fetchNoteFolders() {
+  return apiFetch("/api/note-folders");
+}
+export async function createNoteFolder(folder) {
+  return apiFetch("/api/note-folders", { method: "POST", body: JSON.stringify({ folder }) });
+}
+export async function renameNoteFolder(from, to) {
+  return apiFetch("/api/note-folders", { method: "PUT", body: JSON.stringify({ from, to }) });
+}
+// deleteNoteFolder удаляет папку ВМЕСТЕ с заметками внутри — спрашивать ДМ
+// обязан вызывающий.
+export async function deleteNoteFolder(folder) {
+  return apiFetch(`/api/note-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
 }
 
 // ---- бестиарий ДМ (только ДМ) — web/dm.html: раздел "Бестиарий", web/bestiary.html ----
@@ -287,6 +313,30 @@ export async function updateCondition(id, cond) {
 }
 export async function deleteCondition(id) {
   return apiFetch(`/api/conditions/${id}`, { method: "DELETE" });
+}
+
+// ---- импорт компендиумов из пакетов Foundry VTT (только ДМ, см.
+// internal/api/http/foundry_handlers.go, web/foundry-import.html) ----
+
+// inspectFoundryPackage — разведка по ссылке на манифест: сервер скачивает
+// и распаковывает архив (первый вызов может идти минуты — модуль с картами
+// весит сотни мегабайт) и отдаёт {id,title,version,packs:[{name,label,type,
+// count,targets:{раздел:сколько},error}]}. Распакованный модуль остаётся в
+// кэше сервера, поэтому последующий importFoundryPack по той же ссылке уже
+// не ходит в сеть.
+export async function inspectFoundryPackage(url) {
+  return apiFetch("/api/foundry/inspect", { method: "POST", body: JSON.stringify({ url }) });
+}
+
+// importFoundryPack — импорт ОДНОГО пака. targets — какие разделы брать
+// ("items"/"spells"/"monsters"/"references"/"conditions"/"scenes"/
+// "playlists"/"notes"), пусто — все. Возвращает {docs:{раздел:[документы
+// Foundry]}, applied:{раздел:сколько}, skipped, assets, warnings}: сцены,
+// плейлисты и заметки сервер уже разложил сам (applied), а документы
+// карточек приезжают сырыми — их маппят те же функции, что и импорт
+// одиночного файла (см. web/src/item-import.js и соседей).
+export async function importFoundryPack(url, pack, targets) {
+  return apiFetch("/api/foundry/import", { method: "POST", body: JSON.stringify({ url, pack, targets }) });
 }
 
 // Загрузка файла (карта, токен-арт, аватар персонажа или ассет карты) на

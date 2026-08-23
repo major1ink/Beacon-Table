@@ -45,11 +45,26 @@ type RoomService interface {
 	Dispatch(c RoomClient, msg domain.ClientMsg)
 	// Shutdown синхронно сохраняет текущую сцену и завершает горутину run().
 	Shutdown()
+	// ImportScenes добавляет в библиотеку комнаты готовые сцены, собранные
+	// не игроком за столом, а импортом пакета Foundry (см.
+	// FoundryService.ImportPack): сцены со стенами/светом/токенами приезжают
+	// целиком, командой "add_wall" по одной стене такое не заводят.
+	// Возвращает, сколько сцен реально добавилось. Единственный вход в
+	// состояние комнаты не через WS — поэтому идёт через ту же горутину
+	// run(), а не трогает r.scenes снаружи.
+	ImportScenes(ctx context.Context, scenes []*domain.SceneState) (int, error)
 }
 
 type inboundMsg struct {
 	from RoomClient
 	msg  domain.ClientMsg
+}
+
+// importScenesReq — заявка на добавление сцен из импорта: reply получает
+// количество добавленных, когда run() их разложит (см. ImportScenes).
+type importScenesReq struct {
+	scenes []*domain.SceneState
+	reply  chan int
 }
 
 // Room — реализация RoomService.
@@ -84,8 +99,13 @@ type Room struct {
 	leave          chan RoomClient
 	inbound        chan inboundMsg
 	shutdown       chan chan struct{}
-	dirty          bool            // есть хоть одна несохранённая мутация с последнего флаша
-	dirtyScenes    map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
+	// importScenes — сцены, приехавшие импортом пакета Foundry (см.
+	// ImportScenes): отдельный канал, а не inbound, потому что это не
+	// команда клиента и авторизации по роли у неё нет — вызывающего
+	// (ДМ-only эндпоинт) проверил API-слой.
+	importScenes chan importScenesReq
+	dirty        bool            // есть хоть одна несохранённая мутация с последнего флаша
+	dirtyScenes  map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
 	// combat — трекер инициативы всего стола (см. domain.CombatState), не
 	// привязан к конкретной сцене — переживает switch_scene. combatDirty —
@@ -151,6 +171,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		leave:          make(chan RoomClient),
 		inbound:        make(chan inboundMsg, 32),
 		shutdown:       make(chan chan struct{}),
+		importScenes:   make(chan importScenesReq),
 		dirtyScenes:    make(map[string]bool),
 		combat:         combat,
 		hub:            hub,
@@ -171,6 +192,51 @@ func (r *Room) Join(c RoomClient)  { r.join <- c }
 func (r *Room) Leave(c RoomClient) { r.leave <- c }
 func (r *Room) Dispatch(c RoomClient, msg domain.ClientMsg) {
 	r.inbound <- inboundMsg{from: c, msg: msg}
+}
+
+// ImportScenes — см. RoomService.ImportScenes. ctx нужен не для отмены самой
+// вставки (она мгновенная), а чтобы не залипнуть навсегда, если комната уже
+// остановлена переключением мира и её run() больше никого не читает.
+func (r *Room) ImportScenes(ctx context.Context, scenes []*domain.SceneState) (int, error) {
+	if len(scenes) == 0 {
+		return 0, nil
+	}
+	reply := make(chan int, 1)
+	select {
+	case r.importScenes <- importScenesReq{scenes: scenes, reply: reply}:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	select {
+	case added := <-reply:
+		return added, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+// addScenes — тело ImportScenes уже внутри горутины run(): кладёт сцены в
+// библиотеку, ставит их в конец переключателя ДМ и помечает грязными, чтобы
+// автосейв записал их файлы. Активную сцену НЕ меняет — импорт не должен
+// уводить стол с текущей карты посреди игры.
+func (r *Room) addScenes(scenes []*domain.SceneState) int {
+	added := 0
+	for _, s := range scenes {
+		if s == nil || s.ID == "" {
+			continue
+		}
+		if _, exists := r.scenes[s.ID]; exists {
+			continue
+		}
+		r.scenes[s.ID] = s
+		r.sceneOrder = append(r.sceneOrder, s.ID)
+		r.markDirty(s.ID)
+		added++
+	}
+	if added > 0 {
+		r.broadcastSceneList()
+	}
+	return added
 }
 
 // autosaveInterval — как часто сбрасывать на диск накопившиеся мутации. Не
@@ -363,6 +429,9 @@ func (r *Room) run() {
 			r.applyMutation(im.msg)
 			r.broadcastAll()
 			r.broadcastSceneList()
+
+		case req := <-r.importScenes:
+			req.reply <- r.addScenes(req.scenes)
 
 		case <-ticker.C:
 			r.flushIfDirty()

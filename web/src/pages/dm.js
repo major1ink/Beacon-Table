@@ -35,12 +35,19 @@ import {
   fetchNote,
   createNote,
   updateNote,
+  moveNote,
   deleteNote,
+  fetchNoteFolders,
+  createNoteFolder,
+  renameNoteFolder,
+  deleteNoteFolder,
   fetchMonster,
 } from "../api.js";
 import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
+import { wireCatalogLinks } from "../catalog-links.js";
+import { enhanceRolls } from "../inline-rolls.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
@@ -1647,6 +1654,9 @@ const noteListView = document.getElementById("noteListView");
 const noteDetailView = document.getElementById("noteDetailView");
 const noteRows = document.getElementById("noteRows");
 const noteSearch = document.getElementById("noteSearch");
+const noteCurrentFolderEl = document.getElementById("noteCurrentFolder");
+const noteFolderResetBtn = document.getElementById("noteFolderResetBtn");
+const noteFolderSelect = document.getElementById("noteFolderSelect");
 const noteDetailTitle = document.getElementById("noteDetailTitle");
 const noteRenderView = document.getElementById("noteRenderView");
 const noteEditView = document.getElementById("noteEditView");
@@ -1655,41 +1665,233 @@ const noteEditToggleBtn = document.getElementById("noteEditToggleBtn");
 const noteMsg = document.getElementById("noteMsg");
 mountNoteToolbar(document.getElementById("noteToolbar"), noteEditArea);
 
-let notesList = []; // [{id,title,updatedAt}] — метаданные, для списка и резолва вики-ссылок
+let notesList = []; // [{id,title,folder,updatedAt}] — метаданные, для дерева и резолва вики-ссылок
+let noteFolders = []; // ["Приключение", "Приключение/Глава 1", ...] — включая пустые
 let notesView = "list"; // "list" | "detail"
-let selectedNote = null; // {id,title,content,updatedAt} заметки, открытой в детейле
+let selectedNote = null; // {id,title,folder,content,updatedAt} заметки, открытой в детейле
 let noteEditing = false;
+// openNoteFolders — какие ветки дерева раскрыты; currentNoteFolder — в какую
+// папку попадёт следующая созданная заметка/подпапка ("" — корень).
+const openNoteFolders = new Set();
+let currentNoteFolder = "";
 
 async function refreshNotesList() {
   try {
-    notesList = await fetchNotes();
+    [notesList, noteFolders] = await Promise.all([fetchNotes(), fetchNoteFolders()]);
   } catch (err) {
     console.error("не удалось загрузить список заметок:", err);
     notesList = [];
+    noteFolders = [];
   }
   renderNoteRows();
+}
+
+// noteFolderTree — дерево из плоских путей заметок и папок. Узел:
+// {path, name, children: Map, notes: []}. Пустые папки приезжают отдельным
+// списком (см. fetchNoteFolders) — иначе только что созданная папка
+// пропадала бы до первой заметки в ней.
+function noteFolderTree() {
+  const root = { path: "", name: "", children: new Map(), notes: [] };
+  const nodeFor = (path) => {
+    let node = root;
+    if (!path) return node;
+    let acc = "";
+    for (const segment of path.split("/")) {
+      acc = acc ? acc + "/" + segment : segment;
+      if (!node.children.has(segment)) {
+        node.children.set(segment, { path: acc, name: segment, children: new Map(), notes: [] });
+      }
+      node = node.children.get(segment);
+    }
+    return node;
+  };
+  for (const folder of noteFolders) nodeFor(folder);
+  for (const n of notesList) nodeFor(n.folder || "").notes.push(n);
+  return root;
+}
+
+function noteRowEl(n, { showFolder = false } = {}) {
+  const row = document.createElement("div");
+  row.className = "note-row";
+  const title = document.createElement("span");
+  title.className = "note-title";
+  title.textContent = n.title;
+  const meta = document.createElement("span");
+  meta.className = "note-meta";
+  meta.textContent = showFolder && n.folder ? n.folder : formatDate(n.updatedAt);
+  meta.title = showFolder && n.folder ? "Папка: " + n.folder : "";
+  row.append(title, meta);
+  row.onclick = () => openNote(n.id);
+  return row;
+}
+
+function noteFolderRowEl(node) {
+  const open = openNoteFolders.has(node.path);
+  const row = document.createElement("div");
+  row.className = "note-folder-row" + (currentNoteFolder === node.path ? " current" : "");
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "note-folder-toggle";
+  toggle.innerHTML = icon(open ? "chevron-down" : "chevron-right", { size: 12 });
+  const name = document.createElement("span");
+  name.className = "note-folder-name";
+  name.textContent = node.name;
+  const count = document.createElement("span");
+  count.className = "note-folder-count";
+  count.textContent = String(countNotesIn(node));
+
+  // Клик по папке делает две вещи сразу — раскрывает её и делает "текущей"
+  // (новая заметка/подпапка создаётся именно в ней): это то же поведение,
+  // что у файловых менеджеров, и избавляет от отдельного «выбрать папку».
+  const select = () => {
+    currentNoteFolder = node.path;
+    if (open) openNoteFolders.delete(node.path);
+    else openNoteFolders.add(node.path);
+    renderNoteRows();
+  };
+  toggle.onclick = select;
+  name.onclick = select;
+  count.onclick = select;
+
+  const actions = document.createElement("span");
+  actions.className = "note-folder-actions";
+  actions.append(
+    folderActionBtn("plus", "Создать подпапку", () => createNoteFolderPrompt(node.path)),
+    folderActionBtn("pencil", "Переименовать папку", () => renameNoteFolderPrompt(node)),
+    folderActionBtn("trash", "Удалить папку вместе с заметками", () => deleteNoteFolderPrompt(node))
+  );
+  row.append(toggle, name, count, actions);
+  return row;
+}
+
+function folderActionBtn(iconName, title, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "note-icon-btn";
+  btn.title = title;
+  btn.innerHTML = icon(iconName, { size: 12 });
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    onClick();
+  };
+  return btn;
+}
+
+function countNotesIn(node) {
+  let total = node.notes.length;
+  for (const child of node.children.values()) total += countNotesIn(child);
+  return total;
+}
+
+function renderNoteTree(node, container, depth) {
+  const folders = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  for (const child of folders) {
+    const row = noteFolderRowEl(child);
+    row.style.paddingLeft = 4 + depth * 12 + "px";
+    container.appendChild(row);
+    if (openNoteFolders.has(child.path)) renderNoteTree(child, container, depth + 1);
+  }
+  for (const n of node.notes) {
+    const row = noteRowEl(n);
+    row.style.marginLeft = depth * 12 + "px";
+    container.appendChild(row);
+  }
 }
 
 function renderNoteRows() {
   const filter = noteSearch.value.trim().toLowerCase();
   noteRows.innerHTML = "";
-  for (const n of notesList) {
-    if (filter && !n.title.toLowerCase().includes(filter)) continue;
-    const row = document.createElement("div");
-    row.className = "note-row";
-    const title = document.createElement("span");
-    title.className = "note-title";
-    title.textContent = n.title;
-    const meta = document.createElement("span");
-    meta.className = "note-meta";
-    meta.textContent = formatDate(n.updatedAt);
-    row.appendChild(title);
-    row.appendChild(meta);
-    row.onclick = () => openNote(n.id);
-    noteRows.appendChild(row);
+
+  // Поиск показывает плоский список по всей библиотеке: искать заметку,
+  // раскрывая ветки руками, — ровно то, от чего поиск и избавляет. Папка
+  // при этом видна в строке справа.
+  if (filter) {
+    const found = notesList.filter(
+      (n) => n.title.toLowerCase().includes(filter) || (n.folder || "").toLowerCase().includes(filter)
+    );
+    if (!found.length) {
+      noteRows.appendChild(hintEl("Ничего не найдено."));
+      return;
+    }
+    for (const n of found) noteRows.appendChild(noteRowEl(n, { showFolder: true }));
+    return;
   }
+
+  renderNoteTree(noteFolderTree(), noteRows, 0);
+  if (!notesList.length && !noteFolders.length) {
+    noteRows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка»."));
+  }
+  noteCurrentFolderEl.textContent = currentNoteFolder ? "в папке: " + currentNoteFolder : "в корне библиотеки";
+  noteFolderResetBtn.style.display = currentNoteFolder ? "" : "none";
+}
+
+function hintEl(text) {
+  const p = document.createElement("p");
+  p.className = "hint";
+  p.textContent = text;
+  return p;
 }
 noteSearch.oninput = renderNoteRows;
+
+// ---- папки: создание/переименование/удаление ----
+
+async function createNoteFolderPrompt(parent) {
+  const name = prompt(parent ? `Название подпапки внутри «${parent}»:` : "Название новой папки:");
+  if (!name || !name.trim()) return;
+  const path = parent ? parent + "/" + name.trim() : name.trim();
+  try {
+    await createNoteFolder(path);
+    openNoteFolders.add(parent);
+    currentNoteFolder = path;
+    await refreshNotesList();
+  } catch (err) {
+    alert("Не удалось создать папку: " + err.message);
+  }
+}
+
+async function renameNoteFolderPrompt(node) {
+  const name = prompt("Новое название папки:", node.name);
+  if (!name || !name.trim() || name.trim() === node.name) return;
+  const parent = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
+  const target = parent ? parent + "/" + name.trim() : name.trim();
+  try {
+    await renameNoteFolder(node.path, target);
+    // Раскрытые ветки и «текущая папка» ссылались на старый путь — переносим
+    // их на новый, иначе дерево схлопнется прямо под руками.
+    for (const open of [...openNoteFolders]) {
+      if (open === node.path || open.startsWith(node.path + "/")) {
+        openNoteFolders.delete(open);
+        openNoteFolders.add(target + open.slice(node.path.length));
+      }
+    }
+    if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) {
+      currentNoteFolder = target + currentNoteFolder.slice(node.path.length);
+    }
+    await refreshNotesList();
+  } catch (err) {
+    alert("Не удалось переименовать: " + err.message);
+  }
+}
+
+async function deleteNoteFolderPrompt(node) {
+  const total = countNotesIn(node);
+  const what = total ? `папку «${node.path}» и ${total} заметок внутри` : `пустую папку «${node.path}»`;
+  if (!confirm(`Удалить ${what}? Это необратимо.`)) return;
+  try {
+    await deleteNoteFolder(node.path);
+    if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) currentNoteFolder = "";
+    await refreshNotesList();
+  } catch (err) {
+    alert("Не удалось удалить папку: " + err.message);
+  }
+}
+
+document.getElementById("newNoteFolderBtn").onclick = () => createNoteFolderPrompt(currentNoteFolder);
+noteFolderResetBtn.onclick = () => {
+  currentNoteFolder = "";
+  renderNoteRows();
+};
 
 function renderNotesPanel() {
   const showDetail = notesView === "detail" && selectedNote;
@@ -1698,9 +1900,39 @@ function renderNotesPanel() {
   if (showDetail) renderNoteDetail();
 }
 
+// renderNoteFolderSelect — «в какой папке лежит эта заметка» в карточке.
+// Список — все существующие папки плюс корень; выбор сразу переносит файл
+// (см. moveNote), отдельной кнопки «сохранить» тут не нужно.
+function renderNoteFolderSelect() {
+  noteFolderSelect.innerHTML = "";
+  const options = ["", ...noteFolders];
+  if (selectedNote.folder && !options.includes(selectedNote.folder)) options.push(selectedNote.folder);
+  for (const folder of options) {
+    const opt = document.createElement("option");
+    opt.value = folder;
+    opt.textContent = folder || "— корень библиотеки —";
+    opt.selected = folder === (selectedNote.folder || "");
+    noteFolderSelect.appendChild(opt);
+  }
+}
+
+noteFolderSelect.onchange = async () => {
+  if (!selectedNote) return;
+  const target = noteFolderSelect.value;
+  try {
+    selectedNote = await moveNote(selectedNote.id, target);
+    noteMsg.textContent = target ? `Перенесено в «${target}».` : "Перенесено в корень библиотеки.";
+    refreshNotesList();
+  } catch (err) {
+    noteMsg.textContent = err.message;
+    renderNoteFolderSelect(); // вернуть селект к реальному состоянию
+  }
+};
+
 function renderNoteDetail() {
   noteMsg.textContent = "";
   noteDetailTitle.textContent = selectedNote.title;
+  renderNoteFolderSelect();
   noteEditView.style.display = noteEditing ? "block" : "none";
   noteRenderView.style.display = noteEditing ? "none" : "block";
   noteEditToggleBtn.innerHTML = icon(noteEditing ? "eye" : "pencil", { size: 14 });
@@ -1711,7 +1943,21 @@ function renderNoteDetail() {
     noteEditArea.focus();
   } else {
     noteRenderView.innerHTML = renderNoteHtml(selectedNote.content);
+    // Формулы в тексте — кликабельные, как в статблоках и карточках (см.
+    // inline-rolls.js). Импорт модуля Foundry специально приводит свои
+    // [[/r 2d6]] к обычной формуле ради этого (см. internal/foundry/rolls.go).
+    // Не делегированный обработчик, а обход текста — поэтому вызываем на
+    // каждую перерисовку, а не один раз при загрузке страницы.
+    enhanceRolls(noteRenderView, sendNoteRoll);
   }
+}
+
+// sendNoteRoll — бросок из текста заметки уходит в общий лог стола тем же
+// сообщением, что и кнопки панели кубов (см. dice.js).
+function sendNoteRoll(formula, label) {
+  if (!vtt) return;
+  const title = selectedNote && selectedNote.title;
+  vtt.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
 }
 
 async function openNote(id, { edit = false } = {}) {
@@ -1736,14 +1982,24 @@ function backToNoteList() {
 }
 document.getElementById("noteBackBtn").onclick = backToNoteList;
 
+// Ссылки .catalog-ref внутри текста заметки — на карточки библиотек и на
+// другие заметки; их эмитит импорт модуля Foundry вместо своих @UUID[…]
+// (см. internal/foundry/links.go). Открываются плавающим окном, как и из
+// описаний карточек.
+wireCatalogLinks(noteRenderView);
+
 // клик по вики-ссылке [[...]] внутри рендера — существующая заметка
 // открывается тут же; для несуществующей предлагаем создать с этим заголовком.
 wireWikiLinks(noteRenderView, () => notesList, {
+  // Папка открытой заметки — точка отсчёта для ссылок вида [[NPC/Марго]] и
+  // для [[Заголовок]] без пути (см. resolveWikiTarget).
+  getFolder: () => (selectedNote && selectedNote.folder) || "",
   onOpen: (id) => openNote(id),
-  onCreateMissing: async (title) => {
-    if (!confirm(`Заметки «${title}» не существует. Создать?`)) return;
+  onCreateMissing: async (title, folder) => {
+    const where = folder ? ` в папке «${folder}»` : " в корне библиотеки";
+    if (!confirm(`Заметки «${title}» не существует. Создать${where}?`)) return;
     try {
-      const n = await createNote(`# ${title}\n\n`);
+      const n = await createNote(`# ${title}\n\n`, folder);
       await refreshNotesList();
       await openNote(n.id, { edit: true });
     } catch (err) {
@@ -1810,7 +2066,10 @@ document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
   const title = titleInput.value.trim();
   if (!title) return;
   try {
-    const n = await createNote(`# ${title}\n\n`);
+    // Новая заметка ложится в выбранную сейчас папку дерева (см.
+    // currentNoteFolder) — то же, чего ждёшь от «создать» в файловом
+    // менеджере.
+    const n = await createNote(`# ${title}\n\n`, currentNoteFolder);
     titleInput.value = "";
     await refreshNotesList();
     await openNote(n.id, { edit: true });

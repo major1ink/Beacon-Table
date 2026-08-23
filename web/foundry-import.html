@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beacon Table — Импорт из Foundry VTT</title>
+  <link rel="stylesheet" href="/src/styles/theme.css" />
+  <style>
+    /* Тот же каркас "шапка + прокручиваемое тело", что у catalog.html —
+       страница открывается тем же openFloatingWindow. */
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12.5px; display: flex; flex-direction: column;
+    }
+    button { cursor: pointer; border: none; border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; padding: 8px 10px; transition: background .12s ease; }
+    button:hover:not(:disabled) { background: var(--surface-hover); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    button.primary { background: var(--accent); color: #fff; }
+    input[type="text"] {
+      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 7px 10px; font: inherit; width: 100%;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    .hint { opacity: 0.6; font-size: 11px; line-height: 1.5; margin: 0; }
+    .error { color: var(--danger, #e06c75); }
+
+    #topBar {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+      border-bottom: 1px solid var(--border); background: var(--panel-bg);
+    }
+    #topBar .title { font-weight: 700; font-size: 15px; margin-right: auto; }
+    #closeBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
+
+    #app { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    #urlForm { display: flex; gap: 6px; }
+    #urlForm input { flex: 1 1 auto; }
+    #urlForm button { flex: 0 0 auto; }
+
+    .section { display: flex; flex-direction: column; gap: 8px; }
+    .section h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+
+    .pack-row {
+      display: flex; align-items: baseline; gap: 8px; padding: 7px 8px;
+      border-radius: 8px; background: var(--panel-bg); border: 1px solid var(--border);
+    }
+    .pack-row label { display: flex; align-items: baseline; gap: 8px; flex: 1 1 auto; cursor: pointer; }
+    .pack-row .pack-name { font-weight: 600; }
+    .pack-row .pack-meta { opacity: .55; font-size: 11px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      font-size: 10.5px; padding: 1px 6px; border-radius: 999px;
+      background: var(--surface); opacity: .85; white-space: nowrap;
+    }
+    .targets { display: flex; flex-wrap: wrap; gap: 10px; }
+    .targets label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+    /* Журнал — не последний абзац прокручиваемого тела (в невысоком окне он
+       оказывался за нижней кромкой ровно тогда, когда нужнее всего), а
+       собственная панель внизу со своей прокруткой. */
+    #logPane {
+      flex: 0 0 auto; display: none; flex-direction: column; min-height: 0;
+      max-height: 45%; border-top: 1px solid var(--border); background: var(--panel-bg);
+    }
+    #logHead {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 6px 16px;
+      font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .7;
+    }
+    #logHead button { margin-left: auto; padding: 3px 8px; font-size: 11px; }
+    #log {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0; padding: 0 16px 10px;
+      white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px; line-height: 1.5;
+    }
+
+    /* Кнопки запуска/остановки липнут к низу тела: журнал может быть
+       длинным, а «Остановить» должно быть под рукой всегда. */
+    .row {
+      display: flex; gap: 8px; align-items: center; position: sticky; bottom: 0;
+      padding: 8px 0; background: var(--bg);
+    }
+
+    .spinner {
+      display: inline-block; width: 11px; height: 11px; margin-right: 6px; vertical-align: -1px;
+      border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+    #progress {
+      display: none; height: 4px; border-radius: 999px; overflow: hidden;
+      background: var(--surface);
+    }
+    #progressBar {
+      height: 100%; width: 0; border-radius: 999px; background: var(--accent);
+      transition: width .15s linear;
+    }
+    /* Неопределённый прогресс (скачиваем архив — сколько ждать, сервер не
+       сообщает): бегущая полоска вместо доли. */
+    /* Диалог «такая заметка уже есть» (см. askNoteConflict): вариантов
+       больше двух, поэтому свой, а не confirm(). */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, .55); padding: 16px;
+    }
+    .modal {
+      max-width: 460px; width: 100%; display: flex; flex-direction: column; gap: 10px;
+      background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
+    }
+    .modal h3 { margin: 0; font-size: 14px; }
+    .modal-diff { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 11.5px; }
+    .modal-diff dt { opacity: .6; }
+    .modal-diff dd { margin: 0; }
+    .modal-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+    .modal-all { display: flex; align-items: center; gap: 6px; font-size: 11px; opacity: .8; }
+
+    #progress.indeterminate #progressBar {
+      width: 35%; animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { margin-left: -35%; }
+      100% { margin-left: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="topBar">
+    <span class="title">Импорт из Foundry VTT</span>
+    <button id="closeBtn" type="button" title="Закрыть"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+  </div>
+  <div id="app">
+    <p class="hint">
+      Вставь ссылку на манифест модуля или системы Foundry VTT (файл
+      <code>module.json</code> / <code>system.json</code> — её дают на странице модуля).
+      Сервер скачает архив этой версии, распакует и разложит содержимое по разделам стола:
+      карточки — в библиотеки, сцены — в переключатель сцен, музыку — в плейлисты ДМ,
+      журналы — в заметки, картинки и треки — в библиотеку загрузок.
+    </p>
+    <form id="urlForm">
+      <input type="text" id="manifestUrl" placeholder="https://example.com/modules/my-module/module.json" spellcheck="false" />
+      <button type="submit" id="inspectBtn" class="primary">Проверить</button>
+    </form>
+    <p class="hint" id="status"></p>
+    <div id="progress"><div id="progressBar"></div></div>
+
+    <div class="section" id="packsSection" style="display:none;">
+      <h3>Что импортировать</h3>
+      <div class="targets" id="targets"></div>
+      <div class="section" id="packs"></div>
+      <div class="row">
+        <button type="button" id="importBtn" class="primary">Импортировать выбранное</button>
+        <button type="button" id="cancelBtn" style="display:none;">Остановить</button>
+      </div>
+      <p class="hint">
+        Совпадения проверяются: запись, которая уже есть в библиотеке и ничем не отличается от
+        того, что в модуле, пропускается молча; если разошлась — импорт спросит, перезаписать,
+        оставить обе или пропустить. Карточки сверяются по названию (состояния — по slug),
+        заметки — по папке и заголовку. Файлы из архива переносятся один раз: повторный импорт
+        узнаёт их и оставляет прежние ссылки.
+      </p>
+    </div>
+  </div>
+
+  <div id="logPane">
+    <div id="logHead">
+      <span>Журнал импорта</span>
+      <button type="button" id="logClearBtn">Очистить</button>
+    </div>
+    <pre id="log"></pre>
+  </div>
+
+  <script type="module" src="/src/pages/foundry-import.js"></script>
+</body>
+</html>
