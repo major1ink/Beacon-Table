@@ -37,6 +37,12 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           version: 3.x
+          # Экшен ищет нужный релиз Task через GitHub API. Без токена запрос
+          # анонимный, а лимит у него — 60 в час НА IP раннера, общий для всех
+          # чужих сборок с той же машины: рано или поздно job падает с "API
+          # rate limit exceeded" на ровном месте. С GITHUB_TOKEN лимит
+          # считается по репозиторию (тысячи в час), и хватает его с запасом.
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: task test
         run: task test
