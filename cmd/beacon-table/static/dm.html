@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>Beacon Table — DM</title>
   <style>
     html, body { height: 100%; }
@@ -55,10 +56,19 @@
       transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
       display: flex; flex-direction: column; z-index: 6;
     }
-   
+    /* Ширина открытой панели тут НЕ задаётся: это состояние времени
+       выполнения (её тянут мышью за #panelResizer и помнят в localStorage —
+       дереву заметок с глубокой вложенностью 300px тесно, а разделу
+       "Освещение" больше и не нужно), inline flex-basis/width ставит
+       pages/dm.js. Закрытая панель inline-стилей не имеет вовсе — работает
+       #panel{flex:0 0 0;width:0} выше, и схлопывание остаётся анимированным
+       тем же transition. */
     #panel.open { margin: 14px 2px 14px 10px; border-width: 1px; box-shadow: var(--shadow-float); }
 
-   
+    /* Ручка ширины — отдельный flex-элемент в зазоре между панелью и
+       канвасом, а не absolute внутри #panel: у панели overflow:hidden, и
+       торчащая наружу ручка была бы обрезана. Показывается только при
+       открытой панели (класс .visible ставит setSidePanelSection). */
     #panelResizer {
       flex: 0 0 auto; width: 10px; margin: 14px 0; z-index: 6; touch-action: none;
       display: none; align-items: center; justify-content: center; cursor: col-resize;
@@ -111,7 +121,7 @@
 
     #canvasWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
-   
+
     #statusBar {
       position: absolute; left: 84px; top: 10px; z-index: 5; transition: left .16s ease;
       background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);

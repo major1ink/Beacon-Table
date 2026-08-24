@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<!-- Иконка вкладки браузера для всех страниц приложения (см. <link rel="icon">
+     в каждом web/*.html). Это НЕ уменьшенный docs/assets/logo.svg: тот
+     нарисован под 680px и на 16×16 превращается в кашу — тонкие лучи, полосы
+     башни и расстекловка лампы сливаются. Здесь тот же маяк, но пересобран
+     под мелкий размер: меньше деталей, толще линии, силуэт крупнее в поле.
+     Палитра — та же, что у логотипа и заставки (public/splash.svg).
+
+     Почему SVG, а не .ico/.png: растр в этом репозитории уходит в git-lfs
+     (см. .gitattributes), а иконка должна приезжать с обычным клоном. Файлы
+     из public/ vite копирует в static/ как есть, поэтому путь /favicon.svg
+     одинаково работает и в dev-режиме, и в собранном бинарнике. -->
+<defs>
+  <linearGradient id="t" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#f4ecdb"/>
+    <stop offset="100%" stop-color="#c9b68b"/>
+  </linearGradient>
+  <linearGradient id="l" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#ffc95a"/>
+    <stop offset="100%" stop-color="#c9701f"/>
+  </linearGradient>
+  <radialGradient id="g" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#ffe6a8" stop-opacity="0.9"/>
+    <stop offset="100%" stop-color="#ffe6a8" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+
+<rect width="64" height="64" rx="13" fill="#0b1220"/>
+
+<!-- зарево лампы -->
+<circle cx="32" cy="22" r="19" fill="url(#g)"/>
+
+<!-- лучи: два широких по бокам, мимо крыши — на 16px именно они читаются
+     как «маяк», а не как «башня» -->
+<g stroke="#f3b93a" stroke-linecap="round" fill="none">
+  <path d="M13 7 L26 18" stroke-width="3.4" opacity="0.55"/>
+  <path d="M51 7 L38 18" stroke-width="3.4" opacity="0.55"/>
+  <path d="M5 20 L24 24" stroke-width="3" opacity="0.32"/>
+  <path d="M59 20 L40 24" stroke-width="3" opacity="0.32"/>
+</g>
+
+<!-- крыша -->
+<polygon points="32,7 25,15 39,15" fill="url(#t)"/>
+<!-- фонарь -->
+<polygon points="42,25 32,30.5 22,25 22,17.5 32,12 42,17.5" fill="url(#l)" stroke="#7a4a12" stroke-width="1.6" stroke-linejoin="round"/>
+<!-- галерея -->
+<rect x="19.5" y="29.5" width="25" height="4" rx="1.4" fill="url(#t)"/>
+<!-- башня -->
+<polygon points="24,33.5 40,33.5 46.5,54 17.5,54" fill="url(#t)"/>
+<g stroke="#a08d61" stroke-width="2" stroke-linecap="round">
+  <path d="M25.5 41 L38.5 41"/>
+  <path d="M23 48 L41 48"/>
+</g>
+<!-- основание -->
+<path d="M14 55.5 L50 55.5" stroke="#3a4256" stroke-width="4" stroke-linecap="round"/>
+</svg>
