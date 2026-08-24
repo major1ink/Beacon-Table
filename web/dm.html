@@ -54,7 +54,7 @@
       background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 0 solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: none;
       transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
-      display: flex; flex-direction: column;
+      display: flex; flex-direction: column; z-index: 6;
     }
     /* Ширина открытой панели тут НЕ задаётся: это состояние времени
        выполнения (её тянут мышью за #panelResizer и помнят в localStorage —
@@ -119,12 +119,11 @@
     #globalLightBrightBtn.active { background: var(--gold); }
     #globalLightDimBtn.active { background: var(--blue); }
 
-    #canvasWrap { flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
+    #canvasWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
-    /* ---- плавающая плашка статуса (сцена / игроки / аккаунт) ---- */
     #statusBar {
-      position: absolute; left: 10px; top: 10px; z-index: 5;
+      position: absolute; left: 84px; top: 10px; z-index: 5; transition: left .16s ease;
       background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;

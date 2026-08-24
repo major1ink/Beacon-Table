@@ -2623,6 +2623,7 @@ function setSidePanelSection(name) {
     sidePanel.style.flexBasis = "";
     sidePanel.style.width = "";
   }
+  updateChromeInset(panelWidth);
   railSectionBtns.forEach((b) => b.classList.toggle("active", b.dataset.section === openPanelSection));
   panelSections.forEach((s) => s.classList.toggle("active", s.dataset.panel === openPanelSection));
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
@@ -2684,10 +2685,24 @@ function applyPanelWidth(px) {
     sidePanel.style.flexBasis = w + "px";
     sidePanel.style.width = w + "px";
   }
+  updateChromeInset(w);
   return w;
 }
 
+// updateChromeInset — сдвинуть плашку статуса правее плавающего меню.
+// Канвас теперь лежит ПОД рейлом и панелью (см. #canvasWrap в dm.html), так
+// что всё, что раньше просто прижималось к левому краю канваса, оказалось бы
+// под ними. Числа — из тех же margin/border, что в dm.html: рейл 14+60,
+// панель 10 + ширина + 2 (рамка), ручка 10.
+const RAIL_RIGHT = 74;
+const statusBar = document.getElementById("statusBar");
+function updateChromeInset(width) {
+  const chromeRight = openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT;
+  statusBar.style.left = chromeRight + 10 + "px";
+}
+
 let panelWidth = Math.min(Math.max(Number(localStorage.getItem(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN), panelWidthMax());
+updateChromeInset(panelWidth);
 window.addEventListener("resize", () => {
   panelWidth = applyPanelWidth(panelWidth); // окно сузили — подрезать панель под новый максимум
 });

@@ -53,21 +53,12 @@
       background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 0 solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: none;
       transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
-      display: flex; flex-direction: column;
+      display: flex; flex-direction: column; z-index: 6;
     }
-    /* Ширина открытой панели тут НЕ задаётся: это состояние времени
-       выполнения (её тянут мышью за #panelResizer и помнят в localStorage —
-       дереву заметок с глубокой вложенностью 300px тесно, а разделу
-       "Освещение" больше и не нужно), inline flex-basis/width ставит
-       pages/dm.js. Закрытая панель inline-стилей не имеет вовсе — работает
-       #panel{flex:0 0 0;width:0} выше, и схлопывание остаётся анимированным
-       тем же transition. */
+   
     #panel.open { margin: 14px 2px 14px 10px; border-width: 1px; box-shadow: var(--shadow-float); }
 
-    /* Ручка ширины — отдельный flex-элемент в зазоре между панелью и
-       канвасом, а не absolute внутри #panel: у панели overflow:hidden, и
-       торчащая наружу ручка была бы обрезана. Показывается только при
-       открытой панели (класс .visible ставит setSidePanelSection). */
+   
     #panelResizer {
       flex: 0 0 auto; width: 10px; margin: 14px 0; z-index: 6; touch-action: none;
       display: none; align-items: center; justify-content: center; cursor: col-resize;
@@ -118,12 +109,11 @@
     #globalLightBrightBtn.active { background: var(--gold); }
     #globalLightDimBtn.active { background: var(--blue); }
 
-    #canvasWrap { flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
+    #canvasWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
-
-    /* ---- плавающая плашка статуса (сцена / игроки / аккаунт) ---- */
+   
     #statusBar {
-      position: absolute; left: 10px; top: 10px; z-index: 5;
+      position: absolute; left: 84px; top: 10px; z-index: 5; transition: left .16s ease;
       background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;
@@ -723,7 +713,7 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-MCv6kk3n.js"></script>
+  <script type="module" crossorigin src="/assets/dm-DuMVp-6h.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-CVeFZVLx.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-B8E5VJBp.js">
   <link rel="modulepreload" crossorigin href="/assets/index-Dont5rWV.js">
