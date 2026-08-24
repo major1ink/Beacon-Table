@@ -4,13 +4,16 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/repository/memory"
 )
 
 // Сквозной тест импорта: поднимаем http-сервер с манифестом и архивом
@@ -27,6 +30,10 @@ import (
 type fakeAssets struct {
 	saved  []string
 	byKind map[string][]domain.AssetInfo
+	// deletedFolders — "kind/folder" каждого вызова DeleteFolder, для
+	// TestFoundryModuleDelete: проверить, что "Удалить модуль" реально просит
+	// снести папку модуля во всех разделах, а не только карточки.
+	deletedFolders []string
 }
 
 func (f *fakeAssets) Upload(_ context.Context, _ *domain.Account, kind, folder, filename string, r io.Reader) (string, error) {
@@ -48,8 +55,11 @@ func (f *fakeAssets) FoldersAll(context.Context) (map[string][]domain.AssetFolde
 	return nil, nil
 }
 func (f *fakeAssets) CreateFolder(context.Context, *domain.Account, string, string) error { return nil }
-func (f *fakeAssets) DeleteFolder(context.Context, *domain.Account, string, string) error { return nil }
-func (f *fakeAssets) DeleteAsset(context.Context, *domain.Account, string, string) error  { return nil }
+func (f *fakeAssets) DeleteFolder(_ context.Context, _ *domain.Account, kind, folder string) error {
+	f.deletedFolders = append(f.deletedFolders, kind+"/"+folder)
+	return nil
+}
+func (f *fakeAssets) DeleteAsset(context.Context, *domain.Account, string, string) error { return nil }
 
 type fakeRoom struct{ scenes []*domain.SceneState }
 
@@ -57,6 +67,7 @@ func (f *fakeRoom) Join(RoomClient)                       {}
 func (f *fakeRoom) Leave(RoomClient)                      {}
 func (f *fakeRoom) Dispatch(RoomClient, domain.ClientMsg) {}
 func (f *fakeRoom) Shutdown()                             {}
+func (f *fakeRoom) NotifyJournalChanged(string)           {}
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil
@@ -86,6 +97,139 @@ func (f *fakePlaylists) UpdateTrack(context.Context, string, string, string, flo
 }
 func (f *fakePlaylists) DeleteTrack(context.Context, string, string) error       { return nil }
 func (f *fakePlaylists) MoveTrack(context.Context, string, string, string) error { return nil }
+
+type fakeBestiary struct{ byID map[string]*domain.Monster }
+
+func newFakeBestiary() *fakeBestiary { return &fakeBestiary{byID: map[string]*domain.Monster{}} }
+func (f *fakeBestiary) List(context.Context) ([]*domain.Monster, error) {
+	out := make([]*domain.Monster, 0, len(f.byID))
+	for _, m := range f.byID {
+		out = append(out, m)
+	}
+	return out, nil
+}
+func (f *fakeBestiary) Get(_ context.Context, id string) (*domain.Monster, error) {
+	return f.byID[id], nil
+}
+func (f *fakeBestiary) Create(_ context.Context, name string) (*domain.Monster, error) {
+	m := &domain.Monster{ID: name, Name: name}
+	f.byID[m.ID] = m
+	return m, nil
+}
+func (f *fakeBestiary) Update(_ context.Context, id string, m domain.Monster) (*domain.Monster, error) {
+	m.ID = id
+	f.byID[id] = &m
+	return &m, nil
+}
+func (f *fakeBestiary) Delete(_ context.Context, id string) error { delete(f.byID, id); return nil }
+
+type fakeSpells struct{ byID map[string]*domain.Spell }
+
+func newFakeSpells() *fakeSpells { return &fakeSpells{byID: map[string]*domain.Spell{}} }
+func (f *fakeSpells) List(context.Context) ([]*domain.Spell, error) {
+	out := make([]*domain.Spell, 0, len(f.byID))
+	for _, x := range f.byID {
+		out = append(out, x)
+	}
+	return out, nil
+}
+func (f *fakeSpells) Get(_ context.Context, id string) (*domain.Spell, error) { return f.byID[id], nil }
+func (f *fakeSpells) Create(_ context.Context, name string) (*domain.Spell, error) {
+	x := &domain.Spell{ID: name, Name: name}
+	f.byID[x.ID] = x
+	return x, nil
+}
+func (f *fakeSpells) Update(_ context.Context, id string, x domain.Spell) (*domain.Spell, error) {
+	x.ID = id
+	f.byID[id] = &x
+	return &x, nil
+}
+func (f *fakeSpells) Delete(_ context.Context, id string) error { delete(f.byID, id); return nil }
+
+type fakeItems struct{ byID map[string]*domain.Item }
+
+func newFakeItems() *fakeItems { return &fakeItems{byID: map[string]*domain.Item{}} }
+func (f *fakeItems) List(context.Context) ([]*domain.Item, error) {
+	out := make([]*domain.Item, 0, len(f.byID))
+	for _, x := range f.byID {
+		out = append(out, x)
+	}
+	return out, nil
+}
+func (f *fakeItems) Get(_ context.Context, id string) (*domain.Item, error) { return f.byID[id], nil }
+func (f *fakeItems) Create(_ context.Context, name string) (*domain.Item, error) {
+	x := &domain.Item{ID: name, Name: name}
+	f.byID[x.ID] = x
+	return x, nil
+}
+func (f *fakeItems) Update(_ context.Context, id string, x domain.Item) (*domain.Item, error) {
+	x.ID = id
+	f.byID[id] = &x
+	return &x, nil
+}
+func (f *fakeItems) Delete(_ context.Context, id string) error { delete(f.byID, id); return nil }
+
+type fakeReferences struct{ byID map[string]*domain.Reference }
+
+func newFakeReferences() *fakeReferences {
+	return &fakeReferences{byID: map[string]*domain.Reference{}}
+}
+func (f *fakeReferences) List(context.Context) ([]*domain.Reference, error) {
+	out := make([]*domain.Reference, 0, len(f.byID))
+	for _, x := range f.byID {
+		out = append(out, x)
+	}
+	return out, nil
+}
+func (f *fakeReferences) Get(_ context.Context, id string) (*domain.Reference, error) {
+	return f.byID[id], nil
+}
+func (f *fakeReferences) Create(_ context.Context, name string) (*domain.Reference, error) {
+	x := &domain.Reference{ID: name, Name: name}
+	f.byID[x.ID] = x
+	return x, nil
+}
+func (f *fakeReferences) Update(_ context.Context, id string, x domain.Reference) (*domain.Reference, error) {
+	x.ID = id
+	f.byID[id] = &x
+	return &x, nil
+}
+func (f *fakeReferences) Delete(_ context.Context, id string) error { delete(f.byID, id); return nil }
+
+type fakeConditionSvc struct{ byID map[string]*domain.Condition }
+
+func newFakeConditions() *fakeConditionSvc {
+	return &fakeConditionSvc{byID: map[string]*domain.Condition{}}
+}
+func (f *fakeConditionSvc) List(context.Context) ([]*domain.Condition, error) {
+	out := make([]*domain.Condition, 0, len(f.byID))
+	for _, x := range f.byID {
+		out = append(out, x)
+	}
+	return out, nil
+}
+func (f *fakeConditionSvc) Get(_ context.Context, id string) (*domain.Condition, error) {
+	return f.byID[id], nil
+}
+func (f *fakeConditionSvc) BySlug(_ context.Context, slug string) (*domain.Condition, error) {
+	for _, x := range f.byID {
+		if x.Slug == slug {
+			return x, nil
+		}
+	}
+	return nil, nil
+}
+func (f *fakeConditionSvc) Create(_ context.Context, name string) (*domain.Condition, error) {
+	x := &domain.Condition{ID: name, Name: name}
+	f.byID[x.ID] = x
+	return x, nil
+}
+func (f *fakeConditionSvc) Update(_ context.Context, id string, x domain.Condition) (*domain.Condition, error) {
+	x.ID = id
+	f.byID[id] = &x
+	return &x, nil
+}
+func (f *fakeConditionSvc) Delete(_ context.Context, id string) error { delete(f.byID, id); return nil }
 
 // ---- модуль-фикстура ----
 
@@ -171,7 +315,8 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	assets := &fakeAssets{}
 	room := &fakeRoom{}
 	playlists := &fakePlaylists{}
-	svc := NewFoundryService(t.TempDir(), assets, room, playlists)
+	svc := NewFoundryService(t.TempDir(), assets, room, playlists, memory.NewFoundryModuleStore(),
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
 	ctx := context.Background()
 	account := &domain.Account{ID: "dm", Role: "admin"}
 
@@ -264,8 +409,82 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	}
 }
 
+// TestFoundryModuleDelete проверяет, что "Удалить модуль" сносит только
+// карточки, помеченные его id (руками заведённые остаются), просит удалить
+// файловые папки во всех разделах и забывает саму запись об установке.
+func TestFoundryModuleDelete(t *testing.T) {
+	modules := memory.NewFoundryModuleStore()
+	bestiary := newFakeBestiary()
+	spells := newFakeSpells()
+	assets := &fakeAssets{}
+	svc := NewFoundryService(t.TempDir(), assets, &fakeRoom{}, &fakePlaylists{}, modules,
+		bestiary, spells, newFakeItems(), newFakeReferences(), newFakeConditions())
+	ctx := context.Background()
+
+	if err := modules.Upsert(ctx, domain.FoundryModule{
+		ID: "my-module", Title: "Мой модуль", Version: "1.0.0",
+		ManifestURL: "https://example.com/module.json", ImportedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tagged, _ := bestiary.Create(ctx, "Гоблин")
+	tagged.FoundryModuleID = "my-module"
+	if _, err := bestiary.Update(ctx, tagged.ID, *tagged); err != nil {
+		t.Fatal(err)
+	}
+	manual, _ := bestiary.Create(ctx, "Ручной монстр") // FoundryModuleID пуст — как будто ДМ завёл сам
+	taggedSpell, _ := spells.Create(ctx, "Огненный шар")
+	taggedSpell.FoundryModuleID = "my-module"
+	if _, err := spells.Update(ctx, taggedSpell.ID, *taggedSpell); err != nil {
+		t.Fatal(err)
+	}
+
+	account := &domain.Account{ID: "dm", Role: "admin"}
+	result, err := svc.Delete(ctx, account, "my-module")
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("не ожидали предупреждений: %v", result.Warnings)
+	}
+	if result.Cards["monsters"] != 1 || result.Cards["spells"] != 1 {
+		t.Fatalf("карточек удалено: %+v", result.Cards)
+	}
+	if _, ok := bestiary.byID[tagged.ID]; ok {
+		t.Fatal("помеченный монстр должен был удалиться")
+	}
+	if _, ok := bestiary.byID[manual.ID]; !ok {
+		t.Fatal("ручной монстр не должен был удалиться")
+	}
+	if _, ok := spells.byID[taggedSpell.ID]; ok {
+		t.Fatal("помеченное заклинание должно было удалиться")
+	}
+
+	wantFolders := map[string]bool{
+		"maps/foundry/my-module": true, "tokens/foundry/my-module": true,
+		"audio/foundry/my-module": true, "notes/foundry/my-module": true,
+	}
+	if len(assets.deletedFolders) != len(wantFolders) {
+		t.Fatalf("папки файлов: %v", assets.deletedFolders)
+	}
+	for _, f := range assets.deletedFolders {
+		if !wantFolders[f] {
+			t.Fatalf("неожиданная папка удалена: %s", f)
+		}
+	}
+
+	if _, err := modules.ByID(ctx, "my-module"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("запись об установке должна была исчезнуть, err=%v", err)
+	}
+	if _, err := svc.Delete(ctx, account, "my-module"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("повторное удаление несуществующего модуля должно быть ErrNotFound, err=%v", err)
+	}
+}
+
 func TestFoundryInspectRejectsBadURL(t *testing.T) {
-	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, &fakeRoom{}, &fakePlaylists{})
+	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, &fakeRoom{}, &fakePlaylists{}, memory.NewFoundryModuleStore(),
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
 	if _, err := svc.Inspect(context.Background(), "file:///etc/passwd"); err == nil {
 		t.Fatal("не-http ссылка должна отклоняться")
 	}

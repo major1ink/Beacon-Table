@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Импорт из Foundry VTT</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
@@ -57,6 +58,10 @@
     }
     .targets { display: flex; flex-wrap: wrap; gap: 10px; }
     .targets label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+    /* подчинённая галочка («журналы → в журнал стола») — читается как
+       уточнение к разделу слева, а не как ещё один равноправный раздел */
+    .targets .sub-target { margin-left: -4px; opacity: .75; font-size: 12px; }
+    .targets .sub-target:has(input:disabled) { opacity: .35; cursor: default; }
 
     /* Журнал — не последний абзац прокручиваемого тела (в невысоком окне он
        оказывался за нижней кромкой ровно тогда, когда нужнее всего), а
@@ -139,7 +144,8 @@
       <code>module.json</code> / <code>system.json</code> — её дают на странице модуля).
       Сервер скачает архив этой версии, распакует и разложит содержимое по разделам стола:
       карточки — в библиотеки, сцены — в переключатель сцен, музыку — в плейлисты ДМ,
-      журналы — в заметки, картинки и треки — в библиотеку загрузок.
+      журналы — в заметки ДМ или в журнал стола (на выбор), картинки и треки —
+      в библиотеку загрузок.
     </p>
     <form id="urlForm">
       <input type="text" id="manifestUrl" placeholder="https://example.com/modules/my-module/module.json" spellcheck="false" />

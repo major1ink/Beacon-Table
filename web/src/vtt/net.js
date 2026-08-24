@@ -71,6 +71,11 @@ export function createNet(ctx, audio) {
       document.dispatchEvent(new CustomEvent("vtt:sceneDetail", { detail: data.scene }));
     } else if (data.type === "player_list") {
       document.dispatchEvent(new CustomEvent("vtt:playerList", { detail: data.players || [] }));
+    } else if (data.type === "journal_shown") {
+      // «Показать игрокам» из журнала ДМ (см. relayJournalShow в
+      // internal/service/room.go) — эфемерное «посмотрите сюда», состояние
+      // мира не трогает; открывает окно журнала у игрока (pages/player.js).
+      document.dispatchEvent(new CustomEvent("vtt:journalShown", { detail: data }));
     } else if (data.type === "roll_result") {
       document.dispatchEvent(new CustomEvent("vtt:rollResult", { detail: data }));
     } else if (data.type === "audio_cue") {

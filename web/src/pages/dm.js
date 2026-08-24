@@ -42,9 +42,13 @@ import {
   renameNoteFolder,
   deleteNoteFolder,
   fetchMonster,
+  fetchFoundryModules,
+  checkFoundryModuleUpdates,
+  deleteFoundryModule,
 } from "../api.js";
 import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
+import { showAlert, showConfirm, showPrompt } from "../modal.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -101,6 +105,27 @@ document.getElementById("logoutBtn").onclick = async () => {
 };
 // worldsBtn — назад на экран выбора мира (worlds.html), не разлогиниваясь —
 // переключиться на другой мир или создать новый (см. web/src/pages/worlds.js).
+// Журнал стола — плавающее окно, а не панель рейла: в него пишут и игроки
+// (см. web/journal.html), у них он открывается ровно тем же окном из
+// бокового меню (pages/player.js), и держать две реализации одного журнала
+// незачем.
+// openJournalWindow — окно журнала одно на весь стол (key "journal", как и
+// у игрока, см. pages/player.js): entryId открывает его сразу на нужной
+// записи — так работают и значок журнала на карте, и ссылки внутри текстов.
+function openJournalWindow(entryId) {
+  openFloatingWindow({
+    key: "journal",
+    title: "Журнал стола",
+    url: "/journal.html" + (entryId ? "?id=" + encodeURIComponent(entryId) : ""),
+    navigate: !!entryId,
+    width: 900,
+    height: 640,
+    popoutFeatures: "width=900,height=640",
+  });
+}
+
+document.getElementById("journalBtn").onclick = () => openJournalWindow();
+
 document.getElementById("worldsBtn").onclick = () => {
   location.href = "/worlds.html";
 };
@@ -232,13 +257,13 @@ function renderAssetsGrid() {
     delBtn.innerHTML = icon("trash", { size: 12 });
     delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Удалить папку «${assetFolderName(f.path)}» со всем содержимым?`)) return;
+      if (!(await showConfirm(`Удалить папку «${assetFolderName(f.path)}» со всем содержимым?`, { title: "Удалить папку", okLabel: "Удалить", danger: true }))) return;
       try {
         await deleteAssetFolder(ASSET_KIND, f.path);
         await refreshLibrary();
         renderAssetsGrid();
       } catch (err) {
-        alert("Не удалось удалить папку: " + err.message);
+        showAlert("Не удалось удалить папку: " + err.message);
       }
     };
     tile.appendChild(delBtn);
@@ -276,13 +301,13 @@ function renderAssetsGrid() {
     delBtn.innerHTML = icon("trash", { size: 12 });
     delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Удалить «${a.name}» из библиотеки?`)) return;
+      if (!(await showConfirm(`Удалить «${a.name}» из библиотеки?`, { title: "Удалить файл", okLabel: "Удалить", danger: true }))) return;
       try {
         await deleteAsset(ASSET_KIND, a.url);
         await refreshLibrary();
         renderAssetsGrid();
       } catch (err) {
-        alert("Не удалось удалить ассет: " + err.message);
+        showAlert("Не удалось удалить ассет: " + err.message);
       }
     };
     tile.appendChild(delBtn);
@@ -292,7 +317,7 @@ function renderAssetsGrid() {
 onPanelOpen("assets", renderAssetsGrid);
 
 document.getElementById("assetsNewFolderBtn").onclick = async () => {
-  const name = prompt("Название новой папки:");
+  const name = await showPrompt("Название папки:", { title: "Новая папка", okLabel: "Создать" });
   if (!name || !name.trim()) return;
   const path = (currentAssetFolder ? currentAssetFolder + "/" : "") + name.trim();
   try {
@@ -300,7 +325,7 @@ document.getElementById("assetsNewFolderBtn").onclick = async () => {
     await refreshLibrary();
     renderAssetsGrid();
   } catch (err) {
-    alert("Не удалось создать папку: " + err.message);
+    showAlert("Не удалось создать папку: " + err.message);
   }
 };
 
@@ -312,7 +337,7 @@ document.getElementById("assetUpload").onchange = async (e) => {
       await uploadFile(file, ASSET_KIND, currentAssetFolder);
     }
   } catch (err) {
-    alert("Не удалось загрузить файл: " + err.message);
+    showAlert("Не удалось загрузить файл: " + err.message);
   } finally {
     e.target.value = "";
     await refreshLibrary();
@@ -365,7 +390,7 @@ document.addEventListener("vtt:toolChanged", (e) => {
 });
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
-  setSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
+  showSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
   openSceneSettings("grid");
 };
 
@@ -690,7 +715,7 @@ noteMarkerResizeBtn.onclick = () => {
   if (!menuNoteMarkerId) return;
   document.dispatchEvent(new CustomEvent("vtt:armNoteMarkerResize", { detail: { id: menuNoteMarkerId } }));
   closeNoteMarkerMenu();
-  alert("Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.");
+  showAlert("Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер значка" });
 };
 
 noteMarkerDeleteBtn.onclick = () => {
@@ -826,7 +851,7 @@ tokenMenuLootBtn.onclick = async () => {
   try {
     chars = await fetchAdminCharacters();
   } catch (err) {
-    alert("Не удалось загрузить список персонажей: " + err.message);
+    showAlert("Не удалось загрузить список персонажей: " + err.message);
     return;
   }
   const characters = chars.map((c) => ({ id: c.id, name: c.accountUsername ? `${c.name} (${c.accountUsername})` : c.name }));
@@ -979,13 +1004,17 @@ async function renderAccounts() {
     const pwBtn = document.createElement("button");
     pwBtn.textContent = "Сменить пароль";
     pwBtn.onclick = async () => {
-      const pw = prompt(`Новый пароль для «${a.username}» (минимум 6 символов):`);
+      const pw = await showPrompt(`Новый пароль для «${a.username}»:`, {
+        title: "Сменить пароль",
+        okLabel: "Сменить",
+        hint: "Минимум 6 символов. Старые сессии этого аккаунта будут разлогинены.",
+      });
       if (!pw) return;
       try {
         await setAdminAccountPassword(a.id, pw);
-        alert("Пароль изменён, старые сессии этого аккаунта разлогинены.");
+        showAlert("Пароль изменён, старые сессии этого аккаунта разлогинены.");
       } catch (err) {
-        alert("Не удалось сменить пароль: " + err.message);
+        showAlert("Не удалось сменить пароль: " + err.message);
       }
     };
     actions.appendChild(pwBtn);
@@ -993,13 +1022,13 @@ async function renderAccounts() {
     delBtn.className = "danger";
     delBtn.textContent = "Удалить";
     delBtn.onclick = async () => {
-      if (!confirm(`Удалить аккаунт «${a.username}» вместе с его персонажами? Это необратимо.`)) return;
+      if (!(await showConfirm(`Удалить аккаунт «${a.username}» вместе с его персонажами?`, { title: "Удалить аккаунт", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
       try {
         await deleteAdminAccount(a.id);
         await renderAccounts();
         await refreshAccountsBadge();
       } catch (err) {
-        alert("Не удалось удалить: " + err.message);
+        showAlert("Не удалось удалить: " + err.message);
       }
     };
     actions.appendChild(delBtn);
@@ -1023,7 +1052,158 @@ onPanelOpen("settings", async () => {
   } catch {
     el.textContent = "неизвестна";
   }
+  await renderFoundryModules();
 });
+
+// ---- модули Foundry VTT (раздел "Настройки") ----
+// Список того, что ДМ хотя бы раз импортировал в этот мир (см.
+// service.FoundryService.Installed), плюс необязательная проверка новых
+// версий по кнопке (см. checkFoundryModuleUpdates) — сама по себе она не
+// ходит в сеть на каждое открытие панели.
+const foundryModulesList = document.getElementById("foundryModulesList");
+const foundryModulesCheckBtn = document.getElementById("foundryModulesCheckBtn");
+let foundryModulesCache = []; // последний ответ fetchFoundryModules — drawFoundryModules перерисовывает по нему же после проверки обновлений/удаления
+let foundryModulesUpdates = null; // последний результат "Проверить обновления" (id → {latestVersion,updateAvailable,error}) — переживает перерисовку после удаления одного пакета
+
+// FOUNDRY_CARD_LABELS — подписи разделов для итога "Удалить модуль" (см.
+// deleteFoundryModuleFlow), те же ключи, что в service.FoundryModuleDelete.Cards
+// (foundry.Target*), и те же подписи, что у TARGETS в foundry-import.js.
+const FOUNDRY_CARD_LABELS = { monsters: "Существа", spells: "Заклинания", items: "Снаряжение", references: "Справочник", conditions: "Состояния" };
+
+function formatModuleDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "—" : d.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+}
+
+// openFoundryUpdateWindow — то же окно импорта, что открывает "＋ Импорт из
+// Foundry VTT" в Справочнике (см. compendium-menu.js), но со ссылкой на
+// манифест уже подставленной в поле и разведкой, запущенной сразу (см.
+// foundry-import.js: boot() читает ?url= из адреса окна). ДМ остаётся
+// выбрать паки/разделы и нажать "Импортировать" — то же самое, что и при
+// первой установке, потому и не отдельная кнопка "Обновить одним кликом".
+// Свой key на каждый пакет (а не общий "foundry-import", как у пункта
+// Справочника) — иначе клик "Обновить" при уже открытом окне импорта просто
+// поднял бы его наверх со старым содержимым, а не подставил новую ссылку
+// (см. openFloatingWindow: у существующего окна по key url не меняется).
+function openFoundryUpdateWindow(m) {
+  openFloatingWindow({
+    key: "foundry-import-" + m.id,
+    title: "Обновление: " + m.title,
+    url: `/foundry-import.html?url=${encodeURIComponent(m.manifestUrl)}`,
+    width: 560,
+    height: 640,
+  });
+}
+
+async function renderFoundryModules() {
+  try {
+    foundryModulesCache = (await fetchFoundryModules()) || [];
+  } catch (err) {
+    foundryModulesList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
+    return;
+  }
+  drawFoundryModules();
+}
+
+// drawFoundryModules — updatesById есть только после "Проверить обновления"
+// (id пакета → {latestVersion, updateAvailable, error}); без него список
+// просто показывает установленные версии, без статуса.
+function drawFoundryModules(updatesById) {
+  foundryModulesList.innerHTML = "";
+  if (!foundryModulesCache.length) {
+    foundryModulesList.innerHTML = '<p class="hint">Пакетов пока не импортировано — см. "＋ Импорт из Foundry VTT" в Справочнике.</p>';
+    return;
+  }
+  for (const m of foundryModulesCache) {
+    const upd = updatesById && updatesById[m.id];
+    const row = document.createElement("div");
+    row.className = "account-row";
+    let pill = "";
+    if (upd) {
+      if (upd.error) pill = `<span class="status-pill error" title="${upd.error}">не проверилось</span>`;
+      else if (upd.updateAvailable) pill = `<span class="status-pill update">вышла ${upd.latestVersion}</span>`;
+      else pill = `<span class="status-pill active">актуально</span>`;
+    }
+    row.innerHTML = `
+      <div class="account-top">
+        <span class="account-name">${m.title}</span>
+        <span class="account-version">v${m.version || "?"}</span>
+        ${pill}
+      </div>
+      <div class="hint" style="margin-bottom:6px;">импортирован ${formatModuleDate(m.importedAt)}</div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "account-actions";
+    if (upd && upd.updateAvailable) {
+      const updBtn = document.createElement("button");
+      updBtn.className = "approve";
+      updBtn.textContent = "Обновить";
+      updBtn.onclick = () => openFoundryUpdateWindow(m);
+      actions.appendChild(updBtn);
+    }
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    delBtn.textContent = "Удалить";
+    delBtn.onclick = () => deleteFoundryModuleFlow(m);
+    actions.appendChild(delBtn);
+    row.appendChild(actions);
+    foundryModulesList.appendChild(row);
+  }
+}
+
+foundryModulesCheckBtn.addEventListener("click", async () => {
+  foundryModulesCheckBtn.disabled = true;
+  foundryModulesCheckBtn.textContent = "Проверяем…";
+  try {
+    const results = await checkFoundryModuleUpdates();
+    foundryModulesUpdates = Object.fromEntries(results.map((r) => [r.id, r]));
+    drawFoundryModules(foundryModulesUpdates);
+  } catch (err) {
+    showAlert("Не удалось проверить обновления: " + err.message);
+  } finally {
+    foundryModulesCheckBtn.disabled = false;
+    foundryModulesCheckBtn.textContent = "Проверить обновления";
+  }
+});
+
+// deleteFoundryModuleFlow — "Удалить модуль" (см. deleteFoundryModule):
+// сносит карточки, помеченные этим пакетом (включая те, что ДМ успел
+// отредактировать после импорта — правка карточки метку не снимает, см.
+// foundry-import.js: importCards), и скачанные им файлы. Сцены/плейлисты/
+// заметки того же импорта не трогает — предупреждаем об этом прямо в
+// диалоге, а не молча (см. FoundryService.Delete).
+async function deleteFoundryModuleFlow(m) {
+  const ok = await showConfirm(
+    `Удалить модуль «${m.title}»?\n\n` +
+      "Будут снесены карточки (существа/заклинания/снаряжение/справочник/состояния), заведённые или в последний раз перезаписанные этим модулем — ДАЖЕ те, что были отредактированы после импорта, — а также файлы, скачанные им в библиотеку загрузок (карты/токены/аудио/картинки заметок).\n\n" +
+      "Сцены, плейлисты и заметки этого модуля не трогает — их придётся удалить отдельно, если нужно.",
+    { title: "Удалить модуль", okLabel: "Удалить", danger: true, hint: "Отменить это действие нельзя." }
+  );
+  if (!ok) return;
+  try {
+    const result = await deleteFoundryModule(m.id);
+    foundryModulesCache = foundryModulesCache.filter((x) => x.id !== m.id);
+    if (foundryModulesUpdates) delete foundryModulesUpdates[m.id];
+    drawFoundryModules(foundryModulesUpdates);
+    const cards = result.cards || {};
+    const total = Object.values(cards).reduce((a, b) => a + b, 0);
+    const breakdown = Object.entries(cards)
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `${FOUNDRY_CARD_LABELS[k] || k}: ${n}`)
+      .join(", ");
+    // Открытые окна-списки компендиума показывают уже несуществующие
+    // карточки — тот же сигнал, что шлёт правка карточки (см.
+    // floating-window.js: postToOpenWindows).
+    for (const type of ["beacon:monsterSaved", "beacon:spellSaved", "beacon:itemSaved", "beacon:referenceSaved", "beacon:conditionSaved"]) {
+      postToOpenWindows("catalog-", { type });
+    }
+    let msg = `Модуль «${m.title}» удалён. Карточек снесено: ${total}${breakdown ? ` (${breakdown})` : ""}.`;
+    if (result.warnings && result.warnings.length) msg += "\n\nПредупреждения:\n" + result.warnings.join("\n");
+    showAlert(msg, { title: "Модуль удалён" });
+  } catch (err) {
+    showAlert("Не удалось удалить: " + err.message);
+  }
+}
 
 const newAccountMsg = document.getElementById("newAccountMsg");
 document.getElementById("newAccountForm").addEventListener("submit", async (e) => {
@@ -1255,7 +1435,7 @@ sceneCanvasEl.addEventListener("drop", async (e) => {
   try {
     m = await fetchMonster(monsterId);
   } catch (err) {
-    alert("Не удалось загрузить монстра: " + err.message);
+    showAlert("Не удалось загрузить монстра: " + err.message);
     return;
   }
   counter++;
@@ -1411,13 +1591,13 @@ function renderPlaylistRows() {
     renameBtn.title = "Переименовать";
     renameBtn.onclick = async (e) => {
       e.stopPropagation();
-      const newName = prompt("Новое название плейлиста:", p.name);
+      const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
       if (!newName) return;
       try {
         await renamePlaylist(p.id, newName);
         await refreshPlaylists();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     const delBtn = document.createElement("button");
@@ -1425,13 +1605,13 @@ function renderPlaylistRows() {
     delBtn.title = "Удалить плейлист";
     delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`)) return;
+      if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
       try {
         await deletePlaylist(p.id);
         if (selectedPlaylistId === p.id) selectedPlaylistId = null;
         await refreshPlaylists();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     row.appendChild(name);
@@ -1473,7 +1653,7 @@ function renderTrackPanel() {
         // дожидаясь следующего запуска.
         if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_volume", cue: { volume: vol } });
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     const loopBtn = document.createElement("button");
@@ -1492,7 +1672,7 @@ function renderTrackPanel() {
         t.loop = newLoop;
         setLoopBtnLabel();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     const upBtn = document.createElement("button");
@@ -1514,12 +1694,12 @@ function renderTrackPanel() {
     const delBtn = document.createElement("button");
     delBtn.innerHTML = icon("trash", { size: 13 });
     delBtn.onclick = async () => {
-      if (!confirm(`Удалить трек «${t.name}»?`)) return;
+      if (!(await showConfirm(`Удалить трек «${t.name}»?`, { title: "Удалить трек", okLabel: "Удалить", danger: true }))) return;
       try {
         await deletePlaylistTrack(playlist.id, t.id);
         await refreshPlaylists();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     delBtn.title = "Удалить трек";
@@ -1544,7 +1724,7 @@ document.getElementById("newPlaylistForm").addEventListener("submit", async (e) 
     nameInput.value = "";
     await refreshPlaylists();
   } catch (err) {
-    alert(err.message);
+    showAlert(err.message);
   }
 });
 
@@ -1655,7 +1835,6 @@ const noteDetailView = document.getElementById("noteDetailView");
 const noteRows = document.getElementById("noteRows");
 const noteSearch = document.getElementById("noteSearch");
 const noteCurrentFolderEl = document.getElementById("noteCurrentFolder");
-const noteFolderResetBtn = document.getElementById("noteFolderResetBtn");
 const noteFolderSelect = document.getElementById("noteFolderSelect");
 const noteDetailTitle = document.getElementById("noteDetailTitle");
 const noteRenderView = document.getElementById("noteRenderView");
@@ -1674,6 +1853,10 @@ let noteEditing = false;
 // папку попадёт следующая созданная заметка/подпапка ("" — корень).
 const openNoteFolders = new Set();
 let currentNoteFolder = "";
+// lastOpenedNoteId — подсветка «вот где ты был» в дереве после возврата из
+// открытой заметки: в библиотеке на сотни записей найти её глазами заново
+// иначе не проще, чем в первый раз.
+let lastOpenedNoteId = "";
 
 async function refreshNotesList() {
   try {
@@ -1710,30 +1893,49 @@ function noteFolderTree() {
   return root;
 }
 
-function noteRowEl(n, { showFolder = false } = {}) {
+// noteRowEl — лист дерева: та же плоская строка-узел, что .compendium-node
+// у Справочника (иконка + название), а не карточка в две строки, как было.
+// Дата правки ушла в подсказку — в дереве из сотен импортированных заметок
+// (см. импорт Foundry) она только шумит, а место под неё съедает название.
+function noteRowEl(n, { showFolder = false, depth = 0 } = {}) {
   const row = document.createElement("div");
-  row.className = "note-row";
+  row.className = "note-row" + (lastOpenedNoteId === n.id ? " current" : "");
+  row.style.setProperty("--depth", String(depth));
+  const iconEl = document.createElement("span");
+  iconEl.className = "note-row-icon";
+  iconEl.innerHTML = icon("file-text", { size: 13 });
   const title = document.createElement("span");
   title.className = "note-title";
   title.textContent = n.title;
-  const meta = document.createElement("span");
-  meta.className = "note-meta";
-  meta.textContent = showFolder && n.folder ? n.folder : formatDate(n.updatedAt);
-  meta.title = showFolder && n.folder ? "Папка: " + n.folder : "";
-  row.append(title, meta);
+  row.append(iconEl, title);
+  // В плоском списке поиска папка — единственный способ понять, какая из
+  // двух одноимённых заметок перед тобой, поэтому там она в строке.
+  if (showFolder && n.folder) {
+    const meta = document.createElement("span");
+    meta.className = "note-meta";
+    meta.textContent = n.folder;
+    row.appendChild(meta);
+  }
+  row.title = (n.folder ? n.folder + "/" : "") + n.title + " — правка " + formatDate(n.updatedAt);
   row.onclick = () => openNote(n.id);
   return row;
 }
 
-function noteFolderRowEl(node) {
+function noteFolderRowEl(node, depth) {
   const open = openNoteFolders.has(node.path);
   const row = document.createElement("div");
-  row.className = "note-folder-row" + (currentNoteFolder === node.path ? " current" : "");
+  row.className = "note-folder-row" + (open ? " open" : "") + (currentNoteFolder === node.path ? " current" : "");
+  row.style.setProperty("--depth", String(depth));
 
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.className = "note-folder-toggle";
-  toggle.innerHTML = icon(open ? "chevron-down" : "chevron-right", { size: 12 });
+  // Шеврон всегда один и тот же (chevron-right), раскрытие показывает
+  // поворотом через CSS-класс .open — при подмене иконки строка заметно
+  // дёргалась на каждый клик.
+  const chevron = document.createElement("span");
+  chevron.className = "note-folder-chevron";
+  chevron.innerHTML = icon("chevron-right", { size: 12 });
+  const folderIcon = document.createElement("span");
+  folderIcon.className = "note-folder-icon";
+  folderIcon.innerHTML = icon("folder", { size: 13 });
   const name = document.createElement("span");
   name.className = "note-folder-name";
   name.textContent = node.name;
@@ -1750,18 +1952,38 @@ function noteFolderRowEl(node) {
     else openNoteFolders.add(node.path);
     renderNoteRows();
   };
-  toggle.onclick = select;
-  name.onclick = select;
-  count.onclick = select;
 
   const actions = document.createElement("span");
   actions.className = "note-folder-actions";
   actions.append(
-    folderActionBtn("plus", "Создать подпапку", () => createNoteFolderPrompt(node.path)),
+    folderActionBtn("folder-plus", "Создать подпапку", () => createNoteFolderPrompt(node.path)),
     folderActionBtn("pencil", "Переименовать папку", () => renameNoteFolderPrompt(node)),
     folderActionBtn("trash", "Удалить папку вместе с заметками", () => deleteNoteFolderPrompt(node))
   );
-  row.append(toggle, name, count, actions);
+  row.append(chevron, folderIcon, name, count, actions);
+  row.title = node.path;
+  row.onclick = select;
+  return row;
+}
+
+// noteRootRowEl — «корень библиотеки»: и заголовок дерева, и цель создания
+// (клик возвращает currentNoteFolder в ""), вместо отдельной кнопки-крестика
+// рядом с формой, которая раньше делала то же самое неочевидным способом.
+function noteRootRowEl(root) {
+  const row = document.createElement("div");
+  row.className = "note-root-row" + (currentNoteFolder === "" ? " current" : "");
+  row.title = "Создавать в корне библиотеки";
+  const name = document.createElement("span");
+  name.className = "note-folder-name";
+  name.textContent = "Библиотека заметок";
+  const count = document.createElement("span");
+  count.className = "note-folder-count";
+  count.textContent = String(countNotesIn(root));
+  row.append(name, count);
+  row.onclick = () => {
+    currentNoteFolder = "";
+    renderNoteRows();
+  };
   return row;
 }
 
@@ -1784,24 +2006,46 @@ function countNotesIn(node) {
   return total;
 }
 
+// renderNoteTree — вложенность выражается ЛЕВЫМ ОТСТУПОМ строки (--depth,
+// см. .note-folder-row/.note-row в dm.html), а не вложенными контейнерами и
+// не marginLeft: строка остаётся во всю ширину панели, поэтому её фон при
+// наведении не «съезжает» уступами вправо с глубиной.
 function renderNoteTree(node, container, depth) {
   const folders = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   for (const child of folders) {
-    const row = noteFolderRowEl(child);
-    row.style.paddingLeft = 4 + depth * 12 + "px";
-    container.appendChild(row);
+    container.appendChild(noteFolderRowEl(child, depth));
     if (openNoteFolders.has(child.path)) renderNoteTree(child, container, depth + 1);
   }
-  for (const n of node.notes) {
-    const row = noteRowEl(n);
-    row.style.marginLeft = depth * 12 + "px";
-    container.appendChild(row);
-  }
+  const notes = [...node.notes].sort((a, b) => a.title.localeCompare(b.title, "ru"));
+  for (const n of notes) container.appendChild(noteRowEl(n, { depth }));
+}
+
+let noteRowsKey = null;
+
+function noteRowsStateKey(filter) {
+  return JSON.stringify([
+    filter,
+    currentNoteFolder,
+    lastOpenedNoteId,
+    [...openNoteFolders].sort(),
+    notesList.map((n) => [n.id, n.title, n.folder || "", n.updatedAt]),
+    noteFolders,
+  ]);
 }
 
 function renderNoteRows() {
   const filter = noteSearch.value.trim().toLowerCase();
-  noteRows.innerHTML = "";
+
+  noteCurrentFolderEl.textContent = currentNoteFolder || "корень библиотеки";
+
+  const key = noteRowsStateKey(filter);
+  if (key === noteRowsKey) return;
+  noteRowsKey = key;
+
+  // Позицию прокрутки дерева сохраняем через перерисовку: без этого любой
+  // клик по папке в глубине длинного списка отбрасывал бы список наверх.
+  const scrollTop = noteRows.scrollTop;
+  const rows = document.createDocumentFragment();
 
   // Поиск показывает плоский список по всей библиотеке: искать заметку,
   // раскрывая ветки руками, — ровно то, от чего поиск и избавляет. Папка
@@ -1810,20 +2054,21 @@ function renderNoteRows() {
     const found = notesList.filter(
       (n) => n.title.toLowerCase().includes(filter) || (n.folder || "").toLowerCase().includes(filter)
     );
-    if (!found.length) {
-      noteRows.appendChild(hintEl("Ничего не найдено."));
-      return;
-    }
-    for (const n of found) noteRows.appendChild(noteRowEl(n, { showFolder: true }));
+    if (!found.length) rows.appendChild(hintEl("Ничего не найдено."));
+    else for (const n of found) rows.appendChild(noteRowEl(n, { showFolder: true }));
+    noteRows.replaceChildren(rows);
+    noteRows.scrollTop = 0; // новый список — новая система координат, старая прокрутка бессмысленна
     return;
   }
 
-  renderNoteTree(noteFolderTree(), noteRows, 0);
+  const tree = noteFolderTree();
+  rows.appendChild(noteRootRowEl(tree));
+  renderNoteTree(tree, rows, 0);
   if (!notesList.length && !noteFolders.length) {
-    noteRows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка»."));
+    rows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка» в шапке."));
   }
-  noteCurrentFolderEl.textContent = currentNoteFolder ? "в папке: " + currentNoteFolder : "в корне библиотеки";
-  noteFolderResetBtn.style.display = currentNoteFolder ? "" : "none";
+  noteRows.replaceChildren(rows);
+  noteRows.scrollTop = scrollTop;
 }
 
 function hintEl(text) {
@@ -1837,7 +2082,11 @@ noteSearch.oninput = renderNoteRows;
 // ---- папки: создание/переименование/удаление ----
 
 async function createNoteFolderPrompt(parent) {
-  const name = prompt(parent ? `Название подпапки внутри «${parent}»:` : "Название новой папки:");
+  const name = await showPrompt("Название папки:", {
+    title: "Новая папка",
+    okLabel: "Создать",
+    hint: parent ? `Внутри «${parent}».` : "В корне библиотеки.",
+  });
   if (!name || !name.trim()) return;
   const path = parent ? parent + "/" + name.trim() : name.trim();
   try {
@@ -1846,12 +2095,12 @@ async function createNoteFolderPrompt(parent) {
     currentNoteFolder = path;
     await refreshNotesList();
   } catch (err) {
-    alert("Не удалось создать папку: " + err.message);
+    showAlert("Не удалось создать папку: " + err.message);
   }
 }
 
 async function renameNoteFolderPrompt(node) {
-  const name = prompt("Новое название папки:", node.name);
+  const name = await showPrompt("Новое название:", { title: "Переименовать папку", value: node.name, okLabel: "Переименовать" });
   if (!name || !name.trim() || name.trim() === node.name) return;
   const parent = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
   const target = parent ? parent + "/" + name.trim() : name.trim();
@@ -1870,34 +2119,33 @@ async function renameNoteFolderPrompt(node) {
     }
     await refreshNotesList();
   } catch (err) {
-    alert("Не удалось переименовать: " + err.message);
+    showAlert("Не удалось переименовать: " + err.message);
   }
 }
 
 async function deleteNoteFolderPrompt(node) {
   const total = countNotesIn(node);
   const what = total ? `папку «${node.path}» и ${total} заметок внутри` : `пустую папку «${node.path}»`;
-  if (!confirm(`Удалить ${what}? Это необратимо.`)) return;
+  if (!(await showConfirm(`Удалить ${what}?`, { title: "Удалить папку", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
   try {
     await deleteNoteFolder(node.path);
     if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) currentNoteFolder = "";
     await refreshNotesList();
   } catch (err) {
-    alert("Не удалось удалить папку: " + err.message);
+    showAlert("Не удалось удалить папку: " + err.message);
   }
 }
 
 document.getElementById("newNoteFolderBtn").onclick = () => createNoteFolderPrompt(currentNoteFolder);
-noteFolderResetBtn.onclick = () => {
-  currentNoteFolder = "";
-  renderNoteRows();
-};
 
 function renderNotesPanel() {
   const showDetail = notesView === "detail" && selectedNote;
-  noteListView.style.display = showDetail ? "none" : "block";
-  noteDetailView.style.display = showDetail ? "block" : "none";
+  // flex, а не block: обе половины — колонки со своей полосой прокрутки
+  // внутри (дерево / текст), см. .note-list-view и #noteDetailView в dm.html.
+  noteListView.style.display = showDetail ? "none" : "flex";
+  noteDetailView.style.display = showDetail ? "flex" : "none";
   if (showDetail) renderNoteDetail();
+  else renderNoteRows();
 }
 
 // renderNoteFolderSelect — «в какой папке лежит эта заметка» в карточке.
@@ -1943,11 +2191,6 @@ function renderNoteDetail() {
     noteEditArea.focus();
   } else {
     noteRenderView.innerHTML = renderNoteHtml(selectedNote.content);
-    // Формулы в тексте — кликабельные, как в статблоках и карточках (см.
-    // inline-rolls.js). Импорт модуля Foundry специально приводит свои
-    // [[/r 2d6]] к обычной формуле ради этого (см. internal/foundry/rolls.go).
-    // Не делегированный обработчик, а обход текста — поэтому вызываем на
-    // каждую перерисовку, а не один раз при загрузке страницы.
     enhanceRolls(noteRenderView, sendNoteRoll);
   }
 }
@@ -1960,18 +2203,40 @@ function sendNoteRoll(formula, label) {
   vtt.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
 }
 
+let noteOpenSeq = 0;
+
 async function openNote(id, { edit = false } = {}) {
+  const seq = ++noteOpenSeq;
   notesView = "detail";
+  let note;
   try {
-    selectedNote = await fetchNote(id);
+    note = await fetchNote(id);
   } catch (err) {
-    alert("Не удалось открыть заметку: " + err.message);
+    if (seq !== noteOpenSeq) return;
+    showAlert("Не удалось открыть заметку: " + err.message);
     notesView = "list";
     renderNotesPanel();
     return;
   }
+  if (seq !== noteOpenSeq) return;
+  selectedNote = note;
   noteEditing = edit;
+  lastOpenedNoteId = note.id;
+  revealNoteFolder(note.folder || "");
   renderNotesPanel();
+}
+
+// revealNoteFolder — раскрыть всю цепочку папок до заметки и сделать её
+// папку текущей. Заметку открывают не только кликом по дереву (значок на
+// карте, вики-ссылка, поиск) — без этого возврат в список показывал бы
+// свёрнутое дерево без всякого следа того, что только что читали.
+function revealNoteFolder(folder) {
+  currentNoteFolder = folder;
+  let acc = "";
+  for (const segment of folder ? folder.split("/") : []) {
+    acc = acc ? acc + "/" + segment : segment;
+    openNoteFolders.add(acc);
+  }
 }
 
 function backToNoteList() {
@@ -1997,13 +2262,13 @@ wireWikiLinks(noteRenderView, () => notesList, {
   onOpen: (id) => openNote(id),
   onCreateMissing: async (title, folder) => {
     const where = folder ? ` в папке «${folder}»` : " в корне библиотеки";
-    if (!confirm(`Заметки «${title}» не существует. Создать${where}?`)) return;
+    if (!(await showConfirm(`Заметки «${title}» не существует. Создать её${where}?`, { title: "Новая заметка", okLabel: "Создать" }))) return;
     try {
       const n = await createNote(`# ${title}\n\n`, folder);
       await refreshNotesList();
       await openNote(n.id, { edit: true });
     } catch (err) {
-      alert("Не удалось создать заметку: " + err.message);
+      showAlert("Не удалось создать заметку: " + err.message);
     }
   },
 });
@@ -2027,12 +2292,18 @@ document.getElementById("noteSaveBtn").onclick = async () => {
 
 document.getElementById("noteDeleteBtn").onclick = async () => {
   if (!selectedNote) return;
-  if (!confirm(`Удалить заметку «${selectedNote.title}»? Это необратимо (значки на карте, ссылающиеся на неё, останутся, но перестанут открываться).`)) return;
+  const okDelete = await showConfirm(`Удалить заметку «${selectedNote.title}»?`, {
+    title: "Удалить заметку",
+    okLabel: "Удалить",
+    danger: true,
+    hint: "Это необратимо. Значки на карте, ссылающиеся на неё, останутся, но перестанут открываться.",
+  });
+  if (!okDelete) return;
   try {
     await deleteNote(selectedNote.id);
     backToNoteList();
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
   }
 };
 
@@ -2040,9 +2311,9 @@ document.getElementById("notePlaceBtn").onclick = () => {
   if (!selectedNote) return;
   closeSidePanel();
   document.dispatchEvent(
-    new CustomEvent("vtt:placeNoteMarker", { detail: { noteId: selectedNote.id, label: selectedNote.title } })
+    new CustomEvent("vtt:placeNoteMarker", { detail: { noteId: selectedNote.id, label: selectedNote.title, library: "" } })
   );
-  alert("Теперь кликни на карте, куда поставить свиток.");
+  showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок заметки" });
 };
 
 document.getElementById("noteWindowBtn").onclick = () => {
@@ -2074,14 +2345,21 @@ document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
     await refreshNotesList();
     await openNote(n.id, { edit: true });
   } catch (err) {
-    alert("Не удалось создать заметку: " + err.message);
+    showAlert("Не удалось создать заметку: " + err.message);
   }
 });
 
 // значок на карте (двойной клик, см. interaction.js) — открыть панель прямо
 // на нужной заметке, а не просто раскрыть раздел.
 document.addEventListener("vtt:openNoteMarker", (e) => {
-  setSidePanelSection("notes");
+  // Значок может вести и в заметки ДМ, и в журнал стола (см.
+  // domain.NoteMarker.Library) — открываем то, на что он реально ссылается,
+  // а не всегда панель заметок.
+  if (e.detail.library === "journal") {
+    openJournalWindow(e.detail.noteId);
+    return;
+  }
+  showSidePanelSection("notes");
   openNote(e.detail.noteId);
 });
 
@@ -2109,7 +2387,17 @@ onPanelOpen("notes", () => {
 window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data) return;
   if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url });
+    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
+  } else if (e.data.type === "beacon:placeJournalMarker") {
+    // Значок записи журнала на карту. Просит окно журнала (iframe, см.
+    // pages/journal.js) — расстановка живёт здесь, потому что канвас есть
+    // только у этой страницы; дальше всё как со значком заметки ДМ.
+    document.dispatchEvent(
+      new CustomEvent("vtt:placeNoteMarker", {
+        detail: { noteId: e.data.id, label: e.data.title, library: "journal" },
+      })
+    );
+    showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок журнала" });
   } else if (
     e.data.type === "beacon:monsterSaved" ||
     e.data.type === "beacon:spellSaved" ||
@@ -2118,6 +2406,25 @@ window.addEventListener("message", (e) => {
     e.data.type === "beacon:conditionSaved"
   ) {
     postToOpenWindows("catalog-", e.data);
+  } else if (e.data.type === "beacon:foundryImported") {
+    // Импорт пакета Foundry (foundry-import.js) заводит заметки, сцены и сам
+    // пакет в списке установленных. Сцены приезжают сокетом сами (см.
+    // room.go: broadcastSceneList), а вот список заметок и раздел
+    // "Настройки" читаются только HTTP-ом при открытии панели — освежаем их
+    // здесь, иначе до F5 висел бы старый список.
+    foundryModulesUpdates = null; // версии, проверенные ДО импорта, теперь врут
+    refreshOpenPanel("settings");
+    refreshNotesList();
+  } else if (e.data.type === "beacon:noteSaved" || e.data.type === "beacon:noteDeleted") {
+    // Заметка, открытая отдельным окном (note-window.js): в дереве панели
+    // могло смениться название, а удалённую надо убрать и закрыть её карточку.
+    const isOpenHere = !!(selectedNote && selectedNote.id === e.data.id);
+    if (e.data.type === "beacon:noteDeleted" && isOpenHere) {
+      backToNoteList(); // сам перечитает список
+    } else {
+      if (isOpenHere) openNote(e.data.id); // тот же текст, что сохранили в окне
+      refreshNotesList();
+    }
   } else if (e.data.type === "beacon:applySpellStatus") {
     // Клик по чипу «Накладывает: …» в карточке заклинания (см.
     // pages/spellbook.js: readStatuses). Сама карточка живёт в iframe и цели
@@ -2344,6 +2651,7 @@ document.addEventListener("mousedown", (e) => {
 // #canvasWrap растягивается обратно — см. ResizeObserver в vtt/index.js,
 // он сам подхватит новую ширину родителя канваса).
 const sidePanel = document.getElementById("panel");
+const panelResizer = document.getElementById("panelResizer");
 const railSectionBtns = [...document.querySelectorAll("#rail .rail-btn[data-section]")];
 const panelSections = [...document.querySelectorAll(".panel-section[data-panel]")];
 let openPanelSection = null;
@@ -2358,17 +2666,127 @@ function setSidePanelSection(name) {
   const opening = openPanelSection !== name;
   openPanelSection = openPanelSection === name ? null : name;
   sidePanel.classList.toggle("open", !!openPanelSection);
+  panelResizer.classList.toggle("visible", !!openPanelSection);
+  if (openPanelSection) {
+    sidePanel.style.flexBasis = panelWidth + "px";
+    sidePanel.style.width = panelWidth + "px";
+  } else {
+    // Ноль ширины — забота CSS (#panel), inline-стиль просто снимаем,
+    // иначе он победил бы правило и панель не схлопнулась бы.
+    sidePanel.style.flexBasis = "";
+    sidePanel.style.width = "";
+  }
+  updateChromeInset(panelWidth);
   railSectionBtns.forEach((b) => b.classList.toggle("active", b.dataset.section === openPanelSection));
   panelSections.forEach((s) => s.classList.toggle("active", s.dataset.panel === openPanelSection));
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
     panelOpenHandlers[openPanelSection]();
   }
 }
+
+// showSidePanelSection — «показать раздел», в отличие от setSidePanelSection
+// («переключить»): нужен тем, кто открывает раздел не кликом по рейлу, а по
+// событию (значок заметки на карте, возврат в настройки сцены). Раньше там
+// звали setSidePanelSection, и если раздел УЖЕ был открыт, вызов его
+// закрывал — ровно наоборот тому, чего ждёшь от «открой мне заметку».
+function showSidePanelSection(name) {
+  if (openPanelSection === name) {
+    if (panelOpenHandlers[name]) panelOpenHandlers[name]();
+    return;
+  }
+  setSidePanelSection(name);
+}
+
+// refreshOpenPanel — перерисовать раздел, если он открыт ПРЯМО СЕЙЧАС.
+// panelOpenHandlers перечитывают данные с сервера, но зовутся только в
+// момент открытия — а данные меняются и снаружи: импорт модуля Foundry и
+// правка заметки идут в плавающем окне (iframe), которое ничего не знает об
+// этой панели и сообщает о себе postMessage'ем (см. слушатель "beacon:*"
+// выше). Без этого открытая панель оставалась висеть со старым списком до
+// перезагрузки страницы.
+function refreshOpenPanel(name) {
+  if (openPanelSection === name && panelOpenHandlers[name]) panelOpenHandlers[name]();
+}
+
 function closeSidePanel() {
   if (openPanelSection) setSidePanelSection(openPanelSection);
 }
 railSectionBtns.forEach((b) => (b.onclick = () => setSidePanelSection(b.dataset.section)));
 document.querySelectorAll(".panel-close[data-close]").forEach((b) => (b.onclick = closeSidePanel));
+
+// ---- ширина панели: тянется мышью за #panelResizer ----
+// Ширину ставим inline'ом на сам #panel: это состояние времени выполнения,
+// а не константа темы. Закрытая панель inline-стилей не имеет вовсе — тогда
+// работает #panel{flex:0 0 0;width:0} из dm.html и закрытие остаётся
+// анимированным. Переживает перезагрузку через localStorage; канвас
+// подхватит новую ширину сам — он уже слушает ResizeObserver своего
+// родителя (см. vtt/index.js).
+const PANEL_WIDTH_KEY = "beacon:dmPanelWidth";
+const PANEL_WIDTH_DEFAULT = 300;
+const PANEL_WIDTH_MIN = 240;
+
+// panelWidthMax — не больше, чем остаётся от окна за вычетом рейла и
+// минимума под сам канвас: иначе панель можно растянуть на весь экран и
+// потерять карту, ради которой всё и затевалось.
+function panelWidthMax() {
+  return Math.max(PANEL_WIDTH_MIN, window.innerWidth - 60 - 320);
+}
+
+function applyPanelWidth(px) {
+  const w = Math.round(Math.min(Math.max(px, PANEL_WIDTH_MIN), panelWidthMax()));
+  if (openPanelSection) {
+    sidePanel.style.flexBasis = w + "px";
+    sidePanel.style.width = w + "px";
+  }
+  updateChromeInset(w);
+  return w;
+}
+
+// updateChromeInset — сдвинуть плашку статуса правее плавающего меню.
+// Канвас теперь лежит ПОД рейлом и панелью (см. #canvasWrap в dm.html), так
+// что всё, что раньше просто прижималось к левому краю канваса, оказалось бы
+// под ними. Числа — из тех же margin/border, что в dm.html: рейл 14+60,
+// панель 10 + ширина + 2 (рамка), ручка 10.
+const RAIL_RIGHT = 74;
+const statusBar = document.getElementById("statusBar");
+function updateChromeInset(width) {
+  const chromeRight = openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT;
+  statusBar.style.left = chromeRight + 10 + "px";
+}
+
+let panelWidth = Math.min(Math.max(Number(localStorage.getItem(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN), panelWidthMax());
+updateChromeInset(panelWidth);
+window.addEventListener("resize", () => {
+  panelWidth = applyPanelWidth(panelWidth); // окно сузили — подрезать панель под новый максимум
+});
+
+panelResizer.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  panelResizer.setPointerCapture(e.pointerId);
+  const startX = e.clientX;
+  const startWidth = panelWidth;
+  document.body.classList.add("panel-resizing");
+
+  const onMove = (ev) => {
+    panelWidth = applyPanelWidth(startWidth + (ev.clientX - startX));
+  };
+  const onUp = () => {
+    panelResizer.removeEventListener("pointermove", onMove);
+    panelResizer.removeEventListener("pointerup", onUp);
+    panelResizer.removeEventListener("pointercancel", onUp);
+    document.body.classList.remove("panel-resizing");
+    localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+  };
+  panelResizer.addEventListener("pointermove", onMove);
+  panelResizer.addEventListener("pointerup", onUp);
+  panelResizer.addEventListener("pointercancel", onUp);
+});
+
+panelResizer.addEventListener("dblclick", () => {
+  panelWidth = applyPanelWidth(PANEL_WIDTH_DEFAULT);
+  localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+});
 
 // ================= токен света: отдельная быстрая кнопка =================
 // В отличие от чекбокса "💡 свет" в разделе "Токены" (который добавляет
@@ -2435,9 +2853,9 @@ function renderSceneDropdown() {
     del.innerHTML = icon("trash", { size: 13 });
     del.title = "Удалить сцену";
     del.disabled = sceneList.length <= 1;
-    del.onclick = (ev) => {
+    del.onclick = async (ev) => {
       ev.stopPropagation();
-      if (!confirm(`Удалить сцену «${s.name}»? Это необратимо.`)) return;
+      if (!(await showConfirm(`Удалить сцену «${s.name}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
     row.append(handle, nameSpan, viewers, del);
@@ -2447,8 +2865,8 @@ function renderSceneDropdown() {
 
 // "+ Сцена" теперь статична в шапке панели (dm.html), а не пересоздаётся
 // каждый renderSceneDropdown() — обработчик вешаем один раз.
-document.getElementById("sceneCreateBtn").onclick = () => {
-  const name = prompt("Название новой сцены:", "Новая сцена");
+document.getElementById("sceneCreateBtn").onclick = async () => {
+  const name = await showPrompt("Название сцены:", { title: "Новая сцена", value: "Новая сцена", okLabel: "Создать" });
   if (name === null) return;
   const sceneId = "scene-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
   vtt.send({ type: "create_scene", sceneId, sceneName: name || "Новая сцена" });
@@ -2667,7 +3085,7 @@ document.getElementById("fitToBgBtn").onclick = async () => {
     fWidth.value = w;
     fHeight.value = h;
   } catch {
-    alert("Не удалось прочитать размер фона — проверь URL.");
+    showAlert("Не удалось прочитать размер фона — проверь URL.");
   }
 };
 
@@ -2688,10 +3106,10 @@ gridEditorBtn.onclick = () => {
 };
 
 // ---- удаление / сохранение (всегда активная сцена) ----
-document.getElementById("sceneDeleteBtn").onclick = () => {
+document.getElementById("sceneDeleteBtn").onclick = async () => {
   if (sceneList.length <= 1) return;
   const s = sceneList.find((x) => x.id === currentSceneId);
-  if (!confirm(`Удалить сцену «${s ? s.name : currentSceneId}»? Это необратимо.`)) return;
+  if (!(await showConfirm(`Удалить сцену «${s ? s.name : currentSceneId}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
   vtt.send({ type: "delete_scene", sceneId: currentSceneId });
   closeSidePanel();
 };

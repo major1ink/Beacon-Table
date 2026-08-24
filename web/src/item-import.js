@@ -19,6 +19,7 @@
 // Чистая функция без побочных эффектов: сервер ничего не знает про формат
 // Foundry, весь разбор — здесь, на клиенте (см. domain/item.go: комментарий
 // про "умный бланк").
+import { cleanFoundryText } from "./foundry-text.js";
 
 function ru(dict, code) {
   if (!code) return "";
@@ -396,6 +397,6 @@ export function mapFoundryItemJson(raw) {
     modifiers: raw.type === "equipment" ? buildArmorModifiers(sys) : [],
     properties: raw.type === "weapon" ? buildWeaponProperties(sys) : "",
     charges: buildCharges(sys.uses),
-    description: (sys.description && sys.description.value) || "",
+    description: cleanFoundryText(sys.description && sys.description.value),
   };
 }

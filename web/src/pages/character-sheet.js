@@ -28,6 +28,7 @@ import { initItemPicker } from "../item-picker.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { renderStatusChips } from "../status-palette.js";
 import { applyModifiers, explainModifiers, collectModifiers, ABILITY_TARGETS, TARGET_AC, TARGET_SPEED, TARGET_HP_MAX } from "../modifiers.js";
+import { showAlert } from "../modal.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -1124,7 +1125,7 @@ function saveInventoryEntry(e, patch) {
   // Снять/надеть — это смена КЗ и прочих производных чисел (см.
   // activeModifiers), а не только галочка в таблице.
   if ("equipped" in patch && mode === "view") refreshView();
-  updateCharacterInventoryItem(charId, e.id, e.quantity, e.equipped, e.notes).catch((err) => alert("Не удалось сохранить: " + err.message));
+  updateCharacterInventoryItem(charId, e.id, e.quantity, e.equipped, e.notes).catch((err) => showAlert("Не удалось сохранить: " + err.message));
 }
 
 function removeInventoryEntry(id) {
@@ -1133,7 +1134,7 @@ function removeInventoryEntry(id) {
       inventory = inventory.filter((e) => e.id !== id);
       renderTab5();
     })
-    .catch((err) => alert("Не удалось удалить: " + err.message));
+    .catch((err) => showAlert("Не удалось удалить: " + err.message));
 }
 
 function renderTab5() {
@@ -1206,7 +1207,7 @@ function renderTab5() {
     onPick: (item, qty) => {
       addCharacterInventoryItem(charId, item.id, qty)
         .then(loadInventory)
-        .catch((err) => alert("Не удалось добавить: " + err.message));
+        .catch((err) => showAlert("Не удалось добавить: " + err.message));
     },
   });
 

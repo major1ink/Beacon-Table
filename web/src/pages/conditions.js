@@ -17,6 +17,7 @@ import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { normalizeSlug, DEFAULT_ICONS } from "../foundry-conditions.js";
 import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 // ==================== state ====================
 
@@ -136,7 +137,7 @@ function renderEditView(root) {
       scheduleSave();
       renderApp();
     } catch (err) {
-      alert("Не удалось загрузить значок: " + err.message);
+      showAlert("Не удалось загрузить значок: " + err.message);
     }
   });
 
@@ -609,7 +610,7 @@ cloneBtn.onclick = async () => {
     }
     location.href = `/conditions.html?id=${created.id}&edit=1`;
   } catch (err) {
-    alert("Не удалось клонировать: " + err.message);
+    showAlert("Не удалось клонировать: " + err.message);
   } finally {
     cloneBtn.disabled = false;
   }
@@ -618,7 +619,13 @@ cloneBtn.onclick = async () => {
 // deleteBtn — тот же приём, что и в itembook.js/spellbook.js/bestiary.js.
 const deleteBtn = document.getElementById("deleteBtn");
 deleteBtn.onclick = async () => {
-  if (!confirm(`Удалить «${condition.name || "Без имени"}» из библиотеки? Уже наложенные метки останутся висеть на токенах, но потеряют описание.`)) return;
+  const okDelete = await showConfirm(`Удалить «${condition.name || "Без имени"}» из библиотеки?`, {
+    title: "Удалить состояние",
+    okLabel: "Удалить",
+    danger: true,
+    hint: "Уже наложенные метки останутся висеть на токенах, но потеряют описание.",
+  });
+  if (!okDelete) return;
   deleteBtn.disabled = true;
   try {
     await deleteCondition(conditionId);
@@ -629,7 +636,7 @@ deleteBtn.onclick = async () => {
       window.close();
     }
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
     deleteBtn.disabled = false;
   }
 };

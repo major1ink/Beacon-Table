@@ -25,9 +25,10 @@ type Reference struct {
 	// проставляется сервером при чтении, клиентское значение в Create/Update
 	// игнорируется (см. referencefile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в общую библиотеку.
-	System   bool   `json:"system,omitempty"`
-	ImageURL string `json:"imageUrl,omitempty"`
-	Source   string `json:"source,omitempty"` // "PHB 2024", "DMG 2024"...
+	System          bool   `json:"system,omitempty"`
+	ImageURL        string `json:"imageUrl,omitempty"`
+	Source          string `json:"source,omitempty"` // "PHB 2024", "DMG 2024"...
+	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 
 	// Kind — "класс" | "архетип" | "происхождение" | "вид" | "черта класса" |
 	// ... свободный текст. Используется и для фильтра-чипов в UI справочника

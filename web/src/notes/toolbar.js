@@ -6,6 +6,7 @@
 // используется и в боковой панели ДМ (pages/dm.js), и в отдельном окне
 // заметки (pages/note-window.js).
 import { uploadFile } from "../api.js";
+import { showAlert, showPrompt } from "../modal.js";
 
 function setValue(ta, value, selStart, selEnd) {
   ta.value = value;
@@ -72,13 +73,19 @@ function toggleLinePrefix(ta, prefix, ordered) {
   setValue(ta, newValue, lineStart, lineStart + newBlock.length);
 }
 
-function insertLink(ta) {
+async function insertLink(ta) {
   const { selectionStart: start, selectionEnd: end, value } = ta;
   const selected = value.slice(start, end);
-  const url = prompt("URL ссылки:", "https://");
+  const url = await showPrompt("Адрес ссылки:", { title: "Ссылка", value: "https://", okLabel: "Вставить" });
   if (!url) return;
-  const text = selected || prompt("Текст ссылки:", url) || url;
-  insertAtCursor(ta, `[${text}](${url})`);
+  const text =
+    selected || (await showPrompt("Текст ссылки:", { title: "Ссылка", value: url, okLabel: "Вставить" })) || url;
+  // Вставляем по координатам выделения, снятым ДО диалога: пока он открыт,
+  // фокус (а с ним и «текущий курсор» textarea) находится в его поле ввода —
+  // insertAtCursor вставил бы не туда. Текст за это время поменяться не мог:
+  // диалог модальный.
+  const md = `[${text}](${url})`;
+  setValue(ta, value.slice(0, start) + md + value.slice(end), start + md.length, start + md.length);
 }
 
 function insertWikiLink(ta) {
@@ -126,7 +133,7 @@ export function mountNoteToolbar(toolbarEl, textarea) {
     const file = fileInput.files[0];
     fileInput.value = "";
     if (!file) return;
-    insertFile(textarea, file).catch((err) => alert("Не удалось загрузить файл: " + err.message));
+    insertFile(textarea, file).catch((err) => showAlert("Не удалось загрузить файл: " + err.message));
   };
   toolbarEl.appendChild(fileInput);
 

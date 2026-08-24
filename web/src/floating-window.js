@@ -15,6 +15,8 @@
 // сессии и /ws/* работают без доп. телодвижений — просто перенос уже
 // работающей страницы в рамку вместо отдельной вкладки браузера.
 
+import { showConfirm } from "./modal.js";
+
 let styleInjected = false;
 function injectStyle() {
   if (styleInjected) return;
@@ -60,14 +62,39 @@ function bringToFront(el) {
 // уже открыто) просто поднимает существующее наверх — как повторный клик по
 // вкладке того же персонажа в Foundry не плодит вторую копию листа.
 //
+// navigate: true — если окно с этим key уже открыто, ПЕРЕВЕСТИ его на новый
+// url, а не просто поднять. Нужно, когда зовущий показывает конкретный
+// документ, а не просто «открой этот инструмент»: ДМ жмёт «Показать» на
+// записи журнала, а у игрока журнал уже открыт — без этого окно всплывало
+// бы на прежней записи, и выглядело бы, будто кнопка ничего не сделала.
+// По умолчанию false: для листа персонажа и компендиумов правильно именно
+// «поднять уже открытое, ничего не перезагружая».
+//
 // popoutTitle/popoutFeatures — параметры window.open() для кнопки 🗗
 // ("вынести" в настоящее отдельное окно браузера, полностью закрывая
 // плавающее — это ставит обратно ровно то поведение, что было ДО этого UI:
 // см. git history web/src/pages/dm.js:handleAdminCharacterUpdate и соседей).
-export function openFloatingWindow({ key, title, url, popoutFeatures = "width=1040,height=880", width = 1040, height = 880 }) {
+export function openFloatingWindow({
+  key,
+  title,
+  url,
+  navigate = false,
+  popoutFeatures = "width=1040,height=880",
+  width = 1040,
+  height = 880,
+}) {
   injectStyle();
   const existing = openWindows.get(key);
   if (existing) {
+    if (navigate) {
+      const frame = existing.querySelector(".fw-iframe");
+      // Сравниваем с href уже загруженной страницы (src — то, что попросили,
+      // href — то, что реально открыто): иначе повторный показ той же
+      // записи молча ничего не делал бы, если внутри окна успели уйти на
+      // другую (см. history.replaceState в journal.js).
+      const currentHref = (frame.contentWindow && frame.contentWindow.location.href) || frame.src;
+      if (new URL(currentHref, location.href).href !== new URL(url, location.href).href) frame.src = url;
+    }
     bringToFront(existing);
     return existing;
   }
@@ -127,7 +154,7 @@ export function openFloatingWindow({ key, title, url, popoutFeatures = "width=10
   // процессом внутри: закрытие iframe убивает его на полпути, а обычный
   // beforeunload браузер для удаления iframe не показывает (см.
   // web/src/pages/foundry-import.js).
-  function confirmClose() {
+  async function confirmClose() {
     let warning = "";
     try {
       const guard = iframe.contentWindow && iframe.contentWindow.beaconCloseGuard;
@@ -135,16 +162,17 @@ export function openFloatingWindow({ key, title, url, popoutFeatures = "width=10
     } catch {
       /* всегда тот же origin, сюда не попадём */
     }
-    return !warning || window.confirm(warning);
+    if (!warning) return true;
+    return showConfirm(warning, { title: "Закрыть окно", okLabel: "Закрыть", cancelLabel: "Не закрывать", danger: true });
   }
 
-  closeBtn.onclick = () => {
-    if (confirmClose()) close();
+  closeBtn.onclick = async () => {
+    if (await confirmClose()) close();
   };
-  popoutBtn.onclick = () => {
+  popoutBtn.onclick = async () => {
     // Вынос в отдельное окно перезагружает страницу с нуля — для процесса
     // внутри это то же самое, что закрытие, поэтому спрашиваем так же.
-    if (!confirmClose()) return;
+    if (!(await confirmClose())) return;
     window.open(url, key, popoutFeatures);
     close();
   };

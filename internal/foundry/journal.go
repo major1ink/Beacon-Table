@@ -3,6 +3,7 @@ package foundry
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 
 	"beacon-table/internal/domain"
@@ -65,9 +66,7 @@ func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journ
 	return Journal{Folder: folder, Title: title, Content: b.String()}
 }
 
-// pageBody — содержимое одной страницы по её типу. Видео/PDF/встроенные
-// документы отдельного представления у заметки не имеют — от них остаётся
-// ссылка, чтобы ДМ хотя бы видел, что там было.
+// pageBody — содержимое одной страницы по её типу. Видео/PDF проигрываются прямо в заметке .
 func pageBody(ctx context.Context, page map[string]any, assets *Assets) string {
 	switch strings.ToLower(asString(page["type"])) {
 	case "image":
@@ -81,13 +80,29 @@ func pageBody(ctx context.Context, page map[string]any, assets *Assets) string {
 			return missingFileNote("иллюстрация не перенесена", ref)
 		}
 		return fmt.Sprintf("![%s](%s)", caption, src)
-	case "video", "pdf":
+	case "video":
+		ref := asString(page["src"])
+		src := assets.URL(ctx, domain.AssetKindNotes, ref)
+		if src == "" {
+			return missingFileNote("видео не перенесено", ref)
+		}
+		esc := html.EscapeString(src)
+
+		return fmt.Sprintf(
+			`<video controls preload="metadata" style="max-width:100%%;border-radius:8px"><source src="%s">Видео не открылось — <a href="%s">скачать файл</a>.</video>`,
+			esc, esc,
+		)
+	case "pdf":
 		ref := asString(page["src"])
 		src := assets.URL(ctx, domain.AssetKindNotes, ref)
 		if src == "" {
 			return missingFileNote("файл не перенесён", ref)
 		}
-		return fmt.Sprintf("[%s](%s)", asString(page["name"]), src)
+		esc := html.EscapeString(src)
+		return fmt.Sprintf(
+			`<iframe src="%s" style="width:100%%;height:70vh;border:1px solid var(--border);border-radius:8px"></iframe>`+"\n\n"+`[Открыть PDF в отдельной вкладке](%s)`,
+			esc, src,
+		)
 	default:
 		return assets.RewriteHTML(ctx, domain.AssetKindNotes, digString(page, "text", "content"))
 	}

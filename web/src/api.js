@@ -206,6 +206,60 @@ export async function deleteNoteFolder(folder) {
   return apiFetch(`/api/note-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
 }
 
+// ---- журнал стола (ДМ и игроки) — web/journal.html ----
+// В отличие от заметок ДМ выше, у каждой записи есть автор и права:
+// "default" — что достаётся всем за столом ("none" | "limited" | "observer" |
+// "owner"), "access" — точечные выдачи {accountId: уровень} (см.
+// domain.JournalEntry). Сервер возвращает вместе с записью и уже вычисленные
+// для ТЕБЯ myAccess/canEdit/canManage — клиент права не пересчитывает.
+export async function fetchJournal() {
+  return apiFetch("/api/journal");
+}
+export async function fetchJournalEntry(id) {
+  return apiFetch(`/api/journal/${id}`);
+}
+// fetchJournalMembers — кому можно раздать права: аккаунты этого мира
+// ([{id, username}]). Доступно и игроку — права раздаёт автор записи.
+export async function fetchJournalMembers() {
+  return apiFetch("/api/journal/members");
+}
+export async function createJournalEntry({ content, folder = "", def = "none", access = {} } = {}) {
+  return apiFetch("/api/journal", {
+    method: "POST",
+    body: JSON.stringify({ content, folder, default: def, access }),
+  });
+}
+export async function updateJournalEntry(id, content) {
+  return apiFetch(`/api/journal/${id}`, { method: "PUT", body: JSON.stringify({ content }) });
+}
+// setJournalAccess — отдельно от updateJournalEntry: текст автосейвится по
+// таймеру при наборе, права меняются осознанным действием в диалоге (см.
+// handleJournalAccess на сервере).
+export async function setJournalAccess(id, def, access) {
+  return apiFetch(`/api/journal/${id}/access`, { method: "PUT", body: JSON.stringify({ default: def, access }) });
+}
+export async function moveJournalEntry(id, folder) {
+  return apiFetch(`/api/journal/${id}/folder`, { method: "PUT", body: JSON.stringify({ folder: folder || "" }) });
+}
+export async function deleteJournalEntry(id) {
+  return apiFetch(`/api/journal/${id}`, { method: "DELETE" });
+}
+
+export async function fetchJournalFolders() {
+  return apiFetch("/api/journal-folders");
+}
+export async function createJournalFolder(folder) {
+  return apiFetch("/api/journal-folders", { method: "POST", body: JSON.stringify({ folder }) });
+}
+export async function renameJournalFolder(from, to) {
+  return apiFetch("/api/journal-folders", { method: "PUT", body: JSON.stringify({ from, to }) });
+}
+// deleteJournalFolder удаляет папку ВМЕСТЕ с записями внутри (игроку сервер
+// разрешит только если все они его собственные) — спрашивать обязан UI.
+export async function deleteJournalFolder(folder) {
+  return apiFetch(`/api/journal-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
+}
+
 // ---- бестиарий ДМ (только ДМ) — web/dm.html: раздел "Бестиарий", web/bestiary.html ----
 export async function fetchBestiary() {
   return apiFetch("/api/bestiary");
@@ -337,6 +391,32 @@ export async function inspectFoundryPackage(url) {
 // одиночного файла (см. web/src/item-import.js и соседей).
 export async function importFoundryPack(url, pack, targets) {
   return apiFetch("/api/foundry/import", { method: "POST", body: JSON.stringify({ url, pack, targets }) });
+}
+
+// fetchFoundryModules — пакеты Foundry VTT, уже импортированные в этот мир
+// (раздел "Настройки"): [{id,title,version,manifestUrl,importedAt}]. Без
+// сети — сама проверка новых версий отдельным запросом (см.
+// checkFoundryModuleUpdates), чтобы открытие настроек не ждало по манифесту
+// на каждый установленный пакет.
+export async function fetchFoundryModules() {
+  return apiFetch("/api/foundry/modules");
+}
+
+// checkFoundryModuleUpdates — для каждого установленного пакета заново
+// скачивает его манифест и сравнивает версию с той, что стояла на момент
+// импорта: [{id,title,installedVersion,latestVersion,updateAvailable,error}].
+export async function checkFoundryModuleUpdates() {
+  return apiFetch("/api/foundry/modules/check", { method: "POST" });
+}
+
+// deleteFoundryModule — "Удалить модуль" целиком: карточки (существа/
+// заклинания/предметы/справочник/состояния), помеченные его id, файлы,
+// скопированные его импортом в библиотеку загрузок, и саму запись об
+// установке. Сцены/плейлисты/заметки, заведённые тем же импортом, НЕ трогает
+// (см. internal/service/foundry.go: FoundryService.Delete). Возвращает
+// {cards:{раздел:сколько удалено},warnings}.
+export async function deleteFoundryModule(id) {
+  return apiFetch(`/api/foundry/modules/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // Загрузка файла (карта, токен-арт, аватар персонажа или ассет карты) на

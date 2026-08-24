@@ -14,6 +14,7 @@ import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -585,7 +586,7 @@ cloneBtn.onclick = async () => {
     }
     location.href = `/spellbook.html?id=${created.id}&edit=1`;
   } catch (err) {
-    alert("Не удалось клонировать: " + err.message);
+    showAlert("Не удалось клонировать: " + err.message);
   } finally {
     cloneBtn.disabled = false;
   }
@@ -597,7 +598,7 @@ cloneBtn.onclick = async () => {
 // закрыть окно.
 const deleteBtn = document.getElementById("deleteBtn");
 deleteBtn.onclick = async () => {
-  if (!confirm(`Удалить «${spell.name || "Без имени"}» из библиотеки?`)) return;
+  if (!(await showConfirm(`Удалить «${spell.name || "Без имени"}» из библиотеки?`, { title: "Удалить заклинание", okLabel: "Удалить", danger: true }))) return;
   deleteBtn.disabled = true;
   try {
     await deleteSpell(spellId);
@@ -608,7 +609,7 @@ deleteBtn.onclick = async () => {
       window.close();
     }
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
     deleteBtn.disabled = false;
   }
 };

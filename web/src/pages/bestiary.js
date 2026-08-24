@@ -14,6 +14,7 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { icon } from "../icons.js";
 import { initItemPicker } from "../item-picker.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 const ABILITIES = [
   { key: "str", label: "Сил" },
@@ -166,7 +167,7 @@ function renderEditView(root) {
       scheduleSave();
       renderApp();
     } catch (err) {
-      alert("Не удалось загрузить арт: " + err.message);
+      showAlert("Не удалось загрузить арт: " + err.message);
     }
   });
   root.appendChild(
@@ -701,7 +702,7 @@ cloneBtn.onclick = async () => {
     // самое, что видит ДМ после создания монстра с нуля (см. dm.js: newMonsterForm).
     location.href = `/bestiary.html?id=${created.id}&edit=1`;
   } catch (err) {
-    alert("Не удалось клонировать: " + err.message);
+    showAlert("Не удалось клонировать: " + err.message);
   } finally {
     cloneBtn.disabled = false;
   }
@@ -713,7 +714,13 @@ cloneBtn.onclick = async () => {
 // предупреждения о токенах, что и в cfg.deleteConfirm списка (pages/catalog.js).
 const deleteBtn = document.getElementById("deleteBtn");
 deleteBtn.onclick = async () => {
-  if (!confirm(`Удалить «${monster.name || "Без имени"}» из бестиария? Это необратимо (уже расставленные токены останутся на карте, но перестанут открывать статблок).`)) return;
+  const okDelete = await showConfirm(`Удалить «${monster.name || "Без имени"}» из бестиария?`, {
+    title: "Удалить монстра",
+    okLabel: "Удалить",
+    danger: true,
+    hint: "Это необратимо. Уже расставленные токены останутся на карте, но перестанут открывать статблок.",
+  });
+  if (!okDelete) return;
   deleteBtn.disabled = true;
   try {
     await deleteMonster(monsterId);
@@ -724,7 +731,7 @@ deleteBtn.onclick = async () => {
       window.close();
     }
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
     deleteBtn.disabled = false;
   }
 };

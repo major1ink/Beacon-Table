@@ -29,6 +29,7 @@
 // правил dnd5e: ключей у Foundry сотни, наших целей — дюжина.
 import { foundryStatusToSlug, conditionName, defaultIcon, normalizeSlug } from "./foundry-conditions.js";
 import { MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, PERIOD_NONE } from "./modifiers.js";
+import { cleanFoundryText } from "./foundry-text.js";
 
 // CHANGE_MODE_RU — режимы ActiveEffect.changes[].mode из Foundry
 // (CONST.ACTIVE_EFFECT_MODES): 0 CUSTOM, 1 MULTIPLY, 2 ADD, 3 DOWNGRADE,
@@ -153,7 +154,7 @@ export function effectRounds(duration) {
 // абзацем — оставляем HTML как есть, но подчищаем пустые обёртки, чтобы
 // карточка не начиналась с пустой строки.
 function cleanDescription(html) {
-  return String(html || "")
+  return cleanFoundryText(html)
     .replace(/<p>\s*(&nbsp;|\s)*<\/p>/gi, "")
     .trim();
 }

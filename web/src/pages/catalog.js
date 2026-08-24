@@ -34,6 +34,7 @@ import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -119,7 +120,7 @@ function renderSpellAddWidget(row, s) {
       }
       select.value = "";
     } catch (err) {
-      alert("Не удалось добавить: " + err.message);
+      showAlert("Не удалось добавить: " + err.message);
     } finally {
       addBtn.disabled = false;
     }
@@ -305,12 +306,12 @@ function buildRow(x) {
     delBtn.innerHTML = icon("trash", { size: 13 });
     delBtn.title = "Удалить из библиотеки";
     delBtn.onclick = async () => {
-      if (!confirm(cfg.deleteConfirm(x))) return;
+      if (!(await showConfirm(cfg.deleteConfirm(x), { title: "Удалить", okLabel: "Удалить", danger: true }))) return;
       try {
         await cfg.deleteOne(x.id);
         await refresh();
       } catch (err) {
-        alert("Не удалось удалить: " + err.message);
+        showAlert("Не удалось удалить: " + err.message);
       }
     };
     row.appendChild(delBtn);
@@ -353,7 +354,7 @@ createForm.addEventListener("submit", async (e) => {
     // ?edit=1 — пустая карточка, смотреть там всё равно не на что, сразу в редактирование.
     openDetail(created, { edit: true });
   } catch (err) {
-    alert("Не удалось создать: " + err.message);
+    showAlert("Не удалось создать: " + err.message);
   }
 });
 
@@ -376,7 +377,7 @@ importFile.addEventListener("change", async (e) => {
       raws.push(...(Array.isArray(parsed) ? parsed : [parsed]));
     }
   } catch (err) {
-    alert("Не удалось прочитать файл: " + err.message);
+    showAlert("Не удалось прочитать файл: " + err.message);
     input.value = "";
     return;
   }
@@ -385,7 +386,7 @@ importFile.addEventListener("change", async (e) => {
   if (cfg.batchMap) {
     mappedList = cfg.batchMap(raws);
     if (mappedList.length === 0) {
-      alert(cfg.batchEmptyMsg);
+      showAlert(cfg.batchEmptyMsg);
       input.value = "";
       return;
     }
@@ -399,7 +400,7 @@ importFile.addEventListener("change", async (e) => {
       await refresh();
       openDetail(saved);
     } catch (err) {
-      alert("Не удалось импортировать: " + err.message);
+      showAlert("Не удалось импортировать: " + err.message);
     } finally {
       input.value = "";
     }

@@ -29,6 +29,7 @@
 // — визуально это те же textarea в редакторе карточки монстра (bestiary.js),
 // одна правка вручную (вырезать/вставить абзац) при необходимости.
 import { CONDITION_RU } from "./foundry-conditions.js";
+import { cleanFoundryText } from "./foundry-text.js";
 
 function ru(dict, code) {
   if (!code) return "";
@@ -185,30 +186,12 @@ function acNote(items) {
     .join(", ");
 }
 
-// cleanFoundryHtml — вырезает Foundry-специфичный макро-синтаксис, бессмысленный
-// вне Foundry: @Compendium[...]{Название}/@UUID[...]{Название} (ссылка на
-// компендиум — оставляем только видимый текст ссылки) и [[/r ФОРМУЛА]]
-// (инлайн-бросок). С инлайн-бросками два случая: бросок атаки "1d20+N" —
-// вырезаем целиком, рядом всегда идёт уже посчитанный жирным модификатор
-// "(+4)", дублировать незачем; любой другой бросок (урон и т.п.) заменяем на
-// саму формулу — её больше неоткуда взять, а не вырезаем как раньше (иначе
-// в тексте оставались пустые скобки "Попадание: 5 () урона" — формула
-// молча терялась). Сохранённая формула — заодно то самое "видимое" число,
-// которое web/src/inline-rolls.js потом делает кликабельным.
-function cleanFoundryHtml(html) {
-  return (html || "")
-    .replace(/@(?:Compendium|UUID)\[[^\]]*\]\{([^}]*)\}/g, "$1")
-    .replace(/\[\[\/r\s*(1d20[^\]]*)\]\]\s*/g, "")
-    .replace(/\[\[\/r\s*([^\]]*?)\]\]/g, "$1")
-    .trim();
-}
-
 function escapeHtml(s) {
   return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 function itemParagraph(item) {
-  const desc = cleanFoundryHtml(item.system && item.system.description && item.system.description.value);
+  const desc = cleanFoundryText(item.system && item.system.description && item.system.description.value);
   return `<p><strong>${escapeHtml(item.name)}.</strong> ${desc}</p>`;
 }
 
@@ -244,11 +227,11 @@ function buildAbilityBlocks(items, resources) {
     if (!ABILITY_ITEM_TYPES.has(item.type)) continue;
     const bucket = bucketFor(item);
     if (bucket === "legendaryIntro") {
-      legendaryIntro = cleanFoundryHtml(item.system && item.system.description && item.system.description.value);
+      legendaryIntro = cleanFoundryText(item.system && item.system.description && item.system.description.value);
       continue;
     }
     if (bucket === "lairIntro") {
-      lairIntro = cleanFoundryHtml(item.system && item.system.description && item.system.description.value);
+      lairIntro = cleanFoundryText(item.system && item.system.description && item.system.description.value);
       continue;
     }
     buckets[bucket].push(itemParagraph(item));
@@ -286,7 +269,13 @@ function buildTags(details) {
 // если это не похоже на существо Foundry (type "npc"/"character").
 export function mapFoundryMonsterJson(raw) {
   if (!raw || typeof raw !== "object") throw new Error("Файл не похож на JSON существа.");
-  if (raw.type && raw.type !== "npc" && raw.type !== "character") {
+  // "vehicle" (транспорт) пускаем тем же маппером, что и npc/character (см.
+  // internal/foundry/classify.go: actorTarget) — статблок корабля/повозки
+  // ложится в те же текстовые поля Monster. Полей, специфичных для
+  // транспорта (sys.abilities, CR), у него обычно нет — ниже они просто
+  // остаются на дефолтах (характеристики 10, CR "0"), это ожидаемо: ДМ
+  // сверяет цифры вручную, как и с остальными полями статблока.
+  if (raw.type && raw.type !== "npc" && raw.type !== "character" && raw.type !== "vehicle") {
     throw new Error(`Это не существо (type: "${raw.type}") — экспортируй карточку существа с TTG Club.`);
   }
   const name = (raw.name || "").trim();
@@ -331,7 +320,7 @@ export function mapFoundryMonsterJson(raw) {
       languages: buildLanguages(sys.traits),
       cr: crLabel(cr),
       proficiencyBonus: prof,
-      description: (details.biography && details.biography.value) || "",
+      description: cleanFoundryText(details.biography && details.biography.value),
       tags: buildTags(details),
     },
     buildAbilityBlocks(items, sys.resources)

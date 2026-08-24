@@ -20,6 +20,7 @@ import {
   fetchReferences, createReference, updateReference,
   fetchConditions, createCondition, updateCondition,
   fetchNotes, fetchNote, createNote, updateNote,
+  fetchJournal, fetchJournalEntry, createJournalEntry, updateJournalEntry,
 } from "../api.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
@@ -63,12 +64,57 @@ const TARGETS = [
 ];
 const TARGET_BY_ID = Object.fromEntries(TARGETS.map((t) => [t.id, t]));
 
+// NOTE_DESTINATIONS — куда класть журналы модуля. В Foundry весь сюжет
+// приключения лежит в JournalEntry, и у него два разумных адреса на столе:
+//   notes   — личная вики ДМ (как было всегда): текст приключения, врезки
+//             для Мастера, то, что игрокам видеть рано;
+//   journal — журнал стола (см. web/journal.html): то, чем ДМ будет
+//             делиться — раздаточные материалы, карты для игроков, хроника.
+// Различаются только четырьмя операциями над хранилищем, поэтому сам импорт
+// (importNotes) их не различает вовсе — получает готовый набор.
+//
+// Записи журнала заводятся ЗАКРЫТЫМИ (default: "none"): импорт приключения
+// не должен разом выложить игрокам всё, включая ответы. Открыть нужное — уже
+// осознанное действие ДМ в диалоге прав.
+const NOTE_DESTINATIONS = {
+  notes: {
+    id: "notes",
+    label: "Заметки ДМ",
+    fetchAll: fetchNotes,
+    fetchOne: fetchNote,
+    create: (note) => createNote(note.content, note.folder),
+    update: (id, content) => updateNote(id, content),
+  },
+  journal: {
+    id: "journal",
+    label: "Журнал стола",
+    fetchAll: fetchJournal,
+    fetchOne: fetchJournalEntry,
+    create: (note) => createJournalEntry({ content: note.content, folder: note.folder, def: "none" }),
+    update: (id, content) => updateJournalEntry(id, content),
+  },
+};
+
 // ==================== состояние ====================
 
 let pkg = null; // ответ /api/foundry/inspect
 let manifestUrl = "";
 const selectedPacks = new Set();
 const selectedTargets = new Set(TARGETS.map((t) => t.id));
+// notesToJournal — галочка «журналы → журнал стола» (см. NOTE_DESTINATIONS).
+// По умолчанию выключена: прежнее поведение — сюжет в заметки ДМ.
+let notesToJournal = false;
+
+function noteDestination() {
+  return notesToJournal ? NOTE_DESTINATIONS.journal : NOTE_DESTINATIONS.notes;
+}
+
+// targetLabel — подпись раздела в чипах пака и в отчёте. У журналов она
+// зависит от галочки: «Заметки ДМ: 4» или «Журнал стола: 4» — иначе отчёт
+// говорил бы не туда, куда всё поехало.
+function targetLabel(id) {
+  return id === "notes" ? noteDestination().label : TARGET_BY_ID[id].label;
+}
 let running = false;
 let cancelled = false;
 // packProgress — сколько паков уже позади из скольких; нужен importCards,
@@ -194,15 +240,45 @@ function renderPackage() {
 
 function renderTargets() {
   targetsEl.innerHTML = "";
+  // toJournalBox — подчинённая галочка «журналы → в журнал стола»; её
+  // доступность зависит от галочки самих журналов, поэтому держим ссылку и
+  // правим точечно. Перерисовывать весь список на каждое переключение
+  // нельзя: клик по одной галочке подменял бы DOM-узлы всех остальных.
+  let toJournalBox = null;
   for (const t of TARGETS) {
     const box = h("input", { type: "checkbox" });
     box.checked = selectedTargets.has(t.id);
     box.addEventListener("change", () => {
       if (box.checked) selectedTargets.add(t.id);
       else selectedTargets.delete(t.id);
+      if (t.id === "notes" && toJournalBox) toJournalBox.disabled = !box.checked;
       renderPacks(); // счётчики пака показывают только выбранные разделы
     });
-    targetsEl.appendChild(h("label", {}, [box, t.label]));
+    targetsEl.appendChild(h("label", {}, [box, t.id === "notes" ? "Журналы" : t.label]));
+
+    // Куда именно кладём журналы — подчинённая галочка сразу под своим
+    // разделом, а не отдельная настройка где-то в стороне: она осмысленна
+    // только когда журналы вообще импортируются.
+    if (t.id === "notes") {
+      toJournalBox = h("input", { type: "checkbox" });
+      toJournalBox.checked = notesToJournal;
+      toJournalBox.disabled = !selectedTargets.has("notes");
+      toJournalBox.addEventListener("change", () => {
+        notesToJournal = toJournalBox.checked;
+        renderPacks();
+      });
+      targetsEl.appendChild(
+        h(
+          "label",
+          {
+            class: "sub-target",
+            title:
+              "Иначе журналы модуля едут в личные заметки ДМ. В журнал они лягут закрытыми — откроешь игрокам те, что нужно",
+          },
+          [toJournalBox, "→ в журнал стола"]
+        )
+      );
+    }
   }
 }
 
@@ -220,7 +296,7 @@ function renderPacks() {
     const chips = h("div", { class: "chips" });
     for (const [target, count] of Object.entries(p.targets || {})) {
       if (target === "skipped" || !selectedTargets.has(target)) continue;
-      chips.appendChild(h("span", { class: "chip", text: `${TARGET_BY_ID[target].label}: ${count}` }));
+      chips.appendChild(h("span", { class: "chip", text: `${targetLabel(target)}: ${count}` }));
     }
     if (!chips.children.length && !p.error) {
       chips.appendChild(h("span", { class: "chip", text: "нечего переносить" }));
@@ -298,7 +374,7 @@ importBtn.addEventListener("click", async () => {
     for (const [target, count] of Object.entries(result.applied || {})) {
       if (!count) continue;
       total.applied += count;
-      log(`  ${TARGET_BY_ID[target].label}: ${count} (разложено сервером)`);
+      log(`  ${targetLabel(target)}: ${count} (разложено сервером)`);
     }
     if ((result.notes || []).length) {
       const stats = await importNotes(result.notes, p);
@@ -438,6 +514,17 @@ async function importCards(target, docs, pack) {
       }
     }
 
+    // Метка "из какого пакета" — единственное назначение: "Удалить модуль" в
+    // настройках (см. pages/dm.js: openFoundryUpdateWindow и
+    // internal/service/foundry.go: FoundryService.Delete), сама карточка это
+    // поле нигде не показывает. Проставляется здесь, ПОСЛЕ sameCard/
+    // resolveConflict выше, а не раньше: иначе она сама попала бы в
+    // сравнение "не изменилось ли" и превращала бы любую руками заведённую
+    // карточку, совпадающую с модулем по остальным полям, в «конфликт» на
+    // пустом месте. Перезаписывается при каждом импорте/обновлении карточки —
+    // если её потом перезаписал другой модуль, "своей" она считается уже у него.
+    card.foundryModuleId = pkg.id;
+
     try {
       if (action === "overwrite") {
         await target.updateOne(existing.id, Object.assign({}, existing, card));
@@ -504,12 +591,13 @@ function sameNoteText(a, b) {
 // importNotes заводит подготовленные сервером заметки, разбираясь с
 // совпадениями: одинаковую пропускаем молча, различающуюся — как скажет ДМ.
 async function importNotes(notes, pack) {
+  const dest = noteDestination();
   const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
   let index;
   try {
-    index = new Map((await fetchNotes()).map((n) => [noteKey(n.folder, n.title), n]));
+    index = new Map((await dest.fetchAll()).map((n) => [noteKey(n.folder, n.title), n]));
   } catch (err) {
-    log(`  Заметки ДМ: не удалось прочитать библиотеку — ${err.message}`);
+    log(`  ${dest.label}: не удалось прочитать библиотеку — ${err.message}`);
     stats.failed += notes.length;
     return stats;
   }
@@ -517,7 +605,7 @@ async function importNotes(notes, pack) {
   for (let i = 0; i < notes.length; i++) {
     if (cancelled) break;
     const note = notes[i];
-    setStatus(`${pack.label || pack.name} → Заметки ДМ: ${i + 1} из ${notes.length}…`, { busy: true });
+    setStatus(`${pack.label || pack.name} → ${dest.label}: ${i + 1} из ${notes.length}…`, { busy: true });
     setProgress((packProgress.done + (i + 1) / notes.length) / packProgress.total);
 
     const existing = index.get(noteKey(note.folder, note.title));
@@ -525,7 +613,7 @@ async function importNotes(notes, pack) {
     if (existing) {
       let current;
       try {
-        current = await fetchNote(existing.id);
+        current = await dest.fetchOne(existing.id);
       } catch (err) {
         stats.failed++;
         console.warn(`[${pack.name}] ${note.title}: ${err.message}`);
@@ -535,9 +623,9 @@ async function importNotes(notes, pack) {
         stats.skipped++;
         continue;
       }
-      action = await resolveConflict(TARGET_BY_ID.notes, {
+      action = await resolveConflict(dest, {
         title: note.title,
-        where: note.folder ? `папка «${note.folder}»` : "корень библиотеки",
+        where: note.folder ? `папка «${note.folder}»` : `корень: ${dest.label.toLowerCase()}`,
         existingInfo: `${(current.content || "").length} символов, изменена ${formatWhen(current.updatedAt)}`,
         incomingInfo: `${note.content.length} символов`,
       });
@@ -553,10 +641,10 @@ async function importNotes(notes, pack) {
 
     try {
       if (action === "overwrite") {
-        await updateNote(existing.id, note.content);
+        await dest.update(existing.id, note.content);
         stats.updated++;
       } else {
-        const created = await createNote(note.content, note.folder);
+        const created = await dest.create(note);
         // Дубликат кладём в индекс под тем же ключом только если его там
         // ещё нет: иначе следующая такая же заметка сравнивалась бы с
         // копией, а не с оригиналом.
@@ -571,7 +659,7 @@ async function importNotes(notes, pack) {
     }
   }
 
-  log(`  Заметки ДМ: ${statsLine(stats)} (из ${notes.length})`);
+  log(`  ${dest.label}: ${statsLine(stats)} (из ${notes.length})`);
   return stats;
 }
 
@@ -642,11 +730,17 @@ function formatWhen(iso) {
 }
 
 // notifySaved — те же сообщения, что шлёт отредактированная карточка:
-// открытые списки компендиума (catalog.js) на них перечитывают себя.
+// открытые списки компендиума (catalog.js) на них перечитывают себя. Плюс
+// "beacon:foundryImported" — им импорт сообщает о СЕБЕ, а не о карточках:
+// после него в мире появились новые заметки, сцены и сам пакет в списке
+// установленных, и открытые разделы левой панели ДМ (Заметки, Настройки)
+// должны перечитаться, а не висеть со старым списком до F5 (см.
+// pages/dm.js: refreshOpenPanel).
 function notifySaved() {
   const messages = ["beacon:monsterSaved", "beacon:spellSaved", "beacon:itemSaved", "beacon:referenceSaved", "beacon:conditionSaved"];
   const target = window.parent !== window ? window.parent : window;
   for (const type of messages) target.postMessage({ type }, location.origin);
+  target.postMessage({ type: "beacon:foundryImported" }, location.origin);
 }
 
 // ==================== закрыть / boot ====================
@@ -696,5 +790,16 @@ document.getElementById("closeBtn").onclick = () => {
     packsSection.style.display = "none";
     urlForm.style.display = "none";
     setStatus("Импорт пакетов Foundry доступен только ДМ.", true);
+    return;
+  }
+  // ?url= — окно открыто из настроек кнопкой "Обновить" у уже
+  // установленного пакета (см. pages/dm.js: openFoundryUpdateWindow):
+  // подставляем ссылку на манифест и сразу запускаем разведку, как будто ДМ
+  // сам вставил её и нажал "Проверить" — дальше тот же выбор паков/разделов,
+  // что и при первой установке.
+  const prefillURL = new URLSearchParams(location.search).get("url");
+  if (prefillURL) {
+    urlInput.value = prefillURL;
+    urlForm.requestSubmit();
   }
 })();

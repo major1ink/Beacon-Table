@@ -1,14 +1,15 @@
 // Package sqlite реализует repository.AccountRepository,
-// repository.CharacterRepository, repository.SessionRepository и
-// repository.PlaylistRepository поверх database/sql + modernc.org/sqlite.
-// Единственная точка правды о SQL-схеме и способе хранения — весь
-// остальной код (service, api) обращается к этим данным только через
-// интерфейсы пакета repository.
+// repository.CharacterRepository, repository.SessionRepository,
+// repository.PlaylistRepository и repository.FoundryModuleRepository поверх
+// database/sql + modernc.org/sqlite. Единственная точка правды о SQL-схеме и
+// способе хранения — весь остальной код (service, api) обращается к этим
+// данным только через интерфейсы пакета repository.
 //
 // Каждая сущность — отдельный тип (AccountStore, CharacterStore,
-// SessionStore, PlaylistStore), а не один Store на все четыре интерфейса:
-// у них пересекаются имена методов (Create/List/Delete), так что общий
-// приёмник их конфликтовал бы. Все они делят один *sql.DB, полученный из Open.
+// SessionStore, PlaylistStore, FoundryModuleStore), а не один Store на все
+// интерфейсы: у них пересекаются имена методов (Create/List/Delete), так что
+// общий приёмник их конфликтовал бы. Все они делят один *sql.DB, полученный
+// из Open.
 package sqlite
 
 import (
@@ -108,6 +109,20 @@ func Open(path string) (*sql.DB, error) {
 		`CREATE TABLE IF NOT EXISTS server_state (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
+		)`,
+		// foundry_modules — пакеты Foundry VTT, хотя бы раз импортированные в
+		// мир (см. domain.FoundryModule): раздел "Настройки" показывает по
+		// ним список и проверяет обновления по manifest_url. Ключ — (id,
+		// company_id): id пакета уникален внутри мира, но два разных мира
+		// вполне могут поставить один и тот же модуль независимо.
+		`CREATE TABLE IF NOT EXISTS foundry_modules (
+			id TEXT NOT NULL,
+			company_id TEXT NOT NULL DEFAULT '',
+			title TEXT NOT NULL,
+			version TEXT NOT NULL,
+			manifest_url TEXT NOT NULL,
+			imported_at TEXT NOT NULL,
+			PRIMARY KEY (id, company_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id)`,

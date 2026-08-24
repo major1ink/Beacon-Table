@@ -31,28 +31,13 @@ type RoomClient interface {
 	PlayerName() string
 }
 
-// RoomService — единственная "комната" стола: живая модель сцен, токенов,
-// стен, тумана и канала ДМ, плюс маршрутизация команд клиентов и
-// авторизация по роли. Реализация (*Room) — actor: всё состояние
-// принадлежит одной горутине run(), мутации идут только через каналы
-// join/leave/inbound, так что гонок на state нет без единого ручного мьютекса.
 type RoomService interface {
 	Join(c RoomClient)
 	Leave(c RoomClient)
-	// Dispatch кладёт разобранную команду в очередь на обработку run().
-	// Разбор сырых байт WS-сообщения в domain.ClientMsg — забота
-	// транспортного (api/ws) слоя, не этого.
 	Dispatch(c RoomClient, msg domain.ClientMsg)
-	// Shutdown синхронно сохраняет текущую сцену и завершает горутину run().
 	Shutdown()
-	// ImportScenes добавляет в библиотеку комнаты готовые сцены, собранные
-	// не игроком за столом, а импортом пакета Foundry (см.
-	// FoundryService.ImportPack): сцены со стенами/светом/токенами приезжают
-	// целиком, командой "add_wall" по одной стене такое не заводят.
-	// Возвращает, сколько сцен реально добавилось. Единственный вход в
-	// состояние комнаты не через WS — поэтому идёт через ту же горутину
-	// run(), а не трогает r.scenes снаружи.
 	ImportScenes(ctx context.Context, scenes []*domain.SceneState) (int, error)
+	NotifyJournalChanged(id string)
 }
 
 type inboundMsg struct {
@@ -104,8 +89,15 @@ type Room struct {
 	// команда клиента и авторизации по роли у неё нет — вызывающего
 	// (ДМ-only эндпоинт) проверил API-слой.
 	importScenes chan importScenesReq
-	dirty        bool            // есть хоть одна несохранённая мутация с последнего флаша
-	dirtyScenes  map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
+	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
+	// NotifyJournalChanged): свой канал по той же причине, что и
+	// importScenes — это не команда клиента и роль по ней не проверяется.
+	// Буферизованный и с неблокирующей отправкой: правка журнала не должна
+	// ждать занятую горутину комнаты (и уж тем более виснуть на уже
+	// остановленной).
+	journalChanged chan string
+	dirty          bool            // есть хоть одна несохранённая мутация с последнего флаша
+	dirtyScenes    map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
 	// combat — трекер инициативы всего стола (см. domain.CombatState), не
 	// привязан к конкретной сцене — переживает switch_scene. combatDirty —
@@ -172,6 +164,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		inbound:        make(chan inboundMsg, 32),
 		shutdown:       make(chan chan struct{}),
 		importScenes:   make(chan importScenesReq),
+		journalChanged: make(chan string, 32),
 		dirtyScenes:    make(map[string]bool),
 		combat:         combat,
 		hub:            hub,
@@ -278,6 +271,9 @@ func (r *Room) run() {
 				continue
 			case "roll_dice":
 				r.handleRollDice(im.from, im.msg) // эфемерно, не трогает state
+				continue
+			case "show_journal":
+				r.relayJournalShow(im.from, im.msg) // эфемерно, как fx: state не трогает
 				continue
 			case "move_own_token":
 				r.applyOwnTokenMove(im.from, im.msg) // сам шлёт broadcastAll при успехе
@@ -432,6 +428,9 @@ func (r *Room) run() {
 
 		case req := <-r.importScenes:
 			req.reply <- r.addScenes(req.scenes)
+
+		case id := <-r.journalChanged:
+			r.broadcastJournalChanged(id)
 
 		case <-ticker.C:
 			r.flushIfDirty()
@@ -774,6 +773,58 @@ func (r *Room) relayRoll(name, formula, label string, result domain.RollResult) 
 
 // relayFx — анимации в state не пишем: это одноразовое "проиграй эффект",
 // снапшот сцены им не разрастается со временем и не требует чистки.
+// relayJournalShow — фаундривское «Показать игрокам»: ДМ открывает запись
+// журнала (см. service.JournalService) сразу у всех за столом, не заставляя
+// каждого искать её в списке. Эфемерно, как relayFx: в state не пишется и в
+// snapshot не попадает — это событие «посмотрите сюда», а не свойство мира.
+//
+// Доступ при этом НЕ выдаётся: у кого прав на запись нет, тот получит на
+// открытии обычный 404 от /api/journal/{id} (см. JournalService.Get).
+// Поэтому шлём всем игрокам, а не только тем, кому положено, — сервер не
+// обязан здесь знать раздачу прав, а клиент и так не покажет чужого.
+// msg.ID — id записи, msg.Label — её заголовок (для уведомления).
+func (r *Room) relayJournalShow(from RoomClient, msg domain.ClientMsg) {
+	if msg.ID == "" {
+		return
+	}
+	payload := map[string]any{"type": "journal_shown", "id": msg.ID, "title": msg.Label}
+	sent := 0
+	for c := range r.clients {
+		if c.Role() == domain.RolePlayer {
+			c.Send(payload)
+			sent++
+		}
+	}
+	// Ответ отправителю: скольким игрокам реально открыли. Без него ДМ,
+	// сидящий за столом один, видел «открыто у игроков» — и не понимал, что
+	// показывать было некому (кнопка выглядела сломанной).
+	from.Send(map[string]any{"type": "journal_shown_ack", "id": msg.ID, "count": sent})
+}
+
+// NotifyJournalChanged — см. RoomService. Неблокирующая отправка: если
+// очередь переполнена (шквал правок) или комната уже остановлена, событие
+// просто теряется — это подсказка «перечитай список», а не состояние,
+// которое нельзя потерять: следующая же правка пришлёт её снова, а
+// открывающееся окно журнала и так читает список с сервера.
+func (r *Room) NotifyJournalChanged(id string) {
+	select {
+	case r.journalChanged <- id:
+	default:
+	}
+}
+
+// broadcastJournalChanged — уже внутри горутины run(). Шлём ДМ и игрокам
+// (TV журнала не открывает); что кому из этого реально видно, решает
+// JournalService, когда клиент придёт перечитывать список.
+func (r *Room) broadcastJournalChanged(id string) {
+	payload := map[string]any{"type": "journal_changed", "id": id}
+	for c := range r.clients {
+		if c.Role() != domain.RoleTV {
+			c.Send(payload)
+		}
+	}
+}
+
 func (r *Room) relayFx(msg domain.ClientMsg) {
 	payload := map[string]any{"type": "fx", "fx": msg}
 	for c := range r.clients {

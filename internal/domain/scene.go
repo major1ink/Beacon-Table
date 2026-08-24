@@ -232,12 +232,13 @@ type GridSettings struct {
 // дефолт (см. layers/note-markers.js), сервер размер не валидирует, как и
 // Token.Size.
 type NoteMarker struct {
-	ID     string  `json:"id"`
-	NoteID string  `json:"noteId"`
-	Label  string  `json:"label"`
-	X      float64 `json:"x"`
-	Y      float64 `json:"y"`
-	Size   float64 `json:"size,omitempty"`
+	ID      string  `json:"id"`
+	NoteID  string  `json:"noteId"`
+	Library string  `json:"library,omitempty"`
+	Label   string  `json:"label"`
+	X       float64 `json:"x"`
+	Y       float64 `json:"y"`
+	Size    float64 `json:"size,omitempty"`
 }
 
 // SceneState — состояние ОДНОЙ сцены: имя, фон, размер холста, туман войны,

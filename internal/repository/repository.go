@@ -8,6 +8,7 @@
 //   - sqlite    — Account/Character/Session/Playlist поверх database/sql (SQLite)
 //   - scenefile — Scene поверх файлов JSON, по одному на сцену
 //   - notefile  — Note поверх файлов .md, по одному на заметку
+//   - journalfile — JournalEntry поверх файлов .md с шапкой прав, по одному на запись
 //   - monsterfile — Monster поверх файлов .json, по одному на монстра
 //   - spellfile — Spell поверх файлов .json, по одному на заклинание
 //   - itemfile — Item поверх файлов .json, по одному на предмет
@@ -168,6 +169,40 @@ type NoteRepository interface {
 	RenameFolder(ctx context.Context, from, to string) error
 }
 
+// JournalRepository — журнал стола, файл-на-запись (см.
+// internal/repository/journalfile) — те же .md на диске, что и у
+// NoteRepository, но с шапкой: автор и раздача прав (domain.JournalEntry).
+// Права репозиторий только ХРАНИТ — решает по ним service.JournalService,
+// репозиторий отдаёт все записи подряд, кто бы ни спрашивал.
+type JournalRepository interface {
+	// List — метаданные всех записей (без Content, как NoteRepository.List).
+	List(ctx context.Context) ([]*domain.JournalEntry, error)
+	Get(ctx context.Context, id string) (*domain.JournalEntry, error)
+	// Create кладёт запись целиком (id/папка/текст/автор/права уже
+	// заполнены вызывающим).
+	Create(ctx context.Context, e *domain.JournalEntry) error
+	// Update меняет ТОЛЬКО текст, не трогая шапку; false — записи нет.
+	Update(ctx context.Context, id, content string) (bool, error)
+	// SetAccess меняет ТОЛЬКО раздачу прав, не трогая текст; false — записи
+	// нет. Отдельно от Update по той же причине, по какой у заметок отдельный
+	// Move: текст автосейвится по таймеру при наборе, и класть в тот же
+	// запрос ещё и права значило бы гонять их туда-сюда на каждое нажатие
+	// клавиши (а гонка двух окон — затирать только что выданный доступ).
+	SetAccess(ctx context.Context, id string, def domain.JournalAccess, access map[string]domain.JournalAccess) (bool, error)
+	// Move переносит запись в другую папку; false, если такой записи нет.
+	Move(ctx context.Context, id, folder string) (bool, error)
+	Delete(ctx context.Context, id string) error
+
+	// Folders — все папки журнала, включая пустые (см. NoteRepository.Folders).
+	Folders(ctx context.Context) ([]string, error)
+	CreateFolder(ctx context.Context, folder string) error
+	// DeleteFolder удаляет папку СО ВСЕМ содержимым — проверить, что
+	// удаляющему это вообще можно, обязан вызывающий (см.
+	// service.JournalService.DeleteFolder).
+	DeleteFolder(ctx context.Context, folder string) error
+	RenameFolder(ctx context.Context, from, to string) error
+}
+
 // MonsterRepository — библиотека карточек бестиария ДМ, файл-на-монстра (см.
 // internal/repository/monsterfile) — тот же принцип, что и NoteRepository,
 // но контент структурированный JSON (domain.Monster), а не markdown.
@@ -257,4 +292,24 @@ type AssetRepository interface {
 	// List) — реализация сама проверяет, что URL действительно указывает
 	// внутрь kind, и отклоняет всё остальное.
 	DeleteAsset(ctx context.Context, kind, url string) error
+}
+
+// FoundryModuleRepository — какие пакеты Foundry VTT (модули/системы) ДМ уже
+// импортировал в этот мир (см. domain.FoundryModule), для раздела
+// "Настройки": список установленного и проверка обновлений по сохранённой
+// ManifestURL (см. service.FoundryService.Installed/CheckUpdates).
+type FoundryModuleRepository interface {
+	// Upsert запоминает/обновляет пакет по m.ID — вызывается после каждого
+	// успешного импорта пака этого модуля (см. FoundryService.ImportPack), с
+	// той версией и ссылкой на манифест, что были использованы.
+	Upsert(ctx context.Context, m domain.FoundryModule) error
+	// List — все запомненные пакеты этого мира, новые сверху.
+	List(ctx context.Context) ([]*domain.FoundryModule, error)
+	// ByID — один пакет; domain.ErrNotFound, если такого не устанавливали
+	// (или уже удалили) в этом мире.
+	ByID(ctx context.Context, id string) (*domain.FoundryModule, error)
+	// Delete забывает пакет как установленный (см. FoundryService.Delete) —
+	// сами карточки/файлы, заведённые его импортом, это НЕ трогает, тем же
+	// разделением, что и у Upsert.
+	Delete(ctx context.Context, id string) error
 }
