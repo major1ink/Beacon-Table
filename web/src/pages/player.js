@@ -17,6 +17,7 @@ import {
 import { icon } from "../icons.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
 // БОКОВОЙ КОЛОНКЕ слева от карты (см. sheet-dock.js): за столом лист держат
@@ -120,11 +121,40 @@ let vtt = null;
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
   mountCompendiumMenu(compendiumPanel, { role: "player" });
 
+  // Журнал стола — та же страница, что и у ДМ (см. web/journal.html):
+  // игрок пишет туда свои заметки и сам решает, кому их видно и кому можно
+  // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
+  // выезжающей плашке бокового меню.
+  vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow);
+
   document.addEventListener("vtt:authFailed", () => {
     document.getElementById("authFailedOverlay").classList.add("open");
     setTimeout(() => (location.href = "/"), 1500);
   });
 })();
+
+// openJournalWindow — плавающее окно журнала; entryId открывает его сразу
+// на нужной записи (так работает «Показать игрокам» со стороны ДМ, см.
+// vtt:journalShown ниже).
+function openJournalWindow(entryId) {
+  openFloatingWindow({
+    key: "journal",
+    title: "Журнал стола",
+    url: "/journal.html" + (entryId ? "?id=" + encodeURIComponent(entryId) : ""),
+    // Показ конкретной записи переводит на неё и уже открытое окно журнала
+    // (см. navigate в floating-window.js); клик по иконке в меню — просто
+    // поднимает окно, ничего не перезагружая.
+    navigate: !!entryId,
+    width: 900,
+    height: 640,
+    popoutFeatures: "width=900,height=640",
+  });
+}
+
+// «Показать игрокам»: ДМ открыл запись журнала у всех за столом (см.
+// relayJournalShow в internal/service/room.go). Доступ это не выдаёт — если
+// записи игроку не открывали, окно покажет обычную ошибку «не найдено».
+document.addEventListener("vtt:journalShown", (e) => openJournalWindow(e.detail.id));
 
 document.getElementById("logoutBtn").onclick = async () => {
   await apiLogout();
@@ -274,13 +304,13 @@ function startEditChar(c) {
 }
 
 async function deleteChar(c) {
-  if (!confirm(`Удалить персонажа «${c.name}»?`)) return;
+  if (!(await showConfirm(`Удалить персонажа «${c.name}»?`, { title: "Удалить персонажа", okLabel: "Удалить", danger: true }))) return;
   try {
     await deleteCharacterApi(c.id);
     if (editingCharId === c.id) resetCharForm();
     await renderChars();
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
   }
 }
 

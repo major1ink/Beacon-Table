@@ -33,9 +33,9 @@ export function createSideMenu(ctx) {
   // по умолчанию — нужно панели "Справочник" (дереву категорий тесно).
   // opts.sticky — см. openPanelSticky выше; панель получает .close() — тот
   // же closeOpen, вызывающий код может дать свою кнопку ✕.
-  function addIcon(icon, title, opts) {
-    const wrap = document.createElement("div");
-    wrap.style.cssText = "position:relative;";
+  // iconButton — общая «стеклянная» круглая кнопка колонки; ею пользуются и
+  // addIcon (кнопка + своя панель), и addButton (кнопка без панели).
+  function iconButton(icon, title) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.innerHTML = icon;
@@ -45,6 +45,27 @@ export function createSideMenu(ctx) {
       "background:var(--glass-bg,rgba(26,26,34,0.74));backdrop-filter:var(--glass-blur,blur(20px));" +
       "-webkit-backdrop-filter:var(--glass-blur,blur(20px));color:#eee;cursor:pointer;" +
       "display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-soft,0 4px 16px rgba(0,0,0,0.35));";
+    return btn;
+  }
+
+  // addButton — иконка колонки БЕЗ панели: клик просто зовёт onClick (журнал
+  // стола, см. pages/player.js, открывается плавающим окном, а не выезжающей
+  // плашкой). Открытую панель при этом закрываем — как и переход к любой
+  // другой иконке колонки.
+  function addButton(icon, title, onClick) {
+    const btn = iconButton(icon, title);
+    btn.onclick = () => {
+      closeOpen();
+      onClick();
+    };
+    column.appendChild(btn);
+    return btn;
+  }
+
+  function addIcon(icon, title, opts) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "position:relative;";
+    const btn = iconButton(icon, title);
     const panel = document.createElement("div");
     panel.style.cssText =
       "display:none;flex-direction:column;gap:8px;position:absolute;right:calc(100% + 8px);top:50%;" +
@@ -92,5 +113,5 @@ export function createSideMenu(ctx) {
   window.addEventListener("resize", position);
   new ResizeObserver(position).observe(ctx.canvas);
 
-  return { addIcon };
+  return { addIcon, addButton };
 }

@@ -25,6 +25,7 @@ import (
 	"beacon-table/internal/repository"
 	"beacon-table/internal/repository/conditionfile"
 	"beacon-table/internal/repository/itemfile"
+	"beacon-table/internal/repository/journalfile"
 	"beacon-table/internal/repository/localfs"
 	"beacon-table/internal/repository/monsterfile"
 	"beacon-table/internal/repository/notefile"
@@ -52,13 +53,11 @@ type ActiveWorld struct {
 	References service.ReferenceService
 	Conditions service.ConditionService
 	Notes      service.NoteService
-	Playlists  service.PlaylistService
-	Assets     service.AssetService
-	// Foundry — импорт компендиумов из пакетов Foundry VTT (см.
-	// service.FoundryService). Собран поверх Assets/Room/Playlists/Notes
-	// этого же мира: импорт кладёт файлы в его библиотеку загрузок и заводит
-	// сцены в его комнате, поэтому пересобирается вместе со всем остальным
-	// при переключении мира.
+	
+	Journal   service.JournalService
+	Playlists service.PlaylistService
+	Assets    service.AssetService
+	
 	Foundry service.FoundryService
 }
 
@@ -230,6 +229,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
 	noteRepo := notefile.NewStore(filepath.Join(dataRoot, "notes"))
+	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
 	monsterRepo := monsterfile.NewCatalog(
 		monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")),
 		monsterfile.NewSystemStore(m.systemFS, "systemdata/bestiary/"+company.System),
@@ -275,6 +275,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	}
 
 	notes := service.NewNoteService(noteRepo)
+	journal := service.NewJournalService(journalRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
 	assets := service.NewAssetService(assetRepo)
 	bestiary := service.NewBestiaryService(monsterRepo)
@@ -294,15 +295,9 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		References: references,
 		Conditions: conditions,
 		Notes:      notes,
+		Journal:    journal,
 		Playlists:  playlists,
 		Assets:     assets,
-		// Кэш скачанных модулей — в данных этой компании: файлы там
-		// временные (чистятся по TTL, см. foundry.Cache), но лежать рядом с
-		// остальными данными мира им уместнее, чем в системном temp, который
-		// на некоторых хостингах живёт в оперативной памяти. bestiary/spells/
-		// items/references/conditions — только для "Удалить модуль" (см.
-		// service.FoundryService.Delete): найти и снести карточки этого мира,
-		// помеченные id пакета.
 		Foundry: service.NewFoundryService(
 			filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists, foundryModuleRepo,
 			bestiary, spells, items, references, conditions,

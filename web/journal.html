@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>Beacon Table — Журнал</title>
+  <link rel="stylesheet" href="/src/styles/theme.css" />
+  <style>
+    /* Журнал стола: слева каталог (папки + записи, как в Foundry), справа
+       открытая запись. Страница живёт плавающим окном поверх канваса (см.
+       floating-window.js) и у ДМ, и у игрока — отсюда две колонки внутри
+       одного окна, а не панель в рейле. */
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text); font-size: 13px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button { cursor: pointer; padding: 7px 12px; border: none; border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; }
+    button:hover { background: var(--surface-hover); }
+    button:disabled { opacity: .45; cursor: default; }
+    .icon-btn {
+      width: 28px; height: 28px; padding: 0; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+      background: none; border-radius: 8px; color: var(--text-dim);
+    }
+    .icon-btn:hover { background: var(--surface-hover); color: var(--text); }
+    .icon-btn.active { background: var(--accent-bg); color: var(--accent); }
+    .icon-btn.danger:hover { background: var(--danger); color: var(--text); }
+
+    #app { display: flex; height: 100%; }
+
+    /* ---- каталог ---- */
+    #dir {
+      flex: 0 0 244px; min-width: 180px; display: flex; flex-direction: column;
+      border-right: 1px solid var(--border); background: var(--panel-bg);
+    }
+    .dir-head { flex: 0 0 auto; padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 8px; }
+    .search-row { position: relative; display: flex; align-items: center; }
+    .search-row svg { position: absolute; left: 9px; opacity: .45; pointer-events: none; }
+    #search {
+      width: 100%; box-sizing: border-box; padding: 7px 10px 7px 30px; font: inherit;
+      background: var(--surface); border: 1px solid transparent; border-radius: 8px; color: var(--text);
+    }
+    #search:focus { outline: none; border-color: var(--accent); }
+    .filters { display: flex; gap: 4px; flex-wrap: wrap; }
+    .filter-chip {
+      padding: 4px 9px; border-radius: var(--radius-pill); background: var(--surface);
+      font-size: 11px; color: var(--text-dim);
+    }
+    .filter-chip.active { background: var(--accent-bg); color: var(--accent); }
+
+    #tree { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 6px 10px; }
+    #tree .hint { padding: 8px 6px; opacity: .5; font-size: 12px; }
+
+    .folder-row, .entry-row, .root-row {
+      display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+      padding: 5px 8px; border-radius: 8px; background: none; font-size: 12.5px;
+    }
+    .root-row { color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; font-weight: 600; }
+    .root-row:hover, .folder-row:hover { background: var(--surface); }
+    .folder-row.current, .root-row.current { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+    .folder-chevron { display: flex; flex: 0 0 auto; opacity: .65; transition: transform .12s ease; }
+    .folder-row.open .folder-chevron { transform: rotate(90deg); }
+    .folder-icon { display: flex; flex: 0 0 auto; opacity: .75; color: var(--gold); }
+    .folder-name { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-count { flex: 0 0 auto; margin-right: auto; font-size: 10.5px; font-weight: 400; opacity: .45; }
+    .folder-actions { flex: 0 0 auto; display: flex; gap: 1px; visibility: hidden; }
+    .folder-row:hover .folder-actions, .folder-row:focus-within .folder-actions { visibility: visible; }
+    .folder-actions .icon-btn { width: 22px; height: 22px; border-radius: 6px; }
+
+    .entry-row { color: var(--text-dim); }
+    .entry-row:hover { background: var(--accent-bg); color: var(--text); }
+    .entry-row.current { background: var(--accent-bg); color: var(--text); }
+    .entry-row-icon { display: flex; flex: 0 0 auto; opacity: .5; }
+    .entry-row-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .entry-row-owner { flex: 0 0 auto; font-size: 10.5px; opacity: .5; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* значок доступа у строки — «общая» / «только название» / «личная» */
+    .acc-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); }
+    .acc-dot.shared { background: var(--green-bright); }
+    .acc-dot.limited { background: var(--amber); }
+    .acc-dot.private { background: transparent; box-shadow: inset 0 0 0 1px var(--text-dim); }
+
+    .dir-foot { flex: 0 0 auto; display: flex; gap: 4px; padding: 8px 10px; border-top: 1px solid var(--border); }
+    .dir-foot button { flex: 1 1 auto; padding: 7px 8px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 5px; }
+    #newEntryBtn { background: var(--accent); }
+    #newEntryBtn:hover { background: var(--accent-hover); }
+    #newSharedBtn { background: var(--green); }
+    #newSharedBtn:hover { background: var(--green-hover); }
+    .dir-foot .icon-btn { flex: 0 0 auto; width: 32px; background: var(--surface); }
+
+    /* ---- открытая запись ---- */
+    #pane { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+    #emptyHint { margin: auto; padding: 24px; opacity: .5; text-align: center; max-width: 320px; line-height: 1.6; }
+    #entryView { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+
+    .entry-head {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+      padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--panel-bg);
+    }
+    #entryTitle { flex: 1 1 auto; min-width: 20px; font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge {
+      flex: 0 0 auto; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 10.5px; font-weight: 600;
+      background: var(--surface); color: var(--text-dim);
+    }
+    .badge.shared { background: rgba(31, 107, 58, .3); color: var(--green-bright); }
+    .badge.readonly { background: rgba(165, 115, 15, .25); color: #e0b055; }
+    #showBtn { padding: 5px 10px; font-size: 12px; display: none; align-items: center; gap: 5px; }
+
+    .entry-sub {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 11.5px; color: var(--text-dim);
+    }
+    .entry-sub select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+      color: var(--text); font: inherit; padding: 3px 6px; max-width: 180px;
+    }
+    .entry-sub select:focus { outline: none; border-color: var(--accent); }
+    .entry-sub label { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+    #scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px 20px 40px; }
+    #editWrap { display: none; flex-direction: column; gap: 8px; height: 100%; box-sizing: border-box; }
+    #editArea {
+      flex: 1 1 auto; min-height: 320px; width: 100%; box-sizing: border-box; resize: none;
+      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+      padding: 12px 14px; font: 13px/1.6 "Cascadia Code", Consolas, monospace;
+    }
+    #editArea:focus { outline: none; border-color: var(--accent); }
+    #msg { flex: 0 0 auto; min-height: 16px; padding: 0 12px 8px; font-size: 12px; color: #e74c3c; }
+    #msg.ok { color: var(--green-bright); }
+
+    /* панель форматирования (см. web/src/notes/toolbar.js) */
+    .note-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+    .note-toolbar-group { display: flex; gap: 2px; background: var(--surface); border-radius: 8px; padding: 3px; }
+    .note-toolbar-btn {
+      min-width: 28px; height: 28px; padding: 0 7px; background: none; border-radius: 6px;
+      font-size: 12.5px; line-height: 1; color: var(--text-dim);
+    }
+    .note-toolbar-btn:hover { background: var(--surface-hover); color: var(--text); }
+    .note-toolbar-btn.tb-bold { font-weight: 700; }
+    .note-toolbar-btn.tb-italic { font-style: italic; }
+    .note-toolbar-btn.tb-strike { text-decoration: line-through; }
+    .note-toolbar-file-input { display: none; }
+
+    /* рендер markdown — те же правила, что в окне заметки ДМ */
+    .note-render { font-size: 14.5px; line-height: 1.7; overflow-wrap: break-word; max-width: 780px; }
+    .note-render:empty::before { content: "Пусто — нажми ✎, чтобы начать писать."; opacity: .45; }
+    .note-render h1, .note-render h2, .note-render h3 { margin: .8em 0 .35em; line-height: 1.3; }
+    .note-render h1:first-child, .note-render h2:first-child, .note-render h3:first-child { margin-top: 0; }
+    .note-render h1 { font-size: 1.6em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+    .note-render h2 { font-size: 1.3em; }
+    .note-render h3 { font-size: 1.12em; opacity: .9; }
+    .note-render p { margin: .6em 0; }
+    .note-render a { color: var(--accent); text-decoration: none; }
+    .note-render a:hover { text-decoration: underline; }
+    .note-render code { background: var(--surface); border-radius: 4px; padding: 1px 6px; font-size: .88em; }
+    .note-render pre { background: var(--surface); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+    .note-render pre code { background: none; padding: 0; }
+    .note-render blockquote { margin: .6em 0; padding: 2px 14px; border-left: 3px solid var(--accent); opacity: .85; }
+    .note-render ul, .note-render ol { margin: .4em 0; padding-left: 1.6em; }
+    .note-render img { max-width: 100%; border-radius: 6px; }
+    .note-render hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+    .note-render table { border-collapse: collapse; }
+    .note-render th, .note-render td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+    .note-render th { background: var(--surface); }
+
+    /* ---- диалог прав (фаундривское "Configure Ownership") ---- */
+    #accessOverlay {
+      display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .55);
+      align-items: center; justify-content: center; padding: 16px;
+    }
+    #accessModal {
+      width: min(460px, 100%); max-height: 100%; display: flex; flex-direction: column;
+      background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-float); overflow: hidden;
+    }
+    #accessModal h2 {
+      margin: 0; padding: 12px 14px; font-size: 14px; display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    #accessModal h2 span { flex: 1 1 auto; }
+    #accessBody { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .access-row { display: flex; align-items: center; gap: 10px; }
+    .access-row .who { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .access-row .who small { display: block; font-size: 10.5px; opacity: .5; }
+    .access-row select {
+      flex: 0 0 auto; width: 168px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font: inherit; padding: 5px 7px;
+    }
+    .access-row select:focus { outline: none; border-color: var(--accent); }
+    .access-divider { border-top: 1px solid var(--border); margin: 2px 0; }
+    .access-note { font-size: 11.5px; opacity: .6; line-height: 1.5; }
+    #accessFoot { flex: 0 0 auto; display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); }
+    #accessSaveBtn { background: var(--green); }
+    #accessSaveBtn:hover { background: var(--green-hover); }
+    #accessMsg { flex: 1 1 auto; align-self: center; font-size: 12px; color: #e74c3c; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="dir">
+      <div class="dir-head">
+        <div class="search-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
+          <input type="text" id="search" placeholder="Поиск по журналу…" />
+        </div>
+        <div class="filters" id="filters">
+          <button type="button" class="filter-chip active" data-filter="all">Все</button>
+          <button type="button" class="filter-chip" data-filter="shared">Общие</button>
+          <button type="button" class="filter-chip" data-filter="mine">Мои</button>
+          <button type="button" class="filter-chip" data-filter="others">Со мной</button>
+        </div>
+      </div>
+      <div id="tree"></div>
+      <div class="dir-foot">
+        <button id="newEntryBtn" title="Новая личная запись — видна только тебе и ДМ, пока не откроешь"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Запись</button>
+        <button id="newSharedBtn" title="Новая запись сразу в общий журнал — её прочитает весь стол"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg> В общий</button>
+        <button id="newFolderBtn" class="icon-btn" title="Новая папка"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2.5h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/><line x1="12" y1="10.5" x2="12" y2="16"/><line x1="9.2" y1="13.2" x2="14.8" y2="13.2"/></svg></button>
+      </div>
+    </aside>
+
+    <main id="pane">
+      <div id="emptyHint">Журнал стола. Выбери запись слева — или заведи свою: личную (её увидит только ДМ) либо сразу общую, для всего стола.</div>
+      <div id="entryView">
+        <header class="entry-head">
+          <span id="entryTitle"></span>
+          <span class="badge" id="entryBadge" style="display:none"></span>
+          <button id="showBtn" title="Открыть эту запись у всех игроков за столом"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg> Показать</button>
+          <button id="accessBtn" class="icon-btn" title="Кому видно и кому можно править"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></button>
+          <button id="editBtn" class="icon-btn" title="Редактировать"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/></svg></button>
+          <button id="deleteBtn" class="icon-btn danger" title="Удалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/></svg></button>
+        </header>
+        <div class="entry-sub">
+          <span id="entryOwner"></span>
+          <span id="entryUpdated"></span>
+          <label id="folderPicker">Папка <select id="folderSelect"></select></label>
+        </div>
+        <div id="scroll">
+          <div id="render" class="note-render"></div>
+          <div id="editWrap">
+            <div id="toolbar" class="note-toolbar"></div>
+            <textarea id="editArea" placeholder="# Заголовок&#10;&#10;markdown, [[Другая запись]] — ссылка внутри журнала…"></textarea>
+          </div>
+        </div>
+        <div id="msg"></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="accessOverlay">
+    <div id="accessModal">
+      <h2><span>Права доступа</span><button id="accessCloseBtn" class="icon-btn" title="Закрыть"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></h2>
+      <div id="accessBody"></div>
+      <div id="accessFoot">
+        <span id="accessMsg"></span>
+        <button id="accessCancelBtn" type="button">Отмена</button>
+        <button id="accessSaveBtn" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/pages/journal.js"></script>
+</body>
+</html>

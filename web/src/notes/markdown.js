@@ -164,7 +164,7 @@ export function renderNoteHtml(rawMarkdown) {
 // ссылки (см. resolveWikiTarget); можно не передавать — тогда всё
 // резолвится от корня. onOpen(id) — нашли существующую заметку;
 // onCreateMissing(title, folder) — не нашли, вызывающий сам решает,
-// создавать ли (обычно после confirm()).
+// создавать ли (обычно после подтверждения, см. modal.js: showConfirm).
 export function wireWikiLinks(containerEl, getNotesList, { onOpen, onCreateMissing, getFolder }) {
   containerEl.addEventListener("click", (e) => {
     const a = e.target.closest('a[href^="wikilink:"]');

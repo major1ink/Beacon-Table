@@ -5,6 +5,7 @@
 // (WS "loot_take_item") — общий рендер списка/степпера не дублируется между
 // pages/dm.js и pages/player.js (см. план фичи).
 import { icon } from "./icons.js";
+import { showAlert } from "./modal.js";
 
 // showLootTakeModal(opts) — создаёт оверлей поверх всей страницы, возвращает
 // {close, update(entries)} для вызывающей стороны (например, обновить список
@@ -118,7 +119,7 @@ export function showLootTakeModal({ title, entries, characters, onTake }) {
           })
           .catch((err) => {
             takeBtn.disabled = false;
-            alert("Не удалось забрать: " + err.message);
+            showAlert("Не удалось забрать: " + err.message);
           });
       };
 

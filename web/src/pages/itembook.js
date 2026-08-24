@@ -15,6 +15,7 @@ import { mapFoundryItemJson } from "../item-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 // ==================== state ====================
 
@@ -125,7 +126,7 @@ function renderEditView(root) {
       scheduleSave();
       renderApp();
     } catch (err) {
-      alert("Не удалось загрузить иконку: " + err.message);
+      showAlert("Не удалось загрузить иконку: " + err.message);
     }
   });
   root.appendChild(
@@ -448,7 +449,7 @@ cloneBtn.onclick = async () => {
     }
     location.href = `/itembook.html?id=${created.id}&edit=1`;
   } catch (err) {
-    alert("Не удалось клонировать: " + err.message);
+    showAlert("Не удалось клонировать: " + err.message);
   } finally {
     cloneBtn.disabled = false;
   }
@@ -461,7 +462,7 @@ cloneBtn.onclick = async () => {
 // которым сохранение сообщает о себе панели "Предметы" (см. doSave).
 const deleteBtn = document.getElementById("deleteBtn");
 deleteBtn.onclick = async () => {
-  if (!confirm(`Удалить «${item.name || "Без имени"}» из библиотеки?`)) return;
+  if (!(await showConfirm(`Удалить «${item.name || "Без имени"}» из библиотеки?`, { title: "Удалить предмет", okLabel: "Удалить", danger: true }))) return;
   deleteBtn.disabled = true;
   try {
     await deleteItem(itemId);
@@ -472,7 +473,7 @@ deleteBtn.onclick = async () => {
       window.close();
     }
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
     deleteBtn.disabled = false;
   }
 };

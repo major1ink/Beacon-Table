@@ -10,6 +10,7 @@ import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 const titleBar = document.getElementById("noteTitleBar");
 const editToggleBtn = document.getElementById("editToggleBtn");
@@ -128,13 +129,13 @@ wireWikiLinks(body, () => notesList, {
   onOpen: (id) => loadNote(id),
   onCreateMissing: async (title, folder) => {
     const where = folder ? ` в папке «${folder}»` : " в корне библиотеки";
-    if (!confirm(`Заметки «${title}» не существует. Создать${where}?`)) return;
+    if (!(await showConfirm(`Заметки «${title}» не существует. Создать её${where}?`, { title: "Новая заметка", okLabel: "Создать" }))) return;
     try {
       const n = await createNote(`# ${title}\n\n`, folder);
       notifyHost("beacon:noteSaved", n.id);
       await loadNote(n.id, { edit: true });
     } catch (err) {
-      alert("Не удалось создать заметку: " + err.message);
+      showAlert("Не удалось создать заметку: " + err.message);
     }
   },
 });
@@ -169,7 +170,7 @@ saveBtn.onclick = async () => {
 
 deleteBtn.onclick = async () => {
   if (!note) return;
-  if (!confirm(`Удалить заметку «${note.title}»? Это необратимо.`)) return;
+  if (!(await showConfirm(`Удалить заметку «${note.title}»?`, { title: "Удалить заметку", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
   try {
     await deleteNote(note.id);
     notifyHost("beacon:noteDeleted", note.id);
@@ -185,7 +186,7 @@ deleteBtn.onclick = async () => {
       window.close(); // если окно не открыто скриптом (напрямую по URL) — close() просто не сработает, это не ошибка
     }
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
   }
 };
 

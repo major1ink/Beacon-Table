@@ -87,13 +87,24 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/notes/{id}/folder", a.handleNoteMove)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.handleNoteDelete)
 
-	// Папки библиотеки заметок (domain.Note.Folder) — настоящие подпапки на
-	// диске, см. internal/repository/notefile. Тот же набор операций и та же
-	// форма эндпоинтов, что у папок библиотеки ассетов ниже.
 	mux.HandleFunc("GET /api/note-folders", a.handleNoteFoldersList)
 	mux.HandleFunc("POST /api/note-folders", a.handleNoteFolderCreate)
 	mux.HandleFunc("PUT /api/note-folders", a.handleNoteFolderRename)
 	mux.HandleFunc("DELETE /api/note-folders", a.handleNoteFolderDelete)
+
+	mux.HandleFunc("GET /api/journal", a.handleJournalList)
+	mux.HandleFunc("POST /api/journal", a.handleJournalCreate)
+	mux.HandleFunc("GET /api/journal/members", a.handleJournalMembers)
+	mux.HandleFunc("GET /api/journal/{id}", a.handleJournalGet)
+	mux.HandleFunc("PUT /api/journal/{id}", a.handleJournalUpdate)
+	mux.HandleFunc("PUT /api/journal/{id}/access", a.handleJournalAccess)
+	mux.HandleFunc("PUT /api/journal/{id}/folder", a.handleJournalMove)
+	mux.HandleFunc("DELETE /api/journal/{id}", a.handleJournalDelete)
+
+	mux.HandleFunc("GET /api/journal-folders", a.handleJournalFoldersList)
+	mux.HandleFunc("POST /api/journal-folders", a.handleJournalFolderCreate)
+	mux.HandleFunc("PUT /api/journal-folders", a.handleJournalFolderRename)
+	mux.HandleFunc("DELETE /api/journal-folders", a.handleJournalFolderDelete)
 
 	mux.HandleFunc("GET /api/bestiary", a.handleBestiaryList)
 	mux.HandleFunc("POST /api/bestiary", a.handleMonsterCreate)

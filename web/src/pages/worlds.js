@@ -4,6 +4,7 @@
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
 import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany } from "../api.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 const listEl = document.getElementById("list");
 const createForm = document.getElementById("createForm");
@@ -64,7 +65,7 @@ async function render() {
         await launchCompany(btn.dataset.id);
         location.href = "/dm.html";
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
         btn.disabled = false;
         btn.textContent = "Запустить";
       }
@@ -77,12 +78,12 @@ async function render() {
   });
   listEl.querySelectorAll(".delete-btn").forEach((btn) => {
     btn.onclick = async () => {
-      if (!confirm("Удалить этот мир из списка? Файлы на диске не трогаются.")) return;
+      if (!(await showConfirm("Удалить этот мир из списка?", { title: "Удалить мир", okLabel: "Удалить", danger: true, hint: "Файлы на диске не трогаются." }))) return;
       try {
         await deleteCompany(btn.dataset.id);
         render();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
   });

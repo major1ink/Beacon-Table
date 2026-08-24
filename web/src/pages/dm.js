@@ -48,6 +48,7 @@ import {
 } from "../api.js";
 import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
+import { showAlert, showConfirm, showPrompt } from "../modal.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -104,6 +105,21 @@ document.getElementById("logoutBtn").onclick = async () => {
 };
 // worldsBtn — назад на экран выбора мира (worlds.html), не разлогиниваясь —
 // переключиться на другой мир или создать новый (см. web/src/pages/worlds.js).
+// Журнал стола — плавающее окно, а не панель рейла: в него пишут и игроки
+// (см. web/journal.html), у них он открывается ровно тем же окном из
+// бокового меню (pages/player.js), и держать две реализации одного журнала
+// незачем.
+document.getElementById("journalBtn").onclick = () => {
+  openFloatingWindow({
+    key: "journal",
+    title: "Журнал стола",
+    url: "/journal.html",
+    width: 900,
+    height: 640,
+    popoutFeatures: "width=900,height=640",
+  });
+};
+
 document.getElementById("worldsBtn").onclick = () => {
   location.href = "/worlds.html";
 };
@@ -235,13 +251,13 @@ function renderAssetsGrid() {
     delBtn.innerHTML = icon("trash", { size: 12 });
     delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Удалить папку «${assetFolderName(f.path)}» со всем содержимым?`)) return;
+      if (!(await showConfirm(`Удалить папку «${assetFolderName(f.path)}» со всем содержимым?`, { title: "Удалить папку", okLabel: "Удалить", danger: true }))) return;
       try {
         await deleteAssetFolder(ASSET_KIND, f.path);
         await refreshLibrary();
         renderAssetsGrid();
       } catch (err) {
-        alert("Не удалось удалить папку: " + err.message);
+        showAlert("Не удалось удалить папку: " + err.message);
       }
     };
     tile.appendChild(delBtn);
@@ -279,13 +295,13 @@ function renderAssetsGrid() {
     delBtn.innerHTML = icon("trash", { size: 12 });
     delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Удалить «${a.name}» из библиотеки?`)) return;
+      if (!(await showConfirm(`Удалить «${a.name}» из библиотеки?`, { title: "Удалить файл", okLabel: "Удалить", danger: true }))) return;
       try {
         await deleteAsset(ASSET_KIND, a.url);
         await refreshLibrary();
         renderAssetsGrid();
       } catch (err) {
-        alert("Не удалось удалить ассет: " + err.message);
+        showAlert("Не удалось удалить ассет: " + err.message);
       }
     };
     tile.appendChild(delBtn);
@@ -295,7 +311,7 @@ function renderAssetsGrid() {
 onPanelOpen("assets", renderAssetsGrid);
 
 document.getElementById("assetsNewFolderBtn").onclick = async () => {
-  const name = prompt("Название новой папки:");
+  const name = await showPrompt("Название папки:", { title: "Новая папка", okLabel: "Создать" });
   if (!name || !name.trim()) return;
   const path = (currentAssetFolder ? currentAssetFolder + "/" : "") + name.trim();
   try {
@@ -303,7 +319,7 @@ document.getElementById("assetsNewFolderBtn").onclick = async () => {
     await refreshLibrary();
     renderAssetsGrid();
   } catch (err) {
-    alert("Не удалось создать папку: " + err.message);
+    showAlert("Не удалось создать папку: " + err.message);
   }
 };
 
@@ -315,7 +331,7 @@ document.getElementById("assetUpload").onchange = async (e) => {
       await uploadFile(file, ASSET_KIND, currentAssetFolder);
     }
   } catch (err) {
-    alert("Не удалось загрузить файл: " + err.message);
+    showAlert("Не удалось загрузить файл: " + err.message);
   } finally {
     e.target.value = "";
     await refreshLibrary();
@@ -693,7 +709,7 @@ noteMarkerResizeBtn.onclick = () => {
   if (!menuNoteMarkerId) return;
   document.dispatchEvent(new CustomEvent("vtt:armNoteMarkerResize", { detail: { id: menuNoteMarkerId } }));
   closeNoteMarkerMenu();
-  alert("Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.");
+  showAlert("Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер значка" });
 };
 
 noteMarkerDeleteBtn.onclick = () => {
@@ -829,7 +845,7 @@ tokenMenuLootBtn.onclick = async () => {
   try {
     chars = await fetchAdminCharacters();
   } catch (err) {
-    alert("Не удалось загрузить список персонажей: " + err.message);
+    showAlert("Не удалось загрузить список персонажей: " + err.message);
     return;
   }
   const characters = chars.map((c) => ({ id: c.id, name: c.accountUsername ? `${c.name} (${c.accountUsername})` : c.name }));
@@ -982,13 +998,17 @@ async function renderAccounts() {
     const pwBtn = document.createElement("button");
     pwBtn.textContent = "Сменить пароль";
     pwBtn.onclick = async () => {
-      const pw = prompt(`Новый пароль для «${a.username}» (минимум 6 символов):`);
+      const pw = await showPrompt(`Новый пароль для «${a.username}»:`, {
+        title: "Сменить пароль",
+        okLabel: "Сменить",
+        hint: "Минимум 6 символов. Старые сессии этого аккаунта будут разлогинены.",
+      });
       if (!pw) return;
       try {
         await setAdminAccountPassword(a.id, pw);
-        alert("Пароль изменён, старые сессии этого аккаунта разлогинены.");
+        showAlert("Пароль изменён, старые сессии этого аккаунта разлогинены.");
       } catch (err) {
-        alert("Не удалось сменить пароль: " + err.message);
+        showAlert("Не удалось сменить пароль: " + err.message);
       }
     };
     actions.appendChild(pwBtn);
@@ -996,13 +1016,13 @@ async function renderAccounts() {
     delBtn.className = "danger";
     delBtn.textContent = "Удалить";
     delBtn.onclick = async () => {
-      if (!confirm(`Удалить аккаунт «${a.username}» вместе с его персонажами? Это необратимо.`)) return;
+      if (!(await showConfirm(`Удалить аккаунт «${a.username}» вместе с его персонажами?`, { title: "Удалить аккаунт", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
       try {
         await deleteAdminAccount(a.id);
         await renderAccounts();
         await refreshAccountsBadge();
       } catch (err) {
-        alert("Не удалось удалить: " + err.message);
+        showAlert("Не удалось удалить: " + err.message);
       }
     };
     actions.appendChild(delBtn);
@@ -1133,7 +1153,7 @@ foundryModulesCheckBtn.addEventListener("click", async () => {
     foundryModulesUpdates = Object.fromEntries(results.map((r) => [r.id, r]));
     drawFoundryModules(foundryModulesUpdates);
   } catch (err) {
-    alert("Не удалось проверить обновления: " + err.message);
+    showAlert("Не удалось проверить обновления: " + err.message);
   } finally {
     foundryModulesCheckBtn.disabled = false;
     foundryModulesCheckBtn.textContent = "Проверить обновления";
@@ -1147,11 +1167,11 @@ foundryModulesCheckBtn.addEventListener("click", async () => {
 // заметки того же импорта не трогает — предупреждаем об этом прямо в
 // диалоге, а не молча (см. FoundryService.Delete).
 async function deleteFoundryModuleFlow(m) {
-  const ok = confirm(
+  const ok = await showConfirm(
     `Удалить модуль «${m.title}»?\n\n` +
       "Будут снесены карточки (существа/заклинания/снаряжение/справочник/состояния), заведённые или в последний раз перезаписанные этим модулем — ДАЖЕ те, что были отредактированы после импорта, — а также файлы, скачанные им в библиотеку загрузок (карты/токены/аудио/картинки заметок).\n\n" +
-      "Сцены, плейлисты и заметки этого модуля не трогает — их придётся удалить отдельно, если нужно.\n\n" +
-      "Отменить это действие нельзя."
+      "Сцены, плейлисты и заметки этого модуля не трогает — их придётся удалить отдельно, если нужно.",
+    { title: "Удалить модуль", okLabel: "Удалить", danger: true, hint: "Отменить это действие нельзя." }
   );
   if (!ok) return;
   try {
@@ -1173,9 +1193,9 @@ async function deleteFoundryModuleFlow(m) {
     }
     let msg = `Модуль «${m.title}» удалён. Карточек снесено: ${total}${breakdown ? ` (${breakdown})` : ""}.`;
     if (result.warnings && result.warnings.length) msg += "\n\nПредупреждения:\n" + result.warnings.join("\n");
-    alert(msg);
+    showAlert(msg, { title: "Модуль удалён" });
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
   }
 }
 
@@ -1409,7 +1429,7 @@ sceneCanvasEl.addEventListener("drop", async (e) => {
   try {
     m = await fetchMonster(monsterId);
   } catch (err) {
-    alert("Не удалось загрузить монстра: " + err.message);
+    showAlert("Не удалось загрузить монстра: " + err.message);
     return;
   }
   counter++;
@@ -1565,13 +1585,13 @@ function renderPlaylistRows() {
     renameBtn.title = "Переименовать";
     renameBtn.onclick = async (e) => {
       e.stopPropagation();
-      const newName = prompt("Новое название плейлиста:", p.name);
+      const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
       if (!newName) return;
       try {
         await renamePlaylist(p.id, newName);
         await refreshPlaylists();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     const delBtn = document.createElement("button");
@@ -1579,13 +1599,13 @@ function renderPlaylistRows() {
     delBtn.title = "Удалить плейлист";
     delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`)) return;
+      if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
       try {
         await deletePlaylist(p.id);
         if (selectedPlaylistId === p.id) selectedPlaylistId = null;
         await refreshPlaylists();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     row.appendChild(name);
@@ -1627,7 +1647,7 @@ function renderTrackPanel() {
         // дожидаясь следующего запуска.
         if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_volume", cue: { volume: vol } });
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     const loopBtn = document.createElement("button");
@@ -1646,7 +1666,7 @@ function renderTrackPanel() {
         t.loop = newLoop;
         setLoopBtnLabel();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     const upBtn = document.createElement("button");
@@ -1668,12 +1688,12 @@ function renderTrackPanel() {
     const delBtn = document.createElement("button");
     delBtn.innerHTML = icon("trash", { size: 13 });
     delBtn.onclick = async () => {
-      if (!confirm(`Удалить трек «${t.name}»?`)) return;
+      if (!(await showConfirm(`Удалить трек «${t.name}»?`, { title: "Удалить трек", okLabel: "Удалить", danger: true }))) return;
       try {
         await deletePlaylistTrack(playlist.id, t.id);
         await refreshPlaylists();
       } catch (err) {
-        alert(err.message);
+        showAlert(err.message);
       }
     };
     delBtn.title = "Удалить трек";
@@ -1698,7 +1718,7 @@ document.getElementById("newPlaylistForm").addEventListener("submit", async (e) 
     nameInput.value = "";
     await refreshPlaylists();
   } catch (err) {
-    alert(err.message);
+    showAlert(err.message);
   }
 });
 
@@ -2056,7 +2076,11 @@ noteSearch.oninput = renderNoteRows;
 // ---- папки: создание/переименование/удаление ----
 
 async function createNoteFolderPrompt(parent) {
-  const name = prompt(parent ? `Название подпапки внутри «${parent}»:` : "Название новой папки:");
+  const name = await showPrompt("Название папки:", {
+    title: "Новая папка",
+    okLabel: "Создать",
+    hint: parent ? `Внутри «${parent}».` : "В корне библиотеки.",
+  });
   if (!name || !name.trim()) return;
   const path = parent ? parent + "/" + name.trim() : name.trim();
   try {
@@ -2065,12 +2089,12 @@ async function createNoteFolderPrompt(parent) {
     currentNoteFolder = path;
     await refreshNotesList();
   } catch (err) {
-    alert("Не удалось создать папку: " + err.message);
+    showAlert("Не удалось создать папку: " + err.message);
   }
 }
 
 async function renameNoteFolderPrompt(node) {
-  const name = prompt("Новое название папки:", node.name);
+  const name = await showPrompt("Новое название:", { title: "Переименовать папку", value: node.name, okLabel: "Переименовать" });
   if (!name || !name.trim() || name.trim() === node.name) return;
   const parent = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
   const target = parent ? parent + "/" + name.trim() : name.trim();
@@ -2089,20 +2113,20 @@ async function renameNoteFolderPrompt(node) {
     }
     await refreshNotesList();
   } catch (err) {
-    alert("Не удалось переименовать: " + err.message);
+    showAlert("Не удалось переименовать: " + err.message);
   }
 }
 
 async function deleteNoteFolderPrompt(node) {
   const total = countNotesIn(node);
   const what = total ? `папку «${node.path}» и ${total} заметок внутри` : `пустую папку «${node.path}»`;
-  if (!confirm(`Удалить ${what}? Это необратимо.`)) return;
+  if (!(await showConfirm(`Удалить ${what}?`, { title: "Удалить папку", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
   try {
     await deleteNoteFolder(node.path);
     if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) currentNoteFolder = "";
     await refreshNotesList();
   } catch (err) {
-    alert("Не удалось удалить папку: " + err.message);
+    showAlert("Не удалось удалить папку: " + err.message);
   }
 }
 
@@ -2183,7 +2207,7 @@ async function openNote(id, { edit = false } = {}) {
     note = await fetchNote(id);
   } catch (err) {
     if (seq !== noteOpenSeq) return;
-    alert("Не удалось открыть заметку: " + err.message);
+    showAlert("Не удалось открыть заметку: " + err.message);
     notesView = "list";
     renderNotesPanel();
     return;
@@ -2232,13 +2256,13 @@ wireWikiLinks(noteRenderView, () => notesList, {
   onOpen: (id) => openNote(id),
   onCreateMissing: async (title, folder) => {
     const where = folder ? ` в папке «${folder}»` : " в корне библиотеки";
-    if (!confirm(`Заметки «${title}» не существует. Создать${where}?`)) return;
+    if (!(await showConfirm(`Заметки «${title}» не существует. Создать её${where}?`, { title: "Новая заметка", okLabel: "Создать" }))) return;
     try {
       const n = await createNote(`# ${title}\n\n`, folder);
       await refreshNotesList();
       await openNote(n.id, { edit: true });
     } catch (err) {
-      alert("Не удалось создать заметку: " + err.message);
+      showAlert("Не удалось создать заметку: " + err.message);
     }
   },
 });
@@ -2262,12 +2286,18 @@ document.getElementById("noteSaveBtn").onclick = async () => {
 
 document.getElementById("noteDeleteBtn").onclick = async () => {
   if (!selectedNote) return;
-  if (!confirm(`Удалить заметку «${selectedNote.title}»? Это необратимо (значки на карте, ссылающиеся на неё, останутся, но перестанут открываться).`)) return;
+  const okDelete = await showConfirm(`Удалить заметку «${selectedNote.title}»?`, {
+    title: "Удалить заметку",
+    okLabel: "Удалить",
+    danger: true,
+    hint: "Это необратимо. Значки на карте, ссылающиеся на неё, останутся, но перестанут открываться.",
+  });
+  if (!okDelete) return;
   try {
     await deleteNote(selectedNote.id);
     backToNoteList();
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
   }
 };
 
@@ -2277,7 +2307,7 @@ document.getElementById("notePlaceBtn").onclick = () => {
   document.dispatchEvent(
     new CustomEvent("vtt:placeNoteMarker", { detail: { noteId: selectedNote.id, label: selectedNote.title } })
   );
-  alert("Теперь кликни на карте, куда поставить свиток.");
+  showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок заметки" });
 };
 
 document.getElementById("noteWindowBtn").onclick = () => {
@@ -2309,7 +2339,7 @@ document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
     await refreshNotesList();
     await openNote(n.id, { edit: true });
   } catch (err) {
-    alert("Не удалось создать заметку: " + err.message);
+    showAlert("Не удалось создать заметку: " + err.message);
   }
 });
 
@@ -2800,9 +2830,9 @@ function renderSceneDropdown() {
     del.innerHTML = icon("trash", { size: 13 });
     del.title = "Удалить сцену";
     del.disabled = sceneList.length <= 1;
-    del.onclick = (ev) => {
+    del.onclick = async (ev) => {
       ev.stopPropagation();
-      if (!confirm(`Удалить сцену «${s.name}»? Это необратимо.`)) return;
+      if (!(await showConfirm(`Удалить сцену «${s.name}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
     row.append(handle, nameSpan, viewers, del);
@@ -2812,8 +2842,8 @@ function renderSceneDropdown() {
 
 // "+ Сцена" теперь статична в шапке панели (dm.html), а не пересоздаётся
 // каждый renderSceneDropdown() — обработчик вешаем один раз.
-document.getElementById("sceneCreateBtn").onclick = () => {
-  const name = prompt("Название новой сцены:", "Новая сцена");
+document.getElementById("sceneCreateBtn").onclick = async () => {
+  const name = await showPrompt("Название сцены:", { title: "Новая сцена", value: "Новая сцена", okLabel: "Создать" });
   if (name === null) return;
   const sceneId = "scene-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
   vtt.send({ type: "create_scene", sceneId, sceneName: name || "Новая сцена" });
@@ -3032,7 +3062,7 @@ document.getElementById("fitToBgBtn").onclick = async () => {
     fWidth.value = w;
     fHeight.value = h;
   } catch {
-    alert("Не удалось прочитать размер фона — проверь URL.");
+    showAlert("Не удалось прочитать размер фона — проверь URL.");
   }
 };
 
@@ -3053,10 +3083,10 @@ gridEditorBtn.onclick = () => {
 };
 
 // ---- удаление / сохранение (всегда активная сцена) ----
-document.getElementById("sceneDeleteBtn").onclick = () => {
+document.getElementById("sceneDeleteBtn").onclick = async () => {
   if (sceneList.length <= 1) return;
   const s = sceneList.find((x) => x.id === currentSceneId);
-  if (!confirm(`Удалить сцену «${s ? s.name : currentSceneId}»? Это необратимо.`)) return;
+  if (!(await showConfirm(`Удалить сцену «${s ? s.name : currentSceneId}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
   vtt.send({ type: "delete_scene", sceneId: currentSceneId });
   closeSidePanel();
 };

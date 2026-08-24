@@ -15,6 +15,7 @@ import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { wireCatalogLinks } from "../catalog-links.js";
+import { showAlert, showConfirm } from "../modal.js";
 
 // ==================== state ====================
 
@@ -101,7 +102,7 @@ function renderEditView(root) {
       scheduleSave();
       renderApp();
     } catch (err) {
-      alert("Не удалось загрузить иконку: " + err.message);
+      showAlert("Не удалось загрузить иконку: " + err.message);
     }
   });
   root.appendChild(
@@ -314,7 +315,7 @@ cloneBtn.onclick = async () => {
     }
     location.href = `/referencebook.html?id=${created.id}&edit=1`;
   } catch (err) {
-    alert("Не удалось клонировать: " + err.message);
+    showAlert("Не удалось клонировать: " + err.message);
   } finally {
     cloneBtn.disabled = false;
   }
@@ -323,7 +324,7 @@ cloneBtn.onclick = async () => {
 // deleteBtn — тот же приём, что и в itembook.js/spellbook.js/bestiary.js/conditions.js.
 const deleteBtn = document.getElementById("deleteBtn");
 deleteBtn.onclick = async () => {
-  if (!confirm(`Удалить «${reference.name || "Без имени"}» из библиотеки?`)) return;
+  if (!(await showConfirm(`Удалить «${reference.name || "Без имени"}» из библиотеки?`, { title: "Удалить запись", okLabel: "Удалить", danger: true }))) return;
   deleteBtn.disabled = true;
   try {
     await deleteReference(referenceId);
@@ -334,7 +335,7 @@ deleteBtn.onclick = async () => {
       window.close();
     }
   } catch (err) {
-    alert("Не удалось удалить: " + err.message);
+    showAlert("Не удалось удалить: " + err.message);
     deleteBtn.disabled = false;
   }
 };

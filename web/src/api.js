@@ -206,6 +206,60 @@ export async function deleteNoteFolder(folder) {
   return apiFetch(`/api/note-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
 }
 
+// ---- журнал стола (ДМ и игроки) — web/journal.html ----
+// В отличие от заметок ДМ выше, у каждой записи есть автор и права:
+// "default" — что достаётся всем за столом ("none" | "limited" | "observer" |
+// "owner"), "access" — точечные выдачи {accountId: уровень} (см.
+// domain.JournalEntry). Сервер возвращает вместе с записью и уже вычисленные
+// для ТЕБЯ myAccess/canEdit/canManage — клиент права не пересчитывает.
+export async function fetchJournal() {
+  return apiFetch("/api/journal");
+}
+export async function fetchJournalEntry(id) {
+  return apiFetch(`/api/journal/${id}`);
+}
+// fetchJournalMembers — кому можно раздать права: аккаунты этого мира
+// ([{id, username}]). Доступно и игроку — права раздаёт автор записи.
+export async function fetchJournalMembers() {
+  return apiFetch("/api/journal/members");
+}
+export async function createJournalEntry({ content, folder = "", def = "none", access = {} } = {}) {
+  return apiFetch("/api/journal", {
+    method: "POST",
+    body: JSON.stringify({ content, folder, default: def, access }),
+  });
+}
+export async function updateJournalEntry(id, content) {
+  return apiFetch(`/api/journal/${id}`, { method: "PUT", body: JSON.stringify({ content }) });
+}
+// setJournalAccess — отдельно от updateJournalEntry: текст автосейвится по
+// таймеру при наборе, права меняются осознанным действием в диалоге (см.
+// handleJournalAccess на сервере).
+export async function setJournalAccess(id, def, access) {
+  return apiFetch(`/api/journal/${id}/access`, { method: "PUT", body: JSON.stringify({ default: def, access }) });
+}
+export async function moveJournalEntry(id, folder) {
+  return apiFetch(`/api/journal/${id}/folder`, { method: "PUT", body: JSON.stringify({ folder: folder || "" }) });
+}
+export async function deleteJournalEntry(id) {
+  return apiFetch(`/api/journal/${id}`, { method: "DELETE" });
+}
+
+export async function fetchJournalFolders() {
+  return apiFetch("/api/journal-folders");
+}
+export async function createJournalFolder(folder) {
+  return apiFetch("/api/journal-folders", { method: "POST", body: JSON.stringify({ folder }) });
+}
+export async function renameJournalFolder(from, to) {
+  return apiFetch("/api/journal-folders", { method: "PUT", body: JSON.stringify({ from, to }) });
+}
+// deleteJournalFolder удаляет папку ВМЕСТЕ с записями внутри (игроку сервер
+// разрешит только если все они его собственные) — спрашивать обязан UI.
+export async function deleteJournalFolder(folder) {
+  return apiFetch(`/api/journal-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
+}
+
 // ---- бестиарий ДМ (только ДМ) — web/dm.html: раздел "Бестиарий", web/bestiary.html ----
 export async function fetchBestiary() {
   return apiFetch("/api/bestiary");

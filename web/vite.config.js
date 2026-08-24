@@ -19,6 +19,7 @@ export default defineConfig({
         player: resolve(__dirname, "player.html"),
         broadcast: resolve(__dirname, "broadcast.html"),
         noteWindow: resolve(__dirname, "note-window.html"),
+        journal: resolve(__dirname, "journal.html"),
         characterSheet: resolve(__dirname, "character-sheet.html"),
         bestiary: resolve(__dirname, "bestiary.html"),
         spellbook: resolve(__dirname, "spellbook.html"),
