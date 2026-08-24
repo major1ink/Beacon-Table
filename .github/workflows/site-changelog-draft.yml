@@ -54,18 +54,19 @@ jobs:
                   bullets.append(m.group(1).strip())
           bullets_html = "\n".join(f"      <li>{b}</li>" for b in bullets) or "      <li>...</li>"
 
-          entry = f'''    <!-- ЧЕРНОВИК (site-changelog-draft): проверить формулировки,
-         объединить/сократить пункты под голос сайта, придумать заголовок,
-         убрать этот комментарий перед мерджем. -->
-    <h2 style="margin-top:0">
-       {tag} <span style="color:var(--text-faint);font-weight:400;font-size:.7em"> — <time datetime="{date_iso}">{date_ru}</time></span>
-    </h2>
-    <p><strong>ЧЕРНОВИК ЗАГОЛОВКА — придумать одну фразу о главном.</strong></p>
-    <ul>
-{bullets_html}
-    </ul>
-
-'''
+          entry = "\n".join([
+              '    <!-- ЧЕРНОВИК (site-changelog-draft): проверить формулировки,',
+              '         объединить/сократить пункты под голос сайта, придумать заголовок,',
+              '         убрать этот комментарий перед мерджем. -->',
+              '    <h2 style="margin-top:0">',
+              f'       {tag} <span style="color:var(--text-faint);font-weight:400;font-size:.7em"> — <time datetime="{date_iso}">{date_ru}</time></span>',
+              '    </h2>',
+              '    <p><strong>ЧЕРНОВИК ЗАГОЛОВКА — придумать одну фразу о главном.</strong></p>',
+              '    <ul>',
+              bullets_html,
+              '    </ul>',
+              '',
+          ]) + "\n"
 
           html = html.replace('<h2 style="margin-top:0">', '<h2>', 1)
           marker = '<section class="prose" style="padding-top:24px">\n  <div class="wrap narrow">\n\n'
