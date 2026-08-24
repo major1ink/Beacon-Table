@@ -54,7 +54,7 @@ var itemTargets = map[string]string{
 	"subspecies": TargetReferences,
 	"origin":     TargetReferences,
 	"effect":     TargetConditions,
-	"facility": TargetReferences,
+	"facility":   TargetReferences,
 }
 
 // Expand разворачивает документы пака в плоский список "документ →

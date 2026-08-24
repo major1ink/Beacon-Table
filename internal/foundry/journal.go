@@ -87,7 +87,7 @@ func pageBody(ctx context.Context, page map[string]any, assets *Assets) string {
 			return missingFileNote("видео не перенесено", ref)
 		}
 		esc := html.EscapeString(src)
-	
+
 		return fmt.Sprintf(
 			`<video controls preload="metadata" style="max-width:100%%;border-radius:8px"><source src="%s">Видео не открылось — <a href="%s">скачать файл</a>.</video>`,
 			esc, esc,

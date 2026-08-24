@@ -53,11 +53,11 @@ type ActiveWorld struct {
 	References service.ReferenceService
 	Conditions service.ConditionService
 	Notes      service.NoteService
-	
+
 	Journal   service.JournalService
 	Playlists service.PlaylistService
 	Assets    service.AssetService
-	
+
 	Foundry service.FoundryService
 }
 

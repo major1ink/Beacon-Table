@@ -32,8 +32,8 @@ type Spell struct {
 	// игнорируется (см. spellfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в общую библиотеку (см.
 	// web/src/pages/spellbook.js).
-	System bool   `json:"system,omitempty"`
-	Source string `json:"source,omitempty"` // "PHB'24", "MHH"...
+	System          bool   `json:"system,omitempty"`
+	Source          string `json:"source,omitempty"` // "PHB'24", "MHH"...
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 
 	Level  int    `json:"level"`            // 0-9, 0 = заговор
