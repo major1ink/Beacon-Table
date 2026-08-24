@@ -61,6 +61,9 @@ const PATHS = {
   "arrow-down": '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/>',
   folder: '<path d="M3 7a2 2 0 012-2h4l2 2.5h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>',
   "folder-plus": '<path d="M3 7a2 2 0 012-2h4l2 2.5h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/><line x1="12" y1="11.5" x2="12" y2="16.5"/><line x1="9.5" y1="14" x2="14.5" y2="14"/>',
+  // "file-text" — лист записи в дереве заметок (см. pages/dm.js: noteRowEl),
+  // тот же уровень детализации, что у folder рядом с ним.
+  "file-text": '<path d="M13.5 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8.5L13.5 3z"/><polyline points="13.5 3 13.5 8.5 19 8.5"/><line x1="8.5" y1="13" x2="15.5" y2="13"/><line x1="8.5" y1="16.5" x2="13" y2="16.5"/>',
 };
 
 // icon(name, opts) — строка <svg>. size — сторона в px, strokeWidth — толщина

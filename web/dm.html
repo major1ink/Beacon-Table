@@ -56,7 +56,34 @@
       transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
       display: flex; flex-direction: column;
     }
-    #panel.open { flex-basis: 300px; width: 300px; margin: 14px 12px 14px 10px; border-width: 1px; box-shadow: var(--shadow-float); }
+    /* Ширина открытой панели тут НЕ задаётся: это состояние времени
+       выполнения (её тянут мышью за #panelResizer и помнят в localStorage —
+       дереву заметок с глубокой вложенностью 300px тесно, а разделу
+       "Освещение" больше и не нужно), inline flex-basis/width ставит
+       pages/dm.js. Закрытая панель inline-стилей не имеет вовсе — работает
+       #panel{flex:0 0 0;width:0} выше, и схлопывание остаётся анимированным
+       тем же transition. */
+    #panel.open { margin: 14px 2px 14px 10px; border-width: 1px; box-shadow: var(--shadow-float); }
+
+    /* Ручка ширины — отдельный flex-элемент в зазоре между панелью и
+       канвасом, а не absolute внутри #panel: у панели overflow:hidden, и
+       торчащая наружу ручка была бы обрезана. Показывается только при
+       открытой панели (класс .visible ставит setSidePanelSection). */
+    #panelResizer {
+      flex: 0 0 auto; width: 10px; margin: 14px 0; z-index: 6; touch-action: none;
+      display: none; align-items: center; justify-content: center; cursor: col-resize;
+    }
+    #panelResizer.visible { display: flex; }
+    #panelResizer::before {
+      content: ""; width: 3px; height: 42px; border-radius: 2px; background: var(--border);
+      transition: background .12s ease, height .12s ease;
+    }
+    #panelResizer:hover::before { background: var(--accent); height: 80px; }
+    /* Пока тянем — гасим анимацию ширины (иначе панель едет за курсором с
+       задержкой) и выделение текста под курсором. */
+    body.panel-resizing { cursor: col-resize; user-select: none; }
+    body.panel-resizing #panel { transition: none; }
+    body.panel-resizing #panelResizer::before { background: var(--accent); height: 80px; }
     .panel-section { display: none; flex-direction: column; min-height: 0; flex: 1 1 auto; }
     .panel-section.active { display: flex; }
     .panel-header {
@@ -456,79 +483,131 @@
     }
     #newAccountMsg { font-size: 12px; color: #e74c3c; min-height: 14px; }
 
-    /* ---- раздел "Заметки" (в панели, мастер-детейл, как "Плейлисты") ---- */
+    /* ---- раздел "Заметки" — дерево-«директория» в духе панели
+       «Справочник» (см. .compendium-* в theme.css) и журнала Foundry:
+       свёртываемые папки с шевроном + плоские строки-записи, а не карточки.
+       Форма строки одна на любой глубине, отличается только отступом
+       (--depth ставит JS, см. pages/dm.js: renderNoteTree). ---- */
+
+    /* panel-body-flush — общая обёртка раздела без своего padding/скролла:
+       прокручиваются отдельно дерево (#noteRows) и текст открытой заметки
+       (.note-detail-scroll), поэтому поиск сверху и форма создания снизу
+       стоят на месте, что бы ни делал список. */
+    .panel-body-flush { padding: 0; gap: 0; overflow: hidden; }
+
+    .note-list-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
+    .note-search-row {
+      flex: 0 0 auto; position: relative; display: flex; align-items: center;
+      padding: 10px 12px 8px;
+    }
+    .note-search-icon { position: absolute; left: 21px; opacity: .45; pointer-events: none; }
     #noteSearch {
-      width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); color: #eee;
-      border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 10px;
+      width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 7px 9px 7px 28px; font: inherit; font-size: 12px;
     }
     #noteSearch:focus { outline: none; border-color: var(--accent); }
-    .note-rows { display: flex; flex-direction: column; gap: 6px; }
-    .note-row {
-      display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 10px;
-      background: var(--surface); border: 1px solid transparent; cursor: pointer;
-      transition: background .12s ease, border-color .12s ease;
-    }
-    .note-row:hover { background: var(--surface-hover); border-color: var(--border); }
-    .note-row .note-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .note-row .note-meta { font-size: 11px; opacity: 0.5; }
 
-    /* дерево папок библиотеки заметок (domain.Note.Folder) */
-    .note-folder-row {
-      display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 8px;
+    .note-tree {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 10px;
+    }
+    .note-tree .hint { padding: 6px 4px; }
+
+    /* корень библиотеки — заголовок дерева и одновременно «создавать здесь»
+       (тот же смысл, что .compendium-root-header у Справочника) */
+    .note-root-row {
+      display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;
+      min-height: 26px; padding: 5px 6px; margin-bottom: 2px; border-radius: 8px;
       cursor: pointer; user-select: none;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim);
+    }
+    .note-root-row:hover { background: var(--surface); color: var(--text); }
+    .note-root-row.current { background: var(--surface); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+    .note-root-row .note-folder-count { text-transform: none; letter-spacing: 0; }
+
+    /* строка папки — тот же тоггл-заголовок, что .compendium-group-header */
+    .note-folder-row {
+      display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;
+      min-height: 28px; padding: 5px 4px 5px calc(4px + var(--depth, 0) * 13px);
+      border-radius: 8px; cursor: pointer; user-select: none;
+      color: var(--text); font-size: 12.5px; font-weight: 600;
     }
     .note-folder-row:hover { background: var(--surface); }
     .note-folder-row.current { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
-    .note-folder-toggle {
-      background: none; border: none; color: inherit; padding: 0; display: flex; cursor: pointer; opacity: .7;
-    }
-    .note-folder-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .note-folder-count { font-size: 10.5px; opacity: .45; margin-right: auto; }
-    .note-folder-actions { display: flex; gap: 2px; visibility: hidden; }
+    /* Шеврон один и тот же на любом состоянии, поворачивается CSS-ом (а не
+       подменяется другой иконкой) — так строка не дёргается при раскрытии. */
+    .note-folder-chevron { display: flex; flex: 0 0 auto; opacity: .65; transition: transform .12s ease; }
+    .note-folder-row.open .note-folder-chevron { transform: rotate(90deg); }
+    .note-folder-icon { display: flex; flex: 0 0 auto; opacity: .75; color: var(--gold); }
+    .note-folder-name { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-folder-count { flex: 0 0 auto; margin-right: auto; font-size: 10.5px; font-weight: 400; opacity: .45; }
+    /* visibility, а не display — место под кнопки зарезервировано всегда,
+       поэтому имя папки не «прыгает» при наведении. */
+    .note-folder-actions { flex: 0 0 auto; display: flex; gap: 1px; visibility: hidden; }
     .note-folder-row:hover .note-folder-actions,
     .note-folder-row:focus-within .note-folder-actions { visibility: visible; }
-    .note-folder-actions .note-icon-btn { width: 20px; height: 20px; border-radius: 6px; }
+    .note-folder-actions .note-icon-btn { width: 22px; height: 22px; border-radius: 6px; background: none; }
+    .note-folder-actions .note-icon-btn:hover { background: var(--surface-hover); }
 
-    /* «куда попадёт новая заметка» + кнопка создания папки */
-    .note-new-target {
-      display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; opacity: .75;
+    /* строка заметки — .compendium-node: плоский узел, без карточки */
+    .note-row {
+      display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;
+      min-height: 26px; padding: 4px 8px 4px calc(9px + var(--depth, 0) * 13px);
+      border-radius: 8px; cursor: pointer; color: var(--text-dim); font-size: 12.5px;
     }
-    .note-new-target #newNoteFolderBtn {
-      margin-left: auto; background: var(--surface); border: 1px solid var(--border); color: #eee;
-      border-radius: 8px; padding: 4px 8px; font-size: 11px; cursor: pointer;
-    }
-    .note-new-target #newNoteFolderBtn:hover { background: var(--surface-hover); }
+    .note-row:hover { background: var(--accent-bg); color: var(--text); }
+    .note-row.current { background: var(--accent-bg); color: var(--text); }
+    .note-row-icon { display: flex; flex: 0 0 auto; opacity: .5; }
+    .note-row .note-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-row .note-meta { flex: 0 0 auto; font-size: 10.5px; opacity: .5; }
 
-    /* папка открытой заметки */
-    .note-folder-picker { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 11px; opacity: .8; }
-    .note-folder-picker select {
-      flex: 1 1 auto; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: #eee;
-      border-radius: 8px; padding: 5px 8px; font-size: 11.5px;
+    /* «куда попадёт новая заметка» + поле создания — прижаты к низу панели */
+    .note-new {
+      flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px;
+      padding: 9px 12px 12px; border-top: 1px solid var(--border);
     }
-    .note-folder-picker select:focus { outline: none; border-color: var(--accent); }
-    #newNoteForm { display: flex; gap: 4px; margin-top: 10px; }
+    .note-new-target { font-size: 11px; opacity: .55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-new-target span { color: var(--accent); }
+    #newNoteForm { display: flex; gap: 5px; }
     #newNoteForm input {
-      flex: 1 1 auto; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: #eee;
-      border-radius: 8px; padding: 7px 9px; font-size: 12px;
+      flex: 1 1 auto; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 12px;
     }
     #newNoteForm input:focus { outline: none; border-color: var(--accent); }
-    #newNoteForm button[type="submit"] { background: var(--accent); font-weight: 600; }
-    #newNoteForm button[type="submit"]:hover { background: #6a5ae0; }
-
-    /* заголовок открытой заметки: "‹ назад" + название + иконки-действия справа */
-    .note-detail-header {
-      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
-      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    #newNoteForm button[type="submit"] {
+      flex: 0 0 auto; width: 32px; padding: 0; display: flex; align-items: center; justify-content: center;
+      background: var(--accent);
     }
-    .note-detail-title { flex: 1 1 auto; min-width: 60px; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .note-detail-icons { display: flex; gap: 3px; flex-shrink: 0; }
+    #newNoteForm button[type="submit"]:hover { background: var(--accent-hover); }
+
+    /* открытая заметка: шапка на месте, прокручивается только текст */
+    #noteDetailView { flex: 1 1 auto; min-height: 0; flex-direction: column; }
+    .note-detail-header {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+      padding: 9px 10px; border-bottom: 1px solid var(--border);
+    }
+    .note-detail-title { flex: 1 1 auto; min-width: 20px; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-detail-icons { display: flex; gap: 2px; flex-shrink: 0; }
+    .note-detail-scroll {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 14px;
+    }
     .note-icon-btn {
-      width: 30px; height: 30px; padding: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; padding: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
       background: var(--surface); border-radius: 8px; font-size: 14px;
     }
     .note-icon-btn:hover { background: var(--surface-hover); }
     .note-icon-btn.active { background: var(--accent-bg); color: var(--accent); }
     .note-icon-danger:hover { background: var(--danger); }
+
+    /* папка открытой заметки */
+    .note-folder-picker { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 11px; opacity: .8; }
+    .note-folder-picker select {
+      flex: 1 1 auto; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: #eee;
+      border-radius: 8px; padding: 5px 8px; font-size: 11.5px;
+    }
+    .note-folder-picker select:focus { outline: none; border-color: var(--accent); }
 
     /* панель форматирования (см. web/src/notes/toolbar.js) */
     .note-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
@@ -915,22 +994,30 @@
       </section>
 
       <section class="panel-section" data-panel="notes">
-        <header class="panel-header"><h3>Заметки</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
-        <div class="panel-body">
-          <div id="noteListView">
-            <input type="text" id="noteSearch" placeholder="🔍 Поиск по заголовку и папке…" />
-            <div id="noteRows" class="note-rows"></div>
-            <div class="note-new-target">
-              <span id="noteCurrentFolder">в корне библиотеки</span>
-              <button type="button" id="noteFolderResetBtn" class="note-icon-btn" title="Создавать в корне библиотеки" style="display:none;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-              </button>
-              <button type="button" id="newNoteFolderBtn" title="Создать папку внутри выбранной">+ Папка</button>
+        <header class="panel-header">
+          <h3>Заметки</h3>
+          <div class="panel-header-actions">
+            <button id="newNoteFolderBtn" class="panel-add-btn" type="button" title="Создать папку внутри выбранной"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2.5h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/><line x1="12" y1="11.5" x2="12" y2="16.5"/><line x1="9.5" y1="14" x2="14.5" y2="14"/></svg> Папка</button>
+            <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+          </div>
+        </header>
+        <!-- panel-body-flush: свои полосы прокрутки внутри (дерево / текст
+             заметки), чтобы шапка поиска и форма создания не уезжали вместе
+             со списком — см. .note-list-view / .note-detail-scroll -->
+        <div class="panel-body panel-body-flush">
+          <div id="noteListView" class="note-list-view">
+            <div class="note-search-row">
+              <svg class="note-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
+              <input type="text" id="noteSearch" placeholder="Поиск по заголовку и папке…" />
             </div>
-            <form id="newNoteForm">
-              <input type="text" id="newNoteTitle" placeholder="Название новой заметки" maxlength="120" />
-              <button type="submit" title="Создать заметку">+</button>
-            </form>
+            <div id="noteRows" class="note-tree"></div>
+            <div class="note-new">
+              <form id="newNoteForm">
+                <input type="text" id="newNoteTitle" placeholder="Название новой заметки" maxlength="120" />
+                <button type="submit" title="Создать заметку"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+              </form>
+              <div class="note-new-target">создать в: <span id="noteCurrentFolder">корень библиотеки</span></div>
+            </div>
           </div>
 
           <div id="noteDetailView" style="display:none;">
@@ -944,17 +1031,19 @@
                 <button id="noteDeleteBtn" class="note-icon-btn note-icon-danger" title="Удалить заметку безвозвратно"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
               </div>
             </div>
-            <label class="note-folder-picker">
-              <span>Папка</span>
-              <select id="noteFolderSelect" title="Перенести заметку в другую папку"></select>
-            </label>
-            <div id="noteRenderView" class="note-render"></div>
-            <div id="noteEditView" style="display:none;">
-              <div id="noteToolbar" class="note-toolbar"></div>
-              <textarea id="noteEditArea" placeholder="# Заголовок&#10;&#10;markdown, [[Другая заметка]] или [[Глава 1/Таверна]] — вики-ссылка…"></textarea>
-              <button id="noteSaveBtn" class="primary-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg> Сохранить</button>
+            <div class="note-detail-scroll">
+              <label class="note-folder-picker">
+                <span>Папка</span>
+                <select id="noteFolderSelect" title="Перенести заметку в другую папку"></select>
+              </label>
+              <div id="noteRenderView" class="note-render"></div>
+              <div id="noteEditView" style="display:none;">
+                <div id="noteToolbar" class="note-toolbar"></div>
+                <textarea id="noteEditArea" placeholder="# Заголовок&#10;&#10;markdown, [[Другая заметка]] или [[Глава 1/Таверна]] — вики-ссылка…"></textarea>
+                <button id="noteSaveBtn" class="primary-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg> Сохранить</button>
+              </div>
+              <div id="noteMsg"></div>
             </div>
-            <div id="noteMsg"></div>
           </div>
         </div>
       </section>
@@ -1004,6 +1093,9 @@
         </div>
       </section>
     </aside>
+
+    <!-- ручка ширины панели: тянуть мышью, двойной клик — вернуть 300px -->
+    <div id="panelResizer" role="separator" aria-orientation="vertical" title="Потяни, чтобы изменить ширину панели (двойной клик — вернуть по умолчанию)"></div>
 
     <div id="canvasWrap">
       <canvas id="scene"></canvas>

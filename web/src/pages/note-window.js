@@ -131,6 +131,7 @@ wireWikiLinks(body, () => notesList, {
     if (!confirm(`Заметки «${title}» не существует. Создать${where}?`)) return;
     try {
       const n = await createNote(`# ${title}\n\n`, folder);
+      notifyHost("beacon:noteSaved", n.id);
       await loadNote(n.id, { edit: true });
     } catch (err) {
       alert("Не удалось создать заметку: " + err.message);
@@ -143,12 +144,24 @@ editToggleBtn.onclick = () => {
   render();
 };
 
+// notifyHost — сообщить странице, которая открыла это окно (dm.js), что
+// библиотека заметок изменилась: там свой список в левой панели, и без
+// этого он оставался со старым заголовком/составом до перезагрузки. Тот же
+// приём, что у карточек компендиума ("beacon:*Saved", см. catalog.js).
+// Окно, вынесенное в отдельную вкладку браузера (window.parent === window),
+// шлёт сообщение самому себе — там слушателя нет, и это не ошибка.
+function notifyHost(type, id) {
+  if (window.parent === window) return;
+  window.parent.postMessage({ type, id }, location.origin);
+}
+
 saveBtn.onclick = async () => {
   msg.textContent = "";
   try {
     note = await updateNote(note.id, editArea.value);
     editing = false;
     render();
+    notifyHost("beacon:noteSaved", note.id);
   } catch (err) {
     msg.textContent = err.message;
   }
@@ -159,6 +172,7 @@ deleteBtn.onclick = async () => {
   if (!confirm(`Удалить заметку «${note.title}»? Это необратимо.`)) return;
   try {
     await deleteNote(note.id);
+    notifyHost("beacon:noteDeleted", note.id);
     // По умолчанию эта страница живёт в плавающем окне поверх канваса, а не
     // в отдельной вкладке (см. web/src/floating-window.js) — там это
     // iframe, и window.close() у него молча ничего не делает. Родитель

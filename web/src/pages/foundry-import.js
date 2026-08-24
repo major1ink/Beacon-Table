@@ -653,11 +653,17 @@ function formatWhen(iso) {
 }
 
 // notifySaved — те же сообщения, что шлёт отредактированная карточка:
-// открытые списки компендиума (catalog.js) на них перечитывают себя.
+// открытые списки компендиума (catalog.js) на них перечитывают себя. Плюс
+// "beacon:foundryImported" — им импорт сообщает о СЕБЕ, а не о карточках:
+// после него в мире появились новые заметки, сцены и сам пакет в списке
+// установленных, и открытые разделы левой панели ДМ (Заметки, Настройки)
+// должны перечитаться, а не висеть со старым списком до F5 (см.
+// pages/dm.js: refreshOpenPanel).
 function notifySaved() {
   const messages = ["beacon:monsterSaved", "beacon:spellSaved", "beacon:itemSaved", "beacon:referenceSaved", "beacon:conditionSaved"];
   const target = window.parent !== window ? window.parent : window;
   for (const type of messages) target.postMessage({ type }, location.origin);
+  target.postMessage({ type: "beacon:foundryImported" }, location.origin);
 }
 
 // ==================== закрыть / boot ====================

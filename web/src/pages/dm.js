@@ -368,7 +368,7 @@ document.addEventListener("vtt:toolChanged", (e) => {
 });
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
-  setSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
+  showSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
   openSceneSettings("grid");
 };
 
@@ -1165,6 +1165,12 @@ async function deleteFoundryModuleFlow(m) {
       .filter(([, n]) => n > 0)
       .map(([k, n]) => `${FOUNDRY_CARD_LABELS[k] || k}: ${n}`)
       .join(", ");
+    // Открытые окна-списки компендиума показывают уже несуществующие
+    // карточки — тот же сигнал, что шлёт правка карточки (см.
+    // floating-window.js: postToOpenWindows).
+    for (const type of ["beacon:monsterSaved", "beacon:spellSaved", "beacon:itemSaved", "beacon:referenceSaved", "beacon:conditionSaved"]) {
+      postToOpenWindows("catalog-", { type });
+    }
     let msg = `Модуль «${m.title}» удалён. Карточек снесено: ${total}${breakdown ? ` (${breakdown})` : ""}.`;
     if (result.warnings && result.warnings.length) msg += "\n\nПредупреждения:\n" + result.warnings.join("\n");
     alert(msg);
@@ -1803,7 +1809,6 @@ const noteDetailView = document.getElementById("noteDetailView");
 const noteRows = document.getElementById("noteRows");
 const noteSearch = document.getElementById("noteSearch");
 const noteCurrentFolderEl = document.getElementById("noteCurrentFolder");
-const noteFolderResetBtn = document.getElementById("noteFolderResetBtn");
 const noteFolderSelect = document.getElementById("noteFolderSelect");
 const noteDetailTitle = document.getElementById("noteDetailTitle");
 const noteRenderView = document.getElementById("noteRenderView");
@@ -1822,6 +1827,10 @@ let noteEditing = false;
 // папку попадёт следующая созданная заметка/подпапка ("" — корень).
 const openNoteFolders = new Set();
 let currentNoteFolder = "";
+// lastOpenedNoteId — подсветка «вот где ты был» в дереве после возврата из
+// открытой заметки: в библиотеке на сотни записей найти её глазами заново
+// иначе не проще, чем в первый раз.
+let lastOpenedNoteId = "";
 
 async function refreshNotesList() {
   try {
@@ -1858,30 +1867,49 @@ function noteFolderTree() {
   return root;
 }
 
-function noteRowEl(n, { showFolder = false } = {}) {
+// noteRowEl — лист дерева: та же плоская строка-узел, что .compendium-node
+// у Справочника (иконка + название), а не карточка в две строки, как было.
+// Дата правки ушла в подсказку — в дереве из сотен импортированных заметок
+// (см. импорт Foundry) она только шумит, а место под неё съедает название.
+function noteRowEl(n, { showFolder = false, depth = 0 } = {}) {
   const row = document.createElement("div");
-  row.className = "note-row";
+  row.className = "note-row" + (lastOpenedNoteId === n.id ? " current" : "");
+  row.style.setProperty("--depth", String(depth));
+  const iconEl = document.createElement("span");
+  iconEl.className = "note-row-icon";
+  iconEl.innerHTML = icon("file-text", { size: 13 });
   const title = document.createElement("span");
   title.className = "note-title";
   title.textContent = n.title;
-  const meta = document.createElement("span");
-  meta.className = "note-meta";
-  meta.textContent = showFolder && n.folder ? n.folder : formatDate(n.updatedAt);
-  meta.title = showFolder && n.folder ? "Папка: " + n.folder : "";
-  row.append(title, meta);
+  row.append(iconEl, title);
+  // В плоском списке поиска папка — единственный способ понять, какая из
+  // двух одноимённых заметок перед тобой, поэтому там она в строке.
+  if (showFolder && n.folder) {
+    const meta = document.createElement("span");
+    meta.className = "note-meta";
+    meta.textContent = n.folder;
+    row.appendChild(meta);
+  }
+  row.title = (n.folder ? n.folder + "/" : "") + n.title + " — правка " + formatDate(n.updatedAt);
   row.onclick = () => openNote(n.id);
   return row;
 }
 
-function noteFolderRowEl(node) {
+function noteFolderRowEl(node, depth) {
   const open = openNoteFolders.has(node.path);
   const row = document.createElement("div");
-  row.className = "note-folder-row" + (currentNoteFolder === node.path ? " current" : "");
+  row.className = "note-folder-row" + (open ? " open" : "") + (currentNoteFolder === node.path ? " current" : "");
+  row.style.setProperty("--depth", String(depth));
 
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.className = "note-folder-toggle";
-  toggle.innerHTML = icon(open ? "chevron-down" : "chevron-right", { size: 12 });
+  // Шеврон всегда один и тот же (chevron-right), раскрытие показывает
+  // поворотом через CSS-класс .open — при подмене иконки строка заметно
+  // дёргалась на каждый клик.
+  const chevron = document.createElement("span");
+  chevron.className = "note-folder-chevron";
+  chevron.innerHTML = icon("chevron-right", { size: 12 });
+  const folderIcon = document.createElement("span");
+  folderIcon.className = "note-folder-icon";
+  folderIcon.innerHTML = icon("folder", { size: 13 });
   const name = document.createElement("span");
   name.className = "note-folder-name";
   name.textContent = node.name;
@@ -1902,12 +1930,34 @@ function noteFolderRowEl(node) {
   const actions = document.createElement("span");
   actions.className = "note-folder-actions";
   actions.append(
-    folderActionBtn("plus", "Создать подпапку", () => createNoteFolderPrompt(node.path)),
+    folderActionBtn("folder-plus", "Создать подпапку", () => createNoteFolderPrompt(node.path)),
     folderActionBtn("pencil", "Переименовать папку", () => renameNoteFolderPrompt(node)),
     folderActionBtn("trash", "Удалить папку вместе с заметками", () => deleteNoteFolderPrompt(node))
   );
-  row.append(toggle, name, count, actions);
+  row.append(chevron, folderIcon, name, count, actions);
+  row.title = node.path;
   row.onclick = select;
+  return row;
+}
+
+// noteRootRowEl — «корень библиотеки»: и заголовок дерева, и цель создания
+// (клик возвращает currentNoteFolder в ""), вместо отдельной кнопки-крестика
+// рядом с формой, которая раньше делала то же самое неочевидным способом.
+function noteRootRowEl(root) {
+  const row = document.createElement("div");
+  row.className = "note-root-row" + (currentNoteFolder === "" ? " current" : "");
+  row.title = "Создавать в корне библиотеки";
+  const name = document.createElement("span");
+  name.className = "note-folder-name";
+  name.textContent = "Библиотека заметок";
+  const count = document.createElement("span");
+  count.className = "note-folder-count";
+  count.textContent = String(countNotesIn(root));
+  row.append(name, count);
+  row.onclick = () => {
+    currentNoteFolder = "";
+    renderNoteRows();
+  };
   return row;
 }
 
@@ -1930,19 +1980,18 @@ function countNotesIn(node) {
   return total;
 }
 
+// renderNoteTree — вложенность выражается ЛЕВЫМ ОТСТУПОМ строки (--depth,
+// см. .note-folder-row/.note-row в dm.html), а не вложенными контейнерами и
+// не marginLeft: строка остаётся во всю ширину панели, поэтому её фон при
+// наведении не «съезжает» уступами вправо с глубиной.
 function renderNoteTree(node, container, depth) {
   const folders = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   for (const child of folders) {
-    const row = noteFolderRowEl(child);
-    row.style.paddingLeft = 4 + depth * 12 + "px";
-    container.appendChild(row);
+    container.appendChild(noteFolderRowEl(child, depth));
     if (openNoteFolders.has(child.path)) renderNoteTree(child, container, depth + 1);
   }
-  for (const n of node.notes) {
-    const row = noteRowEl(n);
-    row.style.marginLeft = depth * 12 + "px";
-    container.appendChild(row);
-  }
+  const notes = [...node.notes].sort((a, b) => a.title.localeCompare(b.title, "ru"));
+  for (const n of notes) container.appendChild(noteRowEl(n, { depth }));
 }
 
 let noteRowsKey = null;
@@ -1951,6 +2000,7 @@ function noteRowsStateKey(filter) {
   return JSON.stringify([
     filter,
     currentNoteFolder,
+    lastOpenedNoteId,
     [...openNoteFolders].sort(),
     notesList.map((n) => [n.id, n.title, n.folder || "", n.updatedAt]),
     noteFolders,
@@ -1960,13 +2010,15 @@ function noteRowsStateKey(filter) {
 function renderNoteRows() {
   const filter = noteSearch.value.trim().toLowerCase();
 
-  noteCurrentFolderEl.textContent = currentNoteFolder ? "в папке: " + currentNoteFolder : "в корне библиотеки";
-  noteFolderResetBtn.style.display = currentNoteFolder ? "" : "none";
+  noteCurrentFolderEl.textContent = currentNoteFolder || "корень библиотеки";
 
   const key = noteRowsStateKey(filter);
   if (key === noteRowsKey) return;
   noteRowsKey = key;
 
+  // Позицию прокрутки дерева сохраняем через перерисовку: без этого любой
+  // клик по папке в глубине длинного списка отбрасывал бы список наверх.
+  const scrollTop = noteRows.scrollTop;
   const rows = document.createDocumentFragment();
 
   // Поиск показывает плоский список по всей библиотеке: искать заметку,
@@ -1979,14 +2031,18 @@ function renderNoteRows() {
     if (!found.length) rows.appendChild(hintEl("Ничего не найдено."));
     else for (const n of found) rows.appendChild(noteRowEl(n, { showFolder: true }));
     noteRows.replaceChildren(rows);
+    noteRows.scrollTop = 0; // новый список — новая система координат, старая прокрутка бессмысленна
     return;
   }
 
-  renderNoteTree(noteFolderTree(), rows, 0);
+  const tree = noteFolderTree();
+  rows.appendChild(noteRootRowEl(tree));
+  renderNoteTree(tree, rows, 0);
   if (!notesList.length && !noteFolders.length) {
-    rows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка»."));
+    rows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка» в шапке."));
   }
   noteRows.replaceChildren(rows);
+  noteRows.scrollTop = scrollTop;
 }
 
 function hintEl(text) {
@@ -2051,16 +2107,15 @@ async function deleteNoteFolderPrompt(node) {
 }
 
 document.getElementById("newNoteFolderBtn").onclick = () => createNoteFolderPrompt(currentNoteFolder);
-noteFolderResetBtn.onclick = () => {
-  currentNoteFolder = "";
-  renderNoteRows();
-};
 
 function renderNotesPanel() {
   const showDetail = notesView === "detail" && selectedNote;
-  noteListView.style.display = showDetail ? "none" : "block";
-  noteDetailView.style.display = showDetail ? "block" : "none";
+  // flex, а не block: обе половины — колонки со своей полосой прокрутки
+  // внутри (дерево / текст), см. .note-list-view и #noteDetailView в dm.html.
+  noteListView.style.display = showDetail ? "none" : "flex";
+  noteDetailView.style.display = showDetail ? "flex" : "none";
   if (showDetail) renderNoteDetail();
+  else renderNoteRows();
 }
 
 // renderNoteFolderSelect — «в какой папке лежит эта заметка» в карточке.
@@ -2136,7 +2191,22 @@ async function openNote(id, { edit = false } = {}) {
   if (seq !== noteOpenSeq) return;
   selectedNote = note;
   noteEditing = edit;
+  lastOpenedNoteId = note.id;
+  revealNoteFolder(note.folder || "");
   renderNotesPanel();
+}
+
+// revealNoteFolder — раскрыть всю цепочку папок до заметки и сделать её
+// папку текущей. Заметку открывают не только кликом по дереву (значок на
+// карте, вики-ссылка, поиск) — без этого возврат в список показывал бы
+// свёрнутое дерево без всякого следа того, что только что читали.
+function revealNoteFolder(folder) {
+  currentNoteFolder = folder;
+  let acc = "";
+  for (const segment of folder ? folder.split("/") : []) {
+    acc = acc ? acc + "/" + segment : segment;
+    openNoteFolders.add(acc);
+  }
 }
 
 function backToNoteList() {
@@ -2246,7 +2316,7 @@ document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
 // значок на карте (двойной клик, см. interaction.js) — открыть панель прямо
 // на нужной заметке, а не просто раскрыть раздел.
 document.addEventListener("vtt:openNoteMarker", (e) => {
-  setSidePanelSection("notes");
+  showSidePanelSection("notes");
   openNote(e.detail.noteId);
 });
 
@@ -2283,6 +2353,25 @@ window.addEventListener("message", (e) => {
     e.data.type === "beacon:conditionSaved"
   ) {
     postToOpenWindows("catalog-", e.data);
+  } else if (e.data.type === "beacon:foundryImported") {
+    // Импорт пакета Foundry (foundry-import.js) заводит заметки, сцены и сам
+    // пакет в списке установленных. Сцены приезжают сокетом сами (см.
+    // room.go: broadcastSceneList), а вот список заметок и раздел
+    // "Настройки" читаются только HTTP-ом при открытии панели — освежаем их
+    // здесь, иначе до F5 висел бы старый список.
+    foundryModulesUpdates = null; // версии, проверенные ДО импорта, теперь врут
+    refreshOpenPanel("settings");
+    refreshNotesList();
+  } else if (e.data.type === "beacon:noteSaved" || e.data.type === "beacon:noteDeleted") {
+    // Заметка, открытая отдельным окном (note-window.js): в дереве панели
+    // могло смениться название, а удалённую надо убрать и закрыть её карточку.
+    const isOpenHere = !!(selectedNote && selectedNote.id === e.data.id);
+    if (e.data.type === "beacon:noteDeleted" && isOpenHere) {
+      backToNoteList(); // сам перечитает список
+    } else {
+      if (isOpenHere) openNote(e.data.id); // тот же текст, что сохранили в окне
+      refreshNotesList();
+    }
   } else if (e.data.type === "beacon:applySpellStatus") {
     // Клик по чипу «Накладывает: …» в карточке заклинания (см.
     // pages/spellbook.js: readStatuses). Сама карточка живёт в iframe и цели
@@ -2509,6 +2598,7 @@ document.addEventListener("mousedown", (e) => {
 // #canvasWrap растягивается обратно — см. ResizeObserver в vtt/index.js,
 // он сам подхватит новую ширину родителя канваса).
 const sidePanel = document.getElementById("panel");
+const panelResizer = document.getElementById("panelResizer");
 const railSectionBtns = [...document.querySelectorAll("#rail .rail-btn[data-section]")];
 const panelSections = [...document.querySelectorAll(".panel-section[data-panel]")];
 let openPanelSection = null;
@@ -2523,17 +2613,112 @@ function setSidePanelSection(name) {
   const opening = openPanelSection !== name;
   openPanelSection = openPanelSection === name ? null : name;
   sidePanel.classList.toggle("open", !!openPanelSection);
+  panelResizer.classList.toggle("visible", !!openPanelSection);
+  if (openPanelSection) {
+    sidePanel.style.flexBasis = panelWidth + "px";
+    sidePanel.style.width = panelWidth + "px";
+  } else {
+    // Ноль ширины — забота CSS (#panel), inline-стиль просто снимаем,
+    // иначе он победил бы правило и панель не схлопнулась бы.
+    sidePanel.style.flexBasis = "";
+    sidePanel.style.width = "";
+  }
   railSectionBtns.forEach((b) => b.classList.toggle("active", b.dataset.section === openPanelSection));
   panelSections.forEach((s) => s.classList.toggle("active", s.dataset.panel === openPanelSection));
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
     panelOpenHandlers[openPanelSection]();
   }
 }
+
+// showSidePanelSection — «показать раздел», в отличие от setSidePanelSection
+// («переключить»): нужен тем, кто открывает раздел не кликом по рейлу, а по
+// событию (значок заметки на карте, возврат в настройки сцены). Раньше там
+// звали setSidePanelSection, и если раздел УЖЕ был открыт, вызов его
+// закрывал — ровно наоборот тому, чего ждёшь от «открой мне заметку».
+function showSidePanelSection(name) {
+  if (openPanelSection === name) {
+    if (panelOpenHandlers[name]) panelOpenHandlers[name]();
+    return;
+  }
+  setSidePanelSection(name);
+}
+
+// refreshOpenPanel — перерисовать раздел, если он открыт ПРЯМО СЕЙЧАС.
+// panelOpenHandlers перечитывают данные с сервера, но зовутся только в
+// момент открытия — а данные меняются и снаружи: импорт модуля Foundry и
+// правка заметки идут в плавающем окне (iframe), которое ничего не знает об
+// этой панели и сообщает о себе postMessage'ем (см. слушатель "beacon:*"
+// выше). Без этого открытая панель оставалась висеть со старым списком до
+// перезагрузки страницы.
+function refreshOpenPanel(name) {
+  if (openPanelSection === name && panelOpenHandlers[name]) panelOpenHandlers[name]();
+}
+
 function closeSidePanel() {
   if (openPanelSection) setSidePanelSection(openPanelSection);
 }
 railSectionBtns.forEach((b) => (b.onclick = () => setSidePanelSection(b.dataset.section)));
 document.querySelectorAll(".panel-close[data-close]").forEach((b) => (b.onclick = closeSidePanel));
+
+// ---- ширина панели: тянется мышью за #panelResizer ----
+// Ширину ставим inline'ом на сам #panel: это состояние времени выполнения,
+// а не константа темы. Закрытая панель inline-стилей не имеет вовсе — тогда
+// работает #panel{flex:0 0 0;width:0} из dm.html и закрытие остаётся
+// анимированным. Переживает перезагрузку через localStorage; канвас
+// подхватит новую ширину сам — он уже слушает ResizeObserver своего
+// родителя (см. vtt/index.js).
+const PANEL_WIDTH_KEY = "beacon:dmPanelWidth";
+const PANEL_WIDTH_DEFAULT = 300;
+const PANEL_WIDTH_MIN = 240;
+
+// panelWidthMax — не больше, чем остаётся от окна за вычетом рейла и
+// минимума под сам канвас: иначе панель можно растянуть на весь экран и
+// потерять карту, ради которой всё и затевалось.
+function panelWidthMax() {
+  return Math.max(PANEL_WIDTH_MIN, window.innerWidth - 60 - 320);
+}
+
+function applyPanelWidth(px) {
+  const w = Math.round(Math.min(Math.max(px, PANEL_WIDTH_MIN), panelWidthMax()));
+  if (openPanelSection) {
+    sidePanel.style.flexBasis = w + "px";
+    sidePanel.style.width = w + "px";
+  }
+  return w;
+}
+
+let panelWidth = Math.min(Math.max(Number(localStorage.getItem(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN), panelWidthMax());
+window.addEventListener("resize", () => {
+  panelWidth = applyPanelWidth(panelWidth); // окно сузили — подрезать панель под новый максимум
+});
+
+panelResizer.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  panelResizer.setPointerCapture(e.pointerId);
+  const startX = e.clientX;
+  const startWidth = panelWidth;
+  document.body.classList.add("panel-resizing");
+
+  const onMove = (ev) => {
+    panelWidth = applyPanelWidth(startWidth + (ev.clientX - startX));
+  };
+  const onUp = () => {
+    panelResizer.removeEventListener("pointermove", onMove);
+    panelResizer.removeEventListener("pointerup", onUp);
+    panelResizer.removeEventListener("pointercancel", onUp);
+    document.body.classList.remove("panel-resizing");
+    localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+  };
+  panelResizer.addEventListener("pointermove", onMove);
+  panelResizer.addEventListener("pointerup", onUp);
+  panelResizer.addEventListener("pointercancel", onUp);
+});
+
+panelResizer.addEventListener("dblclick", () => {
+  panelWidth = applyPanelWidth(PANEL_WIDTH_DEFAULT);
+  localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+});
 
 // ================= токен света: отдельная быстрая кнопка =================
 // В отличие от чекбокса "💡 свет" в разделе "Токены" (который добавляет
