@@ -46,6 +46,7 @@ const editWrap = document.getElementById("editWrap");
 const editArea = document.getElementById("editArea");
 const msgEl = document.getElementById("msg");
 const showBtn = document.getElementById("showBtn");
+const pinBtn = document.getElementById("pinBtn");
 const accessBtn = document.getElementById("accessBtn");
 const editBtn = document.getElementById("editBtn");
 const deleteBtn = document.getElementById("deleteBtn");
@@ -69,6 +70,12 @@ let members = [];
 let current = null; // открытая запись целиком
 let editing = false;
 let filter = "all"; // all | shared | mine | others
+// pendingSection — раздел («## Название»), на котором надо открыть запись.
+// Страница журнала Foundry у нас становится разделом внутри записи (см.
+// internal/foundry/journal.go), и ссылка на неё должна попадать не в начало
+// длинного текста, а туда, куда вела. Приезжает хэшем адреса, тем же
+// приёмом, что в окне заметки ДМ (pages/note-window.js).
+let pendingSection = "";
 let currentFolder = ""; // куда ляжет новая запись/папка
 const openFolders = new Set();
 
@@ -324,8 +331,9 @@ function renderFolderSelect() {
 
 let openSeq = 0;
 
-async function openEntry(id, { edit = false } = {}) {
+async function openEntry(id, { edit = false, section = "" } = {}) {
   const seq = ++openSeq;
+  pendingSection = section;
   await flushPendingSave(); // уходя с записи, не теряем недосохранённое
   let entry;
   try {
@@ -339,8 +347,28 @@ async function openEntry(id, { edit = false } = {}) {
   current = entry;
   editing = edit && entry.canEdit;
   revealFolder(entry.folder || "");
+  // Адрес окна должен указывать на открытую запись: журнал живёт одним окном
+  // на весь стол (см. player.js: openJournalWindow), и ссылка «покажи вот
+  // это» переводит его именно сменой url — без replaceState следующий такой
+  // переход сравнивал бы новый адрес со старым и решил, что идти некуда.
+  history.replaceState(null, "", "/journal.html?id=" + id + (section ? "#" + encodeURIComponent(section) : ""));
   renderEntry();
   renderTree();
+}
+
+// scrollToSection — открыть запись сразу на нужном разделе (pendingSection),
+// с короткой подсветкой: иначе непонятно, почему текст открылся с середины.
+function scrollToSection() {
+  const wanted = pendingSection.trim().toLowerCase();
+  pendingSection = "";
+  if (!wanted) return;
+  const heading = [...renderEl.querySelectorAll("h1, h2, h3, h4")].find(
+    (h) => h.textContent.trim().toLowerCase() === wanted
+  );
+  if (!heading) return;
+  heading.scrollIntoView({ block: "start" });
+  heading.classList.add("section-target");
+  setTimeout(() => heading.classList.remove("section-target"), 2000);
 }
 
 // revealFolder — раскрыть цепочку папок до записи и сделать её папку
@@ -386,6 +414,9 @@ function renderEntry() {
   deleteBtn.style.display = current.canManage ? "flex" : "none";
   folderPicker.style.display = current.canManage ? "flex" : "none";
   showBtn.style.display = isDM ? "flex" : "none";
+  // Значки на карте расставляет и видит только ДМ (сервер шлёт
+  // scene.noteMarkers одной этой роли, см. service.Room.sceneFor).
+  pinBtn.style.display = isDM ? "flex" : "none";
   renderFolderSelect();
 
   editWrap.style.display = editing ? "flex" : "none";
@@ -404,6 +435,7 @@ function renderEntry() {
     // Формулы в тексте кликабельны, как в карточках библиотек — бросок
     // уходит в общий лог стола (см. inline-rolls.js).
     enhanceRolls(renderEl, sendRoll);
+    scrollToSection();
   }
 }
 
@@ -659,6 +691,20 @@ showBtn.onclick = () => {
   msgEl.textContent = "Показываю…"; // окончательный ответ придёт в journal_shown_ack
 };
 
+// pinBtn — значок записи на карте, как у заметок ДМ (см. domain.NoteMarker).
+// Само окно журнала канваса не видит — оно живёт в iframe поверх него,
+// поэтому просит расстановку у страницы-хозяина (pages/dm.js), тем же
+// postMessage-мостом, каким открываются плавающие окна.
+pinBtn.onclick = () => {
+  if (!current) return;
+  window.parent.postMessage(
+    { type: "beacon:placeJournalMarker", id: current.id, title: current.title },
+    location.origin
+  );
+  msgEl.className = "ok";
+  msgEl.textContent = "Кликни на карте, куда поставить значок.";
+};
+
 // ---- броски из текста записи ----
 // Своя WS-связь, как у карточек предмета/заклинания (см. itembook.js):
 // страница живёт отдельным окном и общего сокета стола не видит. /ws/player
@@ -735,7 +781,9 @@ function sendRoll(formula, label) {
 
 // ---- ссылки внутри текста ----
 
-wireCatalogLinks(renderEl);
+// prefer: "journal" — запись, на которую ведёт ссылка из журнала, ищется
+// сначала в журнале и только потом в заметках ДМ (см. catalog-links.js).
+wireCatalogLinks(renderEl, { prefer: "journal" });
 wireWikiLinks(renderEl, () => entries, {
   getFolder: () => (current && current.folder) || "",
   onOpen: (id) => openEntry(id),
@@ -783,5 +831,5 @@ async function guard(fn) {
   }
   await refreshList();
   const wanted = new URLSearchParams(location.search).get("id");
-  if (wanted) await openEntry(wanted);
+  if (wanted) await openEntry(wanted, { section: decodeURIComponent(location.hash.slice(1)) });
 })();

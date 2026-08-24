@@ -17,7 +17,7 @@
 // (pages/catalog.js: openDetail) — сама эта страница тоже всегда живёт в
 // плавающем окне-iframe, второй уровень вложенности не нужен (см.
 // floating-window.js: все окна — прямые дети топ-документа).
-import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchNotes } from "./api.js";
+import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchNotes, fetchJournal } from "./api.js";
 
 const KIND_CONFIG = {
   item: { fetchAll: fetchItems, urlFor: (id) => `/itembook.html?id=${id}`, keyPrefix: "item" },
@@ -30,7 +30,25 @@ const KIND_CONFIG = {
   // правила ссылаются на другие правила (@UUID[...JournalEntry...]), см.
   // internal/foundry/links.go.
   note: { fetchAll: fetchNotes, urlFor: (id) => `/note-window.html?id=${id}`, keyPrefix: "note" },
+  // journal — журнал стола (domain.JournalEntry). Отдельного data-kind у
+  // ссылок нет и быть не может: в Foundry и то, и другое — один и тот же
+  // JournalEntry, а куда он приехал у нас, решает галочка при импорте (см.
+  // NOTE_DESTINATIONS в pages/foundry-import.js). Поэтому kind="note" ищется
+  // в обеих библиотеках — см. NOTE_LOOKUP_ORDER.
+  journal: { fetchAll: fetchJournal, urlFor: (id) => `/journal.html?id=${id}`, keyPrefix: "journal", single: true },
 };
+
+// NOTE_LOOKUP_ORDER — где искать цель ссылки kind="note" и в каком порядке.
+// prefer задаёт страница, внутри которой висит текст: ссылка из журнала
+// сначала ищет в журнале, ссылка из заметки — в заметках. Это важно, когда
+// один и тот же модуль импортировали дважды, в обе библиотеки: открыться
+// должна та копия, по которой человек сейчас читает.
+//
+// Игроку /api/notes отвечает 403 (заметки ДМ — только его), список молча
+// становится пустым (см. listFor) и поиск идёт дальше, в журнал.
+function noteLookupOrder(prefer) {
+  return prefer === "journal" ? ["journal", "note"] : ["note", "journal"];
+}
 
 // listCache — один запрос списка на kind на всё время жизни страницы: одно
 // описание нередко ссылается на десяток заклинаний/черт, гонять сеть за
@@ -69,8 +87,18 @@ function openEntry(kind, id, name, section) {
   const cfg = KIND_CONFIG[kind];
   if (!cfg) return;
   const url = cfg.urlFor(id) + (section ? "#" + encodeURIComponent(section) : "");
+  // single: у журнала окно одно на весь стол (key "journal", см.
+  // pages/player.js: openJournalWindow) — ссылка должна ПЕРЕВЕСТИ его на
+  // нужную запись, а не открыть второй журнал рядом. Отсюда navigate (см.
+  // floating-window.js).
   window.parent.postMessage(
-    { type: "beacon:openFloatingWindow", key: cfg.keyPrefix + "-" + id, title: name, url },
+    {
+      type: "beacon:openFloatingWindow",
+      key: cfg.single ? cfg.keyPrefix : cfg.keyPrefix + "-" + id,
+      title: cfg.single ? "Журнал стола" : name,
+      url,
+      navigate: !!cfg.single,
+    },
     location.origin
   );
 }
@@ -78,7 +106,7 @@ function openEntry(kind, id, name, section) {
 // wireCatalogLinks — делегированный клик по containerEl, как и у
 // enhanceRolls/wireWikiLinks — не нужно перевешивать обработчик при каждой
 // перерисовке блока, один вызов после вставки HTML достаточно.
-export function wireCatalogLinks(containerEl) {
+export function wireCatalogLinks(containerEl, { prefer = "note" } = {}) {
   if (!containerEl) return;
   containerEl.addEventListener("click", async (e) => {
     const a = e.target.closest("a.catalog-ref");
@@ -87,9 +115,18 @@ export function wireCatalogLinks(containerEl) {
     const kind = a.dataset.kind;
     const name = a.dataset.name;
     if (!kind || !name) return;
-    const list = await listFor(kind);
-    const found = matchByName(list, name, a.dataset.folder);
-    if (!found) return; // карточки с таким именем нет в текущей библиотеке — ссылка просто ничего не делает, не ошибка
-    openEntry(kind, found.id, found.name || found.title, a.dataset.section);
+
+    // Журналы модуля могли поехать и в заметки ДМ, и в журнал стола —
+    // перебираем обе библиотеки, а не одну (см. noteLookupOrder).
+    const kinds = kind === "note" ? noteLookupOrder(prefer) : [kind];
+    for (const k of kinds) {
+      const found = matchByName(await listFor(k), name, a.dataset.folder);
+      if (found) {
+        openEntry(k, found.id, found.name || found.title, a.dataset.section);
+        return;
+      }
+    }
+    // Записи с таким именем нет ни там, ни там — ссылка просто ничего не
+    // делает: цель могли не импортировать или удалить, это не ошибка.
   });
 }

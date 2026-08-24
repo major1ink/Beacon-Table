@@ -364,7 +364,7 @@ charsOverlay.addEventListener("mousedown", (e) => {
 window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data) return;
   if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url });
+    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
   } else if (
     e.data.type === "beacon:spellSaved" ||
     e.data.type === "beacon:itemSaved" ||

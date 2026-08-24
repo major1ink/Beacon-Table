@@ -905,7 +905,12 @@ export function createInteraction(ctx) {
       // открыть его в панели "Заметки" (см. pages/dm.js: vtt:openNoteMarker).
       const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers);
       if (markerId) {
-        document.dispatchEvent(new CustomEvent("vtt:openNoteMarker", { detail: { noteId: ctx.scene.noteMarkers[markerId].noteId } }));
+        const marker = ctx.scene.noteMarkers[markerId];
+        // library — из какой библиотеки запись (см. domain.NoteMarker):
+        // пусто у значков, поставленных до появления журнала, — это заметки ДМ.
+        document.dispatchEvent(
+          new CustomEvent("vtt:openNoteMarker", { detail: { noteId: marker.noteId, library: marker.library || "" } })
+        );
         return;
       }
     });
@@ -1116,7 +1121,14 @@ export function createInteraction(ctx) {
       const payload = JSON.parse(canvas.dataset.noteMarkerPayload);
       ctx.send({
         type: "add_note_marker",
-        noteMarker: { id: "nm-" + Date.now(), noteId: payload.noteId, label: payload.label, x, y },
+        noteMarker: {
+          id: "nm-" + Date.now(),
+          noteId: payload.noteId,
+          library: payload.library || "",
+          label: payload.label,
+          x,
+          y,
+        },
       });
       canvas.dataset.placingNoteMarker = "0";
     });

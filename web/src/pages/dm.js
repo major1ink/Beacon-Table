@@ -109,16 +109,22 @@ document.getElementById("logoutBtn").onclick = async () => {
 // (см. web/journal.html), у них он открывается ровно тем же окном из
 // бокового меню (pages/player.js), и держать две реализации одного журнала
 // незачем.
-document.getElementById("journalBtn").onclick = () => {
+// openJournalWindow — окно журнала одно на весь стол (key "journal", как и
+// у игрока, см. pages/player.js): entryId открывает его сразу на нужной
+// записи — так работают и значок журнала на карте, и ссылки внутри текстов.
+function openJournalWindow(entryId) {
   openFloatingWindow({
     key: "journal",
     title: "Журнал стола",
-    url: "/journal.html",
+    url: "/journal.html" + (entryId ? "?id=" + encodeURIComponent(entryId) : ""),
+    navigate: !!entryId,
     width: 900,
     height: 640,
     popoutFeatures: "width=900,height=640",
   });
-};
+}
+
+document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
 document.getElementById("worldsBtn").onclick = () => {
   location.href = "/worlds.html";
@@ -2305,7 +2311,7 @@ document.getElementById("notePlaceBtn").onclick = () => {
   if (!selectedNote) return;
   closeSidePanel();
   document.dispatchEvent(
-    new CustomEvent("vtt:placeNoteMarker", { detail: { noteId: selectedNote.id, label: selectedNote.title } })
+    new CustomEvent("vtt:placeNoteMarker", { detail: { noteId: selectedNote.id, label: selectedNote.title, library: "" } })
   );
   showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок заметки" });
 };
@@ -2346,6 +2352,13 @@ document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
 // значок на карте (двойной клик, см. interaction.js) — открыть панель прямо
 // на нужной заметке, а не просто раскрыть раздел.
 document.addEventListener("vtt:openNoteMarker", (e) => {
+  // Значок может вести и в заметки ДМ, и в журнал стола (см.
+  // domain.NoteMarker.Library) — открываем то, на что он реально ссылается,
+  // а не всегда панель заметок.
+  if (e.detail.library === "journal") {
+    openJournalWindow(e.detail.noteId);
+    return;
+  }
   showSidePanelSection("notes");
   openNote(e.detail.noteId);
 });
@@ -2374,7 +2387,17 @@ onPanelOpen("notes", () => {
 window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data) return;
   if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url });
+    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
+  } else if (e.data.type === "beacon:placeJournalMarker") {
+    // Значок записи журнала на карту. Просит окно журнала (iframe, см.
+    // pages/journal.js) — расстановка живёт здесь, потому что канвас есть
+    // только у этой страницы; дальше всё как со значком заметки ДМ.
+    document.dispatchEvent(
+      new CustomEvent("vtt:placeNoteMarker", {
+        detail: { noteId: e.data.id, label: e.data.title, library: "journal" },
+      })
+    );
+    showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок журнала" });
   } else if (
     e.data.type === "beacon:monsterSaved" ||
     e.data.type === "beacon:spellSaved" ||

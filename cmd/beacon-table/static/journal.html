@@ -145,6 +145,12 @@
     .note-render:empty::before { content: "Пусто — нажми ✎, чтобы начать писать."; opacity: .45; }
     .note-render h1, .note-render h2, .note-render h3 { margin: .8em 0 .35em; line-height: 1.3; }
     .note-render h1:first-child, .note-render h2:first-child, .note-render h3:first-child { margin-top: 0; }
+    /* раздел, на который вела ссылка (см. journal.js: scrollToSection) */
+    .note-render .section-target {
+      background: color-mix(in srgb, var(--accent) 22%, transparent);
+      border-radius: 6px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent);
+      transition: background .4s ease, box-shadow .4s ease;
+    }
     .note-render h1 { font-size: 1.6em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
     .note-render h2 { font-size: 1.3em; }
     .note-render h3 { font-size: 1.12em; opacity: .9; }
@@ -193,13 +199,13 @@
     #accessSaveBtn:hover { background: var(--green-hover); }
     #accessMsg { flex: 1 1 auto; align-self: center; font-size: 12px; color: #e74c3c; }
   </style>
-  <script type="module" crossorigin src="/assets/journal-BFzDlYQh.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-Dra3uWxP.js">
+  <script type="module" crossorigin src="/assets/journal-BGn8ARRm.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-jZPu2o7F.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-B8E5VJBp.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-CY9_0aAs.js">
-  <link rel="modulepreload" crossorigin href="/assets/toolbar-Be7lW1dL.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-BtqJIi_5.js">
+  <link rel="modulepreload" crossorigin href="/assets/toolbar-B3UalKaP.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-Kr2n7buy.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-BdFQkweV.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
@@ -233,6 +239,7 @@
           <span id="entryTitle"></span>
           <span class="badge" id="entryBadge" style="display:none"></span>
           <button id="showBtn" title="Открыть эту запись у всех игроков за столом"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg> Показать</button>
+          <button id="pinBtn" class="icon-btn" title="Поставить значок этой записи на карту"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.9-6.5-10.5a6.5 6.5 0 0113 0C18.5 15.1 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg></button>
           <button id="accessBtn" class="icon-btn" title="Кому видно и кому можно править"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></button>
           <button id="editBtn" class="icon-btn" title="Редактировать"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/></svg></button>
           <button id="deleteBtn" class="icon-btn danger" title="Удалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/></svg></button>
