@@ -1750,9 +1750,6 @@ function noteFolderRowEl(node) {
     else openNoteFolders.add(node.path);
     renderNoteRows();
   };
-  toggle.onclick = select;
-  name.onclick = select;
-  count.onclick = select;
 
   const actions = document.createElement("span");
   actions.className = "note-folder-actions";
@@ -1762,6 +1759,7 @@ function noteFolderRowEl(node) {
     folderActionBtn("trash", "Удалить папку вместе с заметками", () => deleteNoteFolderPrompt(node))
   );
   row.append(toggle, name, count, actions);
+  row.onclick = select;
   return row;
 }
 
@@ -1799,9 +1797,29 @@ function renderNoteTree(node, container, depth) {
   }
 }
 
+let noteRowsKey = null;
+
+function noteRowsStateKey(filter) {
+  return JSON.stringify([
+    filter,
+    currentNoteFolder,
+    [...openNoteFolders].sort(),
+    notesList.map((n) => [n.id, n.title, n.folder || "", n.updatedAt]),
+    noteFolders,
+  ]);
+}
+
 function renderNoteRows() {
   const filter = noteSearch.value.trim().toLowerCase();
-  noteRows.innerHTML = "";
+
+  noteCurrentFolderEl.textContent = currentNoteFolder ? "в папке: " + currentNoteFolder : "в корне библиотеки";
+  noteFolderResetBtn.style.display = currentNoteFolder ? "" : "none";
+
+  const key = noteRowsStateKey(filter);
+  if (key === noteRowsKey) return;
+  noteRowsKey = key;
+
+  const rows = document.createDocumentFragment();
 
   // Поиск показывает плоский список по всей библиотеке: искать заметку,
   // раскрывая ветки руками, — ровно то, от чего поиск и избавляет. Папка
@@ -1810,20 +1828,17 @@ function renderNoteRows() {
     const found = notesList.filter(
       (n) => n.title.toLowerCase().includes(filter) || (n.folder || "").toLowerCase().includes(filter)
     );
-    if (!found.length) {
-      noteRows.appendChild(hintEl("Ничего не найдено."));
-      return;
-    }
-    for (const n of found) noteRows.appendChild(noteRowEl(n, { showFolder: true }));
+    if (!found.length) rows.appendChild(hintEl("Ничего не найдено."));
+    else for (const n of found) rows.appendChild(noteRowEl(n, { showFolder: true }));
+    noteRows.replaceChildren(rows);
     return;
   }
 
-  renderNoteTree(noteFolderTree(), noteRows, 0);
+  renderNoteTree(noteFolderTree(), rows, 0);
   if (!notesList.length && !noteFolders.length) {
-    noteRows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка»."));
+    rows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка»."));
   }
-  noteCurrentFolderEl.textContent = currentNoteFolder ? "в папке: " + currentNoteFolder : "в корне библиотеки";
-  noteFolderResetBtn.style.display = currentNoteFolder ? "" : "none";
+  noteRows.replaceChildren(rows);
 }
 
 function hintEl(text) {
@@ -1943,11 +1958,6 @@ function renderNoteDetail() {
     noteEditArea.focus();
   } else {
     noteRenderView.innerHTML = renderNoteHtml(selectedNote.content);
-    // Формулы в тексте — кликабельные, как в статблоках и карточках (см.
-    // inline-rolls.js). Импорт модуля Foundry специально приводит свои
-    // [[/r 2d6]] к обычной формуле ради этого (см. internal/foundry/rolls.go).
-    // Не делегированный обработчик, а обход текста — поэтому вызываем на
-    // каждую перерисовку, а не один раз при загрузке страницы.
     enhanceRolls(noteRenderView, sendNoteRoll);
   }
 }
@@ -1960,16 +1970,23 @@ function sendNoteRoll(formula, label) {
   vtt.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
 }
 
+let noteOpenSeq = 0;
+
 async function openNote(id, { edit = false } = {}) {
+  const seq = ++noteOpenSeq;
   notesView = "detail";
+  let note;
   try {
-    selectedNote = await fetchNote(id);
+    note = await fetchNote(id);
   } catch (err) {
+    if (seq !== noteOpenSeq) return;
     alert("Не удалось открыть заметку: " + err.message);
     notesView = "list";
     renderNotesPanel();
     return;
   }
+  if (seq !== noteOpenSeq) return;
+  selectedNote = note;
   noteEditing = edit;
   renderNotesPanel();
 }
