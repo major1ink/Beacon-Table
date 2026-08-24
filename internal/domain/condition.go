@@ -40,8 +40,8 @@ type Condition struct {
 	// игнорируется (см. conditionfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в библиотеку и править копию
 	// (кнопка «Клонировать», см. web/src/pages/conditions.js).
-	System bool   `json:"system,omitempty"`
-	Source string `json:"source,omitempty"` // "PHB'24", "самодельное"...
+	System          bool   `json:"system,omitempty"`
+	Source          string `json:"source,omitempty"` // "PHB'24", "самодельное"...
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 
 	// Slug — стабильный машинный ключ состояния ("blinded", "prone",

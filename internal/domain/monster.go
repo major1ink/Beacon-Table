@@ -33,7 +33,7 @@ type Monster struct {
 	// карточки нельзя редактировать/удалять (см. monsterfile.Catalog.Update/
 	// Delete — domain.ErrForbidden) — только клонировать в пользовательскую
 	// библиотеку (см. web/src/pages/bestiary.js).
-	System bool `json:"system,omitempty"`
+	System          bool   `json:"system,omitempty"`
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 	ImageURL        string `json:"imageUrl,omitempty"` // токен-арт — та же /uploads/tokens категория, что у аватаров персонажей
 

@@ -171,18 +171,18 @@ func (s *journalService) Create(ctx context.Context, v domain.JournalViewer, dra
 
 // manageable — общая проверка «запись существует и viewer вправе ею
 // распоряжаться» для SetAccess/Move/Delete.
-func (s *journalService) manageable(ctx context.Context, v domain.JournalViewer, id string) (*domain.JournalEntry, error) {
+func (s *journalService) manageable(ctx context.Context, v domain.JournalViewer, id string) error {
 	e, err := s.entries.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !e.CanSee(v) {
-		return nil, domain.ErrNotFound // см. Get: не подтверждаем существование
+		return domain.ErrNotFound // см. Get: не подтверждаем существование
 	}
 	if !e.CanManage(v) {
-		return nil, domain.ErrForbidden
+		return domain.ErrForbidden
 	}
-	return e, nil
+	return nil
 }
 
 func (s *journalService) Update(ctx context.Context, v domain.JournalViewer, id, content string) (*domain.JournalEntry, error) {
@@ -210,7 +210,7 @@ func (s *journalService) Update(ctx context.Context, v domain.JournalViewer, id,
 }
 
 func (s *journalService) SetAccess(ctx context.Context, v domain.JournalViewer, id string, def domain.JournalAccess, access map[string]domain.JournalAccess) (*domain.JournalEntry, error) {
-	if _, err := s.manageable(ctx, v, id); err != nil {
+	if err := s.manageable(ctx, v, id); err != nil {
 		return nil, err
 	}
 	def, access, err := normalizeAccess(def, access)
@@ -228,7 +228,7 @@ func (s *journalService) SetAccess(ctx context.Context, v domain.JournalViewer, 
 }
 
 func (s *journalService) Move(ctx context.Context, v domain.JournalViewer, id, folder string) (*domain.JournalEntry, error) {
-	if _, err := s.manageable(ctx, v, id); err != nil {
+	if err := s.manageable(ctx, v, id); err != nil {
 		return nil, err
 	}
 	folder, err := validateNoteFolder(folder)
@@ -246,7 +246,7 @@ func (s *journalService) Move(ctx context.Context, v domain.JournalViewer, id, f
 }
 
 func (s *journalService) Delete(ctx context.Context, v domain.JournalViewer, id string) error {
-	if _, err := s.manageable(ctx, v, id); err != nil {
+	if err := s.manageable(ctx, v, id); err != nil {
 		return err
 	}
 	return s.entries.Delete(ctx, id)
