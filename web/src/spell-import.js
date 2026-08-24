@@ -13,6 +13,7 @@
 
 import { foundryStatusToSlug, conditionName } from "./foundry-conditions.js";
 import { effectRounds } from "./condition-import.js";
+import { cleanFoundryText } from "./foundry-text.js";
 
 const SCHOOL_RU = {
   abj: "Ограждение",
@@ -279,7 +280,7 @@ export function mapFoundrySpellJson(raw) {
     concentration: components.concentration,
     savingThrow: buildSavingThrow(sys),
     damage: buildDamage(sys),
-    description: (sys.description && sys.description.value) || "",
+    description: cleanFoundryText(sys.description && sys.description.value),
     statuses: mapFoundrySpellStatuses(raw),
   };
 }

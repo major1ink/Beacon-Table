@@ -193,9 +193,11 @@ func TestClassify(t *testing.T) {
 		{"заклинание из пака предметов", Doc{"type": "spell"}, "Item", TargetSpells},
 		{"меч", Doc{"type": "weapon"}, "Item", TargetItems},
 		{"класс", Doc{"type": "class"}, "Item", TargetReferences},
+		{"помещение бастиона", Doc{"type": "facility"}, "Item", TargetReferences},
 		{"предыстория", Doc{"type": "background"}, "Item", TargetReferences},
 		{"NPC", Doc{"type": "npc"}, "Actor", TargetMonsters},
-		{"транспорт не статблок", Doc{"type": "vehicle"}, "Actor", TargetSkipped},
+		{"транспорт едет в бестиарий как статблок", Doc{"type": "vehicle"}, "Actor", TargetMonsters},
+		{"группа актёров не статблок", Doc{"type": "group"}, "Actor", TargetSkipped},
 		{"журнал", Doc{"pages": []any{map[string]any{}}}, "JournalEntry", TargetNotes},
 		{"таблица", Doc{"results": []any{}}, "RollTable", TargetSkipped},
 		{"эффект", Doc{"changes": []any{}, "duration": map[string]any{}}, "", TargetConditions},
@@ -444,6 +446,48 @@ func TestMapJournalMissingImage(t *testing.T) {
 	}
 }
 
+// TestMapJournalVideoPDF — страницы видео/PDF проигрываются прямо в
+// заметке (<video>/<iframe> на перенесённый файл), а не оседают голой
+// ссылкой на скачивание.
+func TestMapJournalVideoPDF(t *testing.T) {
+	_, assets := testModule(t)
+	doc := Doc{
+		"name": "Приложения",
+		"pages": []any{
+			map[string]any{"name": "Ролик", "type": "video", "src": "modules/my-module/icons/goblin.webp"},
+			map[string]any{"name": "Раздатка", "type": "pdf", "src": "modules/my-module/icons/goblin.webp"},
+		},
+	}
+	content := MapJournal(context.Background(), doc, "", assets).Content
+	if !strings.Contains(content, "<video") || !strings.Contains(content, "<source src=\"/uploads/notes/") {
+		t.Fatalf("видео не проигрывается инлайн: %q", content)
+	}
+	if !strings.Contains(content, "<iframe src=\"/uploads/notes/") {
+		t.Fatalf("PDF не встроен инлайн: %q", content)
+	}
+	if !strings.Contains(content, "[Открыть PDF в отдельной вкладке](/uploads/notes/") {
+		t.Fatalf("нет запасной ссылки на PDF: %q", content)
+	}
+}
+
+// TestMapJournalMissingVideo — тот же случай, что MissingImage, но для
+// видео: файла в архиве нет, заметка должна сказать об этом текстом, а не
+// оставить битый <video> без src.
+func TestMapJournalMissingVideo(t *testing.T) {
+	_, assets := testModule(t)
+	doc := Doc{
+		"name":  "Приложения",
+		"pages": []any{map[string]any{"name": "Ролик", "type": "video", "src": "modules/other/cutscene.mp4"}},
+	}
+	content := MapJournal(context.Background(), doc, "", assets).Content
+	if strings.Contains(content, "<video") {
+		t.Fatalf("тег видео вставился без файла: %q", content)
+	}
+	if !strings.Contains(content, "видео не перенесено") || !strings.Contains(content, "cutscene.mp4") {
+		t.Fatalf("нет следа от ненайденного видео: %q", content)
+	}
+}
+
 // TestAssetsLocateFallback — путь в документе не всегда совпадает с тем, что
 // в архиве: другой регистр или файл переехал в другую подпапку при сборке.
 // Ищем по индексу архива, иначе картинки теряются на ровном месте.
@@ -630,6 +674,16 @@ func TestRewriteRolls(t *testing.T) {
 		},
 		{"экранированный амперсанд у &Reference", `состояние &amp;Reference[Prone]`, `состояние Prone`},
 		{"незнакомая команда без подписи исчезает", `а[[/item Меч]]б`, `аб`},
+		// Регрессия на реальных данных (см. data/references — "Покрытое ядом
+		// оружие"): цель /item названа "Русское [English]" — из-за одиночной
+		// пары [...] внутри макроса он раньше не матчился ВООБЩЕ (жадный
+		// [^\]]+ упирался в "]" из "[Cunning Strike]" раньше двух закрывающих
+		// "]]") и оставался в тексте нетронутым.
+		{
+			"вложенные [...] в цели /item (одно название на два языка)",
+			`эффект [[/item Хитроумный удар [Cunning Strike] activity="Отравление"]]{Отравление} применён`,
+			`эффект Отравление применён`,
+		},
 		{"ссылка на правило системы", `состояние &Reference[condition=prone]{Ничком}`, `состояние Ничком`},
 		{"текст без макросов не трогаем", `просто 2d6 в тексте`, `просто 2d6 в тексте`},
 	}

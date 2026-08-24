@@ -54,6 +54,7 @@ var itemTargets = map[string]string{
 	"subspecies": TargetReferences,
 	"origin":     TargetReferences,
 	"effect":     TargetConditions,
+	"facility": TargetReferences,
 }
 
 // Expand разворачивает документы пака в плоский список "документ →
@@ -172,11 +173,16 @@ func Classify(d Doc, packType string) string {
 	return TargetSkipped
 }
 
-// actorTarget — существо едет в бестиарий, но только если это существо:
-// транспорт (vehicle) и группы (group) наш статблок не описывает.
+// actorTarget — существо едет в бестиарий. Транспорт (vehicle) — туда же:
+// domain.Monster почти целиком свободный текст (см. комментарий в
+// internal/domain/monster.go), статблок корабля/повозки в него ложится не
+// хуже статблока существа, а КД/ХП у vehicle-актёра в dnd5e лежат в тех же
+// полях, что у npc (см. web/src/monster-import.js — маппер общий). Группы
+// (group) — не статблок, а обёртка со ссылками на актёров пака; сами актёры
+// приедут своими документами, тащить группу отдельно значило бы задвоить.
 func actorTarget(docType string) string {
 	switch docType {
-	case "", "npc", "character":
+	case "", "npc", "character", "vehicle":
 		return TargetMonsters
 	default:
 		return TargetSkipped
