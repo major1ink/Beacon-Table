@@ -321,3 +321,49 @@ func (s *SessionStore) DeleteForAccount(ctx context.Context, accountID string) e
 	}
 	return nil
 }
+
+// FoundryModuleStore — in-memory repository.FoundryModuleRepository.
+type FoundryModuleStore struct {
+	mu   sync.Mutex
+	byID map[string]domain.FoundryModule
+}
+
+func NewFoundryModuleStore() *FoundryModuleStore {
+	return &FoundryModuleStore{byID: map[string]domain.FoundryModule{}}
+}
+
+func (s *FoundryModuleStore) Upsert(ctx context.Context, m domain.FoundryModule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byID[m.ID] = m
+	return nil
+}
+
+func (s *FoundryModuleStore) List(ctx context.Context) ([]*domain.FoundryModule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*domain.FoundryModule, 0, len(s.byID))
+	for _, m := range s.byID {
+		cp := m
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ImportedAt.After(out[j].ImportedAt) })
+	return out, nil
+}
+
+func (s *FoundryModuleStore) ByID(ctx context.Context, id string) (*domain.FoundryModule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, ok := s.byID[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &m, nil
+}
+
+func (s *FoundryModuleStore) Delete(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.byID, id)
+	return nil
+}

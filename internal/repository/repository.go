@@ -258,3 +258,23 @@ type AssetRepository interface {
 	// внутрь kind, и отклоняет всё остальное.
 	DeleteAsset(ctx context.Context, kind, url string) error
 }
+
+// FoundryModuleRepository — какие пакеты Foundry VTT (модули/системы) ДМ уже
+// импортировал в этот мир (см. domain.FoundryModule), для раздела
+// "Настройки": список установленного и проверка обновлений по сохранённой
+// ManifestURL (см. service.FoundryService.Installed/CheckUpdates).
+type FoundryModuleRepository interface {
+	// Upsert запоминает/обновляет пакет по m.ID — вызывается после каждого
+	// успешного импорта пака этого модуля (см. FoundryService.ImportPack), с
+	// той версией и ссылкой на манифест, что были использованы.
+	Upsert(ctx context.Context, m domain.FoundryModule) error
+	// List — все запомненные пакеты этого мира, новые сверху.
+	List(ctx context.Context) ([]*domain.FoundryModule, error)
+	// ByID — один пакет; domain.ErrNotFound, если такого не устанавливали
+	// (или уже удалили) в этом мире.
+	ByID(ctx context.Context, id string) (*domain.FoundryModule, error)
+	// Delete забывает пакет как установленный (см. FoundryService.Delete) —
+	// сами карточки/файлы, заведённые его импортом, это НЕ трогает, тем же
+	// разделением, что и у Upsert.
+	Delete(ctx context.Context, id string) error
+}

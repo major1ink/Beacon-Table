@@ -34,6 +34,7 @@ type Spell struct {
 	// web/src/pages/spellbook.js).
 	System bool   `json:"system,omitempty"`
 	Source string `json:"source,omitempty"` // "PHB'24", "MHH"...
+	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 
 	Level  int    `json:"level"`            // 0-9, 0 = заговор
 	School string `json:"school,omitempty"` // "Прорицание" и т.п. — свободный текст

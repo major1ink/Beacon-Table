@@ -438,6 +438,17 @@ async function importCards(target, docs, pack) {
       }
     }
 
+    // Метка "из какого пакета" — единственное назначение: "Удалить модуль" в
+    // настройках (см. pages/dm.js: openFoundryUpdateWindow и
+    // internal/service/foundry.go: FoundryService.Delete), сама карточка это
+    // поле нигде не показывает. Проставляется здесь, ПОСЛЕ sameCard/
+    // resolveConflict выше, а не раньше: иначе она сама попала бы в
+    // сравнение "не изменилось ли" и превращала бы любую руками заведённую
+    // карточку, совпадающую с модулем по остальным полям, в «конфликт» на
+    // пустом месте. Перезаписывается при каждом импорте/обновлении карточки —
+    // если её потом перезаписал другой модуль, "своей" она считается уже у него.
+    card.foundryModuleId = pkg.id;
+
     try {
       if (action === "overwrite") {
         await target.updateOne(existing.id, Object.assign({}, existing, card));
@@ -696,5 +707,16 @@ document.getElementById("closeBtn").onclick = () => {
     packsSection.style.display = "none";
     urlForm.style.display = "none";
     setStatus("Импорт пакетов Foundry доступен только ДМ.", true);
+    return;
+  }
+  // ?url= — окно открыто из настроек кнопкой "Обновить" у уже
+  // установленного пакета (см. pages/dm.js: openFoundryUpdateWindow):
+  // подставляем ссылку на манифест и сразу запускаем разведку, как будто ДМ
+  // сам вставил её и нажал "Проверить" — дальше тот же выбор паков/разделов,
+  // что и при первой установке.
+  const prefillURL = new URLSearchParams(location.search).get("url");
+  if (prefillURL) {
+    urlInput.value = prefillURL;
+    urlForm.requestSubmit();
   }
 })();

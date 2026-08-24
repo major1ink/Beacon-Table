@@ -339,6 +339,32 @@ export async function importFoundryPack(url, pack, targets) {
   return apiFetch("/api/foundry/import", { method: "POST", body: JSON.stringify({ url, pack, targets }) });
 }
 
+// fetchFoundryModules — пакеты Foundry VTT, уже импортированные в этот мир
+// (раздел "Настройки"): [{id,title,version,manifestUrl,importedAt}]. Без
+// сети — сама проверка новых версий отдельным запросом (см.
+// checkFoundryModuleUpdates), чтобы открытие настроек не ждало по манифесту
+// на каждый установленный пакет.
+export async function fetchFoundryModules() {
+  return apiFetch("/api/foundry/modules");
+}
+
+// checkFoundryModuleUpdates — для каждого установленного пакета заново
+// скачивает его манифест и сравнивает версию с той, что стояла на момент
+// импорта: [{id,title,installedVersion,latestVersion,updateAvailable,error}].
+export async function checkFoundryModuleUpdates() {
+  return apiFetch("/api/foundry/modules/check", { method: "POST" });
+}
+
+// deleteFoundryModule — "Удалить модуль" целиком: карточки (существа/
+// заклинания/предметы/справочник/состояния), помеченные его id, файлы,
+// скопированные его импортом в библиотеку загрузок, и саму запись об
+// установке. Сцены/плейлисты/заметки, заведённые тем же импортом, НЕ трогает
+// (см. internal/service/foundry.go: FoundryService.Delete). Возвращает
+// {cards:{раздел:сколько удалено},warnings}.
+export async function deleteFoundryModule(id) {
+  return apiFetch(`/api/foundry/modules/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 // Загрузка файла (карта, токен-арт, аватар персонажа или ассет карты) на
 // сервер, возвращает {url}. kind — "maps"/"audio"/"props" (только ДМ) или
 // "tokens" (любой авторизованный аккаунт — сюда же грузят аватары

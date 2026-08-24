@@ -125,6 +125,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// см. foundry_handlers.go.
 	mux.HandleFunc("POST /api/foundry/inspect", a.handleFoundryInspect)
 	mux.HandleFunc("POST /api/foundry/import", a.handleFoundryImport)
+	mux.HandleFunc("GET /api/foundry/modules", a.handleFoundryModules)
+	mux.HandleFunc("POST /api/foundry/modules/check", a.handleFoundryModulesCheck)
+	mux.HandleFunc("DELETE /api/foundry/modules/{id}", a.handleFoundryModuleDelete)
 
 	mux.HandleFunc("GET /api/conditions", a.handleConditionsList)
 	mux.HandleFunc("POST /api/conditions", a.handleConditionCreate)

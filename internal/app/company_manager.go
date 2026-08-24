@@ -262,6 +262,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 
 	characterRepo := sqlite.NewCharacterStore(m.db, company.ID, company.System)
 	playlistRepo := sqlite.NewPlaylistStore(m.db, company.ID)
+	foundryModuleRepo := sqlite.NewFoundryModuleStore(m.db, company.ID)
 
 	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo)
 	if err != nil {
@@ -276,25 +277,36 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	notes := service.NewNoteService(noteRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
 	assets := service.NewAssetService(assetRepo)
+	bestiary := service.NewBestiaryService(monsterRepo)
+	spells := service.NewSpellService(spellRepo)
+	items := service.NewItemService(itemRepo)
+	references := service.NewReferenceService(referenceRepo)
+	conditions := service.NewConditionService(conditionRepo)
 
 	world := &ActiveWorld{
 		Company:    company,
 		Room:       room,
 		Characters: service.NewCharacterService(characterRepo, itemRepo),
 		Admin:      service.NewAdminService(m.accounts, m.sessions, characterRepo, company.ID),
-		Bestiary:   service.NewBestiaryService(monsterRepo),
-		Spells:     service.NewSpellService(spellRepo),
-		Items:      service.NewItemService(itemRepo),
-		References: service.NewReferenceService(referenceRepo),
-		Conditions: service.NewConditionService(conditionRepo),
+		Bestiary:   bestiary,
+		Spells:     spells,
+		Items:      items,
+		References: references,
+		Conditions: conditions,
 		Notes:      notes,
 		Playlists:  playlists,
 		Assets:     assets,
 		// Кэш скачанных модулей — в данных этой компании: файлы там
 		// временные (чистятся по TTL, см. foundry.Cache), но лежать рядом с
 		// остальными данными мира им уместнее, чем в системном temp, который
-		// на некоторых хостингах живёт в оперативной памяти.
-		Foundry: service.NewFoundryService(filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists),
+		// на некоторых хостингах живёт в оперативной памяти. bestiary/spells/
+		// items/references/conditions — только для "Удалить модуль" (см.
+		// service.FoundryService.Delete): найти и снести карточки этого мира,
+		// помеченные id пакета.
+		Foundry: service.NewFoundryService(
+			filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists, foundryModuleRepo,
+			bestiary, spells, items, references, conditions,
+		),
 	}
 
 	m.mu.Lock()

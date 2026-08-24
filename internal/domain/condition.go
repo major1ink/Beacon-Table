@@ -42,6 +42,7 @@ type Condition struct {
 	// (кнопка «Клонировать», см. web/src/pages/conditions.js).
 	System bool   `json:"system,omitempty"`
 	Source string `json:"source,omitempty"` // "PHB'24", "самодельное"...
+	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 
 	// Slug — стабильный машинный ключ состояния ("blinded", "prone",
 	// "concentrating"), НЕ ID. Три роли, ради которых он вообще заведён:

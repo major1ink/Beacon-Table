@@ -11,6 +11,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/foundry"
+	"beacon-table/internal/repository"
 )
 
 // FoundryService — импорт компендиумов из пакетов Foundry VTT по ссылке на
@@ -40,6 +41,57 @@ type FoundryService interface {
 	// targets ограничивает разделы, в которые импортируем ("items",
 	// "spells", ... см. foundry.Target*); пустой список — все.
 	ImportPack(ctx context.Context, account *domain.Account, manifestURL, packName string, targets []string) (*FoundryImport, error)
+	// Installed — пакеты, хотя бы раз импортированные в этот мир (см.
+	// repository.FoundryModuleRepository), для раздела "Настройки". Чисто из
+	// хранилища, без сети — сама проверка новой версии в CheckUpdates.
+	Installed(ctx context.Context) ([]*domain.FoundryModule, error)
+	// CheckUpdates — для каждого установленного пакета заново скачивает его
+	// манифест (по сохранённой ManifestURL, обычно она указывает на
+	// "latest") и сравнивает версию с той, что была на момент импорта.
+	// Пакет, манифест которого не открылся, не роняет всю проверку — как и в
+	// Inspect, ошибка одного не должна прятать результат по остальным.
+	CheckUpdates(ctx context.Context) ([]FoundryModuleUpdate, error)
+	// Delete сносит установленный пакет целиком: карточки (существа/
+	// заклинания/предметы/справочник/состояния), помеченные его id (см.
+	// domain.Monster.FoundryModuleID и соседей), файлы, скопированные его
+	// импортом в библиотеку загрузок (папка "foundry/<id>" во всех разделах),
+	// и саму запись об установке. Сцены, плейлисты и заметки, заведённые тем
+	// же импортом, НЕ трогает — источник у них не помечается тем же id (см.
+	// package doc: у них нет клиентского маппера, сервер заводит их сам, и
+	// заметка/сцена — не «карточка каталога», а контент мира, который ДМ мог
+	// уже отредактировать) — их удаляет ДМ вручную, как и любые другие.
+	Delete(ctx context.Context, account *domain.Account, id string) (*FoundryModuleDelete, error)
+}
+
+// FoundryModuleDelete — что снесла "Удалить модуль" (см. FoundryService.Delete).
+type FoundryModuleDelete struct {
+	// Cards — сколько карточек удалено, по разделам (foundry.Target*: "items",
+	// "spells", "monsters", "references", "conditions").
+	Cards map[string]int `json:"cards"`
+	// Warnings — что не удалось снести (карточка/папка не поддались) — не
+	// останавливает удаление остального.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// FoundryModuleUpdate — результат проверки одного установленного пакета на
+// новую версию (см. FoundryService.CheckUpdates).
+type FoundryModuleUpdate struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// InstalledVersion — версия, что была на момент последнего импорта (см.
+	// domain.FoundryModule.Version).
+	InstalledVersion string `json:"installedVersion"`
+	// LatestVersion — версия из манифеста прямо сейчас; пусто, если манифест
+	// не открылся (см. Error).
+	LatestVersion string `json:"latestVersion,omitempty"`
+	// UpdateAvailable — LatestVersion получена и отличается от
+	// InstalledVersion. Само по себе не значит "новее" (версии пакетов
+	// Foundry не всегда строгий semver, чтобы сравнивать по порядку), но
+	// ManifestURL — это, как правило, ссылка на "latest" самого пакета, так
+	// что расхождение с тем, что стояло на момент импорта, и есть повод
+	// предложить ДМ обновиться.
+	UpdateAvailable bool   `json:"updateAvailable"`
+	Error           string `json:"error,omitempty"`
 }
 
 // FoundryPackage — результат разведки: сам пакет и его компендиумы.
@@ -110,6 +162,20 @@ type foundryService struct {
 	assets    AssetService
 	room      RoomService
 	playlists PlaylistService
+	// modules — установленные пакеты этого мира: список для раздела
+	// "Настройки" и запись после каждого успешного ImportPack (см.
+	// Installed/CheckUpdates ниже).
+	modules repository.FoundryModuleRepository
+
+	// bestiary/spells/items/references/conditions — только для Delete: найти
+	// и снести карточки, помеченные FoundryModuleID удаляемого пакета (см.
+	// package doc Delete). Импорту они не нужны — тот создаёт карточки не
+	// здесь, а через клиента (см. package-doc FoundryService).
+	bestiary   BestiaryService
+	spells     SpellService
+	items      ItemService
+	references ReferenceService
+	conditions ConditionService
 
 	// links — индекс перекрёстных ссылок модуля (см. foundry.LinkIndex),
 	// ключ — папка распакованного модуля. Строится обходом ВСЕХ паков, а
@@ -129,15 +195,28 @@ const foundryHTTPTimeout = time.Hour
 const roomImportTimeout = 30 * time.Second
 
 // NewFoundryService — cacheDir: папка под скачанные архивы (чистится по TTL
-// самим кэшем, см. foundry.Cache).
-func NewFoundryService(cacheDir string, assets AssetService, room RoomService, playlists PlaylistService) FoundryService {
+// самим кэшем, см. foundry.Cache). modules — где запоминаются установленные
+// пакеты этого мира (см. Installed/CheckUpdates). bestiary/spells/items/
+// references/conditions — те же сервисы этого мира, нужны только Delete
+// (см. её комментарий).
+func NewFoundryService(
+	cacheDir string,
+	assets AssetService, room RoomService, playlists PlaylistService, modules repository.FoundryModuleRepository,
+	bestiary BestiaryService, spells SpellService, items ItemService, references ReferenceService, conditions ConditionService,
+) FoundryService {
 	client := &http.Client{Timeout: foundryHTTPTimeout}
 	return &foundryService{
-		cache:     foundry.NewCache(cacheDir, client),
-		assets:    assets,
-		room:      room,
-		playlists: playlists,
-		links:     map[string]*foundry.LinkIndex{},
+		cache:      foundry.NewCache(cacheDir, client),
+		assets:     assets,
+		room:       room,
+		playlists:  playlists,
+		modules:    modules,
+		bestiary:   bestiary,
+		spells:     spells,
+		items:      items,
+		references: references,
+		conditions: conditions,
+		links:      map[string]*foundry.LinkIndex{},
 	}
 }
 
@@ -206,9 +285,16 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 
 	packageID := mod.Manifest.PackageID()
 	moduleTitle := mod.Manifest.DisplayTitle()
+	moduleVersion := mod.Manifest.Version
 	if mod.ArchiveManifest != nil && mod.ArchiveManifest.PackageID() != "" {
 		packageID = mod.ArchiveManifest.PackageID()
 		moduleTitle = mod.ArchiveManifest.DisplayTitle()
+	}
+	// Версия — из архива, если она там есть: это версия того, что реально
+	// распаковано и импортируется, манифест по ссылке (обычно "latest")
+	// иногда успевает уйти вперёд между "скачали" и "распаковали".
+	if mod.ArchiveManifest != nil && mod.ArchiveManifest.Version != "" {
+		moduleVersion = mod.ArchiveManifest.Version
 	}
 	packLabel := pack.Label
 	if packLabel == "" {
@@ -276,7 +362,207 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 	}
 	result.Assets = assets.Count()
 	result.AssetsMissing = assets.Missing
+
+	// Запоминаем пакет как установленный — после успешного импорта пака, а
+	// не только разведки (Inspect ничего не пишет: ДМ мог посмотреть и
+	// передумать). Промах здесь не должен ронять уже сделанный импорт —
+	// только предупреждает: список установленного в настройках останется
+	// неполным, но карточки/сцены/заметки этого пака уже на месте.
+	if err := s.modules.Upsert(ctx, domain.FoundryModule{
+		ID:          packageID,
+		Title:       moduleTitle,
+		Version:     moduleVersion,
+		ManifestURL: strings.TrimSpace(manifestURL),
+		ImportedAt:  time.Now(),
+	}); err != nil {
+		result.Warnings = appendWarning(result.Warnings, "не удалось запомнить установленный пакет: "+err.Error())
+	}
 	return result, nil
+}
+
+// Installed implements FoundryService.
+func (s *foundryService) Installed(ctx context.Context) ([]*domain.FoundryModule, error) {
+	return s.modules.List(ctx)
+}
+
+// checkUpdateConcurrency — сколько манифестов проверяем одновременно.
+// Установленных пакетов у одного ДМ обычно единицы-десятки — потолок здесь
+// не про throughput, а про то, чтобы не открыть сходу полсотни соединений на
+// чужие сайты одним кликом по "Проверить обновления".
+const checkUpdateConcurrency = 4
+
+// CheckUpdates implements FoundryService.
+func (s *foundryService) CheckUpdates(ctx context.Context) ([]FoundryModuleUpdate, error) {
+	installed, err := s.modules.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FoundryModuleUpdate, len(installed))
+	sem := make(chan struct{}, checkUpdateConcurrency)
+	var wg sync.WaitGroup
+	for i, m := range installed {
+		i, m := i, m
+		out[i] = FoundryModuleUpdate{ID: m.ID, Title: m.Title, InstalledVersion: m.Version}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			man, err := s.cache.Manifest(ctx, m.ManifestURL)
+			if err != nil {
+				out[i].Error = err.Error()
+				return
+			}
+			out[i].LatestVersion = man.Version
+			out[i].UpdateAvailable = man.Version != "" && man.Version != m.Version
+		}()
+	}
+	wg.Wait()
+	return out, nil
+}
+
+// deletableAssetKinds — разделы библиотеки загрузок, куда импорт модуля
+// вообще кладёт файлы (см. internal/foundry: assets.go/scene.go/journal.go/
+// playlist.go) — kind "props" импорт не использует, чистить его незачем.
+var deletableAssetKinds = []string{domain.AssetKindMaps, domain.AssetKindTokens, domain.AssetKindAudio, domain.AssetKindNotes}
+
+// Delete implements FoundryService.
+func (s *foundryService) Delete(ctx context.Context, account *domain.Account, id string) (*FoundryModuleDelete, error) {
+	// ByID — не только чтобы отдать 404 на чужой/неизвестный id (см.
+	// handleFoundryModuleDelete), но и источник правды, что "foundry/<id>"
+	// вообще стоило чистить: сама папка строится из id ниже.
+	if _, err := s.modules.ByID(ctx, id); err != nil {
+		return nil, err
+	}
+
+	result := &FoundryModuleDelete{Cards: map[string]int{}}
+
+	// Карточки — только те, что заведены/перезаписаны ИМЕННО этим импортом
+	// (см. domain.Monster.FoundryModuleID и соседей): ручная правка карточки
+	// после импорта сохраняет отметку (Update целиком перезаписывает
+	// карточку, включая это поле, тем же значением, что пришло) — снести
+	// такую карточку тоже, раз она всё ещё числится за модулем, это осознанно
+	// выбранное поведение, а не недосмотр.
+	type cardSet struct {
+		target string
+		list   func(ctx context.Context) ([]string, error) // id карточек этого модуля
+		del    func(ctx context.Context, id string) error
+	}
+	sets := []cardSet{
+		{foundry.TargetMonsters, func(ctx context.Context) ([]string, error) { return matchingMonsters(ctx, s.bestiary, id) }, s.bestiary.Delete},
+		{foundry.TargetSpells, func(ctx context.Context) ([]string, error) { return matchingSpells(ctx, s.spells, id) }, s.spells.Delete},
+		{foundry.TargetItems, func(ctx context.Context) ([]string, error) { return matchingItems(ctx, s.items, id) }, s.items.Delete},
+		{foundry.TargetReferences, func(ctx context.Context) ([]string, error) { return matchingReferences(ctx, s.references, id) }, s.references.Delete},
+		{foundry.TargetConditions, func(ctx context.Context) ([]string, error) { return matchingConditions(ctx, s.conditions, id) }, s.conditions.Delete},
+	}
+	for _, set := range sets {
+		ids, err := set.list(ctx)
+		if err != nil {
+			result.Warnings = appendWarning(result.Warnings, fmt.Sprintf("%s: не удалось прочитать библиотеку — %s", set.target, err.Error()))
+			continue
+		}
+		for _, cardID := range ids {
+			if err := set.del(ctx, cardID); err != nil {
+				result.Warnings = appendWarning(result.Warnings, fmt.Sprintf("%s %s: %s", set.target, cardID, err.Error()))
+				continue
+			}
+			result.Cards[set.target]++
+		}
+	}
+
+	// Файлы — вся папка "foundry/<id>" во всех разделах, куда импорт вообще
+	// пишет (см. deletableAssetKinds); DeleteFolder молча ничего не делает,
+	// если в этом разделе для модуля папки не было (os.RemoveAll на
+	// несуществующий путь — не ошибка), так что звать его для всех разделов
+	// разом дешевле, чем сперва проверять, что там реально лежало.
+	folder := "foundry/" + sanitizeFolderName(id)
+	for _, kind := range deletableAssetKinds {
+		if err := s.assets.DeleteFolder(ctx, account, kind, folder); err != nil {
+			result.Warnings = appendWarning(result.Warnings, fmt.Sprintf("файлы (%s): %s", kind, err.Error()))
+		}
+	}
+
+	if err := s.modules.Delete(ctx, id); err != nil {
+		result.Warnings = appendWarning(result.Warnings, "запись об установке не удалилась: "+err.Error())
+	}
+	return result, nil
+}
+
+// matchingMonsters/matchingSpells/matchingItems/matchingReferences/
+// matchingConditions — id карточек библиотеки, помеченных moduleID (см.
+// Delete выше). Карточки каталога «из коробки» в отметке не нуждаются: у
+// них System=true и FoundryModuleID всегда пусто (проставляется только
+// клиентским импортом, см. web/src/pages/foundry-import.js), так что
+// отдельно исключать их незачем — фильтр по непустому совпадению их и так
+// не заденет.
+func matchingMonsters(ctx context.Context, svc BestiaryService, moduleID string) ([]string, error) {
+	all, err := svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, x := range all {
+		if x.FoundryModuleID == moduleID {
+			out = append(out, x.ID)
+		}
+	}
+	return out, nil
+}
+
+func matchingSpells(ctx context.Context, svc SpellService, moduleID string) ([]string, error) {
+	all, err := svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, x := range all {
+		if x.FoundryModuleID == moduleID {
+			out = append(out, x.ID)
+		}
+	}
+	return out, nil
+}
+
+func matchingItems(ctx context.Context, svc ItemService, moduleID string) ([]string, error) {
+	all, err := svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, x := range all {
+		if x.FoundryModuleID == moduleID {
+			out = append(out, x.ID)
+		}
+	}
+	return out, nil
+}
+
+func matchingReferences(ctx context.Context, svc ReferenceService, moduleID string) ([]string, error) {
+	all, err := svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, x := range all {
+		if x.FoundryModuleID == moduleID {
+			out = append(out, x.ID)
+		}
+	}
+	return out, nil
+}
+
+func matchingConditions(ctx context.Context, svc ConditionService, moduleID string) ([]string, error) {
+	all, err := svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, x := range all {
+		if x.FoundryModuleID == moduleID {
+			out = append(out, x.ID)
+		}
+	}
+	return out, nil
 }
 
 // applyPlaylist заводит плейлист и его треки через обычный PlaylistService —

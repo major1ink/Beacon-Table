@@ -42,6 +42,9 @@ import {
   renameNoteFolder,
   deleteNoteFolder,
   fetchMonster,
+  fetchFoundryModules,
+  checkFoundryModuleUpdates,
+  deleteFoundryModule,
 } from "../api.js";
 import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
@@ -1023,7 +1026,152 @@ onPanelOpen("settings", async () => {
   } catch {
     el.textContent = "неизвестна";
   }
+  await renderFoundryModules();
 });
+
+// ---- модули Foundry VTT (раздел "Настройки") ----
+// Список того, что ДМ хотя бы раз импортировал в этот мир (см.
+// service.FoundryService.Installed), плюс необязательная проверка новых
+// версий по кнопке (см. checkFoundryModuleUpdates) — сама по себе она не
+// ходит в сеть на каждое открытие панели.
+const foundryModulesList = document.getElementById("foundryModulesList");
+const foundryModulesCheckBtn = document.getElementById("foundryModulesCheckBtn");
+let foundryModulesCache = []; // последний ответ fetchFoundryModules — drawFoundryModules перерисовывает по нему же после проверки обновлений/удаления
+let foundryModulesUpdates = null; // последний результат "Проверить обновления" (id → {latestVersion,updateAvailable,error}) — переживает перерисовку после удаления одного пакета
+
+// FOUNDRY_CARD_LABELS — подписи разделов для итога "Удалить модуль" (см.
+// deleteFoundryModuleFlow), те же ключи, что в service.FoundryModuleDelete.Cards
+// (foundry.Target*), и те же подписи, что у TARGETS в foundry-import.js.
+const FOUNDRY_CARD_LABELS = { monsters: "Существа", spells: "Заклинания", items: "Снаряжение", references: "Справочник", conditions: "Состояния" };
+
+function formatModuleDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "—" : d.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+}
+
+// openFoundryUpdateWindow — то же окно импорта, что открывает "＋ Импорт из
+// Foundry VTT" в Справочнике (см. compendium-menu.js), но со ссылкой на
+// манифест уже подставленной в поле и разведкой, запущенной сразу (см.
+// foundry-import.js: boot() читает ?url= из адреса окна). ДМ остаётся
+// выбрать паки/разделы и нажать "Импортировать" — то же самое, что и при
+// первой установке, потому и не отдельная кнопка "Обновить одним кликом".
+// Свой key на каждый пакет (а не общий "foundry-import", как у пункта
+// Справочника) — иначе клик "Обновить" при уже открытом окне импорта просто
+// поднял бы его наверх со старым содержимым, а не подставил новую ссылку
+// (см. openFloatingWindow: у существующего окна по key url не меняется).
+function openFoundryUpdateWindow(m) {
+  openFloatingWindow({
+    key: "foundry-import-" + m.id,
+    title: "Обновление: " + m.title,
+    url: `/foundry-import.html?url=${encodeURIComponent(m.manifestUrl)}`,
+    width: 560,
+    height: 640,
+  });
+}
+
+async function renderFoundryModules() {
+  try {
+    foundryModulesCache = (await fetchFoundryModules()) || [];
+  } catch (err) {
+    foundryModulesList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
+    return;
+  }
+  drawFoundryModules();
+}
+
+// drawFoundryModules — updatesById есть только после "Проверить обновления"
+// (id пакета → {latestVersion, updateAvailable, error}); без него список
+// просто показывает установленные версии, без статуса.
+function drawFoundryModules(updatesById) {
+  foundryModulesList.innerHTML = "";
+  if (!foundryModulesCache.length) {
+    foundryModulesList.innerHTML = '<p class="hint">Пакетов пока не импортировано — см. "＋ Импорт из Foundry VTT" в Справочнике.</p>';
+    return;
+  }
+  for (const m of foundryModulesCache) {
+    const upd = updatesById && updatesById[m.id];
+    const row = document.createElement("div");
+    row.className = "account-row";
+    let pill = "";
+    if (upd) {
+      if (upd.error) pill = `<span class="status-pill error" title="${upd.error}">не проверилось</span>`;
+      else if (upd.updateAvailable) pill = `<span class="status-pill update">вышла ${upd.latestVersion}</span>`;
+      else pill = `<span class="status-pill active">актуально</span>`;
+    }
+    row.innerHTML = `
+      <div class="account-top">
+        <span class="account-name">${m.title}</span>
+        <span class="account-version">v${m.version || "?"}</span>
+        ${pill}
+      </div>
+      <div class="hint" style="margin-bottom:6px;">импортирован ${formatModuleDate(m.importedAt)}</div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "account-actions";
+    if (upd && upd.updateAvailable) {
+      const updBtn = document.createElement("button");
+      updBtn.className = "approve";
+      updBtn.textContent = "Обновить";
+      updBtn.onclick = () => openFoundryUpdateWindow(m);
+      actions.appendChild(updBtn);
+    }
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    delBtn.textContent = "Удалить";
+    delBtn.onclick = () => deleteFoundryModuleFlow(m);
+    actions.appendChild(delBtn);
+    row.appendChild(actions);
+    foundryModulesList.appendChild(row);
+  }
+}
+
+foundryModulesCheckBtn.addEventListener("click", async () => {
+  foundryModulesCheckBtn.disabled = true;
+  foundryModulesCheckBtn.textContent = "Проверяем…";
+  try {
+    const results = await checkFoundryModuleUpdates();
+    foundryModulesUpdates = Object.fromEntries(results.map((r) => [r.id, r]));
+    drawFoundryModules(foundryModulesUpdates);
+  } catch (err) {
+    alert("Не удалось проверить обновления: " + err.message);
+  } finally {
+    foundryModulesCheckBtn.disabled = false;
+    foundryModulesCheckBtn.textContent = "Проверить обновления";
+  }
+});
+
+// deleteFoundryModuleFlow — "Удалить модуль" (см. deleteFoundryModule):
+// сносит карточки, помеченные этим пакетом (включая те, что ДМ успел
+// отредактировать после импорта — правка карточки метку не снимает, см.
+// foundry-import.js: importCards), и скачанные им файлы. Сцены/плейлисты/
+// заметки того же импорта не трогает — предупреждаем об этом прямо в
+// диалоге, а не молча (см. FoundryService.Delete).
+async function deleteFoundryModuleFlow(m) {
+  const ok = confirm(
+    `Удалить модуль «${m.title}»?\n\n` +
+      "Будут снесены карточки (существа/заклинания/снаряжение/справочник/состояния), заведённые или в последний раз перезаписанные этим модулем — ДАЖЕ те, что были отредактированы после импорта, — а также файлы, скачанные им в библиотеку загрузок (карты/токены/аудио/картинки заметок).\n\n" +
+      "Сцены, плейлисты и заметки этого модуля не трогает — их придётся удалить отдельно, если нужно.\n\n" +
+      "Отменить это действие нельзя."
+  );
+  if (!ok) return;
+  try {
+    const result = await deleteFoundryModule(m.id);
+    foundryModulesCache = foundryModulesCache.filter((x) => x.id !== m.id);
+    if (foundryModulesUpdates) delete foundryModulesUpdates[m.id];
+    drawFoundryModules(foundryModulesUpdates);
+    const cards = result.cards || {};
+    const total = Object.values(cards).reduce((a, b) => a + b, 0);
+    const breakdown = Object.entries(cards)
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `${FOUNDRY_CARD_LABELS[k] || k}: ${n}`)
+      .join(", ");
+    let msg = `Модуль «${m.title}» удалён. Карточек снесено: ${total}${breakdown ? ` (${breakdown})` : ""}.`;
+    if (result.warnings && result.warnings.length) msg += "\n\nПредупреждения:\n" + result.warnings.join("\n");
+    alert(msg);
+  } catch (err) {
+    alert("Не удалось удалить: " + err.message);
+  }
+}
 
 const newAccountMsg = document.getElementById("newAccountMsg");
 document.getElementById("newAccountForm").addEventListener("submit", async (e) => {
