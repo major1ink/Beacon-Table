@@ -18,6 +18,7 @@
 // мини-WS-клиента плавающего окна (см. pages/combat-tracker.js) — оба
 // диспатчат его в одном и том же формате, откуда взято неважно.
 import { fetchBestiary, fetchAdminCharacters } from "./api.js";
+import { openActionsPeek, closeActionsPeek } from "./combat-actions-peek.js";
 import { icon } from "./icons.js";
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "./combatant-card.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
@@ -81,12 +82,6 @@ export function initCombatPanel({ send, els }) {
       name.textContent = cmb.name;
       name.title = cmb.name;
 
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "combat-remove";
-      removeBtn.innerHTML = icon("close", { size: 11 });
-      removeBtn.title = "Убрать из инициативы";
-      removeBtn.onclick = () => send({ type: "remove_combatant", combatantId: cmb.id });
-
       // Быстрый вход в карточку бойца прямо из инициативы — то, ради чего
       // в Foundry делают двойной клик по строке трекера: во время боя
       // статблок нужен постоянно ("а что у него за реакция?"), и идти за
@@ -111,13 +106,35 @@ export function initCombatPanel({ send, els }) {
         });
       }
 
+      // "Действия" — компактный попап с боевыми блоками статблока прямо у
+      // строки (см. combat-actions-peek.js): посреди чужого хода нужно
+      // "чем он бьёт", а не весь статблок. Только у монстра: у игрового
+      // персонажа боевые блоки живут не в статблоке, а на его бланке —
+      // туда ведёт клик по имени.
+      let peekBtn = null;
+      if (cmb.monsterId) {
+        peekBtn = document.createElement("button");
+        peekBtn.className = "combat-peek";
+        peekBtn.innerHTML = icon("sword", { size: 12 });
+        peekBtn.title = "Действия и реакции — быстрый взгляд";
+        peekBtn.onclick = (e) => openActionsPeek({ x: e.clientX, y: e.clientY, combatant: cmb, send });
+      }
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "combat-remove";
+      removeBtn.innerHTML = icon("close", { size: 11 });
+      removeBtn.title = "Убрать из инициативы";
+      removeBtn.onclick = () => send({ type: "remove_combatant", combatantId: cmb.id });
+
       if (draggable) {
         const handle = document.createElement("span");
         handle.className = "drag-handle";
         handle.innerHTML = icon("grip-vertical", { size: 14 });
         top.appendChild(handle);
       }
-      top.append(avatar, name, removeBtn);
+      top.append(avatar, name);
+      if (peekBtn) top.appendChild(peekBtn);
+      top.appendChild(removeBtn);
 
       // ---- ряд подписанных характеристик: Иниц. / КД / HP ----
       // stat(label, content) — подписанное поле: маленькая подпись сверху,

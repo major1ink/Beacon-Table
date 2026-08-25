@@ -6,6 +6,7 @@ import { initVTT } from "../vtt/index.js";
 import { mapObjectsOf } from "../vtt/map-objects.js";
 import { initDiceRoller } from "../dice.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
+import { invalidateActionsPeek } from "../combat-actions-peek.js";
 import { initCombatPanel } from "../combat-panel.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import {
@@ -2577,6 +2578,10 @@ window.addEventListener("message", (e) => {
     e.data.type === "beacon:referenceSaved" ||
     e.data.type === "beacon:conditionSaved"
   ) {
+    // Статблок правили в соседнем окне — попап "действия" держит свой кэш
+    // монстров (см. combat-actions-peek.js), сбрасываем, иначе он ещё долго
+    // показывал бы старый текст.
+    if (e.data.type === "beacon:monsterSaved") invalidateActionsPeek(e.data.id);
     postToOpenWindows("catalog-", e.data);
   } else if (e.data.type === "beacon:foundryImported") {
     // Импорт пакета Foundry (foundry-import.js) заводит заметки, сцены и сам

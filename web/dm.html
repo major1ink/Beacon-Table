@@ -513,6 +513,13 @@
     }
     .combat-row input[type="number"]::-webkit-inner-spin-button,
     .combat-row input[type="number"]::-webkit-outer-spin-button {
+    /* Кнопка "действия" в шапке карточки бойца — попап с боевыми блоками
+       статблока (см. web/src/combat-actions-peek.js) */
+    .combat-row .combat-peek {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-peek:hover { background: var(--surface-hover); color: var(--accent); }
       -webkit-appearance: none; margin: 0;
     }
     .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
