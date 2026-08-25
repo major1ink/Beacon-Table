@@ -8,6 +8,8 @@ import { initDiceRoller } from "../dice.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
 import { invalidateActionsPeek } from "../combat-actions-peek.js";
 import { initCombatPanel } from "../combat-panel.js";
+import { setCardOpener } from "../combatant-card.js";
+import { openSheetDock } from "../sheet-dock.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import {
   fetchMe,
@@ -2561,6 +2563,11 @@ window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data) return;
   if (e.data.type === "beacon:openFloatingWindow") {
     openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
+  } else if (e.data.type === "beacon:openCombatantCard") {
+    // Клик по бойцу в трекере, вынесенном в плавающее окно (iframe
+    // combat-tracker.html): своей колонки у него нет — показываем в нашей
+    // (см. combatant-card.js: openCombatantCard).
+    openCardInDock({ key: e.data.key, title: e.data.title, url: e.data.url });
   } else if (e.data.type === "beacon:placeJournalMarker") {
     // Значок записи журнала на карту. Просит окно журнала (iframe, см.
     // pages/journal.js) — расстановка живёт здесь, потому что канвас есть
@@ -2775,6 +2782,24 @@ initCombatPanel({
   },
 });
 
+// openCardInDock — куда попадает клик по бойцу в трекере и по фишке в
+// верхнем оверлее хода. Во время боя статблок нужен открытым постоянно, а
+// плавающее окно для этого приходится всё время оттаскивать с карты — та же
+// причина, по которой у игрока в доке живёт лист персонажа (см.
+// pages/player.js). Кнопка ⧉ в шапке дока переносит карточку в плавающее
+// окно, если ДМ хочет её на втором мониторе.
+function openCardInDock(target) {
+  openSheetDock(document.getElementById("sheetDock"), {
+    key: target.key,
+    title: target.title,
+    url: target.url,
+    // Колонка встаёт между панелью рейла и картой и накрывает канвас —
+    // плашке статуса надо отъехать правее, ровно как при открытии панели.
+    onLayoutChange: () => updateChromeInset(panelWidth),
+  });
+}
+setCardOpener(openCardInDock);
+
 // combatShowHpToggle — раздел "Настройки" (общий, не привязан к сцене):
 // показывать ли HP в верхнем оверлее хода (combat-bar.js) игрокам/TV, а не
 // только ДМ (см. domain.CombatState.ShowHP / "set_show_hp" в
@@ -2784,6 +2809,7 @@ initCombatPanel({
 // поменяли из другого места (например, из этой же комнаты в другой вкладке).
 const combatShowHpToggle = document.getElementById("combatShowHpToggle");
 document.addEventListener("vtt:combatState", (e) => {
+
   combatShowHpToggle.checked = !!e.detail.showHp;
 });
 combatShowHpToggle.onchange = () => {

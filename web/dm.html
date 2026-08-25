@@ -120,6 +120,21 @@
     #globalLightBrightBtn.active { background: var(--gold); }
     #globalLightDimBtn.active { background: var(--blue); }
 
+    /* Колонка со статблоком того, кем сейчас занят бой — общий модуль с
+       боковым листом персонажа у игрока (web/src/sheet-dock.js), тут только
+       перекраска под стекло ДМ-стола. Стоит между панелью рейла и картой и
+       лежит ПОВЕРХ канваса, а не ужимает его: канвас у ДМ полноэкранный
+       (#canvasWrap{position:absolute;inset:0}), и рейл с панелью его тоже
+       накрывают — колонка ведёт себя как они, а не как док игрока. */
+    #sheetDock.sheet-dock {
+      margin: 14px 0 14px 10px; z-index: 6; overflow: hidden;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
+    }
+    #sheetDock .sheet-dock-header { background: transparent; }
+    /* Ручка ширины у модуля торчит на 3px наружу — при overflow:hidden выше
+       её бы срезало, поэтому убираем внутрь. */
+    #sheetDock .sheet-dock-resizer { right: 0; }
     #canvasWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
@@ -1207,6 +1222,10 @@
     <label id="tokenMenuShapeRow">Форма: <select id="tokenMenuShape">
       <option value="circle">○ Круг</option>
       <option value="square">▢ Квадрат (без обрезки)</option>
+    <!-- Колонка со статблоком бойца (см. web/src/sheet-dock.js): пустая до
+         первого открытия, наполняется из pages/dm.js -->
+    <aside id="sheetDock"></aside>
+
     </select></label>
     <label id="tokenMenuLightRow"><input type="checkbox" id="tokenMenuLight" /> <span id="tokenMenuLightLabel">источник света</span></label>
     <label id="tokenMenuLightBrightField" class="light-field" title="Радиус яркого света в единицах линейки сцены (по умолчанию фт, см. настройку сетки) — 0: без яркого ядра, только тусклая кайма">
