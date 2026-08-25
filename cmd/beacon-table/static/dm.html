@@ -176,9 +176,66 @@
        разрушает */
     #tokenMenuStatusBtn { background: var(--surface); }
     #tokenMenuStatusBtn:hover { background: var(--surface-hover); }
-    #tokenMenu button, #wallPointMenu button, #noteMarkerMenu button {
+    /* "Копировать"/"Заблокировать" — такие же нейтральные, как "Состояния":
+       ни то, ни другое ничего не разрушает (см. коммент выше про красный
+       #tokenMenu button по умолчанию) */
+    #tokenMenuCopyBtn, #tokenMenuLockBtn { background: var(--surface); }
+    #tokenMenuCopyBtn:hover, #tokenMenuLockBtn:hover { background: var(--surface-hover); }
+    #tokenMenu button, #wallPointMenu button, #noteMarkerMenu button, #canvasMenu button {
       display: flex; align-items: center; gap: 7px; text-align: left; justify-content: flex-start;
     }
+    /* Запертый объект (domain.Token.Locked): всё, что его правит, гаснет и
+       перестаёт нажиматься прямо в открытом меню — кроме самой кнопки
+       "Разблокировать", иначе замок было бы нечем снять */
+    #tokenMenu .locked-disabled { opacity: 0.4; pointer-events: none; }
+
+    /* меню ПКМ по ПУСТОМУ месту карты — сейчас только "Вставить" (см.
+       pages/dm.js: буфер обмена объектов карты) */
+    #canvasMenu {
+      position: fixed; display: none; z-index: 10;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
+      min-width: 150px;
+    }
+    /* Замок — нейтральное действие в меню, где всё остальное красное
+       ("Удалить фигуру/здание/значок"): он ничего не разрушает */
+    /* Селекторы намеренно из ДВУХ id: "#fogAreaMenu button { background:
+       var(--danger) }" ниже специфичнее одиночного "#fogAreaMenuLockBtn"
+       (0,1,0,1 против 0,1,0,0) и красил бы замок в цвет "Удалить" */
+    #fogAreaMenu #fogAreaMenuLockBtn, #buildingMenu #buildingMenuLockBtn, #noteMarkerMenu #noteMarkerMenuLockBtn {
+      width: 100%; margin-bottom: 6px; background: var(--surface);
+      display: flex; align-items: center; gap: 7px; justify-content: flex-start; text-align: left;
+    }
+    #fogAreaMenu #fogAreaMenuLockBtn:hover, #buildingMenu #buildingMenuLockBtn:hover, #noteMarkerMenu #noteMarkerMenuLockBtn:hover { background: var(--surface-hover); }
+    /* запертый объект: правящие пункты его меню гаснут, как и у токена */
+    #fogAreaMenu .locked-disabled, #buildingMenu .locked-disabled, #noteMarkerMenu .locked-disabled { opacity: 0.4; pointer-events: none; }
+
+    #canvasMenu button { width: 100%; background: var(--surface); }
+    #canvasMenu button:hover { background: var(--surface-hover); }
+
+    /* ---- список источников света в панели "Освещение" ---- */
+    #lightList { display: flex; flex-direction: column; gap: 4px; }
+    .light-row {
+      display: flex; align-items: center; gap: 4px;
+      padding: 4px 4px 4px 6px; border-radius: var(--radius);
+      background: var(--surface); border: 1px solid var(--border);
+    }
+    .light-row.off { opacity: 0.55; }
+    .light-row.locked { border-color: var(--gold, #d4a24c); }
+    .light-row .light-row-name {
+      flex: 1 1 auto; min-width: 0; background: transparent; border: none; color: var(--text);
+      font-size: 12px; padding: 2px 0; text-overflow: ellipsis;
+    }
+    .light-row .light-row-name:focus { outline: none; background: var(--surface-hover); border-radius: 4px; padding: 2px 4px; }
+    .light-row .light-row-radii { flex: 0 0 auto; font-size: 10px; opacity: 0.5; white-space: nowrap; }
+    .light-row button {
+      flex: 0 0 auto; width: 24px; height: 24px; padding: 0; margin: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; border: none; color: var(--text); opacity: 0.65; border-radius: 5px;
+    }
+    .light-row button:hover { opacity: 1; background: var(--surface-hover); }
+    .light-row button.on { opacity: 1; color: var(--gold, #d4a24c); }
 
     #wallPointMenu {
       position: fixed; display: none; z-index: 10;
@@ -723,22 +780,22 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BO4yYFxx.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-jZPu2o7F.js">
+  <script type="module" crossorigin src="/assets/dm-DhiW98CC.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CwnEFZ2M.js">
   <link rel="modulepreload" crossorigin href="/assets/icons-B8E5VJBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-CiMLlz14.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-BlT6bFWB.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-CY9_0aAs.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-_WXWdM_o.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BqO6UcoP.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-D3DLkG-d.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-C8xoOT4F.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-B1OomexY.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-C9BO-jMJ.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CxyUCQ6K.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
-  <link rel="modulepreload" crossorigin href="/assets/toolbar-B3UalKaP.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-Kr2n7buy.js">
+  <link rel="modulepreload" crossorigin href="/assets/toolbar-CztejOJ9.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DC8oo-J7.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-BdFQkweV.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-DrlW62Ad.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-CykOXfA3.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>
@@ -823,10 +880,14 @@
         <header class="panel-header"><h3>Освещение</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <button id="addLightToken" class="primary-btn" title="Добавляет на карту невидимый токен-источник света без арта — перетащи, где нужно, радиусы можно поправить через ПКМ → меню токена"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> + Токен света</button>
-          <p class="hint">Токен без арта, только источник света. Позицию и радиусы правь через ПКМ на токене.</p>
+          <p class="hint">Токен без арта, только источник света. Двигать и править источники на карте можно, ТОЛЬКО пока открыт этот раздел — в остальное время мышь их не видит и не цепляет. Позиция — драгом, радиусы и копирование — через ПКМ на токене.</p>
           <div class="section-divider"></div>
           <button id="globalLightBrightBtn" class="tool-btn" title="Залить всю карту ярким светом — как будто глобальный день"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.6" y1="4.6" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.4" y2="19.4"/><line x1="4.6" y1="19.4" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.4" y2="4.6"/></svg> Свет на карту</button>
           <button id="globalLightDimBtn" class="tool-btn" title="Залить всю карту тусклым светом — вполовину слабее яркого"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1110 3.8a7 7 0 0010 10.7z"/></svg> Тусклый свет на карту</button>
+          <div class="section-divider"></div>
+          <h4 style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;opacity:0.6;">Источники на карте</h4>
+          <div id="lightList"></div>
+          <p class="hint">Название правится прямо в строке. Лампочка — быстро зажечь/потушить, мишень — навести камеру на источник и подсветить его, замок — запереть: запертый не двигается и не правится даже в этом разделе, пока замок не снят.</p>
         </div>
       </section>
 
@@ -1158,7 +1219,15 @@
       тускл. <input type="number" id="tokenMenuLightDim" min="0" step="5" value="0" />
     </label>
     <button id="tokenMenuLightToggleBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> Включить свет</button>
+    <button id="tokenMenuCopyBtn" style="display:none;" title="Скопировать источник света — потом ПКМ по пустому месту карты и «Вставить»"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 15V5a2 2 0 012-2h10"/></svg> Копировать</button>
+    <button id="tokenMenuLockBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg> <span id="tokenMenuLockLabel">Заблокировать</span></button>
     <button id="tokenMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить токен</button>
+  </div>
+
+  <!-- ПКМ по пустому месту карты: вставка скопированного объекта (см.
+       web/src/vtt/interaction.js: vtt:canvasContextMenu) -->
+  <div id="canvasMenu">
+    <button id="canvasMenuPasteBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 15V5a2 2 0 012-2h10"/></svg> <span id="canvasMenuPasteLabel">Вставить</span></button>
   </div>
 
   <div id="wallPointMenu">
@@ -1166,10 +1235,12 @@
   </div>
 
   <div id="fogAreaMenu">
+    <button id="fogAreaMenuLockBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg> <span id="fogAreaMenuLockLabel">Заблокировать</span></button>
     <button id="fogAreaMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить фигуру тумана</button>
   </div>
 
   <div id="buildingMenu">
+    <button id="buildingMenuLockBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg> <span id="buildingMenuLockLabel">Заблокировать</span></button>
     <button id="buildingMenuDelete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить здание</button>
   </div>
 
@@ -1185,6 +1256,7 @@
   </div>
 
   <div id="noteMarkerMenu">
+    <button id="noteMarkerMenuLockBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg> <span id="noteMarkerMenuLockLabel">Заблокировать</span></button>
     <button id="noteMarkerResizeBtn" title="Дальше потяни за значок на карте — тащишь от него дальше, он растёт, ближе — уменьшается"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg> Изменить размер</button>
     <button id="noteMarkerDeleteBtn" title="Не удаляет саму заметку — только значок с карты"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Убрать со сцены</button>
   </div>
