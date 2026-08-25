@@ -26,16 +26,19 @@ import { combatantCardTarget, combatantCardHint, openCombatantCard } from "../co
 import { icon } from "../icons.js";
 
 const BAR_H = 32;
+// MIN_FREE_W — ниже этого полосу не ужимаем: если панели съели почти всю
+// ширину, пусть лучше немного зайдёт под них, чем схлопнется в точку.
+const MIN_FREE_W = 240;
 
 export function createCombatBar(ctx) {
   const bar = document.createElement("div");
   bar.style.cssText =
-    "display:none;position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:40;" +
+    "display:none;position:fixed;top:10px;transform:translateX(-50%);z-index:40;" +
     "align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;border-radius:" + (BAR_H / 2 + 2) + "px;" +
     "background:var(--glass-bg-strong,rgba(22,22,29,0.88));backdrop-filter:var(--glass-blur,blur(20px));" +
     "-webkit-backdrop-filter:var(--glass-blur,blur(20px));border:1px solid var(--glass-border,rgba(255,255,255,0.08));" +
     "box-shadow:var(--shadow-float,0 6px 20px rgba(0,0,0,0.5));" +
-    "font:12px/1 sans-serif;color:#eee;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
+    "font:12px/1 sans-serif;color:#eee;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
   document.body.appendChild(bar);
 
   const roundLabel = document.createElement("div");
@@ -195,6 +198,33 @@ export function createCombatBar(ctx) {
   }
 
   document.addEventListener("vtt:combatState", (e) => render(e.detail));
+
+  // ---- где стоит сама полоса ----
+  // Центр берём по СВОБОДНОЙ части карты, а не по окну. Слева от карты
+  // лежат панели: у ДМ — рейл, панель рейла и колонка со статблоком (они
+  // канвас не ужимают, а накрывают: #canvasWrap{position:absolute;inset:0}
+  // в dm.html), у игрока — боковой док листа (этот как раз ужимает канвас,
+  // и его видно по rect канваса). Поэтому слагаемых два: rect канваса плюс
+  // отступ, о котором сообщает страница событием "vtt:chromeInset" (шлёт
+  // pages/dm.js: updateChromeInset — тем же числом он двигает плашку
+  // статуса). Без этого полоса центрировалась по всему окну и наезжала на
+  // шапку колонки со статблоком.
+  let leftInset = 0;
+  function position() {
+    const rect = ctx.canvas.getBoundingClientRect();
+    const free = Math.max(MIN_FREE_W, rect.width - leftInset);
+    bar.style.left = Math.round(rect.left + leftInset + free / 2) + "px";
+    bar.style.maxWidth = Math.round(free - 24) + "px";
+  }
+  document.addEventListener("vtt:chromeInset", (e) => {
+    leftInset = (e.detail && e.detail.left) || 0;
+    position();
+  });
+  window.addEventListener("resize", position);
+  // Канвас меняет размер и без ресайза окна (у игрока — открытый док листа),
+  // тот же приём, что в side-menu.js.
+  new ResizeObserver(position).observe(ctx.canvas);
+  position();
 
   return { render };
 }

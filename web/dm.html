@@ -141,8 +141,13 @@
     #canvasWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
+    /* Плашка "сцена · игроки · ДМ" стоит в нижнем правом углу, в одном ряду
+       с зумом (#zoomHud правее её, отсюда right: 118px = 10 + ширина зума
+       100 + зазор 8). Раньше она жила в верхнем левом углу, но там её
+       зажало между колонкой со статблоком и полосой хода — а низ справа
+       занят только зумом и от боя не зависит вообще. */
     #statusBar {
-      position: absolute; left: 84px; top: 10px; z-index: 5; transition: left .16s ease;
+      position: absolute; right: 118px; bottom: 10px; z-index: 5;
       background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;

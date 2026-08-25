@@ -2955,16 +2955,22 @@ function applyPanelWidth(px) {
   return w;
 }
 
-// updateChromeInset — сдвинуть плашку статуса правее плавающего меню.
-// Канвас теперь лежит ПОД рейлом и панелью (см. #canvasWrap в dm.html), так
-// что всё, что раньше просто прижималось к левому краю канваса, оказалось бы
-// под ними. Числа — из тех же margin/border, что в dm.html: рейл 14+60,
-// панель 10 + ширина + 2 (рамка), ручка 10.
+// updateChromeInset — сколько места слева съели плавающие панели. Канвас
+// лежит ПОД рейлом и панелью (см. #canvasWrap в dm.html), сам про них ничего
+// не знает, и всё, что центрируется "по карте", обязано узнать это число
+// снаружи. Сегодняшний потребитель один — верхний оверлей хода
+// (vtt/combat-bar.js): без этого он центрировался по всему окну и наезжал на
+// шапку колонки со статблоком. Числа — из тех же margin/border, что в
+// dm.html: рейл 14+60, панель 10 + ширина + 2 (рамка), ручка 10.
 const RAIL_RIGHT = 74;
-const statusBar = document.getElementById("statusBar");
 function updateChromeInset(width) {
-  const chromeRight = openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT;
-  statusBar.style.left = chromeRight + 10 + "px";
+  // Колонка со статблоком (см. openCardInDock) — такой же слой поверх
+  // канваса, как рейл и панель, и её ширину ДМ тянет мышью: меряем по факту,
+  // а не по константе.
+  const dock = document.getElementById("sheetDock");
+  const dockWidth = dock && dock.classList.contains("open") ? dock.offsetWidth + 10 : 0;
+  const chromeRight = (openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT) + dockWidth;
+  document.dispatchEvent(new CustomEvent("vtt:chromeInset", { detail: { left: chromeRight + 10 } }));
 }
 
 let panelWidth = Math.min(Math.max(Number(localStorage.getItem(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN), panelWidthMax());
