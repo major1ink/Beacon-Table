@@ -17,14 +17,12 @@ import {
   fetchAdminCharacter,
   updateAdminCharacterSheet,
   fetchCharacterInventory,
-  addCharacterInventoryItem,
   updateCharacterInventoryItem,
   deleteCharacterInventoryItem,
   fetchReferences,
 } from "../api.js";
 import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
-import { initItemPicker } from "../item-picker.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "../hp-bar.js";
 import { renderStatusChips } from "../status-palette.js";
@@ -1094,6 +1092,12 @@ function renderTab4() {
 // только что выданный лут устаревшей копией). Доступна только владельцу
 // (см. isAdminView ниже — у ДМ, открывшего ЧУЖОЙ лист, эндпоинты инвентаря
 // вернут 404: они авторизуются по сессии текущего аккаунта, а не персонажа).
+//
+// Игрок НЕ может сам добавить себе предмет из каталога — только то, что
+// выдал ДМ (хаб лута) или что удалось забрать с трупа (см. loot-take-modal.js,
+// оба пути пишут через AddInventoryEntry в обход этого сервиса). Отсюда же
+// правки количества в этой вкладке — только уменьшение (потратил/выбросил),
+// см. qtyInput ниже.
 let inventory = [];
 
 function totalWeight() {
@@ -1122,10 +1126,19 @@ async function loadInventory() {
 }
 
 function saveInventoryEntry(e, patch) {
+  if ("equipped" in patch && patch.equipped !== e.equipped) {
+    // Надеть/снять может расщепить стопку (надел одну штуку из трёх — в
+    // инвентаре появляется отдельная надетая запись на 1 и обычная на 2) или
+    // слить её обратно с такой же соседней записью (см.
+    // internal/service/characters.go: UpdateInventoryItem), поэтому id и
+    // количества строк после запроса могут не совпадать с тем, что было в
+    // памяти — правим не локально, а перечитываем инвентарь целиком.
+    updateCharacterInventoryItem(charId, e.id, e.quantity, patch.equipped, e.notes)
+      .then(loadInventory)
+      .catch((err) => showAlert("Не удалось сохранить: " + err.message));
+    return;
+  }
   Object.assign(e, patch);
-  // Снять/надеть — это смена КЗ и прочих производных чисел (см.
-  // activeModifiers), а не только галочка в таблице.
-  if ("equipped" in patch && mode === "view") refreshView();
   updateCharacterInventoryItem(charId, e.id, e.quantity, e.equipped, e.notes).catch((err) => showAlert("Не удалось сохранить: " + err.message));
 }
 
@@ -1134,6 +1147,7 @@ function removeInventoryEntry(id) {
     .then(() => {
       inventory = inventory.filter((e) => e.id !== id);
       renderTab5();
+      if (mode === "view") renderView();
     })
     .catch((err) => showAlert("Не удалось удалить: " + err.message));
 }
@@ -1165,10 +1179,19 @@ function renderTab5() {
     const avatar = h("div", { class: "inv-avatar" });
     if (e.imageUrl) avatar.style.backgroundImage = `url("${e.imageUrl}")`;
 
-    const qtyInput = h("input", { type: "number", min: "0", value: String(e.quantity) });
+    // max = текущее количество — игрок может только потратить/выбросить
+    // часть стопки, не приписать себе лишнее (см. комментарий у `let inventory`).
+    const qtyInput = h("input", { type: "number", min: "0", max: String(e.quantity), value: String(e.quantity) });
     qtyInput.addEventListener("change", () => {
       const q = parseInt(qtyInput.value, 10);
-      saveInventoryEntry(e, { quantity: Number.isFinite(q) && q >= 0 ? q : e.quantity });
+      const clamped = Number.isFinite(q) ? Math.min(Math.max(q, 0), e.quantity) : e.quantity;
+      // 0 — предмет потрачен весь, запись удаляется целиком (см. сервер:
+      // UpdateInventoryItem), а не остаётся строкой "×0".
+      if (clamped === 0) {
+        removeInventoryEntry(e.id);
+        return;
+      }
+      saveInventoryEntry(e, { quantity: clamped });
       renderTab5();
     });
 
@@ -1201,18 +1224,7 @@ function renderTab5() {
   table.appendChild(tbody);
   listSection.appendChild(table);
 
-  const addSection = h("div", { class: "section" }, [h("h3", { text: "Добавить из каталога" })]);
-  const pickerWrap = h("div", {});
-  addSection.appendChild(pickerWrap);
-  initItemPicker(pickerWrap, {
-    onPick: (item, qty) => {
-      addCharacterInventoryItem(charId, item.id, qty)
-        .then(loadInventory)
-        .catch((err) => showAlert("Не удалось добавить: " + err.message));
-    },
-  });
-
-  root.append(listSection, addSection);
+  root.append(listSection);
 }
 
 // ==================== режим чтения ====================
@@ -1902,31 +1914,27 @@ function vInventoryCard() {
       class: "v-inv-eq" + (e.equipped ? " on" : ""),
       title: e.equipped ? "Надето — снять" : "Надеть",
       html: icon("check", { size: 12 }),
-      onclick: () => {
-        saveInventoryEntry(e, { equipped: !e.equipped });
-        renderView();
-      },
+      onclick: () => saveInventoryEntry(e, { equipped: !e.equipped }),
     });
     return h("div", { class: "v-inv" }, [
       h("span", { class: "v-inv-name" }, [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + e.weightLb + " фнт" }) : null]),
       qty,
+      // Только "потратить" — набрать себе лишнего игрок не может (см.
+      // комментарий у `let inventory`), пополнение только через лут/ДМ.
       h("button", {
         type: "button",
         class: "v-inv-eq",
         title: "Потратить одну штуку",
         html: icon("minus", { size: 12 }),
         onclick: () => {
-          saveInventoryEntry(e, { quantity: Math.max(0, (e.quantity || 0) - 1) });
-          renderView();
-        },
-      }),
-      h("button", {
-        type: "button",
-        class: "v-inv-eq",
-        title: "Добавить одну штуку",
-        html: icon("plus", { size: 12 }),
-        onclick: () => {
-          saveInventoryEntry(e, { quantity: (e.quantity || 0) + 1 });
+          const next = Math.max(0, (e.quantity || 0) - 1);
+          // 0 — предмет потрачен весь, запись удаляется целиком (см.
+          // removeInventoryEntry), а не остаётся строкой "×0".
+          if (next === 0) {
+            removeInventoryEntry(e.id);
+            return;
+          }
+          saveInventoryEntry(e, { quantity: next });
           renderView();
         },
       }),
@@ -2081,6 +2089,13 @@ function connectRollSocket() {
     // перезагрузки страницы. Кладём их в СВОЮ копию листа — иначе
     // ближайший автосейв бланка (debounce 700мс, см. scheduleSave) увёз бы
     // на сервер старые хиты и откатил правку ДМ.
+    // Инвентарь пополняется не только с этого окна (хаб ДМа/труп на
+    // player.html, см. service.Room: handleHubTakeItem/handleLootTakeItem) —
+    // без этого сигнала новый лут появлялся бы только после перезагрузки
+    // страницы с открытым бланком.
+    if (data.type === "character_inventory" && data.characterId === charId) {
+      loadInventory();
+    }
     if (data.type === "character_hp" && data.characterId === charId && sheet) {
       sheet.combat.hpCurrent = data.hpCurrent;
       sheet.combat.hpTemp = data.hpTemp;

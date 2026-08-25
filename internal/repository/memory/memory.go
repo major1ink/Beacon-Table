@@ -238,9 +238,11 @@ func (s *CharacterStore) AddInventoryEntry(ctx context.Context, characterID, acc
 	if !s.ownsCharacter(characterID, accountID) {
 		return nil, domain.ErrNotFound
 	}
+	// Надетая запись в апсерт не участвует (см. sqlite/inventory.go) — новый
+	// предмет того же ItemID копится в отдельной незанадетой стопке
 	if entry.ItemID != "" {
 		for _, e := range s.inventory[characterID] {
-			if e.ItemID == entry.ItemID {
+			if e.ItemID == entry.ItemID && !e.Equipped {
 				e.Quantity += entry.Quantity
 				cp := *e
 				return &cp, nil
@@ -255,6 +257,78 @@ func (s *CharacterStore) AddInventoryEntry(ctx context.Context, characterID, acc
 	s.inventory[characterID] = append(s.inventory[characterID], &cp)
 	out := cp
 	return &out, nil
+}
+
+// SetInventoryEquipped implements repository.CharacterRepository — то же
+// расщепление/слияние по одной штуке, что и в sqlite/inventory.go.
+func (s *CharacterStore) SetInventoryEquipped(ctx context.Context, characterID, accountID, entryID, newEntryID string, equipped bool) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.ownsCharacter(characterID, accountID) {
+		return false, nil
+	}
+	list := s.inventory[characterID]
+	var target *domain.InventoryEntry
+	for _, e := range list {
+		if e.ID == entryID {
+			target = e
+			break
+		}
+	}
+	if target == nil {
+		return false, nil
+	}
+	if target.Equipped == equipped {
+		return true, nil
+	}
+
+	var sibling *domain.InventoryEntry
+	if target.ItemID != "" {
+		for _, e := range list {
+			if e != target && e.ItemID == target.ItemID && e.Equipped == equipped {
+				sibling = e
+				break
+			}
+		}
+	}
+
+	if target.ItemID == "" || target.Quantity <= 1 {
+		if sibling != nil {
+			sibling.Quantity += target.Quantity
+			s.inventory[characterID] = removeInventoryEntryPtr(list, target)
+		} else {
+			target.Equipped = equipped
+		}
+		return true, nil
+	}
+
+	target.Quantity--
+	if sibling != nil {
+		sibling.Quantity++
+	} else {
+		s.invSeq++
+		id := newEntryID
+		if id == "" {
+			id = "inv-" + strconv.Itoa(s.invSeq)
+		}
+		cp := *target
+		cp.ID = id
+		cp.Quantity = 1
+		cp.Equipped = equipped
+		cp.Notes = ""
+		s.inventory[characterID] = append(s.inventory[characterID], &cp)
+	}
+	return true, nil
+}
+
+func removeInventoryEntryPtr(list []*domain.InventoryEntry, target *domain.InventoryEntry) []*domain.InventoryEntry {
+	out := make([]*domain.InventoryEntry, 0, len(list)-1)
+	for _, e := range list {
+		if e != target {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func (s *CharacterStore) UpdateInventoryEntry(ctx context.Context, characterID, accountID, entryID string, quantity int, equipped bool, notes string) (bool, error) {

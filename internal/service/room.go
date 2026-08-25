@@ -1754,6 +1754,7 @@ func (r *Room) handleHubTakeItem(c RoomClient, msg domain.ClientMsg) {
 	}
 	r.markHubDirty()
 	r.broadcastHub()
+	r.broadcastCharacterInventory(ch.ID, ch.AccountID)
 }
 
 // ================= лут убитого монстра прямо с токена (Token.Loot) =================
@@ -1806,6 +1807,7 @@ func (r *Room) handleLootTakeItem(c RoomClient, msg domain.ClientMsg) {
 	}
 	r.markDirty(r.currentSceneID)
 	r.broadcastAll()
+	r.broadcastCharacterInventory(ch.ID, ch.AccountID)
 }
 
 // removeString возвращает копию list без первого вхождения v — используется

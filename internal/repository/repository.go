@@ -94,16 +94,34 @@ type CharacterRepository interface {
 
 	ListInventory(ctx context.Context, characterID string) ([]*domain.InventoryEntry, error)
 	// AddInventoryEntry добавляет запись инвентаря. Если entry.ItemID != ""
-	// и у персонажа уже есть запись с таким же ItemID — количество
+	// и у персонажа уже есть НЕнадетая запись с таким же ItemID — количество
 	// СУММИРУЕТСЯ в существующую запись (апсерт), а не плодит вторую строку;
-	// записи без ItemID (ручные/осиротевшие) всегда добавляются новой
-	// строкой. accountID — тот же принцип защиты, что и у Update/UpdateSheet/
-	// Delete: запись видна только если character действительно принадлежит
-	// этому accountID (и этой компании).
+	// надетая запись того же ItemID в это сопоставление не участвует —
+	// новая партия копится отдельной стопкой, что надето — отображается
+	// отдельно от общей кучи. Записи без ItemID (ручные/осиротевшие) всегда
+	// добавляются новой строкой. accountID — тот же принцип защиты, что и у
+	// Update/UpdateSheet/Delete: запись видна только если character
+	// действительно принадлежит этому accountID (и этой компании).
 	AddInventoryEntry(ctx context.Context, characterID, accountID string, entry domain.InventoryEntry) (*domain.InventoryEntry, error)
 	// UpdateInventoryEntry возвращает false, если записи с таким entryID нет
 	// у ЭТОГО персонажа/аккаунта.
 	UpdateInventoryEntry(ctx context.Context, characterID, accountID, entryID string, quantity int, equipped bool, notes string) (bool, error)
+	// SetInventoryEquipped переключает надето/снято для одной ШТУКИ записи
+	// entryID (та же гранулярность, что у "потратить одну штуку" в
+	// quantity) — не весь флаг строки целиком:
+	//   - quantity записи <= 1 (или ItemID == "", слить не с кем) — строка
+	//     переключается целиком, либо (если рядом уже есть запись того же
+	//     ItemID в целевом equipped-состоянии) сливается в неё квантити,
+	//     а сама удаляется;
+	//   - quantity > 1 — от строки отделяется одна единица: quantity строки
+	//     уменьшается на 1, единица уходит в соседнюю запись того же ItemID
+	//     в целевом состоянии (если есть) или заводит новую (см. newEntryID)
+	//     — так надетое всегда видно отдельной записью от общей стопки.
+	// newEntryID используется, только если пришлось завести новую строку —
+	// тот же приём, что и entry.ID у AddInventoryEntry (ID генерирует
+	// вызывающий service-слой). Возвращает false, если entryID не найден у
+	// этого персонажа/аккаунта.
+	SetInventoryEquipped(ctx context.Context, characterID, accountID, entryID, newEntryID string, equipped bool) (bool, error)
 	// RemoveInventoryEntry возвращает false, если записи с таким entryID нет.
 	RemoveInventoryEntry(ctx context.Context, characterID, accountID, entryID string) (bool, error)
 }

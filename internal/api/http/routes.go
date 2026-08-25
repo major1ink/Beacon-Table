@@ -57,7 +57,6 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// не часть /sheet выше (см. комментарий repository.CharacterRepository и
 	// план фичи про гонку с автосейвом листа).
 	mux.HandleFunc("GET /api/characters/{id}/inventory", a.handleCharacterInventoryList)
-	mux.HandleFunc("POST /api/characters/{id}/inventory", a.handleCharacterInventoryAdd)
 	mux.HandleFunc("PUT /api/characters/{id}/inventory/{entryId}", a.handleCharacterInventoryUpdate)
 	mux.HandleFunc("DELETE /api/characters/{id}/inventory/{entryId}", a.handleCharacterInventoryDelete)
 

@@ -93,9 +93,9 @@ export async function updateCharacterSheet(id, sheet) {
 export async function fetchCharacterInventory(id) {
   return apiFetch(`/api/characters/${id}/inventory`);
 }
-export async function addCharacterInventoryItem(id, itemId, quantity) {
-  return apiFetch(`/api/characters/${id}/inventory`, { method: "POST", body: JSON.stringify({ itemId, quantity }) });
-}
+// Добавить предмет из каталога напрямую в свой инвентарь игрок не может (см.
+// internal/service/characters.go) — только уменьшать/снимать/надевать то, что
+// уже выдал ДМ или удалось забрать через loot-take-modal.js.
 export async function updateCharacterInventoryItem(id, entryId, quantity, equipped, notes) {
   return apiFetch(`/api/characters/${id}/inventory/${entryId}`, {
     method: "PUT",
