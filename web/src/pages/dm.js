@@ -3,6 +3,7 @@
 // initVTT(...) стал await initVTT(...) (см. vtt/index.js — единственное
 // вынужденное отличие от прежнего classic-script вызова).
 import { initVTT } from "../vtt/index.js";
+import { mapObjectsOf } from "../vtt/map-objects.js";
 import { initDiceRoller } from "../dice.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
 import { initCombatPanel } from "../combat-panel.js";
@@ -444,6 +445,9 @@ const tokenMenuLightBrightField = document.getElementById("tokenMenuLightBrightF
 const tokenMenuLightDimField = document.getElementById("tokenMenuLightDimField");
 const tokenMenuLightToggleBtn = document.getElementById("tokenMenuLightToggleBtn");
 const tokenMenuStatusBtn = document.getElementById("tokenMenuStatusBtn");
+const tokenMenuCopyBtn = document.getElementById("tokenMenuCopyBtn");
+const tokenMenuLockBtn = document.getElementById("tokenMenuLockBtn");
+const tokenMenuLockLabel = document.getElementById("tokenMenuLockLabel");
 const tokenMenuDelete = document.getElementById("tokenMenuDelete");
 let menuTokenId = null;
 let menuCharacterId = ""; // characterId токена в открытом сейчас меню — "" у обычных NPC-токенов
@@ -456,6 +460,11 @@ let menuMonsterId = ""; // monsterId токена в открытом сейча
 // tokenMenuLight.checked, когда меню в этом режиме.
 let menuIsLightOnly = false;
 let menuLightEnabled = false;
+// menuTokenLocked — заперт ли токен в ОТКРЫТОМ СЕЙЧАС меню (см.
+// domain.Token.Locked и web/src/vtt/map-objects.js). Меню запертого токена
+// открывается как обычно — иначе замок было бы нечем снять, — но всё, что
+// его правит, в нём гасится (класс .locked-disabled, см. web/dm.html).
+let menuTokenLocked = false;
 // menuTokenLoot — снимок Token.Loot (см. domain.InventoryEntry) токена в
 // открытом сейчас меню — "Лутить" виден, только если тут реально есть что
 // разобрать (token.dead && loot.length), см. handler ниже.
@@ -464,6 +473,7 @@ let menuTokenLoot = [];
 function closeTokenMenu() {
   tokenMenu.style.display = "none";
   menuTokenId = null;
+  menuTokenLocked = false;
   menuCharacterId = "";
   menuCharacterLabel = "";
   menuMonsterId = "";
@@ -493,6 +503,7 @@ function closeWallPointMenu() {
 }
 
 document.addEventListener("vtt:wallPointContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeNoteMarkerMenu();
   closeFogAreaMenu();
@@ -515,6 +526,8 @@ wallPointMenuDelete.onclick = () => {
 // меню, как у токена/значка заметки, а не остаётся единственным ПКМ-действием.
 const fogAreaMenu = document.getElementById("fogAreaMenu");
 const fogAreaMenuDelete = document.getElementById("fogAreaMenuDelete");
+const fogAreaMenuLockBtn = document.getElementById("fogAreaMenuLockBtn");
+const fogAreaMenuLockLabel = document.getElementById("fogAreaMenuLockLabel");
 let menuFogAreaId = null;
 
 function closeFogAreaMenu() {
@@ -523,12 +536,14 @@ function closeFogAreaMenu() {
 }
 
 document.addEventListener("vtt:fogAreaContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeWallMenu();
   closeBuildingMenu();
   menuFogAreaId = e.detail.id;
+  wireMapObjectLock("fogArea", menuFogAreaId, fogAreaMenuLockBtn, fogAreaMenuLockLabel, [fogAreaMenuDelete], closeFogAreaMenu);
   fogAreaMenu.style.left = e.detail.pageX + "px";
   fogAreaMenu.style.top = e.detail.pageY + "px";
   fogAreaMenu.style.display = "block";
@@ -569,6 +584,7 @@ function closeWallMenu() {
 }
 
 document.addEventListener("vtt:wallContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
@@ -663,6 +679,8 @@ wallMenuDelete.onclick = () => {
 // режиме "Здание" не сносил контур мгновенно.
 const buildingMenu = document.getElementById("buildingMenu");
 const buildingMenuDelete = document.getElementById("buildingMenuDelete");
+const buildingMenuLockBtn = document.getElementById("buildingMenuLockBtn");
+const buildingMenuLockLabel = document.getElementById("buildingMenuLockLabel");
 let menuBuildingId = null;
 
 function closeBuildingMenu() {
@@ -671,12 +689,14 @@ function closeBuildingMenu() {
 }
 
 document.addEventListener("vtt:buildingContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeFogAreaMenu();
   closeWallMenu();
   menuBuildingId = e.detail.id;
+  wireMapObjectLock("building", menuBuildingId, buildingMenuLockBtn, buildingMenuLockLabel, [buildingMenuDelete], closeBuildingMenu);
   buildingMenu.style.left = e.detail.pageX + "px";
   buildingMenu.style.top = e.detail.pageY + "px";
   buildingMenu.style.display = "block";
@@ -692,6 +712,8 @@ buildingMenuDelete.onclick = () => {
 const noteMarkerMenu = document.getElementById("noteMarkerMenu");
 const noteMarkerResizeBtn = document.getElementById("noteMarkerResizeBtn");
 const noteMarkerDeleteBtn = document.getElementById("noteMarkerDeleteBtn");
+const noteMarkerMenuLockBtn = document.getElementById("noteMarkerMenuLockBtn");
+const noteMarkerMenuLockLabel = document.getElementById("noteMarkerMenuLockLabel");
 let menuNoteMarkerId = null;
 
 function closeNoteMarkerMenu() {
@@ -700,12 +722,21 @@ function closeNoteMarkerMenu() {
 }
 
 document.addEventListener("vtt:noteMarkerContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
   menuNoteMarkerId = e.detail.id;
+  wireMapObjectLock(
+    "noteMarker",
+    menuNoteMarkerId,
+    noteMarkerMenuLockBtn,
+    noteMarkerMenuLockLabel,
+    [noteMarkerResizeBtn, noteMarkerDeleteBtn],
+    closeNoteMarkerMenu
+  );
   noteMarkerMenu.style.left = e.detail.pageX + "px";
   noteMarkerMenu.style.top = e.detail.pageY + "px";
   noteMarkerMenu.style.display = "flex";
@@ -729,6 +760,7 @@ function updateLightToggleBtnLabel() {
 }
 
 document.addEventListener("vtt:tokenContextMenu", (e) => {
+  closeCanvasMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeFogAreaMenu();
@@ -786,10 +818,146 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
     syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
   }
 
+  // "Копировать" — пока только у токена света: копия источника вместе с
+  // радиусами и состоянием вкл/выкл вставляется ПКМ по пустому месту карты
+  // (см. #canvasMenu). Для существ такой кнопки осознанно нет — копия
+  // монстра это работа бестиария/трекера, а не буфера обмена карты.
+  tokenMenuCopyBtn.style.display = menuIsLightOnly ? "flex" : "none";
+
+  // Замок — универсальный для всех объектов карты (см. map-objects.js):
+  // здесь он на токене, тем же событием vtt:setMapObjectLocked его получат
+  // значки заметок, здания и фигуры тумана.
+  //
+  // Но НЕ на фигурках существ: у них запирать нечего — они ходят каждый
+  // ход, это и есть их работа на карте, а замок там только лишний пункт в
+  // меню и способ случайно обездвижить бойца посреди боя. Замок нужен
+  // ровно противоположному — РАЗМЕТКЕ карты: источникам света, декорациям
+  // из ассетов, значкам, зданиям, фигурам тумана; они стоят на тех же
+  // координатах, что и существа, и именно их промах мышью утаскивает.
+  //
+  // Признак ПОЛОЖИТЕЛЬНЫЙ ("это обстановка"), а не отрицательный ("нет
+  // characterId и monsterId"), и это принципиально: у токенов, приехавших
+  // вместе со сценой из Foundry, никаких id нет (см.
+  // internal/foundry/scene.go: mapToken переносит только имя, арт и
+  // размер), но это существа — и отрицательный признак предлагал бы для
+  // гоблина-воителя замок наравне с бочкой.
+  //
+  // Единственное исключение — токен, который УЖЕ заперт: кнопку
+  // показываем в любом случае, иначе запертое до появления этого правила
+  // нечем было бы освободить.
+  const menuIsMapDecor = menuIsLightOnly || !!token.decor;
+  menuTokenLocked = !!token.locked;
+  tokenMenuLockBtn.style.display = menuIsMapDecor || menuTokenLocked ? "flex" : "none";
+  tokenMenuLockLabel.textContent = menuTokenLocked ? "Разблокировать" : "Заблокировать";
+  applyTokenMenuLockState();
+
   tokenMenu.style.left = pageX + "px";
   tokenMenu.style.top = pageY + "px";
   tokenMenu.style.display = "block";
 });
+
+// applyTokenMenuLockState — гасит в открытом меню всё, что правит запертый
+// токен. Список исключений короткий и осознанный: сама кнопка замка (иначе
+// его не снять) и чисто читающие пункты (лист персонажа/статблок) —
+// посмотреть, ЧТО именно заперто, замок мешать не должен.
+function applyTokenMenuLockState() {
+  const editable = [
+    tokenMenuAddInitiativeBtn,
+    tokenMenuStatusBtn,
+    tokenMenuLootBtn,
+    tokenMenuHiddenRow,
+    tokenMenuShapeRow,
+    tokenMenuLightRow,
+    tokenMenuLightBrightField,
+    tokenMenuLightDimField,
+    tokenMenuLightToggleBtn,
+    tokenMenuCopyBtn,
+    tokenMenuDelete,
+  ];
+  for (const el of editable) el.classList.toggle("locked-disabled", menuTokenLocked);
+}
+
+tokenMenuLockBtn.onclick = () => {
+  if (!menuTokenId) return;
+  document.dispatchEvent(
+    new CustomEvent("vtt:setMapObjectLocked", { detail: { kind: "token", id: menuTokenId, locked: !menuTokenLocked } })
+  );
+  closeTokenMenu();
+};
+
+// wireMapObjectLock — одна и та же обвязка кнопки замка для меню значка
+// заметки, фигуры тумана и здания (у токена свой вариант выше — там кнопок
+// и режимов больше). Текущий флаг читается из ЖИВОЙ сцены, а не из detail
+// события: меню держат открытым, а сцена за это время приходит с сервера
+// ещё много раз. editable — что погасить, пока объект заперт (сама кнопка
+// замка в список, разумеется, не входит).
+function wireMapObjectLock(kind, id, btn, label, editable, close) {
+  const obj = mapObjectsOf(vtt.getScene(), kind)[id];
+  const locked = !!(obj && obj.locked);
+  label.textContent = locked ? "Разблокировать" : "Заблокировать";
+  for (const el of editable) el.classList.toggle("locked-disabled", locked);
+  btn.onclick = () => {
+    document.dispatchEvent(new CustomEvent("vtt:setMapObjectLocked", { detail: { kind, id, locked: !locked } }));
+    close();
+  };
+}
+
+// ================= буфер обмена объектов карты =================
+// mapClipboard — {kind, object} последнего скопированного объекта карты (см.
+// map-objects.js: MAP_OBJECT_KINDS). Живёт только в этой вкладке ДМ и только
+// до перезагрузки — это буфер обмена, а не состояние стола, серверу о нём
+// знать незачем. Хранится СНИМОК объекта, а не его id: вставить копию
+// удалённого с тех пор источника — нормально и ожидаемо.
+let mapClipboard = null;
+const canvasMenu = document.getElementById("canvasMenu");
+const canvasMenuPasteBtn = document.getElementById("canvasMenuPasteBtn");
+const canvasMenuPasteLabel = document.getElementById("canvasMenuPasteLabel");
+let canvasMenuAt = null; // мировые координаты ПКМ — точка вставки
+
+function closeCanvasMenu() {
+  canvasMenu.style.display = "none";
+  canvasMenuAt = null;
+}
+
+tokenMenuCopyBtn.onclick = () => {
+  if (!menuTokenId) return;
+  const t = (vtt.getScene().tokens || {})[menuTokenId];
+  if (!t) return;
+  // Копию берём из ЖИВОЙ сцены, а не из снимка, с которым открывали меню:
+  // пока меню висело, свет могли переключить двойным кликом или из списка
+  // в панели "Освещение".
+  mapClipboard = { kind: "token", object: { ...t } };
+  closeTokenMenu();
+};
+
+// ПКМ по пустому месту карты (см. interaction.js: vtt:canvasContextMenu) —
+// меню появляется, только если есть что вставлять: пустое меню на каждый
+// промах мимо токена раздражало бы сильнее, чем помогало.
+document.addEventListener("vtt:canvasContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  closeBuildingMenu();
+  if (!mapClipboard) return;
+  canvasMenuAt = { x: e.detail.x, y: e.detail.y };
+  canvasMenuPasteLabel.textContent = "Вставить: " + (mapClipboard.object.label || "объект");
+  canvasMenu.style.left = e.detail.pageX + "px";
+  canvasMenu.style.top = e.detail.pageY + "px";
+  canvasMenu.style.display = "block";
+});
+
+canvasMenuPasteBtn.onclick = () => {
+  if (!mapClipboard || !canvasMenuAt) return;
+  const src = mapClipboard.object;
+  counter++;
+  // Свой id и координаты точки вставки; замок копия НЕ наследует — вставили
+  // затем, чтобы поставить куда надо, а запертое сразу не поставишь.
+  const object = { ...src, id: "tok-" + Date.now() + "-" + counter, x: canvasMenuAt.x, y: canvasMenuAt.y, locked: false };
+  vtt.send({ type: "add_token", token: object });
+  closeCanvasMenu();
+};
 
 tokenMenuSheetBtn.onclick = () => {
   if (!menuCharacterId) return;
@@ -1494,6 +1662,10 @@ sceneCanvasEl.addEventListener("drop", (e) => {
       size: gridSize / 2,
       shape: "",
       hidden: false,
+      // decor — это обстановка, а не существо (см. domain.Token.Decor):
+      // единственное место, где признак вообще проставляется, — отсюда и
+      // берётся право предложить для этого токена замок.
+      decor: true,
     },
   });
 });
@@ -2640,6 +2812,7 @@ document.addEventListener("mousedown", (e) => {
   if (fogAreaMenu.style.display === "block" && !fogAreaMenu.contains(e.target)) closeFogAreaMenu();
   if (wallMenu.style.display === "block" && !wallMenu.contains(e.target)) closeWallMenu();
   if (buildingMenu.style.display === "block" && !buildingMenu.contains(e.target)) closeBuildingMenu();
+  if (canvasMenu.style.display === "block" && !canvasMenu.contains(e.target)) closeCanvasMenu();
 });
 
 // ===================================================================
@@ -2682,6 +2855,11 @@ function setSidePanelSection(name) {
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
     panelOpenHandlers[openPanelSection]();
   }
+  // Токены света редактируются на карте ТОЛЬКО пока открыт этот раздел (см.
+  // interaction.js: lightEditActive). Событие шлём на каждое переключение
+  // раздела, а не только на открытие/закрытие света: уход в любой другой
+  // раздел так же выключает режим, как и закрытие панели.
+  document.dispatchEvent(new CustomEvent("vtt:lightEditMode", { detail: { active: openPanelSection === "light" } }));
 }
 
 // showSidePanelSection — «показать раздел», в отличие от setSidePanelSection
@@ -2814,6 +2992,145 @@ document.getElementById("addLightToken").onclick = () => {
   };
   vtt.send({ type: "add_token", token });
 };
+
+// ================= список источников света на карте =================
+// Токен света ничем не подписан на карте (см. layers/tokens.js — у него нет
+// label, только иконка лампочки), поэтому единственный способ понять, что
+// именно расставлено по сцене и где, — этот список. Он же закрывает три
+// вещи, которых у света не было вовсе: имя источника, быстрый тумблер
+// вкл/выкл без поиска токена мышью и «найди мне его» (кнопка 🎯 — камера
+// едет к источнику и подсвечивает его, см. map-objects.js).
+const lightList = document.getElementById("lightList");
+
+// lightTokensSorted — источники текущей сцены в стабильном порядке. Ключи
+// объекта tokens приходят с сервера в порядке обхода Go-мапы, то есть в
+// РАЗНОМ на каждый снапшот: без сортировки список бы перетасовывался сам
+// собой на каждое движение любого токена на карте.
+function lightTokensSorted() {
+  return Object.entries(vtt.getScene().tokens || {})
+    .filter(([, t]) => t.lightOnly)
+    .sort((a, b) => (a[1].label || "").localeCompare(b[1].label || "", "ru") || a[0].localeCompare(b[0]));
+}
+
+// sendLightToken — сохранить правку источника целиком (сервер делает апсерт
+// по id, см. service.Room.applyMutation "move_token"). Читаем токен из
+// ЖИВОЙ сцены, а не из замыкания строки списка: между отрисовкой списка и
+// кликом сцена приходит с сервера ещё много раз.
+function sendLightToken(id, patch) {
+  const t = (vtt.getScene().tokens || {})[id];
+  if (!t) return;
+  vtt.send({ type: "move_token", token: { ...t, ...patch } });
+}
+
+function renderLightList() {
+  // Пока ДМ ПЕЧАТАЕТ имя источника прямо в списке, перерисовка съела бы
+  // фокус и половину слова — снапшоты со сцены прилетают на каждый чужой
+  // драг токена. Ждём, пока поле отпустят (см. onblur ниже).
+  //
+  // Проверять надо ИМЕННО поле имени, а не "фокус где-то внутри списка":
+  // браузер отдаёт фокус и обычной <button> по клику, поэтому широкая
+  // проверка намертво замораживала список после первого же нажатия на
+  // лампочку или замок — состояние вкл/выкл и замок в строке переставали
+  // обновляться вообще (на самой карте при этом всё работало, что и делало
+  // симптом таким странным).
+  const editing = document.activeElement;
+  if (editing && lightList.contains(editing) && editing.classList.contains("light-row-name")) return;
+  // Строки пересоздаются целиком, значит нажатая кнопка сейчас будет
+  // уничтожена вместе с фокусом на ней. Мышь этого не замечает (курсор
+  // остаётся над новой кнопкой на том же месте), а вот Tab-навигация
+  // выкидывала бы в начало страницы после каждого щелчка — поэтому
+  // запоминаем "чья это была кнопка" и возвращаем фокус на её замену.
+  const refocus = editing && lightList.contains(editing) && editing.dataset && editing.dataset.lightBtn
+    ? { id: editing.dataset.lightId, btn: editing.dataset.lightBtn }
+    : null;
+  lightList.innerHTML = "";
+  const rows = lightTokensSorted();
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "На сцене пока нет источников света.";
+    lightList.appendChild(empty);
+    return;
+  }
+  for (const [id, t] of rows) {
+    const on = !!(t.light && t.light.enabled);
+    const locked = !!t.locked;
+    const row = document.createElement("div");
+    row.className = "light-row" + (on ? "" : " off") + (locked ? " locked" : "");
+
+    const name = document.createElement("input");
+    name.className = "light-row-name";
+    name.value = t.label || "Источник света";
+    name.title = "Название источника — видно только ДМ";
+    name.disabled = locked; // запертый не правится даже здесь — см. требование к замку
+    name.onblur = () => {
+      const next = name.value.trim() || "Источник света";
+      if (next !== (t.label || "")) sendLightToken(id, { label: next });
+      else renderLightList();
+    };
+    name.onkeydown = (e) => {
+      if (e.key === "Enter") name.blur();
+      if (e.key === "Escape") {
+        name.value = t.label || "Источник света";
+        name.blur();
+      }
+    };
+
+    const radii = document.createElement("span");
+    radii.className = "light-row-radii";
+    radii.textContent = `${(t.light && t.light.bright) || 0}/${(t.light && t.light.dim) || 0}`;
+    radii.title = "Радиусы яркого/тусклого света в единицах линейки сцены";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = on ? "on" : "";
+    toggle.innerHTML = icon("bulb", { size: 14 });
+    toggle.title = on ? "Потушить источник" : "Зажечь источник";
+    toggle.disabled = locked;
+    toggle.dataset.lightId = id;
+    toggle.dataset.lightBtn = "toggle";
+    toggle.onclick = () => document.dispatchEvent(new CustomEvent("vtt:toggleTokenLight", { detail: { id } }));
+
+    // Фокусировка работает и на запертом источнике: она ничего не меняет в
+    // мире, только наводит камеру — ровно то, ради чего замок и ставят
+    // («стоит на месте, но я хочу его найти»).
+    const focusBtn = document.createElement("button");
+    focusBtn.type = "button";
+    focusBtn.innerHTML = icon("target", { size: 14 });
+    focusBtn.title = "Показать на карте — камера наведётся и подсветит источник";
+    focusBtn.dataset.lightId = id;
+    focusBtn.dataset.lightBtn = "focus";
+    focusBtn.onclick = () => document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: "token", id } }));
+
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.className = locked ? "on" : "";
+    lockBtn.innerHTML = icon("lock", { size: 14 });
+    lockBtn.title = locked ? "Снять замок — источник снова двигается и правится" : "Запереть — источник не двигается и не правится, пока замок не снят";
+    lockBtn.dataset.lightId = id;
+    lockBtn.dataset.lightBtn = "lock";
+    lockBtn.onclick = () =>
+      document.dispatchEvent(new CustomEvent("vtt:setMapObjectLocked", { detail: { kind: "token", id, locked: !locked } }));
+
+    row.append(name, radii, toggle, focusBtn, lockBtn);
+    lightList.appendChild(row);
+  }
+
+  if (refocus) {
+    const again = lightList.querySelector(
+      `[data-light-id="${CSS.escape(refocus.id)}"][data-light-btn="${refocus.btn}"]`
+    );
+    // Кнопка могла и не появиться заново (источник удалили, или замок
+    // сделал её disabled) — тогда просто оставляем фокус там, куда его
+    // увёл браузер.
+    if (again && !again.disabled) again.focus();
+  }
+}
+
+onPanelOpen("light", renderLightList);
+document.addEventListener("vtt:sceneUpdated", () => {
+  if (openPanelSection === "light") renderLightList();
+});
 
 // ===================================================================
 // ==================== переключатель сцен ==========================

@@ -21,6 +21,7 @@ import {
   clampMoveByWalls,
 } from "../geometry.js";
 import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
+import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
 import { fetchCharacter } from "../api.js";
 
@@ -77,6 +78,18 @@ export function createInteraction(ctx) {
     markCameraDirty();
     ctx.render();
   }
+
+  // ---- универсальная механика объектов карты (см. map-objects.js) ----
+  // Фокусировка ("покажи, где он") заведена для ВСЕХ ролей, а не только для
+  // ДМ: сам жест ничего в мире не меняет — он двигает локальную камеру, — и
+  // ровно та же кнопка "найти на карте" понадобится в любом списке объектов
+  // на экране игрока.
+  const mapObjectFocus = createMapObjectFocus(ctx, applyCameraAndRender);
+  document.addEventListener("vtt:focusMapObject", (e) => {
+    const { kind, id, minZoom } = e.detail || {};
+    const obj = mapObjectsOf(ctx.scene, kind)[id];
+    if (obj) mapObjectFocus.focus(obj, { minZoom });
+  });
 
   // ---- зум колесом, пан средней кнопкой — работают у всех трёх ролей ----
   canvas.addEventListener(
@@ -204,6 +217,42 @@ export function createInteraction(ctx) {
     let dragStart = null;
     let dragLastPos = null;
     let dragTraveled = 0;
+
+    // lightEditActive — открыта ли ПРЯМО СЕЙЧАС панель "Освещение" (см.
+    // pages/dm.js: setSidePanelSection шлёт "vtt:lightEditMode"). Токены
+    // света (domain.Token.LightOnly) — это разметка карты, а не фигурки на
+    // ней: они стоят там же, где ходят существа, ничем не подписаны и
+    // ловятся мышью ровно так же, как монстр. Пока панель освещения
+    // закрыта, они полностью выпадают из хит-теста — ни драга, ни ПКМ-меню,
+    // ни двойного клика; открыл панель — они, наоборот, получают
+    // ПРИОРИТЕТ в стопке (см. prefer в dmTokenAt), чтобы фонарь можно было
+    // достать из-под вставшего на него монстра, не убирая монстра.
+    let lightEditActive = false;
+    document.addEventListener("vtt:lightEditMode", (e) => {
+      const next = !!(e.detail && e.detail.active);
+      if (next === lightEditActive) return;
+      lightEditActive = next;
+      // Выход из режима посреди жеста не должен оставить токен света
+      // "прилипшим" к курсору.
+      if (!lightEditActive && dragTokenId && (ctx.scene.tokens[dragTokenId] || {}).lightOnly) {
+        dragTokenId = null;
+        distanceLabel.hide();
+      }
+    });
+
+    // dmTokenAt — единственный хит-тест токенов у ДМ (см. geometry.tokenAt):
+    // тут собраны оба правила разом — что вообще видно мыши (токены света
+    // только в режиме освещения) и что нельзя трогать (opts.skipLocked —
+    // запертые объекты, см. domain.Token.Locked). skipLocked НЕ ставится на
+    // ПКМ: контекстное меню запертого токена обязано открываться, иначе
+    // замок было бы нечем снять.
+    function dmTokenAt(x, y, opts) {
+      const skipLocked = !!(opts && opts.skipLocked);
+      return tokenAt(x, y, ctx.scene.tokens, {
+        filter: (t) => (lightEditActive || !t.lightOnly) && !(skipLocked && isLocked(t)),
+        prefer: lightEditActive ? (t) => !!t.lightOnly : null,
+      });
+    }
 
     function setTool(name) {
       tool = name || "select";
@@ -404,7 +453,7 @@ export function createInteraction(ctx) {
           return;
         }
         const vertex = buildingVertexNear(x, y, ctx.scene.buildings, ctx.world.scale.x || 1);
-        if (vertex) draggingBuildingPoint = vertex;
+        if (vertex && !isLocked(ctx.scene.buildings[vertex.buildingId])) draggingBuildingPoint = vertex;
         return;
       }
       if (tool === "fog") {
@@ -414,12 +463,12 @@ export function createInteraction(ctx) {
         }
         const scale = ctx.world.scale.x || 1;
         const fogVertex = fogVertexNear(x, y, ctx.scene.fogAreas, scale);
-        if (fogVertex) {
+        if (fogVertex && !isLocked(ctx.scene.fogAreas[fogVertex.areaId])) {
           draggingFogVertex = fogVertex;
           return;
         }
         const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
-        if (fogId) {
+        if (fogId && !isLocked(ctx.scene.fogAreas[fogId])) {
           draggingFogArea = { id: fogId, startX: x, startY: y, original: ctx.scene.fogAreas[fogId].points.map((p) => ({ x: p.x, y: p.y })) };
         }
         return;
@@ -467,7 +516,9 @@ export function createInteraction(ctx) {
         }
       }
 
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
+      // skipLocked — запертый токен (domain.Token.Locked) для ЛКМ просто не
+      // существует: ни утащить, ни выбрать целью атаки.
+      const hitId = dmTokenAt(x, y, { skipLocked: true });
       if (tool === "attack") {
         if (!attackFromId) {
           attackFromId = hitId;
@@ -492,7 +543,7 @@ export function createInteraction(ctx) {
       // Значок заметки перетаскивается только инструментом "выбор" — как и
       // токен выше, чтобы не мешать рисованию стен/тумана/здания.
       if (tool === "select") {
-        const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers);
+        const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers, 16, (m) => !isLocked(m));
         if (markerId && markerId === resizeArmedNoteMarkerId) {
           // Резайз армирован ИМЕННО для этого значка (см. vtt:armNoteMarkerResize
           // ниже) и mousedown попал по нему — начинаем драг размера, а не
@@ -725,7 +776,14 @@ export function createInteraction(ctx) {
       if (!dragTokenId) return;
       const snapped = snapToGrid(x, y, ctx.scene.grid);
       const t = ctx.scene.tokens[dragTokenId];
-      if (!t) return;
+      // Токен мог быть заперт (или удалён) уже ПОСЛЕ начала жеста — с
+      // другого экрана ДМ или из списка источников света; тогда жест просто
+      // прекращается, а не продолжает двигать запертое.
+      if (!t || isLocked(t)) {
+        dragTokenId = null;
+        distanceLabel.hide();
+        return;
+      }
       // У ДМ перемещение ничем не ограничено (maxAllowed=Infinity — полная
       // авторская власть над картой), в отличие от драга игроком СВОЕГО
       // токена в его ход (см. ветку ctx.isPlayer ниже) — но "одометр" для
@@ -889,7 +947,7 @@ export function createInteraction(ctx) {
         return;
       }
       const { x, y } = mousePos(e);
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
+      const hitId = dmTokenAt(x, y, { skipLocked: true });
       if (hitId) {
         const t = ctx.scene.tokens[hitId];
         if (t.lightOnly) {
@@ -969,7 +1027,7 @@ export function createInteraction(ctx) {
         }
       }
 
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
+      const hitId = dmTokenAt(x, y);
       if (hitId) {
         document.dispatchEvent(
           new CustomEvent("vtt:tokenContextMenu", {
@@ -1015,8 +1073,20 @@ export function createInteraction(ctx) {
           document.dispatchEvent(
             new CustomEvent("vtt:buildingContextMenu", { detail: { id: buildingId, pageX: e.clientX, pageY: e.clientY } })
           );
+          return;
         }
       }
+
+      // Ни во что не попали — это ПКМ по ПУСТОМУ месту карты. Раньше он
+      // просто ничего не делал; теперь это точка вставки скопированного
+      // объекта (см. pages/dm.js: #canvasMenu / "Вставить"). Мировые
+      // координаты идут в detail рядом с экранными: меню рисуется по
+      // экранным, а вставлять объект надо ровно туда, куда ткнули на карте,
+      // и пересчитывать это заново в dm.js было бы вторым источником правды
+      // о камере.
+      document.dispatchEvent(
+        new CustomEvent("vtt:canvasContextMenu", { detail: { x, y, pageX: e.clientX, pageY: e.clientY } })
+      );
     });
 
     // команда из меню точки стены (см. web/dm.html #wallPointMenu) — удаляет
@@ -1098,6 +1168,20 @@ export function createInteraction(ctx) {
     // из панели "Персонажи" на канвас (см. pages/dm.js: обработчик "drop").
     document.addEventListener("vtt:removeToken", (e) => {
       ctx.send({ type: "remove_token", id: e.detail.id });
+    });
+
+    // vtt:setMapObjectLocked — универсальный замок (см. map-objects.js и
+    // domain.Token.Locked): один обработчик на все виды объектов карты
+    // вместо своего "vtt:setTokenLocked"/"vtt:setBuildingLocked"/… на
+    // каждый. Сервер во всех четырёх случаях делает апсерт целого объекта
+    // по id (см. service.Room.applyMutation), поэтому шлём его копию с
+    // изменённым флагом — тем же приёмом, что и vtt:setTokenHidden выше.
+    document.addEventListener("vtt:setMapObjectLocked", (e) => {
+      const { kind, id, locked } = e.detail || {};
+      const meta = MAP_OBJECT_KINDS[kind];
+      const obj = meta && mapObjectsOf(ctx.scene, kind)[id];
+      if (!meta || !obj) return;
+      ctx.send({ type: meta.saveType, [meta.payload]: { ...obj, locked: !!locked } });
     });
 
     // команды из меню значка заметки (см. web/dm.html #noteMarkerMenu, pages/dm.js)
@@ -1212,8 +1296,17 @@ export function createInteraction(ctx) {
         ctx.send({ type: "toggle_door", id: doorId });
         return;
       }
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
-      if (hitId && ctx.scene.tokens[hitId].ownerId === ctx.playerId) {
+      // Хит-тест сразу сужен до того, что игрок вообще МОЖЕТ потащить —
+      // свой и незапертый токен. Раньше тут был хит-тест "любой токен", и
+      // проверка владельца шла уже после него: стоило собственному токену
+      // встать на клетку с монстром, токеном света или ассетом карты, как
+      // клик попадал в чужой объект, драг не начинался, и персонаж
+      // "залипал" на месте — сойти он не мог, пока ДМ не убирал то, на что
+      // он наступил (см. geometry.tokenAt о порядке выбора из стопки).
+      const hitId = tokenAt(x, y, ctx.scene.tokens, {
+        filter: (t) => t.ownerId === ctx.playerId && !isLocked(t),
+      });
+      if (hitId) {
         dragTokenId = hitId;
         const t0 = ctx.scene.tokens[hitId];
         dragStart = { x: t0.x, y: t0.y };
@@ -1236,7 +1329,7 @@ export function createInteraction(ctx) {
 
       if (!dragTokenId) return;
       const t = ctx.scene.tokens[dragTokenId];
-      if (!t || t.ownerId !== ctx.playerId) {
+      if (!t || t.ownerId !== ctx.playerId || isLocked(t)) {
         dragTokenId = null;
         distanceLabel.hide();
         return;
@@ -1318,11 +1411,17 @@ export function createInteraction(ctx) {
     // ничего не делаем на любом другом ПКМ, вместо полноценного меню.
     canvas.addEventListener("contextmenu", (e) => {
       const { x, y } = mousePos(e);
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
+      // Ищем сразу ТРУП С ДОБЫЧЕЙ, а не "любой токен, а потом посмотрим":
+      // мародёрствуют обычно стоя прямо на теле, и хит-тест "первый
+      // попавшийся" отдавал бы токен того, кто на нём стоит (см. тот же
+      // разбор у mousedown выше).
+      const hitId = tokenAt(x, y, ctx.scene.tokens, {
+        filter: (t) => t.dead && Array.isArray(t.loot) && t.loot.length > 0,
+      });
       if (!hitId) return;
       const t = ctx.scene.tokens[hitId];
-      const loot = Array.isArray(t.loot) ? t.loot : [];
-      if (!t.dead || loot.length === 0 || !(ctx.combat && ctx.combat.lootingEnabled)) return;
+      const loot = t.loot;
+      if (!(ctx.combat && ctx.combat.lootingEnabled)) return;
       e.preventDefault();
       document.dispatchEvent(new CustomEvent("vtt:tokenLootRequest", { detail: { tokenId: hitId, loot, name: t.label } }));
     });
