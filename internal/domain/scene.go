@@ -158,15 +158,17 @@ type TokenLight struct {
 // web/src/geometry.js:wallBlocksSight), во всём остальном обычная стена.
 // Door и Window взаимоисключающие — сервер сам сбрасывает одно при
 // выставлении другого (см. room.go: "set_wall_door"/"set_wall_window").
+
 type Wall struct {
-	ID        string  `json:"id"`
-	X1        float64 `json:"x1"`
-	Y1        float64 `json:"y1"`
-	X2        float64 `json:"x2"`
-	Y2        float64 `json:"y2"`
-	Door      string  `json:"door,omitempty"`
-	DoorState string  `json:"doorState,omitempty"`
-	Window    bool    `json:"window,omitempty"`
+	ID           string  `json:"id"`
+	X1           float64 `json:"x1"`
+	Y1           float64 `json:"y1"`
+	X2           float64 `json:"x2"`
+	Y2           float64 `json:"y2"`
+	Door         string  `json:"door,omitempty"`
+	DoorState    string  `json:"doorState,omitempty"`
+	Window       bool    `json:"window,omitempty"`
+	LightThrough bool    `json:"lightThrough,omitempty"`
 }
 
 // Point — вершина многоугольника FogArea.

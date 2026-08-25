@@ -55,7 +55,11 @@ export function createWindowsLayer(ctx) {
     const walls = ctx.scene.walls || {};
     const out = [];
     for (const id in walls) {
-      if (walls[id].window) out.push([id, walls[id]]);
+      // Именно окно = сквозь него видно, но свет оно держит. Сегмент, через
+      // который проходит и то и другое (Wall.LightThrough — «местность» из
+      // Foundry: заросли, дымка), окном не является, значка стекла ему тут
+      // не место — см. domain.Wall.
+      if (walls[id].window && !walls[id].lightThrough) out.push([id, walls[id]]);
     }
     return out;
   }

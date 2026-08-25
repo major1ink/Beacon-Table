@@ -1279,6 +1279,17 @@ export function createInteraction(ctx) {
       dragLastPos = step.pos;
       dragTraveled = step.traveled;
       ctx.dirty.tokens = true;
+      // Освещение — СРАЗУ, не дожидаясь, пока сервер пришлёт снапшот с этим
+      // же перемещением обратно. Раньше тут стоял только dirty.tokens:
+      // кружок токена уезжал за курсором мгновенно, а туман вокруг него
+      // перерисовывался лишь после круга «отправили -> сервер -> снапшот»,
+      // то есть всегда отставал от токена. За столом это читается как
+      // «лагает, будто пинг большой», даже когда сервер стоит в той же
+      // локальной сети. Лишней работы это не добавляет: пришедший следом
+      // снапшот несёт РОВНО ту позицию, которую мы уже применили, и
+      // пересчёт на нём отсекается по planInputKey (см. vision-plan.js).
+      ctx.dirty.vision = true;
+      ctx.dirty.buildings = true; // мог войти/выйти из контура здания — occupied() пересчитать
       ctx.render();
       distanceLabel.show(t.x, t.y, formatDistanceValue(dragTraveled, ctx.scene.grid, limitUnits));
       ctx.send({ type: "move_own_token", token: { id: t.id, x: t.x, y: t.y } });

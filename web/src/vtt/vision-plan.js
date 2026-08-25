@@ -7,7 +7,7 @@
 // createVisionFogLayer, накрыть его тестом было нечем — и регрессия
 // (сборка фронта, отставшая от исходников) доехала до боевого стола.
 //
-// Что видит игрок = (объединение обзора всех нескрытых токенов) ∩
+// Что видит игрок = (объединение обзора токенов ПАРТИИ) ∩
 // (объединение всех источников света + опциональный глобальный свет на всю
 // карту). Оба множителя по отдельности — обычный raycasting от точки,
 // ограниченный стенами и радиусом (computeVisibilityPolygon), просто теперь
@@ -21,7 +21,7 @@
 // осознанно ближе к дефолтному поведению Foundry VTT (без дарквижна и
 // настройки "Sight Range" на токене видно ровно то, что освещено и не
 // закрыто стеной — отдельного "радиуса зрения" сверху нет).
-import { computeVisibilityPolygon, weldWalls, pointInPolygon, wallBlocksSight } from "../geometry.js";
+import { computeVisibilityPolygon, weldWalls, pointInPolygon, wallBlocksSight, wallBlocksLight } from "../geometry.js";
 import { worldSize } from "./camera.js";
 import { unionAll, intersectMulti, differenceMulti, unionMulti, worldRect, gridUnitsToWorld, quantizePoints } from "./light-geometry.js";
 
@@ -32,6 +32,19 @@ export const SIGHT_MARGIN = 50; // запас поверх диагонали к
 // рабочий (0.25px, визуально неотличимо), остальные — аварийные повторы,
 // если на точном polygon-clipping всё-таки упал.
 export const QUANTUM_LADDER = [0.25, 1, 4];
+
+// LIGHT_STEPS — на сколько ступеней разбит переход от яркого света к краю
+// тусклого (см. ringMultis в computeLightLayer). Раньше ступеней было ровно
+// две — «ярко» и «тускло», — и граница между ними шла резкой линией поперёк
+// светового пятна: именно она читается как артефакт рядом с честными
+// (и обязанными быть резкими) краями теней от стен.
+//
+// Цена ступени — одно пересечение с обзором на кадр (само построение колец
+// живёт в кэше слоя света). Замеры на боевых картах: на "Пещере" (301
+// стена, 18 источников) каждая ступень стоит ~3 мс, на "Зимнем поместье" —
+// ~1.5 мс. 4 — компромисс: переход уже читается как плавный, а кадр на
+// поместье остаётся в бюджете 16.7 мс.
+export const LIGHT_STEPS = 4;
 
 // computeVisionPlanWithFallback — точка входа для vision-fog.js: каскад по
 // QUANTUM_LADDER поверх основной защиты (квантование входа, см.
@@ -53,22 +66,104 @@ export const QUANTUM_LADDER = [0.25, 1, 4];
 // Возвращает { plan, quantum } при успехе и { plan: null, error } если не
 // прошёл ни один шаг лестницы — вызывающая сторона сама решает, что делать
 // (vision-fog.js оставляет на экране предыдущий кадр).
-export function computeVisionPlanWithFallback(scene, isDM) {
+//
+// memo — НЕОБЯЗАТЕЛЬНЫЙ объект, который вызывающая сторона заводит один раз
+// и передаёт сюда каждый кадр (см. vision-fog.js). Он несёт две вещи, и обе
+// про скорость, не про результат — без memo всё считается ровно так же,
+// просто дороже:
+//
+//   * memo.quantum — квант, на котором получилось В ПРОШЛЫЙ РАЗ. Лестница
+//     задумывалась аварийной («обычно проходит первый шаг»), но на реальных
+//     импортированных картах бывает наоборот: на "Пещере" из goblin-trouble
+//     (301 стена) точный квант 0.25 падает ВСЕГДА, и каждый кадр честно
+//     доделывал заведомо провальную попытку целиком — 86 мс из 264 мс на
+//     кадр уходили в мусорку. Геометрия сцены между кадрами почти не
+//     меняется, поэтому прошлый удачный квант — лучшая первая догадка;
+//     точный квант при этом не забыт, а стоит следующим (см. ladderFrom):
+//     как только карта упростится, расчёт сам вернётся на него.
+//   * memo.layer/memo.layerKey — посчитанный слой света (см.
+//     computeLightLayer). Он зависит ТОЛЬКО от источников, стен, зданий и
+//     сетки — но не от того, где стоят наблюдатели. При таскании токена
+//     мышью (десятки кадров в секунду) он не меняется ни на пиксель, а
+//     пересчитывался вместе с обзором.
+export function computeVisionPlanWithFallback(scene, isDM, memo) {
+  // Сперва — не изменилось ли вообще ничего из того, от чего зависит
+  // освещение. Пересчёт запускает бит dirty.vision, а его выставляет ЛЮБОЙ
+  // снапшот, у которого объект tokens не тот же по ссылке (см. dirty.js:
+  // diffAndMarkDirty) — то есть каждый бросок кубика, каждое изменение HP,
+  // каждая правка инициативы. Геометрия при этом не менялась ни на пиксель,
+  // а стол получал десятки миллисекунд заблокированного главного потока —
+  // ровно то, что за столом ощущается как «лагает, будто пинг большой».
+  if (memo) {
+    const key = planInputKey(scene, isDM);
+    if (memo.planKey === key && memo.plan) return { plan: memo.plan, quantum: memo.quantum, unchanged: true };
+    memo.planKey = null; // до успешного расчёта кэшировать нечего
+  }
   let lastErr = null;
-  for (const quantum of QUANTUM_LADDER) {
+  for (const quantum of ladderFrom(memo && memo.quantum)) {
     try {
-      return { plan: computeVisionPlan(scene, isDM, quantum), quantum };
+      const plan = computeVisionPlan(scene, isDM, quantum, memo);
+      if (memo) {
+        memo.quantum = quantum;
+        memo.plan = plan;
+        memo.planKey = planInputKey(scene, isDM);
+      }
+      return { plan, quantum };
     } catch (err) {
       lastErr = err;
+      if (memo) memo.layerKey = null; // недосчитанный слой мог остаться в memo — не доверяем ему
     }
   }
   return { plan: null, quantum: null, error: lastErr };
 }
 
+// planInputKey — подпись ВСЕГО входа расчёта. Строится за доли миллисекунды
+// (см. соображение про строку vs хеш у lightLayerKey) и решает, надо ли
+// вообще что-то считать.
+//
+// Правило то же, что и у lightLayerKey: здесь обязано быть перечислено ровно
+// то, что читает computeVisionPlan. Забыть поле — значит показать игроку
+// прошлый кадр освещения и не заметить этого (кадр-то валидный, просто
+// устаревший).
+function planInputKey(scene, isDM) {
+  if (isDM || scene.fogOfWar === false) return "skip"; // расчёта нет вовсе — вход неважен
+  const parts = [scene.width, scene.height, scene.globalLight || ""];
+  const grid = scene.grid;
+  if (grid) parts.push(grid.size, grid.unitsPerCell);
+  for (const id in scene.tokens || {}) {
+    const t = scene.tokens[id];
+    if (t.hidden) continue; // скрытый токен не наблюдатель и не источник — его правки расчёта не касаются
+    const light = t.light;
+    const lights = !!(light && light.enabled && ((light.bright || 0) > 0 || (light.dim || 0) > 0));
+    const observes = !t.lightOnly && !!t.ownerId;
+    // Токен, который не смотрит и не светит (монстр, труп, безликий NPC), на
+    // расчёт не влияет ВООБЩЕ — его в подписи нет. Это не микрооптимизация:
+    // именно монстры двигаются в бою чаще всех, и раньше каждый их шаг
+    // сбрасывал бы кэш плана впустую.
+    if (!lights && !observes) continue;
+    parts.push("T", id, t.x, t.y, observes ? 1 : 0);
+    if (lights) parts.push(light.bright || 0, light.dim || 0);
+  }
+  parts.push(wallsSignature(scene));
+  for (const id in scene.buildings || {}) {
+    parts.push("B", id);
+    for (const p of scene.buildings[id].points) parts.push(p.x, p.y);
+  }
+  return parts.join("|");
+}
+
+// ladderFrom — QUANTUM_LADDER, но начиная с ранее сработавшего кванта:
+// сперва он сам, затем вся лестница с начала (включая шаги грубее — вдруг
+// геометрия усложнилась ещё). Дубли не страшны, но и не нужны — фильтруем.
+function ladderFrom(preferred) {
+  if (!preferred || preferred === QUANTUM_LADDER[0]) return QUANTUM_LADDER;
+  return [preferred, ...QUANTUM_LADDER.filter((q) => q !== preferred)];
+}
+
 // computeVisionPlan — один проход расчёта на заданном кванте. МОЖЕТ КИНУТЬ
 // исключение (polygon-clipping на вырожденной геометрии) — это нормально и
 // ожидаемо, ловит computeVisionPlanWithFallback выше.
-export function computeVisionPlan(scene, isDM, quantum) {
+export function computeVisionPlan(scene, isDM, quantum, memo) {
   // Только не-DM экран — DM должен видеть весь стол целиком, всегда, вне
   // зависимости от света (ориентир для редактирования, как и со стенами/
   // hidden-токенами). Ручные fogAreas (layers/manual-fog.js) рисуются
@@ -77,7 +172,7 @@ export function computeVisionPlan(scene, isDM, quantum) {
   if (scene.fogOfWar === false) return { skip: true };
 
   const { w, h } = worldSize(scene);
-  const empty = { skip: false, w, h, dimIslands: [] };
+  const empty = { skip: false, w, h, dimIslands: [], rings: [] };
 
   // weldWalls — склеивает почти-совпадающие концы стен ПЕРЕД raycasting'ом
   // (см. geometry.js): без этого щель в пару пикселей на углу комнаты
@@ -90,6 +185,10 @@ export function computeVisionPlan(scene, isDM, quantum) {
   // не попадают в raycasting вообще, как будто их тут нет — ни отдельной
   // ветки в computeVisibilityPolygon, ни пересчёта геометрии не нужно.
   //
+  // У СВЕТА список стен свой (см. computeLightLayer): окно держит свет, хотя
+  // сквозь него и видно — geometry.js:wallBlocksLight. Один список на оба
+  // расчёта был неверен именно на окнах.
+  //
   // Здания (domain.Building) НЕ участвуют в этом raycasting'е — ни в
   // обзоре, ни в самом построении луча света: подмешивание их контуров
   // сюда добавляло вершины/лучи от КАЖДОГО угла здания для ЛЮБОГО токена
@@ -101,21 +200,33 @@ export function computeVisionPlan(scene, isDM, quantum) {
   // многоугольников (см. clipLightByBuildings ниже) — без единого лишнего
   // луча.
   const walls = weldWalls(Object.values(scene.walls || {}).filter(wallBlocksSight));
-  const tokens = Object.values(scene.tokens || {}).filter((t) => !t.hidden);
+  // Пары [id, token], а не голые токены: id нужен кэшу обзора
+  // (cachedSightPolys), и брать его надо из КЛЮЧА словаря сцены, а не из
+  // token.id — последнего у токена может не оказаться (так собраны сцены в
+  // тестах), и тогда все наблюдатели схлопнулись бы в одну запись кэша.
+  const entries = Object.entries(scene.tokens || {}).filter(([, t]) => !t.hidden);
+  const tokens = entries.map(([, t]) => t);
   if (tokens.length === 0) return empty; // некому видеть — сплошная тьма
 
-  // sightTokens — только те, у кого вообще есть "глаза": lightOnly-токен
-  // (голая лампочка-маркер, см. domain.Token.LightOnly) — это декоративный
-  // источник света, а не персонаж с обзором. Раньше он ВСЁ РАВНО попадал в
-  // visionPolys ниже с sightRadius во всю карту (ограниченным только
-  // стенами) — один такой факел, поставленный в открытом месте без стен
-  // рядом, раскрывал обзором почти всю карту, и это перекрывало эффект
-  // ЛЮБОЙ, даже идеально замкнутой, комнаты в другом месте карты (обзор —
-  // объединение ПО ВСЕМ токенам сразу, см. visionMulti ниже). Сам свет
-  // факела (lightTokens ниже) по-прежнему участвует как обычно — меняется
-  // только то, что он не выступает ещё и "наблюдателем".
-  const sightTokens = tokens.filter((t) => !t.lightOnly);
-  if (sightTokens.length === 0) return empty; // одни факелы без наблюдателя — светить некому
+  // sightTokens — ТОКЕНЫ ПАРТИИ, то есть те, у кого есть владелец-игрок
+  // (domain.Token.OwnerID; проставляется, когда ДМ выкладывает персонажа из
+  // панели "Персонажи"). Именно вся партия, а не только токены смотрящего
+  // игрока: за столом персонажи стоят рядом и разговаривают, общий обзор —
+  // это то, чего ждут от карты.
+  //
+  // Раньше наблюдателем считался ЛЮБОЙ нескрытый не-lightOnly токен, то есть
+  // и монстры тоже — игрок видел карту глазами гоблинов. На боевой "Пещере"
+  // (3 гоблина-воителя, гигантская многоножка и трое NPC против одного
+  // токена партии) это открывало игроку ровно вдвое больше карты, чем видела
+  // партия. Скрытый токен (Token.Hidden) сюда и раньше не попадал — сервер
+  // вырезает его из payload целиком, — а вот обычный видимый монстр попадал.
+  //
+  // lightOnly-токен (голая лампочка-маркер) отсекается той же строкой и по
+  // отдельной причине: это декоративный источник света, а не персонаж с
+  // обзором, и владельца у него не бывает вовсе. Сам свет факела
+  // (computeLightLayer) по-прежнему участвует как обычно.
+  const sightTokens = entries.filter(([, t]) => !t.lightOnly && t.ownerId);
+  if (sightTokens.length === 0) return empty; // на сцене нет ни одного токена партии — смотреть некем
 
   // ray — ЕДИНСТВЕННАЯ точка входа в рейкастинг в этом файле: сразу
   // санитарит результат под текущий quantum (см. quantizePoints), чтобы
@@ -123,10 +234,134 @@ export function computeVisionPlan(scene, isDM, quantum) {
   const ray = (x, y, radius) => quantizePoints(computeVisibilityPolygon(x, y, radius, walls), quantum);
 
   const sightRadius = Math.hypot(w, h) + SIGHT_MARGIN;
-  const visionPolys = sightTokens.map((t) => ray(t.x, t.y, sightRadius)).filter((p) => p.length >= 3);
+  // Обзор каждого наблюдателя — через кэш: пока игрок тащит свой токен,
+  // остальные наблюдатели стоят на месте, и их лучи считать заново незачем
+  // (см. cachedSightPolys).
+  const visionPolys = cachedSightPolys(sightTokens, sightRadius, quantum, ray, memo, wallsSignature(scene)).filter((p) => p.length >= 3);
   const visionMulti = unionAll(visionPolys);
   if (!visionMulti.length) return empty;
 
+  // Слой света считаем через memo (см. computeVisionPlanWithFallback): он не
+  // зависит от того, где стоят наблюдатели, и при таскании токена по карте
+  // не меняется вообще.
+  const { dimMulti, ringMultis } = cachedLightLayer(scene, quantum, tokens, w, h, memo);
+  if (!dimMulti.length) return empty; // ни одного источника света на карте — игроки не видят НИЧЕГО (п.2 ТЗ)
+
+  const revealDim = intersectMulti(visionMulti, dimMulti);
+  if (!revealDim.length) return empty;
+
+  // dimIslands — revealDim по отдельным "островам" (одна дыра могла
+  // распасться на несколько несмежных кусков — стены дробят даже свет ОДНОГО
+  // факела, а уж несколько факелов в разных углах карты почти всегда дают
+  // больше одного острова). Нужны только для выреза из тьмы (см. paintPlan).
+  const dimIslands = revealDim.map((poly) => ({ poly }));
+
+  // rings — те же кольца затухания, что посчитал слой света, но обрезанные
+  // обзором. level (0 — край тусклого света, 1 — яркий свет) переводит в
+  // прозрачность уже vision-fog.js: план не знает про альфы и цвета.
+  const rings = [];
+  for (const { level, multi } of ringMultis) {
+    const reveal = intersectMulti(visionMulti, multi);
+    if (reveal.length) rings.push({ level, multi: reveal });
+  }
+
+  return { skip: false, w, h, dimIslands, rings };
+}
+
+// ---- слой света ----
+//
+// Всё, что ниже, считает ТОЛЬКО «где на карте есть свет» — без единого
+// упоминания наблюдателей. Это и есть причина, по которой слой вынесен из
+// computeVisionPlan: при таскании токена мышью (десятки кадров в секунду)
+// меняются позиции наблюдателей, а свет — нет, и пересчитывать его заново на
+// каждый кадр было чистой потерей. Кто держит кэш — vision-fog.js (см. memo в
+// computeVisionPlanWithFallback), сам расчёт остаётся чистой функцией.
+
+// cachedLightLayer — computeLightLayer плюс проверка ключа. Ключ сравнивает
+// ровно тот вход, от которого слой зависит (см. lightLayerKey): совпал —
+// отдаём прошлый результат как есть, не совпал — считаем и запоминаем.
+function cachedLightLayer(scene, quantum, tokens, w, h, memo) {
+  const key = memo ? lightLayerKey(scene, quantum, tokens) : null;
+  if (memo && memo.layerKey === key && memo.layer) return memo.layer;
+  const layer = computeLightLayer(scene, quantum, tokens, w, h);
+  if (memo) {
+    memo.layer = layer;
+    memo.layerKey = key;
+  }
+  return layer;
+}
+
+// lightLayerKey — подпись входа слоя света. Строка, а не хеш: собирается за
+// доли миллисекунды даже на карте с сотнями стен (против десятков
+// миллисекунд самого расчёта), а от коллизий, в отличие от хеша, защищена по
+// построению. Всё, что здесь перечислено, обязано быть ровно тем, что читает
+// computeLightLayer — забыть поле значит показать игроку прошлый кадр света.
+function lightLayerKey(scene, quantum, tokens) {
+  const parts = [quantum, scene.globalLight || "", scene.grid && scene.grid.size, scene.grid && scene.grid.unitsPerCell];
+  for (const t of tokens) {
+    if (!t.light || !t.light.enabled) continue;
+    parts.push("L", t.x, t.y, t.light.bright || 0, t.light.dim || 0);
+  }
+  parts.push(wallsSignature(scene));
+  for (const id in scene.buildings || {}) {
+    parts.push("B", id);
+    for (const p of scene.buildings[id].points) parts.push(p.x, p.y);
+  }
+  return parts.join("|");
+}
+
+// wallsSignature — подпись ВСЕХ стен со всеми полями, которые влияют хоть на
+// один рейкастинг (см. wallBlocksSight/wallBlocksLight). Одна на оба кэша —
+// и слоя света, и обзора: разводить их по отдельным подписям значит завести
+// два места, где легко забыть новое поле стены, а цена лишнего сброса кэша
+// (стены двигает только ДМ, и только в редакторе) пренебрежима.
+function wallsSignature(scene) {
+  const parts = [];
+  for (const id in scene.walls || {}) {
+    const wall = scene.walls[id];
+    parts.push("W", wall.x1, wall.y1, wall.x2, wall.y2, wall.door || "", wall.doorState || "", wall.window ? 1 : 0, wall.lightThrough ? 1 : 0);
+  }
+  return parts.join("|");
+}
+
+// cachedSightPolys — многоугольники обзора наблюдателей, по одному на токен,
+// с переиспользованием тех, что не изменились.
+//
+// Зачем: пока игрок тащит СВОЙ токен мышью, из всех наблюдателей на карте
+// двигается ровно один, а рейкастинг гонялся заново для каждого. На "Пещере"
+// (289 стен, 7 наблюдателей) это 16 мс на кадр, из которых 14 — пересчёт
+// того, что не менялось.
+//
+// Кэш сбрасывается целиком при любой правке стен (wallsSignature) или смене
+// кванта: и то и другое меняет ВСЕ многоугольники разом, разбираться
+// по-токенно там нечего.
+//
+// Объединение (unionAll ниже) при этом всё равно считается заново — оно
+// зависит от всех многоугольников сразу, и один сдвинувшийся наблюдатель
+// меняет результат целиком.
+function cachedSightPolys(sightTokens, radius, quantum, ray, memo, wallsKey) {
+  if (!memo) return sightTokens.map(([, t]) => ray(t.x, t.y, radius));
+  const key = `${quantum}|${radius}|${wallsKey}`;
+  if (memo.sightKey !== key) {
+    memo.sightKey = key;
+    memo.sight = new Map();
+  }
+  const fresh = new Map();
+  const out = [];
+  for (const [id, t] of sightTokens) {
+    const hit = memo.sight.get(id);
+    const poly = hit && hit.x === t.x && hit.y === t.y ? hit.poly : ray(t.x, t.y, radius);
+    fresh.set(id, { x: t.x, y: t.y, poly });
+    out.push(poly);
+  }
+  memo.sight = fresh; // ушедшие со сцены токены не копятся в кэше
+  return out;
+}
+
+// computeLightLayer — { dimMulti, brightMulti }: где на карте есть тусклый и
+// где яркий свет, уже с учётом стен и зданий, но БЕЗ обзора. МОЖЕТ КИНУТЬ —
+// как и computeVisionPlan, ловит computeVisionPlanWithFallback.
+export function computeLightLayer(scene, quantum, tokens, w, h) {
   const globalLight = scene.globalLight || "";
   const lightTokens = tokens.filter((t) => t.light && t.light.enabled && ((t.light.bright || 0) > 0 || (t.light.dim || 0) > 0));
   // Token.Light.Bright/Dim хранятся в единицах линейки сцены (фт), не в
@@ -134,8 +369,13 @@ export function computeVisionPlan(scene, isDM, quantum) {
   // (см. gridUnitsToWorld и domain.TokenLight в scene.go).
   const grid = scene.grid;
 
+  // Список стен СВЕТА — свой, не тот, по которому считается обзор: окно свет
+  // держит (geometry.js:wallBlocksLight и коммент там же про иглы у окон).
+  const walls = weldWalls(Object.values(scene.walls || {}).filter(wallBlocksLight));
+  const ray = (x, y, radius) => quantizePoints(computeVisibilityPolygon(x, y, radius, walls), quantum);
+
   // buildings/buildingsMulti — контуры зданий для clipLightByBuildings
-  // ниже (НЕ для raycasting'а, см. коммент у walls выше).
+  // ниже (НЕ для raycasting'а, см. коммент у walls в computeVisionPlan).
   // Контуры зданий прижимаем к ТОЙ ЖЕ сетке, что и лучи (quantizePoints) —
   // иначе вершина здания и упёршийся в неё луч расходились бы на доли
   // пикселя, а такие "почти совпадающие, но не совпавшие" точки — ровно
@@ -171,55 +411,50 @@ export function computeVisionPlan(scene, isDM, quantum) {
     return unionMulti(outsideMulti, insideMulti);
   }
 
-  let dimMulti;
-  if (globalLight === "dim" || globalLight === "bright") {
-    dimMulti = worldRect(w, h);
-  } else {
-    const dimEntries = lightTokens
-      .map((t) => ({ token: t, poly: ray(t.x, t.y, gridUnitsToWorld(grid, Math.max(t.light.dim || 0, t.light.bright || 0))) }))
+  // bandAt — «докуда достаёт свет», если каждому источнику урезать радиус с
+  // dim до bright на долю k/LIGHT_STEPS. k=0 — полный тусклый радиус, k=
+  // LIGHT_STEPS — ровно ярко освещённое ядро. Радиус у каждого источника
+  // СВОЙ (у факела и у костра затухание своей ширины), поэтому доля
+  // применяется к каждому по отдельности, а объединяются уже готовые
+  // многоугольники.
+  const bandAt = (k) => {
+    if (globalLight === "bright") return worldRect(w, h);
+    if (globalLight === "dim") return k === 0 ? worldRect(w, h) : [];
+    const entries = lightTokens
+      .map((t) => {
+        const dim = gridUnitsToWorld(grid, Math.max(t.light.dim || 0, t.light.bright || 0));
+        const bright = gridUnitsToWorld(grid, t.light.bright || 0);
+        const radius = dim - (dim - bright) * (k / LIGHT_STEPS);
+        return { token: t, poly: radius > 0 ? ray(t.x, t.y, radius) : [] };
+      })
       .filter((e) => e.poly.length >= 3);
-    dimMulti = clipLightByBuildings(dimEntries);
+    return clipLightByBuildings(entries);
+  };
+
+  const bands = [];
+  for (let k = 0; k <= LIGHT_STEPS; k++) bands.push(bandAt(k));
+
+  // ringMultis — КОЛЬЦА между соседними полосами, то есть фигуры, которые
+  // НЕ ПЕРЕСЕКАЮТСЯ между собой. Это и есть весь фокус мягкого света: тьма
+  // рисуется поверх карты, а накладывать полупрозрачные слои тьмы друг на
+  // друга нельзя — там, где два факела перекрываются, суммарная альфа
+  // получилась бы БОЛЬШЕ, чем от каждого по отдельности, и на стыке двух
+  // световых пятен появилась бы тёмная кайма (ровно наоборот тому, как
+  // ведёт себя настоящий свет). Разложенные в непересекающиеся кольца
+  // полосы такого стыка иметь не могут по построению: каждая точка карты
+  // попадает ровно в одно кольцо — то, которое отвечает БЛИЖАЙШЕМУ к ней
+  // источнику (объединение по источникам считается ДО вычитания). Заодно
+  // это снимает всю возню с Pixi cut(): кольцу не нужны чужие вырезы, у
+  // него есть собственные дыры и всё (см. fillMulti в light-geometry.js).
+  //
+  // Само ярко освещённое ядро (bands[LIGHT_STEPS]) в список не попадает —
+  // ему отвечает level 1, то есть полностью прозрачная накладка: рисовать
+  // нечего.
+  const ringMultis = [];
+  for (let k = 0; k < LIGHT_STEPS; k++) {
+    const multi = differenceMulti(bands[k], bands[k + 1]);
+    if (multi.length) ringMultis.push({ level: k / LIGHT_STEPS, multi });
   }
-  if (!dimMulti.length) return empty; // ни одного источника света на карте — игроки не видят НИЧЕГО (п.2 ТЗ)
 
-  let brightMulti;
-  if (globalLight === "bright") {
-    brightMulti = worldRect(w, h);
-  } else {
-    const brightEntries = lightTokens
-      .filter((t) => (t.light.bright || 0) > 0)
-      .map((t) => ({ token: t, poly: ray(t.x, t.y, gridUnitsToWorld(grid, t.light.bright)) }))
-      .filter((e) => e.poly.length >= 3);
-    brightMulti = clipLightByBuildings(brightEntries);
-  }
-
-  const revealDim = intersectMulti(visionMulti, dimMulti);
-  if (!revealDim.length) return empty;
-  const revealBright = brightMulti.length ? intersectMulti(visionMulti, brightMulti) : [];
-
-  // dimIslands — revealDim, но каждый отдельный "остров" (одна дыра могла
-  // распасться на несколько несмежных кусков — стены дробят даже свет
-  // ОДНОГО факела, а уж несколько факелов в разных углах карты почти
-  // всегда дают больше одного острова) уже со СВОИМ кусочком revealBright
-  // внутри него (см. paintPlan в layers/vision-fog.js — там на пару
-  // fill()+cut() надо ровно по одному острову за раз, иначе Pixi
-  // Graphics.cut() перепутает остров). Пересечение считаем ЛОКАЛЬНО: один
-  // остров (обёрнутый в [poly] — уже готовый MultiPolygon из одного
-  // элемента) против revealBright — вход ограничен размером ЭТОГО острова,
-  // не всей карты. Первая версия фикса считала вместо этого
-  // differenceMulti(worldRect(w,h), revealDim) — вычитание острова(-ов) из
-  // прямоугольника ВСЕЙ карты целиком: на картах со сложной геометрией стен
-  // (много изрезанных islands) polygon-clipping на такой операции валится
-  // ("Unable to find segment ... in SweepLine tree", переполнение стека в
-  // isExteriorRing на большом числе вложенных дыр) — ловится в
-  // computeVisionPlanWithFallback, но КАЖДЫЙ кадр подряд, то есть освещение
-  // зависает на последнем удачном кадре навсегда, пока геометрия сцены не
-  // поменяется на что-то попроще. Локальный per-island intersect на порядки
-  // меньше и без этой патологии.
-  const dimIslands = revealDim.map((poly) => ({
-    poly,
-    bright: revealBright.length ? intersectMulti([poly], revealBright) : [],
-  }));
-
-  return { skip: false, w, h, dimIslands };
+  return { dimMulti: bands[0], ringMultis };
 }

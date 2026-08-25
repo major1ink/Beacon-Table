@@ -1758,9 +1758,8 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 			case "", "door", "secret":
 				w.Door = msg.Door
 				if w.Door != "" {
-					// Door и Window взаимоисключающие (см. domain.Wall) —
-					// назначение двери сбрасывает окно, если оно было.
 					w.Window = false
+					w.LightThrough = false
 					if w.DoorState == "" {
 						w.DoorState = "closed" // дверь всегда стартует закрытой
 					}
@@ -1774,6 +1773,12 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 	case "set_wall_window":
 		if w, ok := r.scene.Walls[msg.ID]; ok && msg.Window != nil {
 			w.Window = *msg.Window
+			// Окно, поставленное ДМ из редактора, — стекло: сквозь него
+			// видно, но свет оно держит (см. domain.Wall). Сегмент,
+			// пропускающий и то и другое, приезжает только импортом из
+			// Foundry, кнопки для него в редакторе нет — поэтому здесь флаг
+			// всегда снимается, в обе стороны переключателя.
+			w.LightThrough = false
 			if w.Window {
 				// Window и Door взаимоисключающие — назначение окна сбрасывает дверь.
 				w.Door = ""

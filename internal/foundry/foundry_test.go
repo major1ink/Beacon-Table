@@ -334,7 +334,8 @@ func TestMapScene(t *testing.T) {
 			map[string]any{"c": []any{300, 200, 400, 200}},
 			map[string]any{"c": []any{500, 200, 500, 300}, "door": 1, "ds": 1},
 			map[string]any{"c": []any{600, 200, 700, 200}, "door": 2},
-			map[string]any{"c": []any{800, 200, 900, 200}, "sight": 0},
+			map[string]any{"c": []any{800, 200, 900, 200}, "sight": 0, "light": 20},
+			map[string]any{"c": []any{800, 400, 900, 400}, "sight": 10, "light": 10},
 		},
 		"lights": []any{
 			map[string]any{"x": 400, "y": 400, "config": map[string]any{"bright": 10, "dim": 20}},
@@ -352,16 +353,18 @@ func TestMapScene(t *testing.T) {
 	if s.Grid.Size != 100 || s.Grid.UnitsPerCell != 5 || s.Grid.Unit != "фт" {
 		t.Fatalf("сетка перенеслась неверно: %+v", s.Grid)
 	}
-	if len(s.Walls) != 4 {
-		t.Fatalf("стен %d, ожидали 4", len(s.Walls))
+	if len(s.Walls) != 5 {
+		t.Fatalf("стен %d, ожидали 5", len(s.Walls))
 	}
-	var plain, door, secret, window *domain.Wall
+	var plain, door, secret, window, terrain *domain.Wall
 	for _, w := range s.Walls {
 		switch {
 		case w.Door == "door":
 			door = w
 		case w.Door == "secret":
 			secret = w
+		case w.Window && w.LightThrough:
+			terrain = w
 		case w.Window:
 			window = w
 		default:
@@ -371,14 +374,23 @@ func TestMapScene(t *testing.T) {
 	if plain == nil || plain.X1 != 0 || plain.Y1 != 0 || plain.X2 != 100 {
 		t.Fatalf("глухая стена не сдвинулась на padding: %+v", plain)
 	}
+	if plain.Window || plain.LightThrough {
+		t.Fatalf("стена без sight/light должна остаться глухой: %+v", plain)
+	}
 	if door == nil || door.DoorState != "open" {
 		t.Fatalf("дверь перенеслась неверно: %+v", door)
 	}
 	if secret == nil || secret.DoorState != "closed" {
 		t.Fatalf("секретная дверь перенеслась неверно: %+v", secret)
 	}
-	if window == nil || window.Door != "" {
+	// Окно (Sight: None при Light: Normal) — видно сквозь, но свет держит.
+	if window == nil || window.Door != "" || window.LightThrough {
 		t.Fatalf("окно перенеслось неверно: %+v", window)
+	}
+	// «Местность» (Sight/Light: Limited) — не глухая стена: раньше оба поля
+	// проваливались мимо разбора и сегмент вставал сплошной тенью.
+	if terrain == nil || terrain.Door != "" {
+		t.Fatalf("Sight/Light: Limited перенеслось неверно: %+v", terrain)
 	}
 
 	var light, token *domain.Token

@@ -153,12 +153,18 @@ func mapWall(w map[string]any, offsetX, offsetY float64) *domain.Wall {
 		default:
 			wall.DoorState = "closed"
 		}
-	} else if w["sight"] != nil && num(w["sight"], 20) == 0 {
-		// sight: NONE — сегмент не мешает смотреть сквозь себя. У нас это
-		// ровно Wall.Window (см. domain/scene.go).
-		wall.Window = true
+	} else {
+		wall.Window = !restricts(w["sight"])
+		wall.LightThrough = !restricts(w["light"])
 	}
 	return wall
+}
+
+func restricts(v any) bool {
+	if v == nil {
+		return true
+	}
+	return num(v, 20) >= 20
 }
 
 // mapLight — источник света Foundry в «токен света». Радиусы у Foundry уже
