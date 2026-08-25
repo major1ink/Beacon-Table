@@ -374,10 +374,11 @@ function renderReadView(root) {
     proseBlock("Действия", monster.actions),
     proseBlock("Бонусные действия", monster.bonusActions),
     proseBlock("Реакции", monster.reactions),
-    proseBlock(
-      "Легендарные действия",
-      (monster.legendaryActionsIntro ? `<p>${monster.legendaryActionsIntro}</p>` : "") + (monster.legendaryActions || "")
-    ),
+    // Вступление и сами действия склеиваются пустой строкой, а не через
+    // <p>…</p>: после HTML-блока marked считает следующие строки его
+    // продолжением и markdown в них не разбирает — названия действий так и
+    // оставались текстом "**Рывок.**" вместо жирного.
+    proseBlock("Легендарные действия", [monster.legendaryActionsIntro, monster.legendaryActions].filter(Boolean).join("\n\n")),
     proseBlock("Действия и эффекты логова", monster.lairActions),
     proseBlock("Описание", monster.description),
   ].filter(Boolean);
