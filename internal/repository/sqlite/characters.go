@@ -161,6 +161,45 @@ func (s *CharacterStore) UpdateSheet(ctx context.Context, id, accountID string, 
 	return n > 0, err
 }
 
+// UpdateSheetHP implements repository.CharacterRepository — точечная правка
+// хитов внутри sheet_json (зачем точечная — см. комментарий в интерфейсе).
+// Read-modify-write в одной транзакции: JSON лежит одним блобом, и без
+// транзакции две одновременные правки хитов (ДМ из трекера и лут-хендлер,
+// например) могли бы прочитать одну и ту же копию и записать её по очереди.
+func (s *CharacterStore) UpdateSheetHP(ctx context.Context, id string, hpCurrent, hpTemp, hpMax int) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var sheetJSON sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT sheet_json FROM characters WHERE id = ? AND company_id = ?`, id, s.companyID).Scan(&sheetJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var sheet domain.CharacterSheet
+	if sheetJSON.Valid && sheetJSON.String != "" {
+		// Битый/пустой лист не повод ронять правку хитов: пишем поверх
+		// пустого — это ровно то, что увидит и сам лист при открытии.
+		_ = json.Unmarshal([]byte(sheetJSON.String), &sheet)
+	}
+	sheet.Combat.HPCurrent = hpCurrent
+	sheet.Combat.HPTemp = hpTemp
+	sheet.Combat.HPMax = hpMax
+	next, err := json.Marshal(sheet)
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE characters SET sheet_json = ? WHERE id = ? AND company_id = ?`, string(next), id, s.companyID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
 // Delete implements repository.CharacterRepository.
 func (s *CharacterStore) Delete(ctx context.Context, id, accountID string) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM characters WHERE id = ? AND account_id = ? AND company_id = ?`, id, accountID, s.companyID)

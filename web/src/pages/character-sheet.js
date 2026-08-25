@@ -26,6 +26,7 @@ import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
 import { initItemPicker } from "../item-picker.js";
 import { enhanceRolls } from "../inline-rolls.js";
+import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "../hp-bar.js";
 import { renderStatusChips } from "../status-palette.js";
 import { applyModifiers, explainModifiers, collectModifiers, ABILITY_TARGETS, TARGET_AC, TARGET_SPEED, TARGET_HP_MAX } from "../modifiers.js";
 import { showAlert } from "../modal.js";
@@ -1247,28 +1248,10 @@ function refreshView() {
   for (const fn of vRefresh) fn();
 }
 
-// parseQuickValue — разбор "быстрого ввода" числовых полей режима чтения:
-// "+5"/"-5" — прибавить/отнять от текущего значения, "17" — поставить ровно
-// 17. Возвращает { delta, value }, где delta === null означает "введено
-// абсолютное значение" (важно для ХП: урон дельтой сначала съедает временные
-// ХП, а прямая установка числа — нет, см. applyHp). null — введено что-то
-// другое, вызывающий откатывает поле.
-function parseQuickValue(raw, current) {
-  // Минус из русской раскладки/типографики ("−", "–", "—") приводим к
-  // обычному дефису: на телефоне и при копипасте из чата прилетает и такое.
-  const t = String(raw || "")
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/[‒–—―−]/g, "-");
-  if (!t) return null;
-  if (/^[+-]\d+$/.test(t)) {
-    const delta = parseInt(t, 10);
-    return { delta, value: current + delta };
-  }
-  if (/^\d+$/.test(t)) return { delta: null, value: parseInt(t, 10) };
-  return null;
-}
-
+// Разбор "быстрого ввода" ("+5"/"-5"/"17") переехал в общий hp-bar.js —
+// тем же полем и с теми же правилами правит хиты ДМ в трекере инициативы
+// (combat-panel.js), и расходиться они не должны.
+//
 // quickInput — узкое поле быстрого ввода (см. parseQuickValue). Значение
 // применяется по Enter или потере фокуса и поле сразу очищается: это не
 // "поле со значением", а команда — текущее число всегда видно рядом крупно.
@@ -1499,21 +1482,43 @@ function vHpCard() {
   const max = h("span", { class: "v-hp-max" });
   const temp = h("span", { class: "v-hp-temp" });
   const fill = h("i", {});
+  // preview — значение, за которым полоска идёт ПОКА ЕЁ ТЯНУТ: в бланк оно
+  // ещё не записано (и не сохранено), но полоска и число обязаны идти за
+  // пальцем, иначе жест не читается.
+  let preview = null;
   const update = () => {
-    const c = sheet.combat.hpCurrent || 0;
+    const c = preview === null ? sheet.combat.hpCurrent || 0 : preview;
     const m = effectiveHPMax(sheet);
     const t = sheet.combat.hpTemp || 0;
     cur.textContent = String(c);
     max.textContent = "/ " + (m || "—");
     temp.textContent = t ? "+" + t + " врем." : "";
     temp.style.display = t ? "" : "none";
-    const ratio = m > 0 ? Math.max(0, Math.min(1, c / m)) : 0;
-    fill.style.width = (m > 0 ? ratio * 100 : 0).toFixed(1) + "%";
-    fill.style.background = ratio > 0.5 ? "var(--green-bright)" : ratio > 0.25 ? "var(--gold)" : "#d9534f";
+    const ratios = hpFillRatios({ current: c, temp: t, max: m });
+    fill.style.width = (ratios.hp * 100).toFixed(1) + "%";
+    fill.style.background = hpColor(ratios.hp);
     cur.style.color = m > 0 && c === 0 ? "#d9534f" : "";
   };
   vRefresh.push(update);
   update();
+
+  // Полоску можно потянуть — тот же жест, что у ДМ в трекере инициативы
+  // (см. hp-bar.js): "поставить примерно столько". Точный урон по-прежнему
+  // вбивается дельтой в поле ниже — только он списывает временные хиты.
+  const bar = h("div", { class: "v-bar", title: "Потяни, чтобы выставить хиты" }, [fill]);
+  attachHpDrag(bar, {
+    getState: () => ({ current: sheet.combat.hpCurrent || 0, max: effectiveHPMax(sheet) }),
+    onPreview: (value) => {
+      preview = value;
+      update();
+    },
+    onCommit: (value) => {
+      preview = null;
+      applyHp({ delta: null, value });
+      scheduleSave();
+      refreshView();
+    },
+  });
 
   const hitDice = String(sheet.combat.hitDiceCurrent || sheet.combat.hitDiceTotal || "").trim();
   const hitDiceEl = hitDice
@@ -1525,7 +1530,7 @@ function vHpCard() {
 
   return h("div", { class: "v-card" }, [
     h("div", { class: "v-hp-row" }, [cur, max, temp]),
-    h("div", { class: "v-bar" }, [fill]),
+    bar,
     h("div", { class: "v-quick", title: "Урон сначала списывается с временных ХП" }, [
       stepBtn("−5", "minus", () => bumpHp(-5)),
       stepBtn("−1", "minus", () => bumpHp(-1)),

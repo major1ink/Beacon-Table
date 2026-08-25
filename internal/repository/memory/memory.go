@@ -188,6 +188,20 @@ func (s *CharacterStore) UpdateSheet(ctx context.Context, id, accountID string, 
 	return true, nil
 }
 
+// UpdateSheetHP implements repository.CharacterRepository.
+func (s *CharacterStore) UpdateSheetHP(ctx context.Context, id string, hpCurrent, hpTemp, hpMax int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.byID[id]
+	if !ok {
+		return false, nil
+	}
+	c.Sheet.Combat.HPCurrent = hpCurrent
+	c.Sheet.Combat.HPTemp = hpTemp
+	c.Sheet.Combat.HPMax = hpMax
+	return true, nil
+}
+
 func (s *CharacterStore) Delete(ctx context.Context, id, accountID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

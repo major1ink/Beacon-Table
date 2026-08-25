@@ -72,6 +72,16 @@ type CharacterRepository interface {
 	// UpdateSheet перезаписывает структурированный лист персонажа (см.
 	// domain.CharacterSheet), не трогая имя/аватар.
 	UpdateSheet(ctx context.Context, id, accountID string, sheet domain.CharacterSheet) (bool, error)
+	// UpdateSheetHP правит ТОЛЬКО хиты в листе (текущие/временные/максимум),
+	// не трогая остальной sheet_json, и без accountID: хиты персонажа правит
+	// не только его владелец, но и ДМ из трекера инициативы (см.
+	// service.Room.syncCharacterHP) — у него своей сессии игрока нет.
+	//
+	// Отдельным точечным методом, а не UpdateSheet целиком, ровно по той же
+	// причине, по которой инвентарь живёт отдельной таблицей (см. ниже):
+	// полная перезапись листа устаревшей копией затирала бы чужую правку —
+	// а во время боя хиты меняются с двух сторон одновременно.
+	UpdateSheetHP(ctx context.Context, id string, hpCurrent, hpTemp, hpMax int) (bool, error)
 	Delete(ctx context.Context, id, accountID string) (bool, error)
 
 	// ---- инвентарь персонажа (domain.InventoryEntry) — СВОЯ таблица, не

@@ -422,7 +422,7 @@ func (r *Room) run() {
 				}
 				continue
 			case "set_combatant_hp":
-				r.handleSetCombatantHP(im.msg.CombatantID, im.msg.HPCurrent, im.msg.HPMax)
+				r.handleSetCombatantHP(im.msg.CombatantID, im.msg.HPCurrent, im.msg.HPMax, im.msg.HPTemp, im.msg.HPDelta)
 				continue
 			case "set_combatant_death_save":
 				if im.msg.DeathSaveValue != nil {
@@ -971,7 +971,7 @@ func abilityMod(score int) int {
 func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	var name, image, color, ownerID, characterID, monsterID, tokenID string
 	dexScore := 10
-	ac, hpCur, hpMax := 0, 0, 0
+	ac, hpCur, hpMax, hpTemp := 0, 0, 0, 0
 
 	switch {
 	case msg.TokenID != "":
@@ -1016,6 +1016,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			ac = ch.Sheet.Combat.AC
 			hpCur = ch.Sheet.Combat.HPCurrent
 			hpMax = ch.Sheet.Combat.HPMax
+			hpTemp = ch.Sheet.Combat.HPTemp
 		}
 	} else if monsterID != "" && r.monsters != nil {
 		if m, err := r.monsters.Get(ctx, monsterID); err == nil {
@@ -1061,7 +1062,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	r.combat.Combatants[id] = &domain.Combatant{
 		ID: id, TokenID: tokenID, Name: name, Image: image, Color: color,
 		OwnerID: ownerID, CharacterID: characterID, MonsterID: monsterID,
-		Initiative: initiative, AC: ac, HPCurrent: hpCur, HPMax: hpMax, Seq: r.combatSeq,
+		Initiative: initiative, AC: ac, HPCurrent: hpCur, HPMax: hpMax, HPTemp: hpTemp, Seq: r.combatSeq,
 	}
 	r.markCombatDirty()
 	r.broadcastCombat()
@@ -1126,7 +1127,7 @@ func (r *Room) handleSetCombatantAC(id string, ac int) {
 //     CharacterID (игровой персонаж) вместо этого просто ждём отметок
 //     "set_combatant_death_save" — из инициативы его уберёт только 3-й
 //     провал (см. handleSetCombatantDeathSave).
-func (r *Room) handleSetCombatantHP(id string, cur, max *int) {
+func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 	cmb, ok := r.combat.Combatants[id]
 	if !ok {
 		return
@@ -1136,6 +1137,38 @@ func (r *Room) handleSetCombatantHP(id string, cur, max *int) {
 		if cmb.HPMax < 0 {
 			cmb.HPMax = 0
 		}
+	}
+	if temp != nil {
+		cmb.HPTemp = *temp
+		if cmb.HPTemp < 0 {
+			cmb.HPTemp = 0
+		}
+	}
+	// Дельта — единственное место, где сервер сам считает новое HP, и
+	// единственное, где действует правило временных хитов: урон сначала
+	// съедает HPTemp, в HPCurrent уходит только остаток; лечение в
+	// HPTemp не идёт вовсе (5e) и не поднимает бойца выше максимума —
+	// в отличие от абсолютной правки поля, где ДМ волен поставить что
+	// угодно (см. комментарий выше). Считается ДО cur ниже: прислать
+	// одновременно и то, и другое клиент не должен, но если прислал —
+	// абсолютное значение выигрывает как более явное.
+	if delta != nil && *delta != 0 {
+		next := cmb.HPCurrent
+		if *delta < 0 {
+			damage := -*delta
+			fromTemp := damage
+			if fromTemp > cmb.HPTemp {
+				fromTemp = cmb.HPTemp
+			}
+			cmb.HPTemp -= fromTemp
+			next -= damage - fromTemp
+		} else {
+			next += *delta
+			if cmb.HPMax > 0 && next > cmb.HPMax {
+				next = cmb.HPMax
+			}
+		}
+		cur = &next
 	}
 	if cur != nil {
 		cmb.HPCurrent = *cur
@@ -1518,6 +1551,10 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		}
 		if isDM || r.combat.ShowHP {
 			entry["hpCurrent"] = cmb.HPCurrent
+			// hpTemp едет рядом с hpCurrent и по тем же правилам видимости:
+			// это часть "сколько он ещё держит", и показывать её игрокам
+			// отдельно от текущих хитов смысла нет.
+			entry["hpTemp"] = cmb.HPTemp
 			entry["hpMax"] = cmb.HPMax
 			entry["hpMaxEffective"] = r.effectiveStat(cmb, cmb.HPMax, domain.ModifierTargetHPMax)
 			entry["deathSaveSuccess"] = cmb.DeathSaveSuccess

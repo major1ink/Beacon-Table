@@ -536,26 +536,39 @@
     }
     .combat-row input[type="number"]::-webkit-inner-spin-button,
     .combat-row input[type="number"]::-webkit-outer-spin-button {
-    /* Кнопка "действия" в шапке карточки бойца — попап с боевыми блоками
-       статблока (см. web/src/combat-actions-peek.js) */
-    .combat-row .combat-peek {
-      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
-      display: flex; align-items: center; justify-content: center;
-    }
-    .combat-row .combat-peek:hover { background: var(--surface-hover); color: var(--accent); }
       -webkit-appearance: none; margin: 0;
     }
     .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
+    /* Полоска хитов бойца: тянется мышью (см. web/src/hp-bar.js), за концом
+       заливки — хвост временных хитов другим цветом. Рядом узкое поле, куда
+       вбивают изменение ("-7"/"+4"/"17"). */
+    .combat-hp-row { display: flex; align-items: center; gap: 6px; padding-left: 40px; margin-top: 7px; }
+    .combat-bar {
+      position: relative; flex: 1 1 auto; height: 12px; border-radius: 6px; overflow: hidden;
+      background: var(--bg); border: 1px solid var(--border); cursor: ew-resize; touch-action: none;
+    }
+    .combat-bar-fill, .combat-bar-temp {
+      position: absolute; top: 0; bottom: 0; left: 0; display: block; transition: width .1s linear;
+    }
+    /* Хвост временных хитов — штриховкой и голубым (тот же #5dd0ff, что у
+       текущего хода в верхнем оверлее): чтобы его нельзя было спутать с
+       обычными хитами ни цветом, ни фактурой. --blue из темы тут слишком
+       тёмный, на полоске в 12px он читается как пустое место. */
+    .combat-bar-temp { background: repeating-linear-gradient(45deg, #5dd0ff, #5dd0ff 3px, rgba(93,208,255,0.45) 3px, rgba(93,208,255,0.45) 6px); }
+    .combat-bar-label {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); pointer-events: none;
+    }
+    .combat-row .combat-hp-quick {
+      flex: 0 0 auto; width: 42px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; font: inherit; font-size: 11px; text-align: center; padding: 3px 1px; box-sizing: border-box;
+    }
+    .combat-row .combat-hp-quick:focus { outline: none; border-color: var(--accent); }
+    .combat-row .combat-hp-temp { width: 30px; color: #5dd0ff; }
     .combat-hp-group { display: flex; align-items: center; gap: 3px; }
     .combat-hp-group input { width: 36px; }
     .combat-hp-group .combat-hp-sep { opacity: 0.4; font-size: 11px; }
     /* спасброски от смерти (см. combat-panel.js: deathSaveRow) — те же
-    /* Портрет и имя — быстрый вход в карточку бойца (статблок монстра/лист
-       персонажа), см. web/src/combatant-card.js. Класс вешается только тем
-       бойцам, у кого карточка есть, — курсор-палец не обещает лишнего. */
-    .combat-row .combat-card-link { cursor: pointer; }
-    .combat-row .combat-name.combat-card-link:hover { color: var(--accent); }
-    .combat-row .combat-avatar.combat-card-link:hover { box-shadow: 0 0 0 2px var(--accent) inset; }
        "лампы"-чекбоксы, что и на бланке персонажа (character-sheet.html).
        Заголовок по центру, под ним колонки "успехи"/"провалы" — подпись
        каждой колонки прямо над её чекбоксами, а не слитно с заголовком. */

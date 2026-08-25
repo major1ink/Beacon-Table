@@ -100,10 +100,22 @@ type ClientMsg struct {
 	Initiative *float64 `json:"initiative,omitempty"`
 	// AC — только для "set_combatant_ac".
 	AC *int `json:"ac,omitempty"`
-	// HPCurrent/HPMax — только для "set_combatant_hp", каждое поле
-	// независимо необязательно (правка одного не трогает другое).
+	// HPCurrent/HPMax/HPTemp/HPDelta — только для "set_combatant_hp", каждое
+	// поле независимо необязательно (правка одного не трогает другое).
+	//
+	// HPCurrent/HPMax/HPTemp — АБСОЛЮТНЫЕ значения: "поставить ровно
+	// столько" (поля в карточке бойца, перетаскивание полоски хитов).
+	// HPDelta — ИЗМЕНЕНИЕ: "-7" от удара, "+4" от лечения. Отдельным полем,
+	// а не посчитанным на клиенте новым числом, ровно из-за временных хитов:
+	// урон дельтой сначала съедает HPTemp и только остатком идёт в
+	// HPCurrent, и это правило должно жить в одном месте на сервере — им
+	// пользуется и ручной ввод ДМ, и периодический урон от меток (см.
+	// service.Room.applyPeriodicModifiers), и никакой клиент не может
+	// посчитать его по устаревшему снимку неправильно.
 	HPCurrent *int `json:"hpCurrent,omitempty"`
 	HPMax     *int `json:"hpMax,omitempty"`
+	HPTemp    *int `json:"hpTemp,omitempty"`
+	HPDelta   *int `json:"hpDelta,omitempty"`
 
 	// DeathSaveKind/DeathSaveValue — только для "set_combatant_death_save":
 	// Kind "success"|"fail", Value — итоговое число отмеченных чекбоксов

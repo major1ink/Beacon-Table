@@ -138,6 +138,19 @@ export function createCombatBar(ctx) {
       cmb.hpCurrent <= 0 ? "#e0645a" : pct <= 0.25 ? "#e0985a" : pct <= 0.5 ? "#e0c95a" : "#5fd08a";
     badge.textContent = `${cmb.hpCurrent}/${cmb.hpMax}`;
     badge.style.cssText = `flex:0 0 auto;font-size:10px;font-weight:700;color:${color};white-space:nowrap;`;
+    // Временные хиты — отдельной голубой прибавкой ("10/10 +5"), тем же
+    // цветом, что и их хвост на полоске в трекере: это не часть текущих
+    // хитов, а буфер поверх них, и складывать их в одно число нельзя.
+    if (cmb.hpTemp > 0) {
+      const tempBadge = document.createElement("span");
+      tempBadge.textContent = "+" + cmb.hpTemp;
+      tempBadge.title = "Временные хиты";
+      tempBadge.style.cssText = "flex:0 0 auto;font-size:10px;font-weight:700;color:#5dd0ff;white-space:nowrap;";
+      const wrap = document.createElement("span");
+      wrap.style.cssText = "flex:0 0 auto;display:flex;align-items:center;gap:3px;";
+      wrap.append(badge, tempBadge);
+      return wrap;
+    }
     return badge;
   }
 

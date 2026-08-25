@@ -514,8 +514,10 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 	if delta == 0 {
 		return
 	}
-	next := cmb.HPCurrent + delta
-	r.handleSetCombatantHP(cmb.ID, &next, nil)
+	// Дельтой, а не готовым числом: правило временных хитов (урон съедает
+	// их первыми) живёт внутри handleSetCombatantHP, и горение на метке
+	// обязано подчиняться ему так же, как удар, который ДМ вбил руками.
+	r.handleSetCombatantHP(cmb.ID, nil, nil, nil, &delta)
 }
 
 // publicStatuses — версия списка меток для конкретной роли: не-ДМ не должен

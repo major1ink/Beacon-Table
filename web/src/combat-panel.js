@@ -19,8 +19,9 @@
 // диспатчат его в одном и том же формате, откуда взято неважно.
 import { fetchBestiary, fetchAdminCharacters } from "./api.js";
 import { openActionsPeek, closeActionsPeek } from "./combat-actions-peek.js";
-import { icon } from "./icons.js";
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "./combatant-card.js";
+import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "./hp-bar.js";
+import { icon } from "./icons.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
 
 // FOLLOW_KEY — режим "статблок следует за ходом" переживает перезагрузку
@@ -199,21 +200,39 @@ export function initCombatPanel({ send, els }) {
       hpMaxInput.type = "number";
       hpMaxInput.title = "Максимум HP";
       hpMaxInput.value = cmb.hpMax ?? 0;
+      // Временные хиты (domain.Combatant.HPTemp) — отдельный буфер поверх
+      // текущих: у персонажа приезжают с его бланка в момент добавления в
+      // инициативу, монстру ДМ ставит руками, когда тот получил их от
+      // заклинания или способности. Показываем всегда, даже когда их нет:
+      // пустое место в ряду сбивало бы вёрстку соседних карточек, а "+0"
+      // читается как "буфера нет".
+      const hpTempInput = document.createElement("input");
+      hpTempInput.type = "number";
+      hpTempInput.min = "0";
+      hpTempInput.className = "combat-hp-temp";
+      hpTempInput.title = "Временные хиты — урон списывается с них первым";
+      hpTempInput.value = cmb.hpTemp ?? 0;
+      const tempSep = document.createElement("span");
+      tempSep.className = "combat-hp-sep";
+      tempSep.textContent = "+";
       const sendHp = () => {
         const cur = parseInt(hpCurInput.value, 10);
         const max = parseInt(hpMaxInput.value, 10);
+        const temp = parseInt(hpTempInput.value, 10);
         send({
           type: "set_combatant_hp",
           combatantId: cmb.id,
           hpCurrent: Number.isNaN(cur) ? undefined : cur,
           hpMax: Number.isNaN(max) ? undefined : max,
+          hpTemp: Number.isNaN(temp) ? undefined : temp,
         });
       };
       hpCurInput.onchange = sendHp;
       hpMaxInput.onchange = sendHp;
+      hpTempInput.onchange = sendHp;
       const hpGroup = document.createElement("div");
       hpGroup.className = "combat-hp-group";
-      hpGroup.append(hpCurInput, hpSep, hpMaxInput);
+      hpGroup.append(hpCurInput, hpSep, hpMaxInput, tempSep, hpTempInput);
 
       // acWrap — поле КД плюс, если состояния его меняют, стрелка с
       // эффективным значением («14 → 12»).
@@ -232,7 +251,7 @@ export function initCombatPanel({ send, els }) {
       stats.className = "combat-row-stats";
       stats.append(stat("Иниц.", initInput), stat("КД", acWrap), stat("HP", hpGroup));
 
-      row.append(top, stats);
+      row.append(top, stats, hpBarRow(cmb, send));
 
       // ---- наложенные состояния (см. domain.AppliedStatus) ----
       // Метки приходят в combat_state уже разрешёнными: если за бойцом стоит
@@ -441,6 +460,105 @@ export function initCombatPanel({ send, els }) {
   els.search.oninput = renderSearchResults;
 
   renderPanel(); // начальный (пустой) рендер — до первого "combat_state" с сервера
+}
+
+// hpBarRow — полоска хитов под характеристиками бойца плюс узкое поле
+// быстрой правки. Два способа делать одно и то же, потому что и нужд две:
+//
+//   - полоску ТЯНУТ мышью, когда надо «поставить примерно столько» (см.
+//     hp-bar.js: attachHpDrag). Тянутся текущие хиты, временные жест не
+//     трогает — их хвост полоска показывает отдельным цветом за концом
+//     заливки;
+//   - в поле рядом ВБИВАЮТ точное изменение: «-7» от удара, «+4» от
+//     лечения, «17» — поставить ровно. Кнопок ±1/±5 тут намеренно нет:
+//     в бою урон почти всегда «неудобное» число, и попытка набрать его
+//     кнопками — это пять кликов вместо двух нажатий.
+//
+// Дельта уходит на сервер именно дельтой ("hpDelta", см. domain.ClientMsg):
+// правило «урон сначала съедает временные хиты» живёт там, клиент его не
+// считает и не может ошибиться на устаревшем снимке.
+function hpBarRow(cmb, send) {
+  const max = cmb.hpMax ?? 0;
+  const bar = document.createElement("div");
+  bar.className = "combat-bar";
+  bar.title = max > 0 ? "Потяни, чтобы выставить хиты" : "Сначала задай максимум HP";
+  const fill = document.createElement("i");
+  fill.className = "combat-bar-fill";
+  const tempFill = document.createElement("i");
+  tempFill.className = "combat-bar-temp";
+  const label = document.createElement("span");
+  label.className = "combat-bar-label";
+  bar.append(fill, tempFill, label);
+
+  // preview — значение, которое сейчас "показывает палец" во время
+  // перетаскивания: на сервер оно ещё не ушло, но полоска обязана идти за
+  // курсором, иначе жест не читается как перетаскивание.
+  let preview = null;
+  function paint() {
+    const current = preview === null ? cmb.hpCurrent ?? 0 : preview;
+    const ratios = hpFillRatios({ current, temp: cmb.hpTemp ?? 0, max });
+    fill.style.width = (ratios.hp * 100).toFixed(1) + "%";
+    fill.style.background = hpColor(ratios.hp);
+    tempFill.style.left = (ratios.hp * 100).toFixed(1) + "%";
+    tempFill.style.width = (ratios.temp * 100).toFixed(1) + "%";
+    if (preview === null) {
+      label.textContent = "";
+      return;
+    }
+    const delta = current - (cmb.hpCurrent ?? 0);
+    label.textContent = delta === 0 ? String(current) : `${current} (${delta > 0 ? "+" : ""}${delta})`;
+  }
+  paint();
+
+  attachHpDrag(bar, {
+    getState: () => ({ current: cmb.hpCurrent ?? 0, max }),
+    onPreview: (value) => {
+      preview = value;
+      paint();
+    },
+    onCommit: (value) => {
+      // Абсолютным значением, а не дельтой: полоску тянут «поставить вот
+      // столько», и списывать при этом временные хиты было бы сюрпризом.
+      send({ type: "set_combatant_hp", combatantId: cmb.id, hpCurrent: value });
+    },
+  });
+
+  const quick = document.createElement("input");
+  quick.type = "text";
+  quick.inputMode = "numeric";
+  quick.autocomplete = "off";
+  quick.className = "combat-hp-quick";
+  quick.placeholder = "+5";
+  quick.title = "«-7» — урон (сначала съедает временные), «+4» — лечение, «17» — поставить ровно";
+  function commitQuick() {
+    const parsed = parseQuickValue(quick.value, cmb.hpCurrent ?? 0);
+    quick.value = "";
+    if (!parsed) return;
+    send(
+      parsed.delta === null
+        ? { type: "set_combatant_hp", combatantId: cmb.id, hpCurrent: parsed.value }
+        : { type: "set_combatant_hp", combatantId: cmb.id, hpDelta: parsed.delta }
+    );
+  }
+  quick.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitQuick();
+      quick.blur();
+    } else if (e.key === "Escape") {
+      quick.value = "";
+      quick.blur();
+    }
+  });
+  // Enter выше уже применил и снял фокус — сюда долетит второй раз, но поле
+  // к этому моменту пустое и parseQuickValue вернёт null (тот же приём, что
+  // в quickInput на бланке персонажа).
+  quick.addEventListener("blur", commitQuick);
+
+  const wrap = document.createElement("div");
+  wrap.className = "combat-hp-row";
+  wrap.append(bar, quick);
+  return wrap;
 }
 
 // deathSaveRow — блок "Спасброски от смерти" под карточкой бойца: общий
