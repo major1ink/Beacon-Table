@@ -35,7 +35,16 @@ type Monster struct {
 	// библиотеку (см. web/src/pages/bestiary.js).
 	System          bool   `json:"system,omitempty"`
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
-	ImageURL        string `json:"imageUrl,omitempty"` // токен-арт — та же /uploads/tokens категория, что у аватаров персонажей
+	// FoundryActorID — id актёра Foundry, из документа которого собрана эта
+	// карточка. Нужен ровно для одного: связать её с токенами, уже
+	// стоящими на импортированных сценах того же модуля — см.
+	// domain.Token.FoundryActorID, там же и о том, почему связывание
+	// отложенное. Проставляется клиентским импортёром ПОСЛЕ сравнения
+	// "не изменилась ли карточка" (web/src/pages/foundry-import.js), той же
+	// причине, что и FoundryModuleID выше: служебная метка не должна сама
+	// превращать совпадающую карточку в конфликт.
+	FoundryActorID string `json:"foundryActorId,omitempty"`
+	ImageURL       string `json:"imageUrl,omitempty"` // токен-арт — та же /uploads/tokens категория, что у аватаров персонажей
 
 	Size      string `json:"size,omitempty"`      // "Средний", "Большой"... — свободный текст
 	Type      string `json:"type,omitempty"`      // "гуманоид", "нежить"...

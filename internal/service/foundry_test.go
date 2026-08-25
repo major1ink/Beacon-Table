@@ -61,7 +61,12 @@ func (f *fakeAssets) DeleteFolder(_ context.Context, _ *domain.Account, kind, fo
 }
 func (f *fakeAssets) DeleteAsset(context.Context, *domain.Account, string, string) error { return nil }
 
-type fakeRoom struct{ scenes []*domain.SceneState }
+type fakeRoom struct {
+	scenes []*domain.SceneState
+	// linkedWith — карта, с которой позвали LinkTokensToMonsters (nil, если
+	// не звали вовсе): тесты связывания смотрят именно на неё.
+	linkedWith map[string]string
+}
 
 func (f *fakeRoom) Join(RoomClient)                       {}
 func (f *fakeRoom) Leave(RoomClient)                      {}
@@ -71,6 +76,26 @@ func (f *fakeRoom) NotifyJournalChanged(string)           {}
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil
+}
+
+// LinkTokensToMonsters — фейк повторяет ровно то, что делает настоящая
+// комната (см. Room.linkTokensToMonsters): дописывает MonsterID токенам с
+// известным FoundryActorID, не трогая уже связанные.
+func (f *fakeRoom) LinkTokensToMonsters(_ context.Context, monsterByActor map[string]string) (int, error) {
+	f.linkedWith = monsterByActor
+	linked := 0
+	for _, s := range f.scenes {
+		for _, t := range s.Tokens {
+			if t.MonsterID != "" || t.FoundryActorID == "" {
+				continue
+			}
+			if id, ok := monsterByActor[t.FoundryActorID]; ok {
+				t.MonsterID = id
+				linked++
+			}
+		}
+	}
+	return linked, nil
 }
 
 type fakePlaylists struct{ lists []*domain.Playlist }
@@ -487,5 +512,77 @@ func TestFoundryInspectRejectsBadURL(t *testing.T) {
 		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
 	if _, err := svc.Inspect(context.Background(), "file:///etc/passwd"); err == nil {
 		t.Fatal("не-http ссылка должна отклоняться")
+	}
+}
+
+// TestFoundryLinkSceneTokens — отложенное связывание токенов импортированной
+// сцены со статблоками (см. FoundryService.LinkSceneTokens).
+//
+// Проверяется именно ПОРЯДОК, из-за которого связывание вообще пришлось
+// делать отдельным шагом: сцена уже разложена, а карточки существ появляются
+// в бестиарии позже (их заводит клиент, см. package doc FoundryService).
+func TestFoundryLinkSceneTokens(t *testing.T) {
+	bestiary := newFakeBestiary()
+	room := &fakeRoom{}
+	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, room, &fakePlaylists{}, memory.NewFoundryModuleStore(),
+		bestiary, newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
+	ctx := context.Background()
+
+	scene := domain.NewScene("sc1", "Логово")
+	scene.Tokens["t-goblin"] = &domain.Token{ID: "t-goblin", Label: "Гоблин-воитель", FoundryActorID: "actor-goblin"}
+	scene.Tokens["t-orc"] = &domain.Token{ID: "t-orc", Label: "Орк", FoundryActorID: "actor-orc"}
+	// Токен, которого ДМ привязал руками к своей карточке: повторный импорт
+	// не должен перебивать его выбор.
+	scene.Tokens["t-manual"] = &domain.Token{ID: "t-manual", Label: "Вожак", FoundryActorID: "actor-goblin", MonsterID: "my-own"}
+	// Декорация/свет — якоря нет вовсе, связывать нечего.
+	scene.Tokens["t-lamp"] = &domain.Token{ID: "t-lamp", LightOnly: true}
+	if _, err := room.ImportScenes(ctx, []*domain.SceneState{scene}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Пока бестиарий пуст, шаг ничего не делает и до комнаты вообще не идёт.
+	linked, err := svc.LinkSceneTokens(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked != 0 || room.linkedWith != nil {
+		t.Fatalf("без карточек существ связывать нечего: linked=%d, linkedWith=%v", linked, room.linkedWith)
+	}
+
+	goblin, _ := bestiary.Create(ctx, "Гоблин-воитель")
+	goblin.FoundryActorID = "actor-goblin"
+	if _, err := bestiary.Update(ctx, goblin.ID, *goblin); err != nil {
+		t.Fatal(err)
+	}
+	manual, _ := bestiary.Create(ctx, "Ручной монстр") // без FoundryActorID — в карту не попадёт
+	_ = manual
+
+	linked, err = svc.LinkSceneTokens(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked != 1 {
+		t.Fatalf("связали %d токенов, ожидали 1", linked)
+	}
+	if got := scene.Tokens["t-goblin"].MonsterID; got != goblin.ID {
+		t.Fatalf("гоблин не получил статблок: %q", got)
+	}
+	if got := scene.Tokens["t-manual"].MonsterID; got != "my-own" {
+		t.Fatalf("ручная привязка перебита: %q", got)
+	}
+	if got := scene.Tokens["t-orc"].MonsterID; got != "" {
+		t.Fatalf("орка не с чем было связывать, а он связался: %q", got)
+	}
+	if _, ok := room.linkedWith["actor-goblin"]; !ok || len(room.linkedWith) != 1 {
+		t.Fatalf("в комнату уехала неверная карта: %v", room.linkedWith)
+	}
+
+	// Повтор идемпотентен: связывать больше нечего, ничего не ломается.
+	linked, err = svc.LinkSceneTokens(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked != 0 {
+		t.Fatalf("повторный проход связал %d токенов, ожидали 0", linked)
 	}
 }

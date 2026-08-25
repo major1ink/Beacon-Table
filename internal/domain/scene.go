@@ -24,8 +24,21 @@ type Token struct {
 	// Ставится один раз при создании токена драгом карточки из бестиария
 	// (web/src/pages/dm.js) и открывает статблок через ПКМ-меню токена
 	// (#tokenMenuBestiaryBtn), как CharacterID открывает лист персонажа.
-	MonsterID string      `json:"monsterId,omitempty"`
-	Light     *TokenLight `json:"light,omitempty"` // необязательный источник света — см. TokenLight
+	MonsterID string `json:"monsterId,omitempty"`
+	// FoundryActorID — id актёра Foundry, которого этот токен изображал на
+	// сцене исходного модуля (см. internal/foundry/scene.go: mapToken).
+	// Сам по себе он ничего не делает — это ЯКОРЬ для отложенного
+	// связывания с бестиарием: сцены и актёры приезжают РАЗНЫМИ паками, и
+	// пак с актёрами может быть импортирован после сцены или не
+	// импортирован вовсе, поэтому проставить MonsterID прямо в момент
+	// разбора сцены невозможно. Когда карточки существ появляются в
+	// бестиарии, они несут тот же id (Monster.FoundryActorID), и проход
+	// FoundryService.LinkSceneTokens сводит одно с другим, дописывая
+	// MonsterID уже стоящим на картах токенам. Остаётся на токене и после
+	// связывания — чтобы повторный импорт/переустановка модуля нашли его
+	// снова.
+	FoundryActorID string      `json:"foundryActorId,omitempty"`
+	Light          *TokenLight `json:"light,omitempty"` // необязательный источник света — см. TokenLight
 	// LightOnly — "токен света": не персонаж/арт, а голый маркер-лампочка,
 	// который DM ставит только ради Light. НЕ использует Hidden (тот целиком
 	// вырезает токен из PublicScene — см. service.Room.sceneFor — тогда

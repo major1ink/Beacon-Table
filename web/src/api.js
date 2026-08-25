@@ -398,6 +398,14 @@ export async function importFoundryPack(url, pack, targets) {
 // сети — сама проверка новых версий отдельным запросом (см.
 // checkFoundryModuleUpdates), чтобы открытие настроек не ждало по манифесту
 // на каждый установленный пакет.
+// linkFoundrySceneTokens — «доставить статблоки токенам импортированных
+// сцен»: сводит токены сцен с карточками бестиария по id актёра Foundry (см.
+// internal/service/foundry.go: LinkSceneTokens — там же о том, почему это
+// отдельный шаг, а не часть импорта пака). Возвращает {linked: N}.
+export async function linkFoundrySceneTokens() {
+  return apiFetch("/api/foundry/link-scene-tokens", { method: "POST" });
+}
+
 export async function fetchFoundryModules() {
   return apiFetch("/api/foundry/modules");
 }

@@ -341,7 +341,7 @@ func TestMapScene(t *testing.T) {
 			map[string]any{"x": 400, "y": 400, "config": map[string]any{"bright": 10, "dim": 20}},
 		},
 		"tokens": []any{
-			map[string]any{"x": 300, "y": 300, "width": 1, "height": 1, "name": "Бармен", "hidden": true},
+			map[string]any{"x": 300, "y": 300, "width": 1, "height": 1, "name": "Бармен", "hidden": true, "actorId": "actor-barman"},
 		},
 	}
 
@@ -411,6 +411,16 @@ func TestMapScene(t *testing.T) {
 	// левый верхний угол, у нас центр).
 	if token == nil || token.X != 50 || token.Y != 150 || !token.Hidden || token.Label != "Бармен" {
 		t.Fatalf("токен перенёсся неверно: %+v", token)
+	}
+	// Якорь для отложенного связывания со статблоком (см.
+	// domain.Token.FoundryActorID): сам MonsterID тут ещё пуст — актёры
+	// приезжают отдельным паком, и связывает их уже
+	// service.FoundryService.LinkSceneTokens.
+	if token.FoundryActorID != "actor-barman" {
+		t.Fatalf("id актёра не сохранился: %q", token.FoundryActorID)
+	}
+	if token.MonsterID != "" {
+		t.Fatalf("статблок не может быть известен на этапе разбора сцены: %q", token.MonsterID)
 	}
 }
 

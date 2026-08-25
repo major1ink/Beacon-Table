@@ -13,7 +13,7 @@
 // Импорт идёт пак за паком, а не одним запросом: так виден прогресс и ответ
 // не разрастается до сотен мегабайт на большом модуле.
 import {
-  fetchMe, inspectFoundryPackage, importFoundryPack,
+  fetchMe, inspectFoundryPackage, importFoundryPack, linkFoundrySceneTokens,
   fetchItems, createItem, updateItem,
   fetchSpells, createSpell, updateSpell,
   fetchBestiary, createMonster, updateMonster,
@@ -47,7 +47,11 @@ function itemArt(doc) {
 // fetchAll у карточек — не только для галочки в отчёте: по этому списку
 // импорт проверяет, нет ли такой карточки в библиотеке уже (см. importCards).
 const TARGETS = [
-  { id: "monsters", label: "Существа", fetchAll: fetchBestiary, createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt },
+  // linkField — куда положить id исходного документа Foundry. Только у
+  // существ: по нему потом сойдутся карточка бестиария и токены, уже
+  // стоящие на импортированных сценах (см. domain.Token.FoundryActorID и
+  // вызов linkFoundrySceneTokens в конце импорта).
+  { id: "monsters", label: "Существа", fetchAll: fetchBestiary, createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt, linkField: "foundryActorId" },
   { id: "spells", label: "Заклинания", fetchAll: fetchSpells, createOne: createSpell, updateOne: updateSpell, mapOne: mapFoundrySpellJson },
   { id: "items", label: "Снаряжение", fetchAll: fetchItems, createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },
   { id: "references", label: "Справочник", fetchAll: fetchReferences, createOne: createReference, updateOne: updateReference, mapBatch: mapFoundryReferenceBatch },
@@ -397,6 +401,23 @@ importBtn.addEventListener("click", async () => {
     for (const warning of result.warnings || []) log(`  ! ${warning}`);
   }
 
+  // Токены на импортированных сценах — это фигурки существ, но статблок им
+  // на этапе разбора сцены взять было неоткуда: карточки существ приезжают
+  // ДРУГИМ паком и заводятся уже здесь, в браузере (см.
+  // internal/foundry/scene.go: mapToken сохраняет только id актёра). Теперь,
+  // когда весь импорт позади, просим сервер свести одно с другим.
+  //
+  // Зовём даже после остановки на полпути (cancelled): часть карточек уже
+  // заведена, и статблоки для них — уже польза. Промах здесь не должен
+  // выглядеть провалом импорта — всё остальное уже на месте, а шаг можно
+  // повторить следующим импортом, он идемпотентен.
+  try {
+    const { linked } = await linkFoundrySceneTokens();
+    if (linked) log(`Статблоки подставлены токенам на импортированных сценах: ${linked}`);
+  } catch (err) {
+    log(`  ! статблоки токенам сцен подставить не удалось: ${err.message}`);
+  }
+
   running = false;
   importBtn.disabled = false;
   urlInput.disabled = false;
@@ -454,12 +475,19 @@ function sameCard(existing, mapped) {
 // такая же карточка пропускается молча, отличающаяся — как решит ДМ.
 async function importCards(target, docs, pack) {
   const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
+  // sourceIds — карточка -> _id документа Foundry, из которого она собрана.
+  // Отдельная карта, а не поле карточки: якорь проставляется ПОСЛЕ сравнения
+  // "не изменилась ли карточка" (см. ниже, там же и про foundryModuleId),
+  // а до тех пор он не должен попасть ни в sameCard, ни в глаза ДМ в
+  // диалоге конфликта.
+  const sourceIds = new Map();
   const mapped = target.mapBatch
     ? target.mapBatch(docs)
     : docs.map((doc) => {
         try {
           const card = target.mapOne(doc);
           if (target.art && !card.imageUrl) card.imageUrl = target.art(doc);
+          if (target.linkField && doc && doc._id) sourceIds.set(card, String(doc._id));
           return card;
         } catch (err) {
           console.warn(`[${pack.name}] ${doc && doc.name}: ${err.message}`);
@@ -524,6 +552,10 @@ async function importCards(target, docs, pack) {
     // пустом месте. Перезаписывается при каждом импорте/обновлении карточки —
     // если её потом перезаписал другой модуль, "своей" она считается уже у него.
     card.foundryModuleId = pkg.id;
+    // Тот же момент и та же причина — якорь на исходный документ Foundry
+    // (см. sourceIds выше): служебная метка не должна сама превращать
+    // совпадающую карточку в «конфликт».
+    if (target.linkField && sourceIds.has(card)) card[target.linkField] = sourceIds.get(card);
 
     try {
       if (action === "overwrite") {

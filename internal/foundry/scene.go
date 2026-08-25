@@ -25,9 +25,13 @@ import (
 //   - источники света Foundry — «токенами света» (domain.Token.LightOnly):
 //     отдельной сущности под ambient light у нас нет, а лампочка-токен даёт
 //     ровно то же самое на карте;
-//   - расставленные токены — арт, имя, размер, скрытость. Связь с актёром
-//     (и, значит, статблок) не переносится: карточки бестиария импортируются
-//     отдельным паком и своими id, угадывать соответствие мы не беремся;
+//   - расставленные токены — арт, имя, размер, скрытость и id актёра, которого
+//     токен изображал (domain.Token.FoundryActorID). Сам статблок в этот
+//     момент подставить нельзя: карточки бестиария приезжают ОТДЕЛЬНЫМ паком,
+//     возможно уже после сцены, — поэтому id сохраняется как якорь, а связь
+//     (Token.MonsterID) дописывается потом проходом
+//     service.FoundryService.LinkSceneTokens. Ничего не угадывается по имени:
+//     сводятся ровно одинаковые id;
 //   - гексагональная сетка ложится квадратной (гексов у нас нет), плитки
 //     (tiles), рисунки (drawings) и шаблоны эффектов не переносятся вовсе.
 func MapScene(ctx context.Context, d Doc, assets *Assets) *domain.SceneState {
@@ -215,14 +219,21 @@ func mapToken(ctx context.Context, t map[string]any, offsetX, offsetY, gridSize 
 	}
 	art := firstNonEmpty(digString(t, "texture", "src"), asString(t["img"]))
 	return &domain.Token{
-		ID:     newID(),
-		X:      num(t["x"], 0) - offsetX + cells*gridSize/2,
-		Y:      num(t["y"], 0) - offsetY + num(t["height"], cells)*gridSize/2,
-		Size:   cells * gridSize / 2,
-		Color:  "#888888",
-		Label:  asString(t["name"]),
-		Image:  assets.URL(ctx, domain.AssetKindTokens, art),
-		Hidden: asBool(t["hidden"]),
+		ID:    newID(),
+		X:     num(t["x"], 0) - offsetX + cells*gridSize/2,
+		Y:     num(t["y"], 0) - offsetY + num(t["height"], cells)*gridSize/2,
+		Size:  cells * gridSize / 2,
+		Color: "#888888",
+		Label: asString(t["name"]),
+		Image: assets.URL(ctx, domain.AssetKindTokens, art),
+		// В Foundry токен на сцене — это ВСЕГДА размещение актёра (декорации
+		// там отдельная сущность, tiles, которую мы не импортируем вовсе).
+		// Значит, всё, что сюда приезжает, — существа, и статблок им положен.
+		// Прямо сейчас его взять неоткуда (актёры лежат в другом паке, см.
+		// domain.Token.FoundryActorID), поэтому сохраняем якорь и оставляем
+		// связывание на потом.
+		FoundryActorID: firstNonEmpty(asString(t["actorId"]), digString(t, "delta", "_id")),
+		Hidden:         asBool(t["hidden"]),
 	}
 }
 

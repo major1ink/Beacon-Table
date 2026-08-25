@@ -37,6 +37,11 @@ type RoomService interface {
 	Dispatch(c RoomClient, msg domain.ClientMsg)
 	Shutdown()
 	ImportScenes(ctx context.Context, scenes []*domain.SceneState) (int, error)
+	// LinkTokensToMonsters дописывает Token.MonsterID токенам, приехавшим со
+	// сценами из Foundry, по карте "id актёра Foundry -> id карточки
+	// бестиария" (см. domain.Token.FoundryActorID). Возвращает, скольким
+	// токенам связь реально проставили.
+	LinkTokensToMonsters(ctx context.Context, monsterByActor map[string]string) (int, error)
 	NotifyJournalChanged(id string)
 }
 
@@ -50,6 +55,13 @@ type inboundMsg struct {
 type importScenesReq struct {
 	scenes []*domain.SceneState
 	reply  chan int
+}
+
+// linkTokensReq — заявка на связывание токенов сцен с бестиарием, тем же
+// приёмом, что importScenesReq выше (см. LinkTokensToMonsters).
+type linkTokensReq struct {
+	monsterByActor map[string]string
+	reply          chan int
 }
 
 // Room — реализация RoomService.
@@ -89,6 +101,10 @@ type Room struct {
 	// команда клиента и авторизации по роли у неё нет — вызывающего
 	// (ДМ-only эндпоинт) проверил API-слой.
 	importScenes chan importScenesReq
+	// linkTokens — связывание токенов с бестиарием после импорта пака с
+	// актёрами (см. LinkTokensToMonsters): свой канал по той же причине, что
+	// и importScenes — это не команда клиента и роль по ней не проверяется.
+	linkTokens chan linkTokensReq
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -164,6 +180,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		inbound:        make(chan inboundMsg, 32),
 		shutdown:       make(chan chan struct{}),
 		importScenes:   make(chan importScenesReq),
+		linkTokens:     make(chan linkTokensReq),
 		journalChanged: make(chan string, 32),
 		dirtyScenes:    make(map[string]bool),
 		combat:         combat,
@@ -206,6 +223,67 @@ func (r *Room) ImportScenes(ctx context.Context, scenes []*domain.SceneState) (i
 	case <-ctx.Done():
 		return 0, ctx.Err()
 	}
+}
+
+// LinkTokensToMonsters — см. RoomService. Пустая карта — сразу 0, без
+// похода в горутину комнаты: импорт пака без единого актёра это обычное
+// дело (заклинания, предметы), и гонять из-за него комнату незачем.
+func (r *Room) LinkTokensToMonsters(ctx context.Context, monsterByActor map[string]string) (int, error) {
+	if len(monsterByActor) == 0 {
+		return 0, nil
+	}
+	reply := make(chan int, 1)
+	select {
+	case r.linkTokens <- linkTokensReq{monsterByActor: monsterByActor, reply: reply}:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	select {
+	case linked := <-reply:
+		return linked, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+// linkTokensToMonsters — тело LinkTokensToMonsters уже внутри горутины
+// run(). Идёт по ВСЕМ сценам комнаты, а не только по активной: пак с
+// актёрами импортируют один раз, а сцены модуля к этому моменту разложены
+// все сразу (см. addScenes), и ДМ вправе ожидать, что статблоки появятся на
+// каждой карте приключения, а не только на той, что открыта.
+//
+// Уже проставленный MonsterID не трогаем: ДМ мог привязать токен к своей
+// карточке руками, и повторный импорт модуля не должен это перебивать.
+func (r *Room) linkTokensToMonsters(monsterByActor map[string]string) int {
+	linked := 0
+	currentTouched := false
+	for sceneID, s := range r.scenes {
+		changed := false
+		for _, t := range s.Tokens {
+			if t.MonsterID != "" || t.FoundryActorID == "" {
+				continue
+			}
+			monsterID, ok := monsterByActor[t.FoundryActorID]
+			if !ok {
+				continue
+			}
+			t.MonsterID = monsterID
+			linked++
+			changed = true
+		}
+		if changed {
+			r.markDirty(sceneID)
+			if sceneID == r.currentSceneID {
+				currentTouched = true
+			}
+		}
+	}
+	// Рассылаем, только если поменялась ОТКРЫТАЯ сейчас сцена: клиенты видят
+	// лишь её, снапшот по правке любой другой был бы пустым шумом.
+	if currentTouched {
+		r.broadcastAll()
+	}
+	return linked
 }
 
 // addScenes — тело ImportScenes уже внутри горутины run(): кладёт сцены в
@@ -428,6 +506,9 @@ func (r *Room) run() {
 
 		case req := <-r.importScenes:
 			req.reply <- r.addScenes(req.scenes)
+
+		case req := <-r.linkTokens:
+			req.reply <- r.linkTokensToMonsters(req.monsterByActor)
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
