@@ -684,6 +684,9 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	if !ok || existing.OwnerID == "" || existing.OwnerID != c.PlayerID() {
 		return // не твой токен — тихо игнорируем, а не ошибку шлём
 	}
+	if existing.Locked {
+		return // ДМ запер токен на карте (см. domain.Token.Locked) — не двигается ничем
+	}
 	existing.X = msg.Token.X
 	existing.Y = msg.Token.Y
 	r.markDirty(r.currentSceneID)

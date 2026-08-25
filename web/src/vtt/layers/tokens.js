@@ -255,6 +255,15 @@ export function createTokensLayer(ctx) {
     const deadIcon = new Text({ text: "💀", style: { fontSize: 20, fontFamily: "sans-serif", align: "center" } });
     deadIcon.anchor.set(0.5, 0.5);
     deadIcon.visible = false;
+    // lockIcon — замок в правом нижнем углу токена, когда объект заперт
+    // (domain.Token.Locked, общий для всех объектов карты флаг — см.
+    // web/src/vtt/map-objects.js). Виден только ДМ: игроку запертость
+    // ничего не сообщает (он и так не двигает чужое), а ДМ по нему сразу
+    // понимает, почему токен не берётся мышью. Тот же приём "готовый
+    // эмодзи вместо ассета", что у lightIcon/deadIcon выше.
+    const lockIcon = new Text({ text: "🔒", style: { fontSize: 12, fontFamily: "sans-serif", align: "center" } });
+    lockIcon.anchor.set(0.5, 0.5);
+    lockIcon.visible = false;
     const label = new Text({ text: "", style: { fill: 0xffffff, fontSize: 12, fontFamily: "sans-serif", align: "center" } });
     label.anchor.set(0.5, 0);
     // statusLayer — наложенные состояния (domain.AppliedStatus): значки-
@@ -264,8 +273,8 @@ export function createTokensLayer(ctx) {
     // значков переменное число, они целиком пересоздаются при изменении
     // набора меток (это происходит только по dirty.tokens, не каждый кадр).
     const statusLayer = new Container();
-    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, statusLayer, label);
-    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, lightRings, lightIcon, deadIcon, statusLayer, label, artUrl: null, artSize: 0, artShape: null };
+    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, statusLayer, lockIcon, label);
+    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, lightRings, lightIcon, deadIcon, statusLayer, lockIcon, label, artUrl: null, artSize: 0, artShape: null };
   }
 
   // MAX_STATUS_BADGES — сколько значков рисуем в ряд, прежде чем свернуть
@@ -466,6 +475,12 @@ export function createTokensLayer(ctx) {
     // Подпись под токеном света не нужна — она и так везде подписана как
     // "Источник света" в контекстном меню (см. dm.js), а на самой сцене её
     // роль и так однозначно читается по иконке лампочки.
+    view.lockIcon.visible = !!(ctx.isDM && t.locked);
+    if (view.lockIcon.visible) {
+      view.lockIcon.style.fontSize = Math.max(10, size * 0.55);
+      view.lockIcon.position.set(size * 0.7, size * 0.7);
+    }
+
     view.label.text = t.lightOnly ? "" : t.label || "";
     view.label.position.set(0, size + 14);
 
