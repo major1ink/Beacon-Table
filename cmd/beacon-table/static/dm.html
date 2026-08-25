@@ -119,11 +119,34 @@
     #globalLightBrightBtn.active { background: var(--gold); }
     #globalLightDimBtn.active { background: var(--blue); }
 
+    /* Колонка со статблоком того, кем сейчас занят бой — общий модуль с
+       боковым листом персонажа у игрока (web/src/sheet-dock.js), тут только
+       перекраска под стекло ДМ-стола. Стоит между панелью рейла и картой и
+       лежит ПОВЕРХ канваса, а не ужимает его: канвас у ДМ полноэкранный
+       (#canvasWrap{position:absolute;inset:0}), и рейл с панелью его тоже
+       накрывают — колонка ведёт себя как они, а не как док игрока. */
+    #sheetDock.sheet-dock {
+      margin: 14px 0 14px 10px; z-index: 6; overflow: hidden;
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
+    }
+    #sheetDock .sheet-dock-header { background: transparent; }
+    /* Ручка ширины у модуля торчит на 3px наружу — при overflow:hidden выше
+       её бы срезало, поэтому убираем внутрь. */
+    #sheetDock .sheet-dock-resizer { right: 0; }
+    /* Кнопка "следовать за ходом" в шапке трекера — включённая подсвечена */
+    #combatFollowBtn.active { opacity: 1; color: var(--accent); background: var(--surface); }
+
     #canvasWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
+    /* Плашка "сцена · игроки · ДМ" стоит в нижнем правом углу, в одном ряду
+       с зумом (#zoomHud правее её, отсюда right: 118px = 10 + ширина зума
+       100 + зазор 8). Раньше она жила в верхнем левом углу, но там её
+       зажало между колонкой со статблоком и полосой хода — а низ справа
+       занят только зумом и от боя не зависит вообще. */
     #statusBar {
-      position: absolute; left: 84px; top: 10px; z-index: 5; transition: left .16s ease;
+      position: absolute; right: 118px; bottom: 10px; z-index: 5;
       background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;
@@ -515,6 +538,32 @@
       -webkit-appearance: none; margin: 0;
     }
     .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
+    /* Полоска хитов бойца: тянется мышью (см. web/src/hp-bar.js), за концом
+       заливки — хвост временных хитов другим цветом. Рядом узкое поле, куда
+       вбивают изменение ("-7"/"+4"/"17"). */
+    .combat-hp-row { display: flex; align-items: center; gap: 6px; padding-left: 40px; margin-top: 7px; }
+    .combat-bar {
+      position: relative; flex: 1 1 auto; height: 12px; border-radius: 6px; overflow: hidden;
+      background: var(--bg); border: 1px solid var(--border); cursor: ew-resize; touch-action: none;
+    }
+    .combat-bar-fill, .combat-bar-temp {
+      position: absolute; top: 0; bottom: 0; left: 0; display: block; transition: width .1s linear;
+    }
+    /* Хвост временных хитов — штриховкой и голубым (тот же #5dd0ff, что у
+       текущего хода в верхнем оверлее): чтобы его нельзя было спутать с
+       обычными хитами ни цветом, ни фактурой. --blue из темы тут слишком
+       тёмный, на полоске в 12px он читается как пустое место. */
+    .combat-bar-temp { background: repeating-linear-gradient(45deg, #5dd0ff, #5dd0ff 3px, rgba(93,208,255,0.45) 3px, rgba(93,208,255,0.45) 6px); }
+    .combat-bar-label {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); pointer-events: none;
+    }
+    .combat-row .combat-hp-quick {
+      flex: 0 0 auto; width: 42px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; font: inherit; font-size: 11px; text-align: center; padding: 3px 1px; box-sizing: border-box;
+    }
+    .combat-row .combat-hp-quick:focus { outline: none; border-color: var(--accent); }
+    .combat-row .combat-hp-temp { width: 30px; color: #5dd0ff; }
     .combat-hp-group { display: flex; align-items: center; gap: 3px; }
     .combat-hp-group input { width: 36px; }
     .combat-hp-group .combat-hp-sep { opacity: 0.4; font-size: 11px; }
@@ -780,22 +829,22 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-DhiW98CC.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CwnEFZ2M.js">
-  <link rel="modulepreload" crossorigin href="/assets/icons-B8E5VJBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-BlT6bFWB.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-CY9_0aAs.js">
+  <script type="module" crossorigin src="/assets/dm-VE9xKdrh.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-NaC6-tA4.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DUy-NyPP.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DE2-6ru0.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-igW3cDTW.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-_WXWdM_o.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-B1OomexY.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-C9BO-jMJ.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CxyUCQ6K.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
-  <link rel="modulepreload" crossorigin href="/assets/toolbar-CztejOJ9.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DC8oo-J7.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-Cz7_Lmvh.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-B1wGMDl8.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-BdFQkweV.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CykOXfA3.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor--rDcuD1K.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-BTgaVEfw.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-Bv_jq2Eh.js">
+  <link rel="modulepreload" crossorigin href="/assets/toolbar-om-mTNMm.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-pLIYmaKr.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>
@@ -926,6 +975,7 @@
         <div class="panel-body">
           <div class="modal-tabs">
             <button data-tab="basic" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/></svg> Основное</button>
+            <button class="panel-close" id="combatFollowBtn" title="Показывать действия того, чей сейчас ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.9-6.5-10.5a6.5 6.5 0 0113 0C18.5 15.1 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg></button>
             <button data-tab="bg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5.5-5.5L9 17"/></svg> Фон</button>
             <button data-tab="audio"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg> Аудио</button>
             <button data-tab="grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg> Сетка</button>
@@ -1210,6 +1260,10 @@
     <label id="tokenMenuShapeRow">Форма: <select id="tokenMenuShape">
       <option value="circle">○ Круг</option>
       <option value="square">▢ Квадрат (без обрезки)</option>
+    <!-- Колонка со статблоком бойца (см. web/src/sheet-dock.js): пустая до
+         первого открытия, наполняется из pages/dm.js -->
+    <aside id="sheetDock"></aside>
+
     </select></label>
     <label id="tokenMenuLightRow"><input type="checkbox" id="tokenMenuLight" /> <span id="tokenMenuLightLabel">источник света</span></label>
     <label id="tokenMenuLightBrightField" class="light-field" title="Радиус яркого света в единицах линейки сцены (по умолчанию фт, см. настройку сетки) — 0: без яркого ядра, только тусклая кайма">

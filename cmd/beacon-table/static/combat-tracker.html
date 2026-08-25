@@ -74,6 +74,13 @@
       flex: 0 0 auto; width: 22px; height: 22px; padding: 0; font-size: 11px; background: var(--danger);
     }
     .combat-row .combat-remove:hover { background: var(--danger-hover); }
+    /* Кнопка "действия" в шапке карточки бойца — попап с боевыми блоками
+       статблока (см. web/src/combat-actions-peek.js) */
+    .combat-row .combat-peek {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-peek:hover { background: var(--surface-hover); color: var(--accent); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
     /* строка чипов наложенных состояний под характеристиками бойца (см.
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
@@ -81,6 +88,12 @@
     .combat-row-statuses { padding-left: 40px; margin-top: 6px; }
     /* КД: поле с базой + стрелка с эффективным значением, когда его меняют
        состояния (см. web/src/combat-panel.js и domain.Modifier) */
+    /* Портрет и имя — быстрый вход в карточку бойца (статблок монстра/лист
+       персонажа), см. web/src/combatant-card.js. Класс вешается только тем
+       бойцам, у кого карточка есть, — курсор-палец не обещает лишнего. */
+    .combat-row .combat-card-link { cursor: pointer; }
+    .combat-row .combat-name.combat-card-link:hover { color: var(--accent); }
+    .combat-row .combat-avatar.combat-card-link:hover { box-shadow: 0 0 0 2px var(--accent) inset; }
     .combat-ac-group { display: flex; align-items: center; gap: 4px; }
     .combat-ac-eff { font-size: 11px; color: var(--amber); white-space: nowrap; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
@@ -95,6 +108,32 @@
       -webkit-appearance: none; margin: 0;
     }
     .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
+    /* Полоска хитов бойца: тянется мышью (см. web/src/hp-bar.js), за концом
+       заливки — хвост временных хитов другим цветом. Рядом узкое поле, куда
+       вбивают изменение ("-7"/"+4"/"17"). */
+    .combat-hp-row { display: flex; align-items: center; gap: 6px; padding-left: 40px; margin-top: 7px; }
+    .combat-bar {
+      position: relative; flex: 1 1 auto; height: 12px; border-radius: 6px; overflow: hidden;
+      background: var(--bg); border: 1px solid var(--border); cursor: ew-resize; touch-action: none;
+    }
+    .combat-bar-fill, .combat-bar-temp {
+      position: absolute; top: 0; bottom: 0; left: 0; display: block; transition: width .1s linear;
+    }
+    /* Хвост временных хитов — штриховкой и голубым (тот же #5dd0ff, что у
+       текущего хода в верхнем оверлее): чтобы его нельзя было спутать с
+       обычными хитами ни цветом, ни фактурой. --blue из темы тут слишком
+       тёмный, на полоске в 12px он читается как пустое место. */
+    .combat-bar-temp { background: repeating-linear-gradient(45deg, #5dd0ff, #5dd0ff 3px, rgba(93,208,255,0.45) 3px, rgba(93,208,255,0.45) 6px); }
+    .combat-bar-label {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); pointer-events: none;
+    }
+    .combat-row .combat-hp-quick {
+      flex: 0 0 auto; width: 42px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; font: inherit; font-size: 11px; text-align: center; padding: 3px 1px; box-sizing: border-box;
+    }
+    .combat-row .combat-hp-quick:focus { outline: none; border-color: var(--accent); }
+    .combat-row .combat-hp-temp { width: 30px; color: #5dd0ff; }
     .combat-hp-group { display: flex; align-items: center; gap: 3px; }
     .combat-hp-group input { width: 36px; }
     .combat-hp-group .combat-hp-sep { opacity: 0.4; font-size: 11px; }
@@ -111,13 +150,17 @@
     .bulb.filled { background: var(--accent); border-color: var(--accent); }
     .bulb.filled.fail { background: var(--danger); border-color: var(--danger); }
   </style>
-  <script type="module" crossorigin src="/assets/combatTracker-DCF7qIen.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CwnEFZ2M.js">
-  <link rel="modulepreload" crossorigin href="/assets/icons-B8E5VJBp.js">
+  <script type="module" crossorigin src="/assets/combatTracker-96TOZqAl.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-NaC6-tA4.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-B1wGMDl8.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DUy-NyPP.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DE2-6ru0.js">
+  <link rel="modulepreload" crossorigin href="/assets/inline-rolls-BdFQkweV.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-B1OomexY.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-C9BO-jMJ.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CxyUCQ6K.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor--rDcuD1K.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-BTgaVEfw.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-Bv_jq2Eh.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>

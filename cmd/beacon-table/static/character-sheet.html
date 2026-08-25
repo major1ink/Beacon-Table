@@ -178,7 +178,9 @@
       margin-left: auto; font-size: 11.5px; font-weight: 700; color: #7fc4ff;
       background: rgba(58, 140, 220, 0.18); border-radius: var(--radius-pill); padding: 3px 9px;
     }
-    .v-bar { height: 7px; border-radius: var(--radius-pill); background: var(--surface); overflow: hidden; margin: 9px 0; }
+    /* Полоску хитов тянут мышью/пальцем (см. web/src/hp-bar.js), поэтому она
+       чуть толще декоративной и с курсором-стрелкой: в 7px попасть трудно. */
+    .v-bar { height: 10px; border-radius: var(--radius-pill); background: var(--surface); overflow: hidden; margin: 9px 0; cursor: ew-resize; touch-action: none; }
     .v-bar > i { display: block; height: 100%; border-radius: var(--radius-pill); transition: width .18s ease, background .18s ease; }
 
     /* .v-quick — ряд быстрых правок числа: −5 −1 [ввод] +1 +5. Поле принимает
@@ -328,15 +330,14 @@
     .v-inv-eq.on { background: var(--green); color: #fff; }
     .v-empty { font-size: 11.5px; color: var(--text-dim); }
   </style>
-  <script type="module" crossorigin src="/assets/characterSheet-DvcAjOHt.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CwnEFZ2M.js">
-  <link rel="modulepreload" crossorigin href="/assets/icons-B8E5VJBp.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CykOXfA3.js">
+  <script type="module" crossorigin src="/assets/characterSheet-CInMFLDS.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-NaC6-tA4.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DUy-NyPP.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-pLIYmaKr.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-BdFQkweV.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-B1OomexY.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-C9BO-jMJ.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-CY9_0aAs.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor--rDcuD1K.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-BTgaVEfw.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>
