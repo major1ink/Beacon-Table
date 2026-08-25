@@ -12,9 +12,24 @@ import { computeVisionPlanWithFallback } from "../vision-plan.js";
 // Яркий свет (Token.Light.Bright) открывает область полностью, тусклый
 // (Token.Light.Dim) — тоже открывает, но с затемняющей поволокой (см.
 // DIM_ALPHA), силуэты видны, детали приглушены — как тусклый свет в Foundry.
+//
+// Между этими двумя границами поволока не обрывается ступенькой, а плавно
+// сходит на нет: план приносит готовые непересекающиеся кольца с полем level
+// (0 — край тусклого света, 1 — ярко освещённое ядро), см. LIGHT_STEPS и
+// ringMultis в vision-plan.js. Здесь остаётся только перевод level в альфу —
+// alphaForLevel ниже.
 const DARK_ALPHA = 0.96; // совсем не освещено
-const DIM_ALPHA = 0.55; // освещено тускло — не тьма, но и не "видно как есть"
+const DIM_ALPHA = 0.55; // самый край тусклого света — не тьма, но и не "видно как есть"
 const DARK_COLOR = 0x06060a;
+
+// alphaForLevel — линейный спад от DIM_ALPHA на внешнем краю тусклого света
+// до нуля в ярком. Линейный, а не квадратичный (как затухание настоящего
+// источника): поволока тут не имитация физики, а читаемость карты — на
+// квадратичном спаде почти вся ширина кольца выглядит одинаково тёмной, и
+// смысл ступеней теряется.
+function alphaForLevel(level) {
+  return DIM_ALPHA * (1 - level);
+}
 
 // Line-of-sight/туман войны — САМОЕ ГЛАВНОЕ место переезда (см. план,
 // раздел "Корневой фикс"). В старом Canvas2D-движке computeVisibilityPolygon
@@ -51,6 +66,13 @@ export function createVisionFogLayer(ctx) {
     dimTint.clear();
   }
 
+  // memo — то, что расчёту незачем делать заново на каждый кадр: сработавший
+  // в прошлый раз квант, посчитанный слой света, обзор каждого наблюдателя и
+  // подпись всего входа целиком (см. computeVisionPlanWithFallback). Живёт
+  // ровно столько же, сколько сам слой, и на результат не влияет — только на
+  // цену кадра.
+  const memo = {};
+
   // rebuild — намеренно в два прохода: СНАЧАЛА вся геометрия (raycasting +
   // polygon-clipping — единственное, что вообще может кинуть исключение,
   // см. computeVisionPlanWithFallback), и ТОЛЬКО ПОТОМ, если всё
@@ -66,7 +88,11 @@ export function createVisionFogLayer(ctx) {
   // экране просто остаётся ПРЕДЫДУЩИЙ (корректный) кадр, без единого мига,
   // пока следующий пересчёт (следующий кадр драга) не спасёт положение сам.
   function rebuild() {
-    const { plan, error } = computeVisionPlanWithFallback(ctx.scene, ctx.isDM);
+    const { plan, error, unchanged } = computeVisionPlanWithFallback(ctx.scene, ctx.isDM, memo);
+    // unchanged — вход расчёта бит в бит тот же, что в прошлый раз (см.
+    // planInputKey): на экране уже нарисовано ровно это, перерисовывать
+    // Graphics незачем.
+    if (unchanged) return;
     if (!plan) {
       console.error("beacon: сбой пересчёта освещения (vision-fog computePlan) — оставляю прошлый кадр как есть:", error, {
         tokens: ctx.scene.tokens,
@@ -85,7 +111,7 @@ export function createVisionFogLayer(ctx) {
     clearAll();
     if (plan.skip) return; // DM/выключенный туман войны — совсем без тьмы
 
-    const { w, h, dimIslands } = plan;
+    const { w, h, dimIslands, rings } = plan;
     darkness.rect(0, 0, w, h).fill({ color: DARK_COLOR, alpha: DARK_ALPHA });
     if (!dimIslands.length) return; // света нет — сплошная тьма как уже залито
 
@@ -98,16 +124,17 @@ export function createVisionFogLayer(ctx) {
     // насколько ярко.
     cutMulti(darkness, dimIslands.map((d) => d.poly), w, h, { color: DARK_COLOR, alpha: DARK_ALPHA });
 
-    // dimTint — тусклая дымка. Здесь ОДНОЙ инструкцией не обойтись: у
-    // каждого острова своя часть revealBright, которую нужно вырезать ИМЕННО
-    // из заливки ЭТОГО острова, а не из чужой — поэтому на каждый остров
-    // идёт свой fillMulti, и он же уносит яркие куски в тот же единственный
-    // cut() (extraCuts). Раньше остров и его яркие куски рисовались двумя
-    // отдельными вызовами, и второй cut() по той же заливке дотягивался до
-    // СОСЕДНЕГО острова — на карте это выглядело как треугольные клинья
-    // не пойми откуда.
-    for (const { poly, bright } of dimIslands) {
-      fillMulti(dimTint, [poly], w, h, { color: DARK_COLOR, alpha: DIM_ALPHA }, bright, { color: DARK_COLOR, alpha: DIM_ALPHA });
+    // dimTint — поволока над тускло освещённым, кольцами от тёмного края к
+    // прозрачному ядру. Кольца НЕ ПЕРЕСЕКАЮТСЯ (см. ringMultis в
+    // vision-plan.js), поэтому каждое рисуется независимо и ничего ни у кого
+    // не вырезает: extraCuts тут не нужны совсем, а с ними ушёл и весь риск
+    // из "ПРАВИЛА РАБОТЫ С Pixi cut()" — у каждой заливки остаются ровно её
+    // собственные дыры и ровно один cut() на них.
+    //
+    // Порядок колец не важен по той же причине (не перекрываются), но идут
+    // они как посчитаны — от края к центру.
+    for (const { level, multi } of rings) {
+      fillMulti(dimTint, multi, w, h, { color: DARK_COLOR, alpha: alphaForLevel(level) });
     }
   }
 

@@ -19,6 +19,28 @@ export function raySegmentT(ox, oy, dx, dy, ax, ay, bx, by) {
   return t;
 }
 
+// wallsInRange — стены, до которых от точки (ox,oy) не дальше radius. Стена
+// дальше радиуса не может заслонить НИЧЕГО внутри круга — луч всё равно
+// обрубается на radius (см. minT ниже), — поэтому она не нужна ни как
+// источник углов, ни как проверка пересечения. Отсечение точное, картинка от
+// него не меняется, а работы становится на порядок меньше: у источника света
+// радиусом в пару клеток рядом обычно 4-20 стен, а на карте их бывает
+// несколько сотен, и каждая стоит трёх лучей И одной проверки в КАЖДОМ луче
+// (то есть цена квадратичная по числу стен). На реальной карте "Пещера" (301
+// стена, 18 источников) это половина всего времени пересчёта освещения.
+//
+// Для обзора (радиус больше диагонали карты, см. SIGHT_MARGIN) отсечение
+// ничего не выкидывает — там остаётся только цена самой проверки, линейная и
+// пренебрежимая на фоне рейкастинга.
+export function wallsInRange(walls, ox, oy, radius) {
+  const out = [];
+  for (const w of walls) {
+    const { cx, cy } = closestPointOnSegment(ox, oy, w.x1, w.y1, w.x2, w.y2);
+    if (Math.hypot(ox - cx, oy - cy) <= radius) out.push(w);
+  }
+  return out;
+}
+
 // computeVisibilityPolygon — видимый многоугольник от точки (ox,oy) с учётом
 // стен. Классический raycasting: луч в сторону каждого конца стены (±
 // крошечный угол, чтобы поймать край) плюс равномерная решётка углов для
@@ -31,10 +53,11 @@ export function raySegmentT(ox, oy, dx, dy, ax, ay, bx, by) {
 // несмежные точки диагональю через всю освещённую область.
 export function computeVisibilityPolygon(ox, oy, radius, walls) {
   const EPS = 0.00001;
+  const near = wallsInRange(walls, ox, oy, radius); // см. wallsInRange — отсечение точное
   const angles = new Set();
   const STEPS = 48;
   for (let i = 0; i < STEPS; i++) angles.add(-Math.PI + (i / STEPS) * Math.PI * 2);
-  for (const w of walls) {
+  for (const w of near) {
     for (const [wx, wy] of [[w.x1, w.y1], [w.x2, w.y2]]) {
       const a = Math.atan2(wy - oy, wx - ox);
       angles.add(a - EPS);
@@ -46,7 +69,7 @@ export function computeVisibilityPolygon(ox, oy, radius, walls) {
   for (const a of angles) {
     const dx = Math.cos(a), dy = Math.sin(a);
     let minT = radius;
-    for (const w of walls) {
+    for (const w of near) {
       const t = raySegmentT(ox, oy, dx, dy, w.x1, w.y1, w.x2, w.y2);
       if (t !== null && t < minT) minT = t;
     }
@@ -197,6 +220,23 @@ export function weldWalls(wallList, eps = 12) {
 // участвуют в лучах вообще, без отдельной ветки в геометрии.
 export function wallBlocksSight(w) {
   if (w.window) return false;
+  if (w.door && w.doorState === "open") return false;
+  return true;
+}
+
+// wallBlocksLight — блокирует ли этот сегмент СВЕТ прямо сейчас. Отличается
+// от wallBlocksSight ровно окном: сквозь окно видно, но свет оно держит —
+// это стекло, а не проём (ровно та же логика, что и у wallBlocksMovement
+// ниже, и ровно то, что делает Foundry: окно там — это Sight: None при
+// Light: Normal, два независимых ограничения на одной стене).
+//
+// Раньше свет считался по тому же списку стен, что и обзор, то есть окно
+// было для него дырой: факел в комнате выстреливал сквозь узкий оконный
+// проём длинной резкой иглой света наружу, а по бокам от неё оставались
+// такие же резкие тёмные клинья. На картах вроде "Зимнего поместья" (14
+// окон) это и выглядело как artefact'ы у окон.
+export function wallBlocksLight(w) {
+  if (w.lightThrough) return false; // «местность»/светопроницаемая перегородка из Foundry
   if (w.door && w.doorState === "open") return false;
   return true;
 }
