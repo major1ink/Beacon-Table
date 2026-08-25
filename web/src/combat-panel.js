@@ -23,6 +23,10 @@ import { icon } from "./icons.js";
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "./combatant-card.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
 
+// FOLLOW_KEY — режим "статблок следует за ходом" переживает перезагрузку
+// страницы: это настройка привычки ДМ, а не состояние конкретного боя.
+const FOLLOW_KEY = "beacon:combatFollowTurn";
+
 export function initCombatPanel({ send, els }) {
   let latestCombat = { active: false, round: 0, currentId: "", combatants: [] };
   // searchList — кэш последнего поиска "+ Добавить": монстры бестиария и
@@ -278,9 +282,66 @@ export function initCombatPanel({ send, els }) {
     }
   }
 
+  // ---- "Следовать за ходом" ----
+  // Держать перед глазами действия того, чей сейчас ход: тот же компактный
+  // попап, что открывает кнопка ⚔ в строке (см. combat-actions-peek.js), но
+  // закреплённый в углу карты — он сам переезжает на следующего бойца и не
+  // закрывается кликом мимо. В Foundry это делают руками, открывая и
+  // закрывая лист очередного монстра.
+  //
+  // Полная карточка отсюда не открывается специально: она заметно больше и
+  // лезет на карту, а посреди боя нужны три строки про атаки. Нужен весь
+  // статблок — кнопка ⤢ в шапке попапа.
+  //
+  // Кнопка есть только у встроенной панели ДМ-стола (её узел передаёт
+  // dm.html), в вынесенном окне трекера её нет: попап открывался бы внутри
+  // этого окна, а не поверх карты.
+  let followTurn = !!els.followBtn && localStorage.getItem(FOLLOW_KEY) === "1";
+  let followedId = ""; // чей статблок уже показан — чтобы не дёргать док на каждый combat_state
+
+  function renderFollowBtn() {
+    if (!els.followBtn) return;
+    els.followBtn.classList.toggle("active", followTurn);
+    els.followBtn.title = followTurn
+      ? "Действия следуют за ходом — выключить"
+      : "Показывать действия того, чей сейчас ход";
+  }
+
+  function syncFollow() {
+    if (!followTurn) return;
+    if (!latestCombat.active) {
+      followedId = ""; // бой кончился — следующий начнём с чистого листа
+      closeActionsPeek();
+      return;
+    }
+    const current = latestCombat.combatants.find((c) => c.id === latestCombat.currentId);
+    if (!current || current.id === followedId) return;
+    // Ход отмечаем пройденным в любом случае, даже если показывать нечего:
+    // иначе на каждый следующий combat_state этого же хода мы пытались бы
+    // открыть попап заново.
+    followedId = current.id;
+    // Ход игрока — статблока нет и быть не может (его действия у него на
+    // бланке): гасим попап, а не оставляем висеть чужого монстра.
+    if (current.monsterId) openActionsPeek({ combatant: current, send, pinned: true });
+    else closeActionsPeek();
+  }
+
+  if (els.followBtn) {
+    els.followBtn.onclick = () => {
+      followTurn = !followTurn;
+      localStorage.setItem(FOLLOW_KEY, followTurn ? "1" : "0");
+      renderFollowBtn();
+      followedId = ""; // включили посреди боя — показать текущего сразу, не дожидаясь следующего хода
+      if (followTurn) syncFollow();
+      else closeActionsPeek();
+    };
+    renderFollowBtn();
+  }
+
   document.addEventListener("vtt:combatState", (e) => {
     latestCombat = e.detail;
     renderPanel();
+    syncFollow();
     // Палитра состояний, если она сейчас открыта, живёт вне этой панели
     // (document.body) — её надо перерисовать отдельно, иначе после наложения
     // метки ячейка не подсветится до следующего открытия.

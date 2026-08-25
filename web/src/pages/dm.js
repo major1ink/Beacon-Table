@@ -2779,6 +2779,10 @@ initCombatPanel({
     search: document.getElementById("combatSearch"),
     searchResults: document.getElementById("combatSearchResults"),
     list: document.getElementById("combatList"),
+    // followBtn — только у встроенной панели: колонка-док есть на этой
+    // странице и нигде больше (см. combat-panel.js: почему кнопки нет в
+    // вынесенном окне трекера).
+    followBtn: document.getElementById("combatFollowBtn"),
   },
 });
 

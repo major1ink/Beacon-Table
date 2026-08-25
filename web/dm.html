@@ -135,6 +135,9 @@
     /* Ручка ширины у модуля торчит на 3px наружу — при overflow:hidden выше
        её бы срезало, поэтому убираем внутрь. */
     #sheetDock .sheet-dock-resizer { right: 0; }
+    /* Кнопка "следовать за ходом" в шапке трекера — включённая подсвечена */
+    #combatFollowBtn.active { opacity: 1; color: var(--accent); background: var(--surface); }
+
     #canvasWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
@@ -938,6 +941,7 @@
         <div class="panel-body">
           <div class="modal-tabs">
             <button data-tab="basic" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/></svg> Основное</button>
+            <button class="panel-close" id="combatFollowBtn" title="Показывать действия того, чей сейчас ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.9-6.5-10.5a6.5 6.5 0 0113 0C18.5 15.1 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg></button>
             <button data-tab="bg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5.5-5.5L9 17"/></svg> Фон</button>
             <button data-tab="audio"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg> Аудио</button>
             <button data-tab="grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg> Сетка</button>
