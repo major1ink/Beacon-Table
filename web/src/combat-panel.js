@@ -1,6 +1,7 @@
 // combat-panel.js — вся логика панели "Трекер инициативы": список бойцов
 // (портрет/имя/Иниц./КД/HP, правка вручную, удаление), поиск по бестиарию
-// для "+", кнопки старта/раундов/хода. Общий модуль для встроенной панели
+// для "+", кнопки старта/раундов/хода, быстрый переход в карточку бойца по
+// клику на портрет/имя (см. combatant-card.js). Общий модуль для встроенной панели
 // ДМ-стола (pages/dm.js, раздел рейла "🎯") и вынесенного плавающего окна
 // (combat-tracker.html/pages/combat-tracker.js, см. floating-window.js) —
 // обе страницы держат одинаковую разметку/CSS (секция "Трекер инициативы" в
@@ -18,6 +19,7 @@
 // диспатчат его в одном и том же формате, откуда взято неважно.
 import { fetchBestiary, fetchAdminCharacters } from "./api.js";
 import { icon } from "./icons.js";
+import { combatantCardTarget, combatantCardHint, openCombatantCard } from "./combatant-card.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
 
 export function initCombatPanel({ send, els }) {
@@ -84,6 +86,30 @@ export function initCombatPanel({ send, els }) {
       removeBtn.innerHTML = icon("close", { size: 11 });
       removeBtn.title = "Убрать из инициативы";
       removeBtn.onclick = () => send({ type: "remove_combatant", combatantId: cmb.id });
+
+      // Быстрый вход в карточку бойца прямо из инициативы — то, ради чего
+      // в Foundry делают двойной клик по строке трекера: во время боя
+      // статблок нужен постоянно ("а что у него за реакция?"), и идти за
+      // ним через отдельный поиск по бестиарию слишком долго. Кликается
+      // портрет и имя, двойной клик по всей карточке — для привычки тех,
+      // кто пришёл из Foundry. Панель трекера открыта только ДМ (встроенная
+      // — раздел рейла dm.html, вынесенная — combat-tracker.js проверяет
+      // роль на входе), поэтому isDM: true.
+      const card = combatantCardTarget(cmb, { isDM: true });
+      if (card) {
+        const hint = `${combatantCardHint(cmb)} — «${cmb.name}»`;
+        for (const el of [avatar, name]) {
+          el.classList.add("combat-card-link");
+          el.title = hint;
+          el.onclick = () => openCombatantCard(cmb, { isDM: true });
+        }
+        row.addEventListener("dblclick", (e) => {
+          // Инпуты/кнопки исключаем: двойной клик по числу выделяет его —
+          // открывать при этом ещё и окно человек точно не просил.
+          if (e.target.closest("input, button")) return;
+          openCombatantCard(cmb, { isDM: true });
+        });
+      }
 
       if (draggable) {
         const handle = document.createElement("span");

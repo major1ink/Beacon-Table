@@ -13,12 +13,16 @@
 // payload, здесь проверяем cmb.hpMax != null и рисуем HP-бейдж рядом с
 // именем (см. hpBadge). Редактирование HP по-прежнему живёт только в панели
 // "Инициатива" (combat-panel.js), не в самом оверлее — тут только чтение.
+// Единственное действие полосы у не-ДМ — клик по фишке бойца: открывает его
+// карточку (статблок монстра у ДМ, лист СВОЕГО персонажа у игрока, см.
+// combatant-card.js — права решаются там).
 // BAR_H — единая высота всех "фишек" полосы (раунд/кнопки/карточки бойцов).
 // Раньше кнопки хода (24px квадраты) и карточки бойцов (variable-height
 // пилюли) были разной высоты — при align-items:center это не ломало
 // раскладку по вертикали, но силуэт полосы получался неровным (кнопки ниже
 // пилюль), из-за чего весь оверлей выглядел "криво". Теперь у всех детей
 // bar одна и та же высота через явные min-height/height, а не "как влезет".
+import { combatantCardTarget, combatantCardHint, openCombatantCard } from "../combatant-card.js";
 import { icon } from "../icons.js";
 
 const BAR_H = 32;
@@ -168,6 +172,24 @@ export function createCombatBar(ctx) {
       pill.append(portrait, name);
       const hp = hpBadge(cmb);
       if (hp) pill.appendChild(hp);
+
+      // Клик по фишке — карточка бойца (статблок монстра у ДМ, лист своего
+      // персонажа у игрока, см. combatant-card.js: права там же). Тот же
+      // быстрый вход, что и в панели "Инициатива", только доступный, когда
+      // панель закрыта или её вовсе нет (игрок/TV) — во время боя это
+      // единственный список бойцов, который видно всем. У бойца без
+      // карточки (или когда роль её видеть не должна) фишка остаётся
+      // некликабельной: курсор ничего не обещает.
+      const cardOpts = { isDM: ctx.isDM, playerId: ctx.playerId };
+      if (combatantCardTarget(cmb, cardOpts)) {
+        pill.style.cursor = "pointer";
+        pill.title = `${pillLabel(cmb)} — ${combatantCardHint(cmb).toLowerCase()}`;
+        // Куда именно ляжет карточка, решает страница (см. combatant-card.js:
+        // setCardOpener): у ДМ и у игрока это боковая колонка у карты, а не
+        // плавающее окно поверх неё.
+        pill.onclick = () => openCombatantCard(cmb, cardOpts);
+      }
+
       track.appendChild(pill);
     }
   }

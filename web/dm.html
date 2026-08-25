@@ -520,6 +520,12 @@
     .combat-hp-group input { width: 36px; }
     .combat-hp-group .combat-hp-sep { opacity: 0.4; font-size: 11px; }
     /* спасброски от смерти (см. combat-panel.js: deathSaveRow) — те же
+    /* Портрет и имя — быстрый вход в карточку бойца (статблок монстра/лист
+       персонажа), см. web/src/combatant-card.js. Класс вешается только тем
+       бойцам, у кого карточка есть, — курсор-палец не обещает лишнего. */
+    .combat-row .combat-card-link { cursor: pointer; }
+    .combat-row .combat-name.combat-card-link:hover { color: var(--accent); }
+    .combat-row .combat-avatar.combat-card-link:hover { box-shadow: 0 0 0 2px var(--accent) inset; }
        "лампы"-чекбоксы, что и на бланке персонажа (character-sheet.html).
        Заголовок по центру, под ним колонки "успехи"/"провалы" — подпись
        каждой колонки прямо над её чекбоксами, а не слитно с заголовком. */

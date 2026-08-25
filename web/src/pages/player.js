@@ -4,6 +4,7 @@ import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
 import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
 import { openSheetDock } from "../sheet-dock.js";
+import { setCardOpener } from "../combatant-card.js";
 import {
   fetchMe,
   apiLogout,
@@ -47,6 +48,12 @@ function openCharacterSheet(c) {
     onLayoutChange: () => document.dispatchEvent(new CustomEvent("vtt:relayout")),
   });
 }
+
+// Клик по фишке в верхнем оверлее хода (vtt/combat-bar.js) открывает лист
+// там же, где его открывает чип в топбаре — в боковом доке (или поднимает
+// уже вынесенное окно). Игроку оттуда может прийти только ЕГО персонаж:
+// права решает combatant-card.js, здесь только место показа.
+setCardOpener((target, cmb) => openCharacterSheet({ id: cmb.characterId, name: cmb.name }));
 
 // renderCharDock — ряд компактных "чипов" своих персонажей в топбаре (см.
 // player.html: #charDock): аватар + имя, клик открывает лист. Раньше до

@@ -82,6 +82,12 @@
     .combat-row-statuses { padding-left: 40px; margin-top: 6px; }
     /* КД: поле с базой + стрелка с эффективным значением, когда его меняют
        состояния (см. web/src/combat-panel.js и domain.Modifier) */
+    /* Портрет и имя — быстрый вход в карточку бойца (статблок монстра/лист
+       персонажа), см. web/src/combatant-card.js. Класс вешается только тем
+       бойцам, у кого карточка есть, — курсор-палец не обещает лишнего. */
+    .combat-row .combat-card-link { cursor: pointer; }
+    .combat-row .combat-name.combat-card-link:hover { color: var(--accent); }
+    .combat-row .combat-avatar.combat-card-link:hover { box-shadow: 0 0 0 2px var(--accent) inset; }
     .combat-ac-group { display: flex; align-items: center; gap: 4px; }
     .combat-ac-eff { font-size: 11px; color: var(--amber); white-space: nowrap; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
