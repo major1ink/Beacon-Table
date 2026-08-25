@@ -43,6 +43,10 @@ type RoomService interface {
 	// токенам связь реально проставили.
 	LinkTokensToMonsters(ctx context.Context, monsterByActor map[string]string) (int, error)
 	NotifyJournalChanged(id string)
+	// NotifyCharacterSheetChanged — лист персонажа сохранили по HTTP:
+	// комната подтягивает его хиты в бойца трекера, если тот сейчас в
+	// инициативе (см. room_character_hp.go).
+	NotifyCharacterSheetChanged(characterID string)
 }
 
 type inboundMsg struct {
@@ -112,8 +116,12 @@ type Room struct {
 	// ждать занятую горутину комнаты (и уж тем более виснуть на уже
 	// остановленной).
 	journalChanged chan string
-	dirty          bool            // есть хоть одна несохранённая мутация с последнего флаша
-	dirtyScenes    map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
+	// characterSheetChanged — «лист персонажа сохранили» из HTTP-хендлера
+	// (см. NotifyCharacterSheetChanged): свой канал по той же причине и с
+	// теми же свойствами, что journalChanged выше.
+	characterSheetChanged chan string
+	dirty                 bool            // есть хоть одна несохранённая мутация с последнего флаша
+	dirtyScenes           map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
 	// combat — трекер инициативы всего стола (см. domain.CombatState), не
 	// привязан к конкретной сцене — переживает switch_scene. combatDirty —
@@ -182,9 +190,11 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		importScenes:   make(chan importScenesReq),
 		linkTokens:     make(chan linkTokensReq),
 		journalChanged: make(chan string, 32),
-		dirtyScenes:    make(map[string]bool),
-		combat:         combat,
-		hub:            hub,
+
+		characterSheetChanged: make(chan string, 32),
+		dirtyScenes:           make(map[string]bool),
+		combat:                combat,
+		hub:                   hub,
 	}
 	r.scene = r.scenes[r.currentSceneID]
 	r.ambientStartedAtMs = time.Now().UnixMilli() // амбиент активной сцены (если есть) стартует заново при запуске сервера
@@ -512,6 +522,9 @@ func (r *Room) run() {
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
+
+		case characterID := <-r.characterSheetChanged:
+			r.applyCharacterSheetHP(characterID)
 
 		case <-ticker.C:
 			r.flushIfDirty()
@@ -1181,6 +1194,9 @@ func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 			return // combatant уже удалён и разослан внутри killMonsterCombatant
 		}
 	}
+	// Хиты игрового персонажа живут ещё и в его листе — держим их одним
+	// числом (см. room_character_hp.go).
+	r.syncCharacterHP(cmb)
 	r.markCombatDirty()
 	r.broadcastCombat()
 }
@@ -1308,6 +1324,9 @@ func (r *Room) handleSetCombatantDeathSave(id, kind string, value int) {
 		cmb.HPCurrent = 1
 		cmb.DeathSaveSuccess = 0
 		cmb.DeathSaveFail = 0
+		// Стабилизация — тоже правка хитов, лист персонажа должен увидеть
+		// эту единицу (см. room_character_hp.go).
+		r.syncCharacterHP(cmb)
 		r.markCombatDirty()
 		r.broadcastCombat()
 		return
