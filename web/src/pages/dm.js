@@ -456,6 +456,17 @@ const tokenMenuCopyBtn = document.getElementById("tokenMenuCopyBtn");
 const tokenMenuLockBtn = document.getElementById("tokenMenuLockBtn");
 const tokenMenuLockLabel = document.getElementById("tokenMenuLockLabel");
 const tokenMenuDelete = document.getElementById("tokenMenuDelete");
+// menuCombatTokenIds — множество tokenId, у которых уже есть боец в трекере
+// инициативы (см. domain.Combatant.TokenID) — синкается с каждым
+// "combat_state" (см. vtt:combatState ниже). Нужно только чтобы погасить
+// "Добавить в инициативу" у токена, который туда уже добавлен: повторный клик
+// заводил бы ВТОРОГО бойца с тем же TokenID — токен на карте один, вытащить
+// для дубля новый уже неоткуда (см. room.go: handleAddCombatant).
+let menuCombatTokenIds = new Set();
+document.addEventListener("vtt:combatState", (e) => {
+  const combatants = (e.detail && e.detail.combatants) || [];
+  menuCombatTokenIds = new Set(combatants.filter((c) => c.tokenId).map((c) => c.tokenId));
+});
 let menuTokenId = null;
 // menuTokenIds — все id токенов, к которым применится действие в ОТКРЫТОМ
 // СЕЙЧАС меню: обычно [menuTokenId], но при ПКМ по токену, входящему в
@@ -811,10 +822,14 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   // УЖЕ убитого монстра (token.dead) кнопки тоже нет — вернуть его в бой
   // можно только через "Восстановить" на вкладке "Убитые" трекера
   // (см. combat-panel.js), а не заново нахватать ему полного HP шаблона
-  // случайным ПКМ. В пачечном режиме кнопку не гасим по одному токену под
-  // курсором — сами обработчики ниже молча пропускают токены-лампочки и
-  // убитых внутри группы.
-  tokenMenuAddInitiativeBtn.style.display = menuIsMulti || (!menuIsLightOnly && !token.dead) ? "flex" : "none";
+  // случайным ПКМ. У токена, УЖЕ привязанного к бойцу трекера
+  // (menuCombatTokenIds), кнопки тоже нет — иначе повторный клик заводил бы
+  // второго бойца с тем же TokenID без своего токена на карте (баг,
+  // см. handleAddCombatant). В пачечном режиме кнопку не гасим по одному
+  // токену под курсором — сами обработчики ниже молча пропускают
+  // токены-лампочки, убитых и уже добавленных внутри группы.
+  tokenMenuAddInitiativeBtn.style.display =
+    menuIsMulti || (!menuIsLightOnly && !token.dead && !menuCombatTokenIds.has(id)) ? "flex" : "none";
   // "Состояния" — по тому же признаку, что и инициатива: у токена-лампочки
   // (domain.Token.LightOnly) состояний не бывает, он не существо.
   tokenMenuStatusBtn.style.display = menuIsMulti || !menuIsLightOnly ? "flex" : "none";
@@ -856,11 +871,14 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
     syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
   }
 
-  // "Копировать" — пока только у токена света: копия источника вместе с
-  // радиусами и состоянием вкл/выкл вставляется ПКМ по пустому месту карты
-  // (см. #canvasMenu). Для существ такой кнопки осознанно нет — копия
-  // монстра это работа бестиария/трекера, а не буфера обмена карты.
-  tokenMenuCopyBtn.style.display = !menuIsMulti && menuIsLightOnly ? "flex" : "none";
+  // "Копировать" — снимок токена вставляется ПКМ по пустому месту карты
+  // (см. #canvasMenu). Кроме токена света годится для любого существа/
+  // декорации — быстро наплодить одинаковых монстров на карте, не таская
+  // каждый раз новую карточку из бестиария. Токен ИГРОКА (menuCharacterId)
+  // из этого исключён: у персонажа на сцене может быть только один токен
+  // (см. room.go: dropDuplicateCharacterTokens) — паста с тем же
+  // characterId тихо снесла бы оригинал, а не завела вторую фигурку.
+  tokenMenuCopyBtn.style.display = !menuIsMulti && (menuIsLightOnly || !menuCharacterId) ? "flex" : "none";
 
   // Замок — универсальный для всех объектов карты (см. map-objects.js):
   // здесь он на токене, тем же событием vtt:setMapObjectLocked его получат
@@ -966,7 +984,12 @@ tokenMenuCopyBtn.onclick = () => {
   // Копию берём из ЖИВОЙ сцены, а не из снимка, с которым открывали меню:
   // пока меню висело, свет могли переключить двойным кликом или из списка
   // в панели "Освещение".
-  mapClipboard = { kind: "token", object: { ...t } };
+  //
+  // dead/loot/xp/statuses сбрасываем явно — это боевые шрамы КОНКРЕТНОГО
+  // инстанса (см. domain.Token), а копия нужна как раз чтобы поставить на
+  // карту НОВОГО, ещё не участвовавшего в бою монстра. Без сброса паста с
+  // мёртвого гоблина ставила бы на карту готовый труп с чужим лутом.
+  mapClipboard = { kind: "token", object: { ...t, dead: false, loot: [], xp: 0, statuses: [] } };
   closeTokenMenu();
 };
 
@@ -1026,6 +1049,7 @@ tokenMenuAddInitiativeBtn.onclick = () => {
   for (const tokenId of menuTokenIds) {
     const t = tokens[tokenId];
     if (t && (t.lightOnly || t.dead)) continue;
+    if (menuCombatTokenIds.has(tokenId)) continue; // уже боец трекера — см. menuCombatTokenIds
     vtt.send({ type: "add_combatant", tokenId });
   }
   closeTokenMenu();

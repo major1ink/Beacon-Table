@@ -1117,6 +1117,16 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			// кнопку "Восстановить" — handleReviveKilledToken).
 			return
 		}
+		if r.combatantByToken(t.ID) != nil {
+			// Токен уже привязан к бойцу трекера (добавлен через поиск и
+			// вытащен на карту, либо повторный ПКМ → "Добавить в
+			// инициативу" по уже добавленному). Без этой проверки завёлся бы
+			// ВТОРОЙ Combatant с тем же TokenID — на карте у него нет своего
+			// токена (drag на карту заблокирован combat-panel.js: draggable
+			// ставится только при !cmb.tokenId), и вытащить его было бы
+			// некуда: единственный токен уже занят первым бойцом.
+			return
+		}
 		tokenID = t.ID
 		name = t.Label
 		image = t.Image
