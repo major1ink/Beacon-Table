@@ -1525,8 +1525,9 @@ function vHpCard() {
   update();
 
   // Полоску можно потянуть — тот же жест, что у ДМ в трекере инициативы
-  // (см. hp-bar.js): "поставить примерно столько". Точный урон по-прежнему
-  // вбивается дельтой в поле ниже — только он списывает временные хиты.
+  // (см. hp-bar.js): "поставить примерно столько". Вниз это урон дельтой,
+  // так что временные хиты съедаются первыми — как при вводе "-N" в поле
+  // ниже (см. applyHp).
   const bar = h("div", { class: "v-bar", title: "Потяни, чтобы выставить хиты" }, [fill]);
   attachHpDrag(bar, {
     getState: () => ({ current: sheet.combat.hpCurrent || 0, max: effectiveHPMax(sheet) }),
@@ -1536,7 +1537,7 @@ function vHpCard() {
     },
     onCommit: (value) => {
       preview = null;
-      applyHp({ delta: null, value });
+      applyHp({ delta: value - (sheet.combat.hpCurrent || 0), value });
       scheduleSave();
       refreshView();
     },
