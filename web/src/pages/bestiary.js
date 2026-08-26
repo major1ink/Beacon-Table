@@ -52,7 +52,7 @@ function normalizeMonster(raw) {
   m.spells = Array.isArray(m.spells) ? m.spells : [];
   // inventory — шаблон добычи монстра (см. domain.InventoryEntry) — список
   // предметов каталога, снимаемый в Token.Loot убитого токена (см. план
-  // фичи/service.Room.snapshotTokenLoot).
+  // фичи/service.Room.snapshotTokenSpoils).
   m.inventory = Array.isArray(m.inventory) ? m.inventory : [];
   return m;
 }
@@ -61,7 +61,7 @@ function normalizeMonster(raw) {
 // тут в редакторе (сервер при сохранении карточки не проверяет уникальность
 // ID записей — целиком доверяет клиенту, как и остальным полям "умного
 // бланка"; настоящие устойчивые ID запись получает только при снимке в
-// Token.Loot в момент смерти монстра, см. service.Room.snapshotTokenLoot).
+// Token.Loot в момент смерти монстра, см. service.Room.snapshotTokenSpoils).
 function tmpInventoryId() {
   return "tmp-" + Math.random().toString(36).slice(2);
 }

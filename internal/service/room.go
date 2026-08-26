@@ -523,6 +523,18 @@ func (r *Room) run() {
 					r.handleSetLootingEnabled(*im.msg.LootingEnabled)
 				}
 				continue
+			// revive_token — вкладка "Убитые" трекера (см. combatPayload:
+			// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
+			// тот умеет только create_scene-подобные мутации сцены, а тут
+			// нужно ещё очистить Loot/XP и т.п. специфичную для смерти логику.
+			case "revive_token":
+				r.handleReviveKilledToken(im.msg.TokenID)
+				continue
+			// clear_killed_tokens — кнопка "Очистить убитых", см.
+			// handleClearKilledTokens. Без TokenID: чистит весь список разом.
+			case "clear_killed_tokens":
+				r.handleClearKilledTokens()
+				continue
 
 			// ---- хаб лута ДМ (см. domain.LootHub) — своя ветка мутаций, тем
 			// же принципом, что и трекер инициативы: живёт вне r.scene,
@@ -1098,6 +1110,13 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 		if !ok || t.LightOnly {
 			return // токена-лампочки в инициативе не бывает — у него нет "хода"
 		}
+		if t.Dead {
+			// Убитый монстр/NPC так в бой не возвращается — иначе он ожил бы
+			// с полным HP шаблона (см. ветку monsterID != "" ниже), минуя
+			// вкладку "Убитые" трекера, которая для этого и есть (см. её
+			// кнопку "Восстановить" — handleReviveKilledToken).
+			return
+		}
 		tokenID = t.ID
 		name = t.Label
 		image = t.Image
@@ -1343,14 +1362,75 @@ func (r *Room) reviveTokenIfDead(tokenID string) {
 	r.broadcastAll()
 }
 
-// snapshotTokenLoot — вызывается ровно один раз, из killMonsterCombatant, в
+// handleReviveKilledToken — "revive_token" (только ДМ): кнопка
+// "Восстановить" на вкладке "Убитые" трекера инициативы (см. combatPayload:
+// "killed") — в отличие от reviveTokenIfDead выше, это не побочный эффект
+// подлеченного бойца в инициативе (там бойца уже нет, killMonsterCombatant
+// его убрал), а прямая команда ДМ на уже мёртвом токене без комбатанта.
+// Возвращает токену обычный арт вместо костей и очищает снимки смерти
+// (Loot/XP, см. snapshotTokenSpoils) — они больше не описывают труп,
+// повторная смерть этого же токена (новое "add_combatant" + бой) снимет их
+// заново с актуальной карточки монстра.
+//
+// Рассылает ОБА канала, не только сцену: сам Token.Dead живёт в ней
+// (broadcastAll, как и markTokenDead/reviveTokenIfDead выше), но вкладка
+// "Убитые" трекера строится из combat_state (см. combatPayload/
+// killedMonsters), а его отдельно рассылает только broadcastCombat — без
+// него вкладка не увидит, что боец воскрес, до следующей несвязанной
+// мутации трекера.
+func (r *Room) handleReviveKilledToken(tokenID string) {
+	t, ok := r.scene.Tokens[tokenID]
+	if !ok || !t.Dead {
+		return
+	}
+	t.Dead = false
+	t.Loot = nil
+	t.XP = 0
+	r.markDirty(r.scene.ID)
+	r.broadcastAll()
+	r.broadcastCombat()
+}
+
+// handleClearKilledTokens — "clear_killed_tokens" (только ДМ): кнопка
+// "Очистить убитых" над вкладкой "Убитые" трекера — навсегда удаляет с
+// активной сцены ВСЕ токены, которые сейчас попадают в killedMonsters (тот
+// же фильтр: Dead и не игровой персонаж), одним действием вместо ПКМ →
+// "Удалить" по каждому трупу. В отличие от handleReviveKilledToken это не
+// "вернуть к жизни", а "выбросить труп" — Loot, если его не забрали,
+// пропадает вместе с токеном безвозвратно (клиент это подтверждает у ДМ
+// перед отправкой, см. combat-panel.js).
+func (r *Room) handleClearKilledTokens() {
+	removed := false
+	for id, t := range r.scene.Tokens {
+		if t.Dead && t.CharacterID == "" {
+			delete(r.scene.Tokens, id)
+			removed = true
+		}
+	}
+	if !removed {
+		return
+	}
+	r.markDirty(r.scene.ID)
+	r.broadcastAll()
+	// Как и у revive_token выше: список вкладки "Убитые" живёт в
+	// combat_state, его нужно разослать отдельно, иначе он не увидит, что
+	// трупы пропали, до следующей несвязанной мутации трекера.
+	r.broadcastCombat()
+}
+
+// snapshotTokenSpoils — вызывается ровно один раз, из killMonsterCombatant, в
 // момент смерти монстра: КОПИРУЕТ (не ссылается на) текущий
 // Monster.Inventory этого монстра в Token.Loot убитого токена, с новыми ID
-// на каждую запись. Копия, а не общая ссылка на шаблон — так лутание одного
-// трупа не трогает "склад" шаблона бестиария и других уже стоящих на карте
-// токенов того же монстра (см. план фичи). monsterID == "" (голый NPC-токен
-// без карточки бестиария за спиной) — тихо ничего не делает, лутить нечего.
-func (r *Room) snapshotTokenLoot(tokenID, monsterID string) {
+// на каждую запись, и снимает опыт за его CR в Token.XP (см. CRToXP). Копия
+// лута, а не общая ссылка на шаблон — так лутание одного трупа не трогает
+// "склад" шаблона бестиария и других уже стоящих на карте токенов того же
+// монстра (см. план фичи); опыт снят числом по той же причине — карточка
+// монстра может измениться или быть удалена уже после его смерти, а вкладка
+// "Убитые" трекера инициативы должна продолжать показывать то, за что его
+// реально убили. monsterID == "" (голый NPC-токен без карточки бестиария за
+// спиной) — тихо ничего не делает: лутить нечего, опыт по таблице CR не
+// посчитать.
+func (r *Room) snapshotTokenSpoils(tokenID, monsterID string) {
 	if tokenID == "" || monsterID == "" || r.monsters == nil {
 		return
 	}
@@ -1359,15 +1439,18 @@ func (r *Room) snapshotTokenLoot(tokenID, monsterID string) {
 		return
 	}
 	m, err := r.monsters.Get(context.Background(), monsterID)
-	if err != nil || len(m.Inventory) == 0 {
+	if err != nil {
 		return
 	}
-	loot := make([]domain.InventoryEntry, len(m.Inventory))
-	for i, e := range m.Inventory {
-		e.ID = "loot-" + newID()
-		loot[i] = e
+	if len(m.Inventory) > 0 {
+		loot := make([]domain.InventoryEntry, len(m.Inventory))
+		for i, e := range m.Inventory {
+			e.ID = "loot-" + newID()
+			loot[i] = e
+		}
+		t.Loot = loot
 	}
-	t.Loot = loot
+	t.XP = domain.CRToXP(m.CR)
 	r.markDirty(r.scene.ID)
 }
 
@@ -1378,10 +1461,11 @@ func (r *Room) snapshotTokenLoot(tokenID, monsterID string) {
 // требование "заменить токен на отображение костей".
 func (r *Room) killMonsterCombatant(cmb *domain.Combatant) {
 	id := cmb.ID
-	// Снимок лута ДО markTokenDead: тот сам шлёт broadcastAll (см. его
-	// комментарий) — если поставить его раньше, Loot уйдёт клиентам только
-	// следующей несвязанной мутацией сцены, а не сразу со смертью токена.
-	r.snapshotTokenLoot(cmb.TokenID, cmb.MonsterID)
+	// Снимок лута и опыта ДО markTokenDead: тот сам шлёт broadcastAll (см.
+	// его комментарий) — если поставить его раньше, Loot/XP уйдут клиентам
+	// только следующей несвязанной мутацией сцены, а не сразу со смертью
+	// токена.
+	r.snapshotTokenSpoils(cmb.TokenID, cmb.MonsterID)
 	r.markTokenDead(cmb.TokenID)
 	delete(r.combat.Combatants, id)
 	if r.combat.CurrentID == id {
@@ -1687,11 +1771,41 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		}
 		combatants = append(combatants, entry)
 	}
-	return map[string]any{
+	payload := map[string]any{
 		"type": "combat_state", "active": r.combat.Active, "round": r.combat.Round,
 		"currentId": r.combat.CurrentID, "combatants": combatants, "showHp": r.combat.ShowHP,
 		"lootingEnabled": r.combat.LootingEnabled,
 	}
+	if isDM {
+		payload["killed"] = r.killedMonsters()
+	}
+	return payload
+}
+
+// killedMonsters — вкладка "Убитые" трекера инициативы: все токены активной
+// сцены, помеченные Dead (см. Token.Dead), КРОМЕ игровых персонажей
+// (CharacterID != "" — тот умирает по своим правилам спасбросков, опыта за
+// него не начисляют и лутать его не заказывали, см. handleSetCombatantDeathSave).
+// Только ДМ (см. combatPayload) — то же самое место, откуда ДМ раньше лутал
+// и добавлял в инициативу через ПКМ-меню токена, просто собранное в один
+// список вместо блуждания по карте. Порядок — по имени, для стабильного
+// списка (в отличие от Combatants выше, тут нет инициативы, которая давала
+// бы естественный порядок).
+func (r *Room) killedMonsters() []map[string]any {
+	out := make([]map[string]any, 0)
+	for _, t := range r.scene.Tokens {
+		if !t.Dead || t.CharacterID != "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"tokenId": t.ID, "name": t.Label, "image": t.Image, "color": t.Color,
+			"monsterId": t.MonsterID, "xp": t.XP, "loot": t.Loot,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i]["name"].(string) < out[j]["name"].(string)
+	})
+	return out
 }
 
 // broadcastCombat шлёт каждому клиенту его версию трекера (см. combatPayload)

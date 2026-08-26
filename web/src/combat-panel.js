@@ -22,6 +22,8 @@ import { openActionsPeek, closeActionsPeek } from "./combat-actions-peek.js";
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "./combatant-card.js";
 import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "./hp-bar.js";
 import { icon } from "./icons.js";
+import { showLootTakeModal } from "./loot-take-modal.js";
+import { showAlert, showConfirm } from "./modal.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
 
 // FOLLOW_KEY — режим "статблок следует за ходом" переживает перезагрузку
@@ -36,6 +38,12 @@ export function initCombatPanel({ send, els }) {
   // monsterId или characterId (см. domain.ClientMsg/room.go: handleAddCombatant,
   // третий источник — карточка игрока напрямую, без токена на карте).
   let searchList = [];
+  // latestKilled — вкладка "Убитые": снимок combat_state.killed (см.
+  // internal/service/room.go: killedMonsters) — все Dead-токены активной
+  // сцены, кроме игровых персонажей. Отдельный от latestCombat список,
+  // потому что это НЕ бойцы трекера — killMonsterCombatant удаляет их из
+  // Combatants в момент смерти, а эти данные читаются прямо со сцены.
+  let latestKilled = [];
 
   function renderPanel() {
     els.startBtn.style.display = latestCombat.active ? "none" : "flex";
@@ -301,6 +309,137 @@ export function initCombatPanel({ send, els }) {
     }
   }
 
+  // ---- вкладка "Убитые" ----
+  // Отдельная от основного трекера вкладка (см. requirement: "запретить
+  // добавлять убитых монстров в инициативу, завести для них отдельную
+  // вкладку"): труп сюда попадает сам, как только сервер помечает его токен
+  // Dead (killMonsterCombatant/handleSetCombatantDeathSave), без действий
+  // ДМ. Отсюда же — опыт за убийство (Token.XP, снятый сервером с CR
+  // монстра в момент смерти, см. domain.CRToXP), восстановление
+  // (revive_token) и раздача добычи (loot_take_item — тот же WS-путь и та
+  // же модалка, что и у "Лутить" в ПКМ-меню токена на карте).
+  //
+  // Элементы вкладок (tabTrackerBtn/tabKilledBtn/trackerTab/killedTab) есть
+  // и у встроенной панели, и у вынесенного окна (см. dm.html/
+  // combat-tracker.html) — разметка идентична, поведение тут одно на обоих.
+  function switchCombatTab(name) {
+    const killed = name === "killed";
+    els.tabTrackerBtn.classList.toggle("active", !killed);
+    els.tabKilledBtn.classList.toggle("active", killed);
+    els.trackerTab.style.display = killed ? "none" : "";
+    els.killedTab.style.display = killed ? "" : "none";
+  }
+  els.tabTrackerBtn.onclick = () => switchCombatTab("tracker");
+  els.tabKilledBtn.onclick = () => switchCombatTab("killed");
+
+  // "Очистить убитых" — навсегда удаляет с карты ВСЕ трупы разом (см.
+  // internal/service/room.go: handleClearKilledTokens), одной командой без
+  // TokenID — сервер сам решает, кто сейчас попадает под список "Убитые".
+  // Необратимо и уносит с собой ещё не разобранную добычу, поэтому —
+  // подтверждение с явным предупреждением, danger как у остальных кнопок
+  // удаления в приложении.
+  els.killedClearBtn.onclick = async () => {
+    const hasLoot = latestKilled.some((k) => Array.isArray(k.loot) && k.loot.length > 0);
+    const ok = await showConfirm(`Очистить всех убитых (${latestKilled.length})?`, {
+      title: "Очистить убитых",
+      danger: true,
+      hint: hasLoot
+        ? "Их токены будут удалены с карты навсегда — вместе с ещё не разобранной добычей."
+        : "Их токены будут удалены с карты навсегда.",
+    });
+    if (ok) send({ type: "clear_killed_tokens" });
+  };
+
+  function renderKilledPanel() {
+    els.tabKilledBtn.textContent = latestKilled.length ? `Убитые (${latestKilled.length})` : "Убитые";
+    els.killedClearBtn.style.display = latestKilled.length ? "flex" : "none";
+    els.killedList.innerHTML = "";
+    if (latestKilled.length === 0) {
+      els.killedSummary.textContent = "";
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = "Убитых монстров пока нет — они попадают сюда сами, как только HP дойдёт до нуля.";
+      els.killedList.appendChild(empty);
+      return;
+    }
+    const totalXp = latestKilled.reduce((sum, k) => sum + (k.xp || 0), 0);
+    els.killedSummary.textContent = totalXp > 0 ? `Опыт партии за убитых: ${totalXp}` : "";
+
+    for (const k of latestKilled) {
+      const row = document.createElement("div");
+      row.className = "combat-row killed-row";
+
+      const top = document.createElement("div");
+      top.className = "combat-row-top";
+      const avatar = document.createElement("div");
+      avatar.className = "combat-avatar";
+      if (k.image) avatar.style.backgroundImage = `url("${k.image}")`;
+      else avatar.style.background = k.color || "#555";
+      const name = document.createElement("div");
+      name.className = "combat-name";
+      name.textContent = k.name;
+      name.title = k.name;
+      top.append(avatar, name);
+      row.appendChild(top);
+
+      const meta = document.createElement("p");
+      meta.className = "hint killed-meta";
+      meta.textContent = k.xp ? `${k.xp} XP` : "Опыт неизвестен — нет карточки монстра в бестиарии";
+      row.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "killed-actions";
+
+      const reviveBtn = document.createElement("button");
+      reviveBtn.type = "button";
+      reviveBtn.className = "tool-btn";
+      reviveBtn.textContent = "Восстановить";
+      reviveBtn.title = "Снять метку смерти — монстр снова живой (в бой возвращается через «+ Добавить»/ПКМ на токене, с полным HP)";
+      reviveBtn.onclick = async () => {
+        const ok = await showConfirm(`Восстановить «${k.name}»?`, {
+          title: "Восстановить монстра",
+          hint: "Метка «мёртв» и оставшаяся добыча будут сброшены. В инициативу его нужно будет добавить заново.",
+        });
+        if (ok) send({ type: "revive_token", tokenId: k.tokenId });
+      };
+      actions.appendChild(reviveBtn);
+
+      if (Array.isArray(k.loot) && k.loot.length > 0) {
+        const lootBtn = document.createElement("button");
+        lootBtn.type = "button";
+        lootBtn.className = "tool-btn";
+        lootBtn.textContent = "Забрать лут";
+        lootBtn.onclick = async () => {
+          let chars = [];
+          try {
+            chars = await fetchAdminCharacters();
+          } catch (err) {
+            showAlert("Не удалось загрузить список персонажей: " + err.message);
+            return;
+          }
+          const characters = chars.map((c) => ({
+            id: c.id,
+            name: c.accountUsername ? `${c.name} (${c.accountUsername})` : c.name,
+          }));
+          const tokenId = k.tokenId;
+          showLootTakeModal({
+            title: "Труп: " + (k.name || "монстр"),
+            entries: k.loot,
+            characters,
+            onTake: (entryId, quantity, characterId) => {
+              send({ type: "loot_take_item", tokenId, entryId, characterId, quantity });
+              return Promise.resolve();
+            },
+          });
+        };
+        actions.appendChild(lootBtn);
+      }
+
+      row.appendChild(actions);
+      els.killedList.appendChild(row);
+    }
+  }
+
   // ---- "Следовать за ходом" ----
   // Держать перед глазами действия того, чей сейчас ход: тот же компактный
   // попап, что открывает кнопка ⚔ в строке (см. combat-actions-peek.js), но
@@ -359,7 +498,14 @@ export function initCombatPanel({ send, els }) {
 
   document.addEventListener("vtt:combatState", (e) => {
     latestCombat = e.detail;
+    // killed — только у ДМ (см. combatPayload в room.go): игрок/TV это
+    // сообщение тоже получают, но без этого поля — latestKilled у них
+    // просто останется пустым, и вкладка "Убитые" будет пустой (сама
+    // вкладка всё равно есть только во встроенной ДМ-панели/её плавающем
+    // окне, но модуль общий, лишняя проверка тут не помешает).
+    latestKilled = Array.isArray(e.detail.killed) ? e.detail.killed : [];
     renderPanel();
+    renderKilledPanel();
     syncFollow();
     // Палитра состояний, если она сейчас открыта, живёт вне этой панели
     // (document.body) — её надо перерисовать отдельно, иначе после наложения
@@ -460,6 +606,7 @@ export function initCombatPanel({ send, els }) {
   els.search.oninput = renderSearchResults;
 
   renderPanel(); // начальный (пустой) рендер — до первого "combat_state" с сервера
+  renderKilledPanel();
 }
 
 // hpBarRow — полоска хитов под характеристиками бойца плюс узкое поле

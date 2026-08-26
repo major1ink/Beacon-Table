@@ -807,10 +807,14 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuBestiaryBtn.style.display = !menuIsMulti && menuMonsterId ? "flex" : "none";
   // "Добавить в инициативу" — у токена света своего "хода" не бывает (см.
   // domain.Token.LightOnly), в остальном доступно любому существу — и
-  // игрока, и монстра, и голому NPC-токену без карточки бестиария/листа.
-  // В пачечном режиме кнопку не гасим по одному токену под курсором — сами
-  // обработчики ниже молча пропускают токены-лампочки внутри группы.
-  tokenMenuAddInitiativeBtn.style.display = menuIsMulti || !menuIsLightOnly ? "flex" : "none";
+  // игрока, и монстра, и голому NPC-токену без карточки бестиария/листа. У
+  // УЖЕ убитого монстра (token.dead) кнопки тоже нет — вернуть его в бой
+  // можно только через "Восстановить" на вкладке "Убитые" трекера
+  // (см. combat-panel.js), а не заново нахватать ему полного HP шаблона
+  // случайным ПКМ. В пачечном режиме кнопку не гасим по одному токену под
+  // курсором — сами обработчики ниже молча пропускают токены-лампочки и
+  // убитых внутри группы.
+  tokenMenuAddInitiativeBtn.style.display = menuIsMulti || (!menuIsLightOnly && !token.dead) ? "flex" : "none";
   // "Состояния" — по тому же признаку, что и инициатива: у токена-лампочки
   // (domain.Token.LightOnly) состояний не бывает, он не существо.
   tokenMenuStatusBtn.style.display = menuIsMulti || !menuIsLightOnly ? "flex" : "none";
@@ -1010,13 +1014,18 @@ tokenMenuBestiaryBtn.onclick = () => {
 // "Добавить в инициативу" — при пачечном выделении шлёт add_combatant по
 // одному сообщению на каждый токен (батч-команды сервер не знает, см.
 // room.go: handleAddCombatant); токены-лампочки (domain.Token.LightOnly)
-// внутри группы молча пропускаем — своего "хода" у них не бывает.
+// внутри группы молча пропускаем — своего "хода" у них не бывает. Убитых
+// (token.dead) — тоже: иначе монстр вернулся бы в бой с полным HP шаблона
+// заново, минуя вкладку "Убитые" трекера, которая для этого и есть
+// (restore/лут — см. combat-panel.js). Сервер (handleAddCombatant) это же
+// правило перепроверяет сам — тут только чтобы не улетал заведомо бесполезный
+// WS-запрос и не мигал список инициативы лишний раз.
 tokenMenuAddInitiativeBtn.onclick = () => {
   if (!menuTokenIds.length) return;
   const tokens = vtt.getScene().tokens || {};
   for (const tokenId of menuTokenIds) {
     const t = tokens[tokenId];
-    if (t && t.lightOnly) continue;
+    if (t && (t.lightOnly || t.dead)) continue;
     vtt.send({ type: "add_combatant", tokenId });
   }
   closeTokenMenu();
@@ -3141,6 +3150,15 @@ initCombatPanel({
     // странице и нигде больше (см. combat-panel.js: почему кнопки нет в
     // вынесенном окне трекера).
     followBtn: document.getElementById("combatFollowBtn"),
+    // вкладки "Инициатива"/"Убитые" (см. combat-panel.js: switchCombatTab) —
+    // разметка идентична вынесенному окну трекера (combat-tracker.html).
+    tabTrackerBtn: document.getElementById("combatTabTrackerBtn"),
+    tabKilledBtn: document.getElementById("combatTabKilledBtn"),
+    trackerTab: document.getElementById("combatTrackerTab"),
+    killedTab: document.getElementById("combatKilledTab"),
+    killedList: document.getElementById("combatKilledList"),
+    killedSummary: document.getElementById("combatKilledSummary"),
+    killedClearBtn: document.getElementById("combatKilledClearBtn"),
   },
 });
 

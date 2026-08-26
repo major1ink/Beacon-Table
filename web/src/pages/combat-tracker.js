@@ -59,6 +59,14 @@ import { initCombatPanel } from "../combat-panel.js";
       search: document.getElementById("combatSearch"),
       searchResults: document.getElementById("combatSearchResults"),
       list: document.getElementById("combatList"),
+      // вкладки "Инициатива"/"Убитые" (см. combat-panel.js: switchCombatTab)
+      tabTrackerBtn: document.getElementById("combatTabTrackerBtn"),
+      tabKilledBtn: document.getElementById("combatTabKilledBtn"),
+      trackerTab: document.getElementById("combatTrackerTab"),
+      killedTab: document.getElementById("combatKilledTab"),
+      killedList: document.getElementById("combatKilledList"),
+      killedSummary: document.getElementById("combatKilledSummary"),
+      killedClearBtn: document.getElementById("combatKilledClearBtn"),
     },
   });
 })();
