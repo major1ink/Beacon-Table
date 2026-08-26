@@ -1,4 +1,4 @@
-import{h as V,d as q,i as G}from"./api-m72PrEiY.js";import{w as Q}from"./catalog-links-DQW6UocY.js";import{c as K,o as W,a as X}from"./combatant-card-BdeWBwwH.js";import{i as M}from"./modal-ClzvMhHz.js";import{e as D}from"./inline-rolls-BdFQkweV.js";import{r as J}from"./markdown-DTEMrdvN.js";import{r as Z,o as ee,a as te,h as ne,b as ae,p as oe,c as ce}from"./status-palette-DRNvIm_w.js";const ie=`
+import{h as V,d as q,i as G}from"./api-m72PrEiY.js";import{w as Q}from"./catalog-links-DQW6UocY.js";import{c as K,o as W,a as X}from"./combatant-card-BdeWBwwH.js";import{i as M}from"./modal-ClzvMhHz.js";import{e as D}from"./inline-rolls-BdFQkweV.js";import{r as J}from"./markdown-DTEMrdvN.js";import{r as Z,o as ee,a as te,h as ne,b as ae,p as oe,c as ce}from"./status-palette-Cwczu3Yg.js";const ie=`
 .actions-peek {
   position: fixed; z-index: 60; width: 360px; max-width: calc(100vw - 16px); max-height: 74vh; overflow: auto;
   display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px;

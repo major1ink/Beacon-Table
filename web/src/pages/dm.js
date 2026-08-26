@@ -433,6 +433,8 @@ document.addEventListener("vtt:sceneUpdated", (e) => {
 // ================= контекстное меню токена =================
 const tokenMenu = document.getElementById("tokenMenu");
 const tokenMenuLightHeader = document.getElementById("tokenMenuLightHeader");
+const tokenMenuMultiHeader = document.getElementById("tokenMenuMultiHeader");
+const tokenMenuMultiHeaderText = document.getElementById("tokenMenuMultiHeaderText");
 const tokenMenuSheetBtn = document.getElementById("tokenMenuSheetBtn");
 const tokenMenuBestiaryBtn = document.getElementById("tokenMenuBestiaryBtn");
 const tokenMenuAddInitiativeBtn = document.getElementById("tokenMenuAddInitiativeBtn");
@@ -455,6 +457,12 @@ const tokenMenuLockBtn = document.getElementById("tokenMenuLockBtn");
 const tokenMenuLockLabel = document.getElementById("tokenMenuLockLabel");
 const tokenMenuDelete = document.getElementById("tokenMenuDelete");
 let menuTokenId = null;
+// menuTokenIds — все id токенов, к которым применится действие в ОТКРЫТОМ
+// СЕЙЧАС меню: обычно [menuTokenId], но при ПКМ по токену, входящему в
+// групповое выделение (interaction.js: contextmenu, поле ids в detail
+// vtt:tokenContextMenu), сюда попадает весь состав выделения — тогда меню
+// сокращается до пачечных действий (см. vtt:tokenContextMenu ниже).
+let menuTokenIds = [];
 let menuCharacterId = ""; // characterId токена в открытом сейчас меню — "" у обычных NPC-токенов
 let menuCharacterLabel = ""; // token.label того же токена — для заголовка плавающего окна листа
 let menuMonsterId = ""; // monsterId токена в открытом сейчас меню — "" у токенов без привязки к бестиарию
@@ -478,6 +486,7 @@ let menuTokenLoot = [];
 function closeTokenMenu() {
   tokenMenu.style.display = "none";
   menuTokenId = null;
+  menuTokenIds = [];
   menuTokenLocked = false;
   menuCharacterId = "";
   menuCharacterLabel = "";
@@ -771,47 +780,67 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
-  const { id, token, pageX, pageY } = e.detail;
+  const { id, token, ids, pageX, pageY } = e.detail;
   menuTokenId = id;
+  menuTokenIds = Array.isArray(ids) && ids.length ? ids : [id];
+  // Пачечный режим — ПКМ пришёлся по одному из группового выделения (см.
+  // interaction.js: contextmenu). Меню сокращается до действий, осмысленных
+  // сразу для НЕСКОЛЬКИХ токенов (инициатива/состояния/свет/удаление, см.
+  // требование "нельзя добавить в инициативу всю пачку разом") — лист
+  // персонажа, статблок, лут, форма и замок остаются штучными: они не имеют
+  // единого смысла для разнородной группы.
+  const menuIsMulti = menuTokenIds.length > 1;
   menuCharacterId = token.characterId || "";
   menuCharacterLabel = token.label || "";
   menuMonsterId = token.monsterId || "";
-  menuIsLightOnly = !!token.lightOnly;
+  menuIsLightOnly = !menuIsMulti && !!token.lightOnly;
+  tokenMenuMultiHeaderText.textContent = `выбрано токенов: ${menuTokenIds.length}`;
+  tokenMenuMultiHeader.style.display = menuIsMulti ? "flex" : "none";
   tokenMenuLightHeader.style.display = menuIsLightOnly ? "flex" : "none";
   // редактировать карточку персонажа прямо из его токена, не только
   // из панели "Персонажи". У токена света персонажа не бывает (см.
   // domain.Token.LightOnly), поэтому эта кнопка с ним не пересекается.
-  tokenMenuSheetBtn.style.display = menuCharacterId ? "flex" : "none";
+  tokenMenuSheetBtn.style.display = !menuIsMulti && menuCharacterId ? "flex" : "none";
   // тот же приём для монстров бестиария (см. domain.Token.MonsterID) —
   // токены персонажей и монстров не пересекаются (характер и бестиарий не
   // ставятся на один токен), поэтому оба флага независимы.
-  tokenMenuBestiaryBtn.style.display = menuMonsterId ? "flex" : "none";
+  tokenMenuBestiaryBtn.style.display = !menuIsMulti && menuMonsterId ? "flex" : "none";
   // "Добавить в инициативу" — у токена света своего "хода" не бывает (см.
   // domain.Token.LightOnly), в остальном доступно любому существу — и
   // игрока, и монстра, и голому NPC-токену без карточки бестиария/листа.
-  tokenMenuAddInitiativeBtn.style.display = menuIsLightOnly ? "none" : "flex";
+  // В пачечном режиме кнопку не гасим по одному токену под курсором — сами
+  // обработчики ниже молча пропускают токены-лампочки внутри группы.
+  tokenMenuAddInitiativeBtn.style.display = menuIsMulti || !menuIsLightOnly ? "flex" : "none";
   // "Состояния" — по тому же признаку, что и инициатива: у токена-лампочки
   // (domain.Token.LightOnly) состояний не бывает, он не существо.
-  tokenMenuStatusBtn.style.display = menuIsLightOnly ? "none" : "flex";
+  tokenMenuStatusBtn.style.display = menuIsMulti || !menuIsLightOnly ? "flex" : "none";
   // "Лутить" — только у мёртвого токена (кости, см. domain.Token.Dead) с
   // непустым Loot; тумблер CombatState.LootingEnabled тут не проверяем — он
   // ограничивает только ИГРОКОВ (см. authorize в room.go), ДМ раздаёт лут
-  // вручную в любой момент.
-  menuTokenLoot = Array.isArray(token.loot) ? token.loot : [];
-  tokenMenuLootBtn.style.display = token.dead && menuTokenLoot.length ? "flex" : "none";
-  tokenMenuHiddenRow.style.display = menuIsLightOnly ? "none" : "flex";
-  tokenMenuShapeRow.style.display = menuIsLightOnly ? "none" : "flex";
+  // вручную в любой момент. Штучное действие — в пачке трупы лутаются по
+  // одному, разбор общего лута сразу нескольких тел не заказывали.
+  menuTokenLoot = !menuIsMulti && Array.isArray(token.loot) ? token.loot : [];
+  tokenMenuLootBtn.style.display = !menuIsMulti && token.dead && menuTokenLoot.length ? "flex" : "none";
+  tokenMenuHiddenRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
+  tokenMenuShapeRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
   tokenMenuLightRow.style.display = menuIsLightOnly ? "none" : "flex";
   tokenMenuLightToggleBtn.style.display = menuIsLightOnly ? "flex" : "none";
   // У токена персонажа игрока свет — это не "токен-лампочка", а факел/фонарь
   // у него в руках, поэтому формулировка чекбокса другая (сама механика
-  // радиусов ниже та же самая, см. TokenLight).
-  tokenMenuLightLabel.textContent = menuCharacterId ? "Держит факел" : "источник света";
+  // радиусов ниже та же самая, см. TokenLight). В пачке настройки не читаем
+  // ни с одного конкретного токена (у каждого могут быть свои) — чекбокс
+  // всегда стартует выключенным, чтобы случайно не залить всем чужой свет;
+  // включили — одинаковые ярк./тускл. уйдут сразу всем выделенным, а
+  // поправить каждого по отдельности можно потом обычным одиночным меню.
+  tokenMenuLightLabel.textContent = menuIsMulti ? "источник света — всем выделенным" : menuCharacterId ? "Держит факел" : "источник света";
 
-  tokenMenuLightBright.value = (token.light && token.light.bright) || 0;
-  tokenMenuLightDim.value = (token.light && token.light.dim) || 0;
+  tokenMenuLightBright.value = menuIsMulti ? 0 : (token.light && token.light.bright) || 0;
+  tokenMenuLightDim.value = menuIsMulti ? 0 : (token.light && token.light.dim) || 0;
 
-  if (menuIsLightOnly) {
+  if (menuIsMulti) {
+    tokenMenuLight.checked = false;
+    syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+  } else if (menuIsLightOnly) {
     menuLightEnabled = !!(token.light && token.light.enabled);
     updateLightToggleBtnLabel();
     tokenMenuLightBrightField.classList.add("visible");
@@ -827,7 +856,7 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   // радиусами и состоянием вкл/выкл вставляется ПКМ по пустому месту карты
   // (см. #canvasMenu). Для существ такой кнопки осознанно нет — копия
   // монстра это работа бестиария/трекера, а не буфера обмена карты.
-  tokenMenuCopyBtn.style.display = menuIsLightOnly ? "flex" : "none";
+  tokenMenuCopyBtn.style.display = !menuIsMulti && menuIsLightOnly ? "flex" : "none";
 
   // Замок — универсальный для всех объектов карты (см. map-objects.js):
   // здесь он на токене, тем же событием vtt:setMapObjectLocked его получат
@@ -850,9 +879,11 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   // Единственное исключение — токен, который УЖЕ заперт: кнопку
   // показываем в любом случае, иначе запертое до появления этого правила
   // нечем было бы освободить.
-  const menuIsMapDecor = menuIsLightOnly || !!token.decor;
-  menuTokenLocked = !!token.locked;
-  tokenMenuLockBtn.style.display = menuIsMapDecor || menuTokenLocked ? "flex" : "none";
+  // Штучное действие — замок группе целиком не имеет смысла (это про одно
+  // конкретное место на карте), поэтому в пачечном режиме просто прячем.
+  const menuIsMapDecor = !menuIsMulti && (menuIsLightOnly || !!token.decor);
+  menuTokenLocked = !menuIsMulti && !!token.locked;
+  tokenMenuLockBtn.style.display = !menuIsMulti && (menuIsMapDecor || menuTokenLocked) ? "flex" : "none";
   tokenMenuLockLabel.textContent = menuTokenLocked ? "Разблокировать" : "Заблокировать";
   applyTokenMenuLockState();
 
@@ -976,25 +1007,44 @@ tokenMenuBestiaryBtn.onclick = () => {
   closeTokenMenu();
 };
 
+// "Добавить в инициативу" — при пачечном выделении шлёт add_combatant по
+// одному сообщению на каждый токен (батч-команды сервер не знает, см.
+// room.go: handleAddCombatant); токены-лампочки (domain.Token.LightOnly)
+// внутри группы молча пропускаем — своего "хода" у них не бывает.
 tokenMenuAddInitiativeBtn.onclick = () => {
-  if (!menuTokenId) return;
-  vtt.send({ type: "add_combatant", tokenId: menuTokenId });
+  if (!menuTokenIds.length) return;
+  const tokens = vtt.getScene().tokens || {};
+  for (const tokenId of menuTokenIds) {
+    const t = tokens[tokenId];
+    if (t && t.lightOnly) continue;
+    vtt.send({ type: "add_combatant", tokenId });
+  }
   closeTokenMenu();
 };
 
 // tokenMenuStatusBtn — "Состояния": палитра наложения метки прямо с карты,
 // аналог палитры статусов в Token HUD у Foundry (см. status-palette.js —
 // тот же модуль, что и "+" в карточке бойца трекера). Меню токена при этом
-// закрывается: палитра встаёт на его место и дальше живёт сама.
+// закрывается: палитра встаёт на его место и дальше живёт сама. При
+// пачечном выделении палитра получает весь список id (target.tokenIds) —
+// каждый клик по иконке уходит всем сразу (см. status-palette.js:
+// targetList/dispatch), а "активной" подсвечивается только метка, висящая
+// СРАЗУ на всех, иначе клик по ней визуально снял бы её лишь с части.
 tokenMenuStatusBtn.onclick = (e) => {
-  if (!menuTokenId) return;
-  const tokenId = menuTokenId; // menuTokenId обнулится в closeTokenMenu ниже
-  const title = menuCharacterLabel;
+  if (!menuTokenIds.length) return;
+  const tokens = vtt.getScene().tokens || {};
+  // Токены-лампочки внутри группы — не существа, состояний не бывает (тот
+  // же признак, что и у инициативы выше) — исключаем их из цели палитры.
+  const tokenIds = menuTokenIds.filter((tokenId) => !(tokens[tokenId] && tokens[tokenId].lightOnly));
+  if (!tokenIds.length) return;
+  const isSingle = tokenIds.length === 1;
+  const tokenId = tokenIds[0];
+  const title = isSingle ? menuCharacterLabel : `выбрано токенов: ${tokenIds.length}`;
   closeTokenMenu();
   openStatusPalette({
     x: e.clientX,
     y: e.clientY,
-    target: { tokenId },
+    target: isSingle ? { tokenId } : { tokenIds },
     send: vtt.send,
     title,
     // Читаем метки из ЖИВОЙ сцены на каждый рендер палитры, а не из снимка
@@ -1002,8 +1052,11 @@ tokenMenuStatusBtn.onclick = (e) => {
     // "vtt:toggleTokenLight" ниже: пока палитра открыта, сцена приходит с
     // сервера ещё много раз.
     statusesFor: () => {
-      const t = (vtt.getScene().tokens || {})[tokenId];
-      return (t && t.statuses) || [];
+      const liveTokens = vtt.getScene().tokens || {};
+      if (isSingle) return (liveTokens[tokenId] && liveTokens[tokenId].statuses) || [];
+      const lists = tokenIds.map((id) => (liveTokens[id] && liveTokens[id].statuses) || []);
+      const [first, ...rest] = lists;
+      return (first || []).filter((st) => rest.every((list) => list.some((o) => o.slug === st.slug)));
     },
   });
 };
@@ -1055,11 +1108,18 @@ tokenMenuShape.onchange = () => {
   );
 };
 
+// sendTokenMenuLight — шлёт одни и те же настройки света на каждый токен в
+// menuTokenIds (для одиночного меню это всегда [menuTokenId], для пачечного
+// — весь состав выделения: "Добавить источник света с одними и теми же
+// настройками", дальше каждый токен можно поправить отдельно через его
+// собственное одиночное меню — оно всегда читает АКТУАЛЬНОЕ состояние).
 function sendTokenMenuLight() {
-  if (!menuTokenId) return;
+  if (!menuTokenIds.length) return;
   const enabled = menuIsLightOnly ? menuLightEnabled : tokenMenuLight.checked;
   const light = { enabled, bright: +tokenMenuLightBright.value || 0, dim: +tokenMenuLightDim.value || 0 };
-  document.dispatchEvent(new CustomEvent("vtt:setTokenLight", { detail: { id: menuTokenId, light } }));
+  for (const id of menuTokenIds) {
+    document.dispatchEvent(new CustomEvent("vtt:setTokenLight", { detail: { id, light } }));
+  }
 }
 tokenMenuLight.onchange = () => {
   syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
@@ -1082,8 +1142,12 @@ tokenMenuLightToggleBtn.onclick = () => {
 };
 
 tokenMenuDelete.onclick = () => {
-  if (!menuTokenId) return;
-  document.dispatchEvent(new CustomEvent("vtt:removeToken", { detail: { id: menuTokenId } }));
+  if (!menuTokenIds.length) return;
+  // vtt:removeToken сам чистит id из selectedTokenIds по одному (см.
+  // interaction.js) — дёргаем его по кругу, отдельного батч-события не надо.
+  for (const id of menuTokenIds) {
+    document.dispatchEvent(new CustomEvent("vtt:removeToken", { detail: { id } }));
+  }
   closeTokenMenu();
 };
 

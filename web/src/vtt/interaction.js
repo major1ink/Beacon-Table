@@ -1278,9 +1278,15 @@ export function createInteraction(ctx) {
 
       const hitId = dmTokenAt(x, y);
       if (hitId) {
+        // ids — весь состав группового выделения, если ПКМ пришёлся по
+        // токену, который в него входит (и выделено больше одного) — тогда
+        // pages/dm.js открывает урезанное "пачечное" меню и применяет
+        // действия (инициатива/состояния/свет/удаление) сразу ко всем.
+        // Промах мимо выделения или одиночный токен — как раньше, id один.
+        const ids = selectedTokenIds.size > 1 && selectedTokenIds.has(hitId) ? [...selectedTokenIds] : [hitId];
         document.dispatchEvent(
           new CustomEvent("vtt:tokenContextMenu", {
-            detail: { id: hitId, token: ctx.scene.tokens[hitId], pageX: e.clientX, pageY: e.clientY },
+            detail: { id: hitId, token: ctx.scene.tokens[hitId], ids, pageX: e.clientX, pageY: e.clientY },
           })
         );
         return;

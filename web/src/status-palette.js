@@ -165,6 +165,19 @@ function targetFields(target) {
   return target.tokenId ? { tokenId: target.tokenId } : { combatantId: target.combatantId };
 }
 
+// targetList/dispatch — то же самое, но для ГРУППОВОЙ цели: target.tokenIds
+// (массив, см. pages/dm.js: vtt:tokenContextMenu, menuTokenIds при ПКМ по
+// групповому выделению). Сервер батч-команд не знает (одно сообщение —
+// один tokenId/combatantId, см. resolveStatusTarget), поэтому шлём то же
+// сообщение по кругу — тем же приёмом, что и applySpellStatus ниже.
+function targetList(target) {
+  if (Array.isArray(target.tokenIds)) return target.tokenIds.map((tokenId) => ({ tokenId }));
+  return [targetFields(target)];
+}
+function dispatch(send, target, type, extra) {
+  for (const fields of targetList(target)) send({ type, ...fields, ...extra });
+}
+
 // ---- чипы наложенных меток ----
 
 // renderStatusChips — строка чипов «что сейчас висит». Используется в
@@ -226,7 +239,13 @@ export function refreshStatusPalette() {
 
 // openStatusPalette — показать палитру у точки (x, y) экрана.
 //
-//   target      — { tokenId } либо { combatantId } (см. targetFields);
+//   target      — { tokenId }, { combatantId } либо { tokenIds: [...] } —
+//                 последнее для группового выделения (см. pages/dm.js:
+//                 vtt:tokenContextMenu): каждая команда (наложить/снять/
+//                 уровень/раунды/"снять все") уходит отдельным сообщением
+//                 на каждый id по кругу (см. targetList/dispatch выше), а
+//                 "активной" считается только метка, висящая СРАЗУ на всех
+//                 (иначе клик по ней визуально снимал бы её лишь с части);
 //   send        — функция отправки WS-команды;
 //   statusesFor — () => массив наложенных меток цели ПРЯМО СЕЙЧАС; именно
 //                 функция, а не массив: пока палитра открыта, состояние
@@ -336,8 +355,8 @@ function renderPalette(state) {
         cell.title = `${cond.name}\nУ карточки не заполнен slug — заполни его в конструкторе, иначе состояние не на что повесить.`;
       } else {
         cell.onclick = () => {
-          if (st) send({ type: "remove_status", ...targetFields(target), statusSlug: slug });
-          else send({ type: "apply_status", ...targetFields(target), statusSlug: slug });
+          if (st) dispatch(send, target, "remove_status", { statusSlug: slug });
+          else dispatch(send, target, "apply_status", { statusSlug: slug });
           state.detailSlug = "";
         };
         cell.oncontextmenu = (e) => {
@@ -364,7 +383,7 @@ function renderPalette(state) {
   clear.type = "button";
   clear.textContent = "Снять все";
   clear.disabled = applied.length === 0;
-  clear.onclick = () => send({ type: "clear_statuses", ...targetFields(target) });
+  clear.onclick = () => dispatch(send, target, "clear_statuses", {});
   foot.appendChild(clear);
   el.appendChild(foot);
 }
@@ -418,7 +437,7 @@ function detailBlock(cond, applied, state) {
     input.onchange = () => {
       const v = parseInt(input.value, 10);
       if (Number.isNaN(v)) return;
-      send({ type: "set_status_level", ...targetFields(target), statusSlug: cond.slug, level: v });
+      dispatch(send, target, "set_status_level", { statusSlug: cond.slug, level: v });
     };
     row.append(label, input);
     box.appendChild(row);
@@ -436,7 +455,7 @@ function detailBlock(cond, applied, state) {
   rounds.onchange = () => {
     const v = parseInt(rounds.value, 10);
     if (Number.isNaN(v)) return;
-    send({ type: "set_status_rounds", ...targetFields(target), statusSlug: cond.slug, rounds: v });
+    dispatch(send, target, "set_status_rounds", { statusSlug: cond.slug, rounds: v });
   };
   roundsRow.append(roundsLabel, rounds);
   box.appendChild(roundsRow);
@@ -450,9 +469,7 @@ function detailBlock(cond, applied, state) {
   // команды «сменить скрытность» нет: apply_status по существующему slug'у
   // не плодит вторую метку, а правит эту (см. room_statuses.go: putStatus).
   hidden.onchange = () =>
-    send({
-      type: "apply_status",
-      ...targetFields(target),
+    dispatch(send, target, "apply_status", {
       statusSlug: cond.slug,
       rounds: applied.rounds || 0,
       level: applied.level || 0,

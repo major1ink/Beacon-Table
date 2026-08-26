@@ -174,6 +174,14 @@
       display: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
       opacity: 0.6; padding: 2px 2px 6px; align-items: center; gap: 5px;
     }
+    /* tokenMenuMultiHeader — подпись "выбрано N токенов" на меню, открытом
+       ПКМ по одному из группового выделения (см. pages/dm.js:
+       vtt:tokenContextMenu, menuTokenIds) — тот же стиль, что и у заголовка
+       "Источник света" выше, только текст свой. */
+    #tokenMenuMultiHeader {
+      display: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+      opacity: 0.6; padding: 2px 2px 6px; align-items: center; gap: 5px;
+    }
     #tokenMenuLightToggleBtn { display: none; background: var(--accent); }
     #tokenMenuLightToggleBtn:hover { background: #6a5ae0; }
     #tokenMenuAddInitiativeBtn { background: var(--accent); }
@@ -882,11 +890,11 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm--PnecIbl.js"></script>
+  <script type="module" crossorigin src="/assets/dm-DECqm8zO.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-m72PrEiY.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-ClzvMhHz.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-BdeWBwwH.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-DGwC-gJ2.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-B0mNuI-G.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-BrQnpYFW.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-links-DQW6UocY.js">
@@ -894,8 +902,8 @@
   <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
   <link rel="modulepreload" crossorigin href="/assets/modifier-editor-CEELzg08.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-DRNvIm_w.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-C8EajCUv.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-Cwczu3Yg.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DkKbxrIf.js">
   <link rel="modulepreload" crossorigin href="/assets/toolbar-BsgWWWqR.js">
   <link rel="modulepreload" crossorigin href="/assets/item-picker-CEzn43a4.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
@@ -1292,6 +1300,7 @@
 
   <div id="tokenMenu">
     <div id="tokenMenuLightHeader"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> Источник света</div>
+    <div id="tokenMenuMultiHeader"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M2 20c0-3 2.5-5 5-5s5 2 5 5M12 20c0-3 2.5-5 5-5s5 2 5 5"/></svg> <span id="tokenMenuMultiHeaderText"></span></div>
     <button id="tokenMenuSheetBtn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h11a2 2 0 012 2v13a2 2 0 01-2 2H8a2 2 0 01-2-2V3z"/><path d="M6 3a2 2 0 00-2 2v13a2 2 0 002 2"/><line x1="9" y1="8" x2="16" y2="8"/><line x1="9" y1="12" x2="16" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg> Лист персонажа</button>
     <button id="tokenMenuBestiaryBtn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5c-1.8-1.3-4-2-6.5-2-1 0-2 .1-3 .4v13.6c1-.3 2-.4 3-.4 2.5 0 4.7.7 6.5 2 1.8-1.3 4-2 6.5-2 1 0 2 .1 3 .4V4.9c-1-.3-2-.4-3-.4-2.5 0-4.7.7-6.5 2z"/><line x1="12" y1="6.5" x2="12" y2="19.9"/></svg> Статблок</button>
     <button id="tokenMenuAddInitiativeBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg> Добавить в инициативу</button>
