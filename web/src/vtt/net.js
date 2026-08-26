@@ -88,6 +88,14 @@ export function createNet(ctx, audio) {
       // combat-bar.js/pages/dm.js синхронный доступ к последнему состоянию
       // без необходимости всем самим держать подписку.
       ctx.combat = data;
+      // dirty.tokens — смена хода (currentId) или тумблер highlightActiveToken
+      // рисуются прямо НА токене (layers/tokens.js: turnRing), а токены сами
+      // по себе combat_state не диффят (это не часть snapshot.scene) — без
+      // явного dirty кольцо не перерисовалось бы до следующего изменения
+      // сцены. Дёшево — тот же объём работы, что и любой другой dirty.tokens
+      // (см. dirty.js).
+      ctx.dirty.tokens = true;
+      ctx.render();
       document.dispatchEvent(new CustomEvent("vtt:combatState", { detail: data }));
     } else if (data.type === "hub_state") {
       // Хаб лута ДМ (см. internal/service/room.go: hubPayload) — не привязан

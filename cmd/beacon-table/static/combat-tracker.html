@@ -81,6 +81,14 @@
       display: flex; align-items: center; justify-content: center;
     }
     .combat-row .combat-peek:hover { background: var(--surface-hover); color: var(--accent); }
+    /* "Показать на карте" — наводит камеру на токен бойца (см.
+       web/src/combat-panel.js: focusCombatantToken), тот же вид, что и
+       "действия" рядом. */
+    .combat-row .combat-focus {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-focus:hover { background: var(--surface-hover); color: var(--accent); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
     /* строка чипов наложенных состояний под характеристиками бойца (см.
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
@@ -160,7 +168,7 @@
     .killed-clear-btn { justify-content: center; background: var(--danger); margin-bottom: 10px; }
     .killed-clear-btn:hover { background: var(--danger-hover); }
   </style>
-  <script type="module" crossorigin src="/assets/combatTracker-DJubtiGq.js"></script>
+  <script type="module" crossorigin src="/assets/combatTracker-q39j5-FP.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-m72PrEiY.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-links-DQW6UocY.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-ClzvMhHz.js">
@@ -171,7 +179,7 @@
   <link rel="modulepreload" crossorigin href="/assets/modifier-editor-CEELzg08.js">
   <link rel="modulepreload" crossorigin href="/assets/status-palette-Cwczu3Yg.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Cajm1d6h.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-BQkVTCq3.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-phVca1-S.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
 </head>
 <body>

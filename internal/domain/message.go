@@ -135,6 +135,11 @@ type ClientMsg struct {
 	// domain.CombatState.ShowHP).
 	ShowHP *bool `json:"showHp,omitempty"`
 
+	// HighlightActiveToken — только для "set_highlight_active_token": общий
+	// переключатель стола (раздел "Настройки"), подсвечивать ли на карте
+	// токен бойца, чей сейчас ход (см. domain.CombatState.HighlightActiveToken).
+	HighlightActiveToken *bool `json:"highlightActiveToken,omitempty"`
+
 	// ---- инвентарь/лут (см. domain.InventoryEntry, LootHub, CombatState.LootingEnabled) ----
 
 	// ItemID — только для "hub_add_item": какую карточку каталога (см.

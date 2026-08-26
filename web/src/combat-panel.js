@@ -30,6 +30,27 @@ import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./st
 // страницы: это настройка привычки ДМ, а не состояние конкретного боя.
 const FOLLOW_KEY = "beacon:combatFollowTurn";
 
+// focusCombatantToken — навести камеру карты на токен бойца (кнопка 🎯 в
+// строке трекера, см. renderPanel ниже). Сам жест — "vtt:focusMapObject"
+// (см. vtt/interaction.js и pages/dm.js: renderLightList — та же кнопка у
+// источников света), но эта панель может жить в ДВУХ разных местах:
+//   - встроенная колонка ДМ-стола (dm.html) — прямой сосед канваса, тот же
+//     document, событие можно диспатчить прямо здесь;
+//   - вынесенное плавающее окно трекера (combat-tracker.html) — свой iframe,
+//     чужой document, событие туда не долетит. Мост тот же, что и у
+//     openCombatantCard в combatant-card.js: просим родителя сделать это за
+//     нас через postMessage (dm.html слушает "beacon:focusMapObject", см.
+//     pages/dm.js). Popped-out в отдельное окно браузера (🗗) трекер сюда не
+//     попадает: у него нет своего канваса вообще, наводить камеру некуда —
+//     window.parent === window, и кнопка молча ничего не сделает.
+function focusCombatantToken(tokenId) {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: "beacon:focusMapObject", kind: "token", id: tokenId }, location.origin);
+  } else {
+    document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: "token", id: tokenId } }));
+  }
+}
+
 export function initCombatPanel({ send, els }) {
   let latestCombat = { active: false, round: 0, currentId: "", combatants: [] };
   // searchList — кэш последнего поиска "+ Добавить": монстры бестиария и
@@ -133,6 +154,22 @@ export function initCombatPanel({ send, els }) {
         peekBtn.onclick = (e) => openActionsPeek({ x: e.clientX, y: e.clientY, combatant: cmb, send });
       }
 
+      // "Показать на карте" — навести камеру на токен этого бойца, тот же
+      // жест и то же событие "vtt:focusMapObject", что и у кнопки 🎯 в
+      // списке источников света (см. pages/dm.js: renderLightList). Только
+      // когда у бойца УЖЕ есть токен на сцене — без него показывать нечего
+      // (см. draggable выше: !cmb.tokenId — карточку тогда только тянут на
+      // карту, а не наводят камеру на неё).
+      let focusBtn = null;
+      if (cmb.tokenId) {
+        focusBtn = document.createElement("button");
+        focusBtn.type = "button";
+        focusBtn.className = "combat-focus";
+        focusBtn.innerHTML = icon("target", { size: 12 });
+        focusBtn.title = "Показать на карте — камера наведётся на токен";
+        focusBtn.onclick = () => focusCombatantToken(cmb.tokenId);
+      }
+
       const removeBtn = document.createElement("button");
       removeBtn.className = "combat-remove";
       removeBtn.innerHTML = icon("close", { size: 11 });
@@ -147,6 +184,7 @@ export function initCombatPanel({ send, els }) {
       }
       top.append(avatar, name);
       if (peekBtn) top.appendChild(peekBtn);
+      if (focusBtn) top.appendChild(focusBtn);
       top.appendChild(removeBtn);
 
       // ---- ряд подписанных характеристик: Иниц. / КД / HP ----

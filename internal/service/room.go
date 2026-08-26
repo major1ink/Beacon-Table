@@ -523,6 +523,11 @@ func (r *Room) run() {
 					r.handleSetLootingEnabled(*im.msg.LootingEnabled)
 				}
 				continue
+			case "set_highlight_active_token":
+				if im.msg.HighlightActiveToken != nil {
+					r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
+				}
+				continue
 			// revive_token — вкладка "Убитые" трекера (см. combatPayload:
 			// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
 			// тот умеет только create_scene-подобные мутации сцены, а тут
@@ -1569,6 +1574,16 @@ func (r *Room) handleSetLootingEnabled(v bool) {
 	r.broadcastCombat()
 }
 
+// handleSetHighlightActiveToken — "set_highlight_active_token": общий
+// переключатель стола, подсвечивать ли красным кольцом на карте токен
+// бойца, чей сейчас ход (см. domain.CombatState.HighlightActiveToken,
+// combatPayload).
+func (r *Room) handleSetHighlightActiveToken(v bool) {
+	r.combat.HighlightActiveToken = &v
+	r.markCombatDirty()
+	r.broadcastCombat()
+}
+
 // handlePlaceCombatantToken — "place_combatant_token": ДМ вытащил карточку
 // бойца из трекера (см. web/src/combat-panel.js: dragstart на .combat-row,
 // pages/dm.js: drop на #scene) на карту. Актуально в первую очередь для
@@ -1785,6 +1800,10 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		"type": "combat_state", "active": r.combat.Active, "round": r.combat.Round,
 		"currentId": r.combat.CurrentID, "combatants": combatants, "showHp": r.combat.ShowHP,
 		"lootingEnabled": r.combat.LootingEnabled,
+		// highlightActiveToken — nil (сервер только что перезапущен со старым
+		// combat.json/новый стол) трактуем как включено, см.
+		// domain.CombatState.HighlightActiveToken.
+		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()

@@ -520,6 +520,13 @@
       flex: 0 0 auto; width: 22px; height: 22px; padding: 0; font-size: 11px; background: var(--danger);
     }
     .combat-row .combat-remove:hover { background: var(--danger-hover); }
+    /* "Показать на карте" — наводит камеру на токен бойца (см.
+       web/src/combat-panel.js: focusCombatantToken). */
+    .combat-row .combat-focus {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-focus:hover { background: var(--surface-hover); color: var(--accent); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
     /* строка чипов наложенных состояний под характеристиками бойца (см.
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
@@ -907,11 +914,11 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-1FKhda6p.js"></script>
+  <script type="module" crossorigin src="/assets/dm-DkE758mC.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-m72PrEiY.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-ClzvMhHz.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-BdeWBwwH.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-B0mNuI-G.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-B50MuuVe.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-ChBwILYq.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-links-DQW6UocY.js">
@@ -921,7 +928,7 @@
   <link rel="modulepreload" crossorigin href="/assets/modifier-editor-CEELzg08.js">
   <link rel="modulepreload" crossorigin href="/assets/status-palette-Cwczu3Yg.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Cajm1d6h.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-BQkVTCq3.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-phVca1-S.js">
   <link rel="modulepreload" crossorigin href="/assets/toolbar-BsgWWWqR.js">
   <link rel="modulepreload" crossorigin href="/assets/item-picker-CEzn43a4.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
@@ -1172,6 +1179,10 @@
           <div class="field-block">
             <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить игрокам лутить убитых монстров</label></div>
             <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах (костях) недоступен игрокам — только ДМ.</p>
+          </div>
+          <div class="field-block">
+            <div class="checkbox-row"><label><input type="checkbox" id="combatHighlightActiveToggle" /> Подсвечивать красным токен активного хода</label></div>
+            <p class="hint">Токен бойца, чей сейчас ход, обводится на карте красным — видно всем ролям, пока идёт бой.</p>
           </div>
           <div class="section-divider"></div>
           <div class="field-block">

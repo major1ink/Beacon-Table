@@ -521,6 +521,13 @@
       flex: 0 0 auto; width: 22px; height: 22px; padding: 0; font-size: 11px; background: var(--danger);
     }
     .combat-row .combat-remove:hover { background: var(--danger-hover); }
+    /* "Показать на карте" — наводит камеру на токен бойца (см.
+       web/src/combat-panel.js: focusCombatantToken). */
+    .combat-row .combat-focus {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-focus:hover { background: var(--surface-hover); color: var(--accent); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
     /* строка чипов наложенных состояний под характеристиками бойца (см.
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
@@ -1155,6 +1162,10 @@
           <div class="field-block">
             <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить игрокам лутить убитых монстров</label></div>
             <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах (костях) недоступен игрокам — только ДМ.</p>
+          </div>
+          <div class="field-block">
+            <div class="checkbox-row"><label><input type="checkbox" id="combatHighlightActiveToggle" /> Подсвечивать красным токен активного хода</label></div>
+            <p class="hint">Токен бойца, чей сейчас ход, обводится на карте красным — видно всем ролям, пока идёт бой.</p>
           </div>
           <div class="section-divider"></div>
           <div class="field-block">

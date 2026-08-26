@@ -82,6 +82,14 @@
       display: flex; align-items: center; justify-content: center;
     }
     .combat-row .combat-peek:hover { background: var(--surface-hover); color: var(--accent); }
+    /* "Показать на карте" — наводит камеру на токен бойца (см.
+       web/src/combat-panel.js: focusCombatantToken), тот же вид, что и
+       "действия" рядом. */
+    .combat-row .combat-focus {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-focus:hover { background: var(--surface-hover); color: var(--accent); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
     /* строка чипов наложенных состояний под характеристиками бойца (см.
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует

@@ -2959,6 +2959,12 @@ window.addEventListener("message", (e) => {
     // combat-tracker.html): своей колонки у него нет — показываем в нашей
     // (см. combatant-card.js: openCombatantCard).
     openCardInDock({ key: e.data.key, title: e.data.title, url: e.data.url });
+  } else if (e.data.type === "beacon:focusMapObject") {
+    // Кнопка "Показать на карте" в трекере, вынесенном в плавающее окно
+    // (iframe combat-tracker.html): своего канваса у него нет — наводим
+    // камеру здесь (см. combat-panel.js: focusCombatantToken, тот же жест,
+    // что и у "vtt:focusMapObject" из renderLightList ниже).
+    document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: e.data.kind, id: e.data.id } }));
   } else if (e.data.type === "beacon:placeJournalMarker") {
     // Значок записи журнала на карту. Просит окно журнала (iframe, см.
     // pages/journal.js) — расстановка живёт здесь, потому что канвас есть
@@ -3230,6 +3236,19 @@ document.addEventListener("vtt:combatState", (e) => {
 });
 lootingEnabledToggle.onchange = () => {
   vtt.send({ type: "set_looting_enabled", lootingEnabled: lootingEnabledToggle.checked });
+};
+
+// combatHighlightActiveToggle — тот же приём: значение приходит внутри
+// "combat_state" (payload.highlightActiveToken, см.
+// domain.CombatState.HighlightActiveToken / "set_highlight_active_token" в
+// internal/service/room.go) — подсвечивать ли на карте токен бойца, чей
+// сейчас ход (см. web/src/vtt/layers/tokens.js: turnRing).
+const combatHighlightActiveToggle = document.getElementById("combatHighlightActiveToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  combatHighlightActiveToggle.checked = e.detail.highlightActiveToken !== false;
+});
+combatHighlightActiveToggle.onchange = () => {
+  vtt.send({ type: "set_highlight_active_token", highlightActiveToken: combatHighlightActiveToggle.checked });
 };
 
 // "🗗 Открыть в окне" — тот же приём, что у заметок (#noteWindowBtn): вся
