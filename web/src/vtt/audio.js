@@ -38,8 +38,15 @@ export function createAudio(ctx, sideMenu) {
 
   let lastAmbientUrl = null;
   let lastAmbientStartedAt = null;
+  // lastCueUrl — только чтобы не дёргать cueAudio.src, когда файл не
+  // менялся (пауза/сик/резюм того же трека): даже присвоение ТОГО ЖЕ URL
+  // заставляет браузер перечитать источник заново, со щелчком в звуке.
   let lastCueUrl = null;
-  let lastCueStartedAt = null;
+  // lastCueSig — "во что уже переставили" (url+startedAtMs+paused+position),
+  // см. applyCue: снапшоты канала ДМ летят на каждый чих (как и у амбиента),
+  // пересчитывать currentTime есть смысл только когда реально что-то из
+  // этого сдвинулось.
+  let lastCueSig = null;
 
   ctx.audioUnlocked = false;
   const unlockables = []; // <video>/<audio> элементы других слоёв (фон карты, токены)
@@ -84,21 +91,32 @@ export function createAudio(ctx, sideMenu) {
     }
   };
 
-  // seekToStart выставляет currentTime по разнице между "сейчас" и моментом
-  // старта трека на сервере, дождавшись метаданных (иначе duration ещё 0 и
-  // не от чего взять остаток по модулю для зацикленных треков).
-  function seekToStart(audioEl, startedAtMs, loop) {
+  // seekTo — общая механика: выставить currentTime (в секундах, с учётом
+  // Loop по модулю длительности) и либо заиграть, либо оставить на паузе,
+  // дождавшись метаданных (иначе duration ещё 0 и не от чего взять остаток
+  // по модулю для зацикленных треков).
+  function seekTo(audioEl, positionSec, loop, play) {
     const apply = () => {
-      const elapsed = Math.max(0, (ctx.now() - startedAtMs) / 1000);
       if (loop && audioEl.duration > 0) {
-        audioEl.currentTime = elapsed % audioEl.duration;
+        audioEl.currentTime = positionSec % audioEl.duration;
       } else {
-        audioEl.currentTime = audioEl.duration > 0 ? Math.min(elapsed, audioEl.duration) : elapsed;
+        audioEl.currentTime = audioEl.duration > 0 ? Math.min(positionSec, audioEl.duration) : positionSec;
       }
-      tryPlay(audioEl);
+      if (play) tryPlay(audioEl);
+      else audioEl.pause();
     };
     if (audioEl.readyState >= 1 /* HAVE_METADATA */) apply();
     else audioEl.addEventListener("loadedmetadata", apply, { once: true });
+  }
+
+  // seekToStart выставляет currentTime по разнице между "сейчас" и моментом
+  // старта трека на сервере и заигрывает — частный случай seekTo для
+  // "обычного" (не на паузе) воспроизведения. Экспортирована наружу —
+  // background.js синхронизирует по ней зацикленное mp4-фото сцены тем же
+  // приёмом, что и амбиент/канал ДМ здесь.
+  function seekToStart(audioEl, startedAtMs, loop) {
+    const elapsed = Math.max(0, (ctx.now() - startedAtMs) / 1000);
+    seekTo(audioEl, elapsed, loop, true);
   }
   ctx.seekToStart = seekToStart;
 
@@ -121,24 +139,47 @@ export function createAudio(ctx, sideMenu) {
   }
 
   // applyCue — реакция на "audio_cue" (см. internal/service/room.go:
-  // broadcastCue). cue===null значит канал ДМ сейчас молчит.
+  // broadcastCue). cue===null значит канал ДМ сейчас молчит. cue.paused —
+  // пауза (см. pause_cue/resume_cue): позиция заморожена в cue.positionMs,
+  // а не считается по cue.startedAtMs (см. domain.CueState).
   function applyCue(cue) {
     lastCueVolume = cue ? cue.volume : lastCueVolume;
     cueAudio.volume = cue ? Math.max(0, Math.min(1, cue.volume * localCueVol)) : 0;
-    const url = cue ? cue.url : null;
-    const startedAtMs = cue ? cue.startedAtMs : null;
+    // Loop — как и громкость выше, применяем сразу и безусловно, а не только
+    // при пересчёте позиции ниже: ДМ может переключить "зациклен" прямо у
+    // играющего трека (см. dm.js: loopBtn/openTrackModal → set_cue_loop), и
+    // это не должно ждать следующего реального рестарта/сика, чтобы
+    // долететь до уже играющего <audio> — иначе трек доигрывает со старым
+    // флагом и на конце останавливается/уходит на следующий вместо цикла.
+    if (cue) cueAudio.loop = !!cue.loop;
     document.dispatchEvent(new CustomEvent("vtt:cueChanged", { detail: cue }));
-    if (url === lastCueUrl && startedAtMs === lastCueStartedAt) return;
-    lastCueUrl = url;
-    lastCueStartedAt = startedAtMs;
+
+    // Сигнатура — url+startedAtMs+paused+positionMs: любое из них сдвинулось —
+    // значит реально нужно перемотать/переиграть. Loop сюда намеренно не
+    // входит — применяется отдельно, выше, без рестарта позиции.
+    const sig = cue ? `${cue.url}|${cue.startedAtMs}|${!!cue.paused}|${cue.positionMs || 0}` : null;
+    if (sig === lastCueSig) return;
+    lastCueSig = sig;
+
     if (!cue) {
+      lastCueUrl = null;
       cueAudio.pause();
       cueAudio.removeAttribute("src");
       return;
     }
-    cueAudio.loop = !!cue.loop;
-    cueAudio.src = cue.url;
-    seekToStart(cueAudio, startedAtMs, !!cue.loop);
+    // Присваивание cueAudio.src ТОМУ ЖЕ значению всё равно перезапускает
+    // буферизацию (щелчок в звуке) — переприсваиваем, только если файл
+    // реально сменился, а не просто пауза/сик/резюм/переключение лупа того
+    // же трека.
+    if (cue.url !== lastCueUrl) {
+      lastCueUrl = cue.url;
+      cueAudio.src = cue.url;
+    }
+    if (cue.paused) {
+      seekTo(cueAudio, (cue.positionMs || 0) / 1000, !!cue.loop, false);
+    } else {
+      seekToStart(cueAudio, cue.startedAtMs, !!cue.loop);
+    }
   }
 
   // ---- иконка громкости в общей боковой колонке ----

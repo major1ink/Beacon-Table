@@ -47,6 +47,11 @@ type RoomService interface {
 	// комната подтягивает его хиты в бойца трекера, если тот сейчас в
 	// инициативе (см. room_character_hp.go).
 	NotifyCharacterSheetChanged(characterID string)
+	// NotifyPlaylistsChanged — плейлисты канала ДМ поменялись мимо WS (см.
+	// admin-эндпоинты /api/admin/playlists и импорт Foundry): уже открытая
+	// панель "Плейлисты" (см. web/src/pages/dm.js) должна перечитать список
+	// сама, без ручной перезагрузки страницы.
+	NotifyPlaylistsChanged()
 }
 
 type inboundMsg struct {
@@ -120,6 +125,10 @@ type Room struct {
 	// (см. NotifyCharacterSheetChanged): свой канал по той же причине и с
 	// теми же свойствами, что journalChanged выше.
 	characterSheetChanged chan string
+	// playlistsChanged — «плейлисты поменялись» из HTTP-хендлера (см.
+	// NotifyPlaylistsChanged: admin-CRUD плейлистов и импорт Foundry) — тот
+	// же принцип и те же свойства, что journalChanged выше.
+	playlistsChanged chan struct{}
 	dirty                 bool            // есть хоть одна несохранённая мутация с последнего флаша
 	dirtyScenes           map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
@@ -192,6 +201,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
+		playlistsChanged:      make(chan struct{}, 4),
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
 		hub:                   hub,
@@ -411,6 +421,55 @@ func (r *Room) run() {
 					r.broadcastCue()
 				}
 				continue
+			case "set_cue_loop":
+				// живое переключение "зациклен" у уже играющего трека (см.
+				// dm.js: loopBtn/openTrackModal) — тем же приёмом, что и
+				// set_cue_volume выше. Без этого доигравший до конца трек
+				// останавливался бы/уходил на следующий по СТАРОМУ флагу —
+				// клиент применяет audioEl.loop только из broadcastCue, а
+				// изменение только в БД никак не долетало бы до уже играющего
+				// <audio>.
+				if r.cue != nil && im.msg.Cue != nil {
+					r.cue.Loop = im.msg.Cue.Loop
+					r.broadcastCue()
+				}
+				continue
+			case "pause_cue":
+				// StartedAtMs больше не годится для формулы currentTime = now -
+				// StartedAtMs (время идёт, а трек стоит) — замораживаем позицию
+				// в PositionMs, её же на резюме превратим обратно в StartedAtMs.
+				if r.cue != nil && !r.cue.Paused {
+					r.cue.PositionMs = time.Now().UnixMilli() - r.cue.StartedAtMs
+					r.cue.Paused = true
+					r.broadcastCue()
+				}
+				continue
+			case "resume_cue":
+				if r.cue != nil && r.cue.Paused {
+					r.cue.StartedAtMs = time.Now().UnixMilli() - r.cue.PositionMs
+					r.cue.Paused = false
+					r.broadcastCue()
+				}
+				continue
+			case "seek_cue":
+				// Перемотка — как play_cue, но без пересоздания CueState: имя/
+				// громкость/луп остаются теми же, меняется только позиция. На
+				// паузе сикаем "на месте" (PositionMs), на воспроизведении —
+				// сдвигаем виртуальный старт (StartedAtMs), тем же приёмом, что
+				// resume_cue выше.
+				if r.cue != nil && im.msg.Cue != nil {
+					pos := im.msg.Cue.PositionMs
+					if pos < 0 {
+						pos = 0
+					}
+					if r.cue.Paused {
+						r.cue.PositionMs = pos
+					} else {
+						r.cue.StartedAtMs = time.Now().UnixMilli() - pos
+					}
+					r.broadcastCue()
+				}
+				continue
 
 			// ---- трекер инициативы (см. domain.CombatState/Combatant) —
 			// своя ветка мутаций, а не applyMutation: он живёт вне r.scene и
@@ -525,6 +584,9 @@ func (r *Room) run() {
 
 		case characterID := <-r.characterSheetChanged:
 			r.applyCharacterSheetHP(characterID)
+
+		case <-r.playlistsChanged:
+			r.broadcastPlaylistsChanged()
 
 		case <-ticker.C:
 			r.flushIfDirty()
@@ -935,6 +997,29 @@ func (r *Room) broadcastJournalChanged(id string) {
 	payload := map[string]any{"type": "journal_changed", "id": id}
 	for c := range r.clients {
 		if c.Role() != domain.RoleTV {
+			c.Send(payload)
+		}
+	}
+}
+
+// NotifyPlaylistsChanged — см. RoomService. Неблокирующая отправка, тот же
+// принцип, что и NotifyJournalChanged: если очередь занята или комната уже
+// остановлена, событие просто теряется — это подсказка "перечитай список", а
+// не состояние, которое нельзя потерять.
+func (r *Room) NotifyPlaylistsChanged() {
+	select {
+	case r.playlistsChanged <- struct{}{}:
+	default:
+	}
+}
+
+// broadcastPlaylistsChanged — уже внутри горутины run(). Панель "Плейлисты"
+// (см. web/src/pages/dm.js) есть только у ДМ — рассылать игрокам и TV
+// незачем, они это сообщение всё равно проигнорируют.
+func (r *Room) broadcastPlaylistsChanged() {
+	payload := map[string]any{"type": "playlists_changed"}
+	for c := range r.clients {
+		if c.Role() == domain.RoleDM {
 			c.Send(payload)
 		}
 	}

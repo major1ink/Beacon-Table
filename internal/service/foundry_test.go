@@ -74,6 +74,7 @@ func (f *fakeRoom) Dispatch(RoomClient, domain.ClientMsg) {}
 func (f *fakeRoom) Shutdown()                             {}
 func (f *fakeRoom) NotifyJournalChanged(string)           {}
 func (f *fakeRoom) NotifyCharacterSheetChanged(string)    {}
+func (f *fakeRoom) NotifyPlaylistsChanged()               {}
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil

@@ -52,7 +52,7 @@ import {
 } from "../api.js";
 import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
-import { showAlert, showConfirm, showPrompt } from "../modal.js";
+import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -80,6 +80,9 @@ let vtt;
   // Плейлист двигает вперёд сам клиент ДМ (см. handleCueEnded ниже) —
   // vtt.cueAudio появляется только сейчас, поэтому слушатель вешаем здесь.
   vtt.cueAudio.addEventListener("ended", handleCueEnded);
+  // Прогресс-бар "сейчас играет" (см. updateCueProgress) — та же логика:
+  // vtt.cueAudio существует только с этого момента.
+  vtt.cueAudio.addEventListener("timeupdate", updateCueProgress);
   // Кубы — отдельная иконка 🎲 в той же боковой колонке, что и 🔊 громкость
   // (см. vtt/side-menu.js — vtt.sideMenu тоже появляется только теперь).
   // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
@@ -147,7 +150,7 @@ let counter = 0;
 
 // ================= библиотека загруженных файлов =================
 // fillLibrary — общий рендер select'ов "из библиотеки" (сейчас остался
-// только у аудио-треков, см. newTrackLibrary ниже — токен-арт ушёл в
+// только у аудио-треков, см. openTrackModal ниже — токен-арт ушёл в
 // раздел "Ассеты" с сеткой плиток, см. renderAssetsGrid).
 function fillLibrary(select, items) {
   const current = select.value;
@@ -167,7 +170,6 @@ async function refreshLibrary() {
     latestAssets = await fetchAssets();
     if (bgTab.classList.contains("active")) renderAssetTable();
     if (audioTab.classList.contains("active")) renderAudioAssetTable();
-    refreshNewTrackLibrary();
     if (assetsPanelSection.classList.contains("active")) renderAssetsGrid();
   } catch (err) {
     console.error("не удалось загрузить библиотеку ассетов:", err);
@@ -1697,30 +1699,66 @@ sceneCanvasEl.addEventListener("drop", (e) => {
 });
 
 // ================= плейлисты (канал ДМ) =================
-// Раньше список плейлистов и треки текущего лежали рядом (модалка шире
-// панели). В узкой выезжающей панели это мастер-детейл: playlistListView
-// (список) ⇄ playlistTracksView (треки одного плейлиста), переключаются
-// целиком, назад — кнопкой "‹ Все плейлисты".
-const playlistListView = document.getElementById("playlistListView");
-const playlistTracksView = document.getElementById("playlistTracksView");
-const playlistRows = document.getElementById("playlistRows");
-const trackPanelTitle = document.getElementById("trackPanelTitle");
-const trackList = document.getElementById("trackList");
-const addTrackForm = document.getElementById("addTrackForm");
-const addTrackMsg = document.getElementById("addTrackMsg");
-const newTrackLibrary = document.getElementById("newTrackLibrary");
-const newTrackName = document.getElementById("newTrackName");
+// Foundry-style аккордеон: все плейлисты видны сразу и разворачиваются на
+// месте (openPlaylistIds — какие именно), можно держать открытыми сразу
+// несколько — без прежнего мастер-детейла "список ⇄ треки" и экрана
+// "‹ Назад". Добавление/правка трека — через модалку (openTrackModal), а не
+// постоянно занимающую место форму внизу панели. Порядок треков — drag-and-
+// drop (см. renderTrackRow) вместо кнопок вверх/вниз.
+const playlistAccordion = document.getElementById("playlistAccordion");
 const nowPlayingLabel = document.getElementById("nowPlayingLabel");
+const nowPlayingProgressBar = document.getElementById("nowPlayingProgressBar");
+const nowPlayingProgressFill = document.getElementById("nowPlayingProgressFill");
+const cuePlayPauseBtn = document.getElementById("cuePlayPauseBtn");
 const cueVolumeSlider = document.getElementById("cueVolumeSlider");
 
 let playlists = [];
-let selectedPlaylistId = null;
-let playlistsView = "list"; // "list" | "tracks"
-let currentCue = null;
-let pendingNewTrackUrl = ""; // из аплоада/библиотеки, для формы "+ Добавить трек"
+let currentCue = null; // {url,name,volume,loop,startedAtMs,paused,positionMs} | null — см. domain.CueState
+const openPlaylistIds = new Set(); // id развёрнутых плейлистов
 
-function refreshNewTrackLibrary() {
-  fillLibrary(newTrackLibrary, latestAssets.audio || []);
+// scrubbing — тащит ли ДМ прямо сейчас полоску прогресса (см. wireSeekBar):
+// пока true, updateCueProgress не трогает заполнение баров — иначе
+// timeupdate от ещё не перемотанного vtt.cueAudio дёргал бы полоску назад
+// прямо под курсором.
+let scrubbing = false;
+
+// wireSeekBar — делает полоску прогресса перематываемой: клик/драг ставит
+// позицию визуально сразу (без сети), а на отпускании шлёт seek_cue один раз
+// — так драг не флудит WS десятками сообщений в секунду. barEl — контейнер с
+// .progress-fill внутри (см. #nowPlayingProgressBar и .bt-track-progress).
+function wireSeekBar(barEl) {
+  const fillEl = barEl.querySelector(".progress-fill");
+  const apply = (e, commit) => {
+    const audio = vtt.cueAudio;
+    if (!audio || !audio.duration || !currentCue) return;
+    const rect = barEl.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    fillEl.style.width = pct * 100 + "%";
+    if (commit) vtt.send({ type: "seek_cue", cue: { positionMs: Math.round(pct * audio.duration * 1000) } });
+  };
+  barEl.addEventListener("mousedown", (e) => {
+    if (!currentCue) return;
+    e.preventDefault();
+    scrubbing = true;
+    apply(e, false);
+    const onMove = (ev) => apply(ev, false);
+    const onUp = (ev) => {
+      apply(ev, true);
+      scrubbing = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+wireSeekBar(nowPlayingProgressBar);
+
+// stripExt — "тема_боя.mp3" → "тема_боя", чтобы автоподставленное имя трека
+// не тащило за собой расширение файла.
+function stripExt(fileName) {
+  const idx = fileName.lastIndexOf(".");
+  return idx > 0 ? fileName.slice(0, idx) : fileName;
 }
 
 async function refreshPlaylists() {
@@ -1730,164 +1768,439 @@ async function refreshPlaylists() {
     console.error("не удалось загрузить плейлисты:", err);
     playlists = [];
   }
-  renderPlaylistsPanel();
+  renderPlaylistAccordion();
 }
 
-function openPlaylistTracks(id) {
-  selectedPlaylistId = id;
-  playlistsView = "tracks";
-  renderPlaylistsPanel();
-}
-function backToPlaylistList() {
-  playlistsView = "list";
-  renderPlaylistsPanel();
-}
-document.getElementById("playlistBackBtn").onclick = backToPlaylistList;
-
-function renderPlaylistsPanel() {
-  const showTracks = playlistsView === "tracks" && playlists.some((p) => p.id === selectedPlaylistId);
-  playlistListView.style.display = showTracks ? "none" : "block";
-  playlistTracksView.style.display = showTracks ? "block" : "none";
-  renderPlaylistRows();
-  if (showTracks) renderTrackPanel();
+function isPlaylistPlaying(p) {
+  return !!(currentCue && (p.tracks || []).some((t) => t.url === currentCue.url));
 }
 
-function renderPlaylistRows() {
-  playlistRows.innerHTML = "";
-  for (const p of playlists) {
-    const row = document.createElement("div");
-    row.className = "playlist-row" + (p.id === selectedPlaylistId ? " active" : "");
-    const name = document.createElement("span");
-    name.className = "pl-name";
-    name.textContent = `${p.name} (${(p.tracks || []).length})`;
-    name.onclick = () => openPlaylistTracks(p.id);
-    const renameBtn = document.createElement("button");
-    renameBtn.innerHTML = icon("pencil", { size: 13 });
-    renameBtn.title = "Переименовать";
-    renameBtn.onclick = async (e) => {
-      e.stopPropagation();
-      const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
-      if (!newName) return;
-      try {
-        await renamePlaylist(p.id, newName);
-        await refreshPlaylists();
-      } catch (err) {
-        showAlert(err.message);
-      }
-    };
-    const delBtn = document.createElement("button");
-    delBtn.innerHTML = icon("trash", { size: 13 });
-    delBtn.title = "Удалить плейлист";
-    delBtn.onclick = async (e) => {
-      e.stopPropagation();
-      if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
-      try {
-        await deletePlaylist(p.id);
-        if (selectedPlaylistId === p.id) selectedPlaylistId = null;
-        await refreshPlaylists();
-      } catch (err) {
-        showAlert(err.message);
-      }
-    };
-    row.appendChild(name);
-    row.appendChild(renameBtn);
-    row.appendChild(delBtn);
-    playlistRows.appendChild(row);
+// cueBtnState — единая логика для play/pause-кнопки плейлиста/трека:
+// - трек не тот, что сейчас в canale ДМ → "играть" (свежий старт, play_cue);
+// - тот же трек, канал играет → "пауза" (pause_cue, не stop_cue — трек не
+//   сбрасывается, просто останавливается на месте);
+// - тот же трек, канал на паузе → "играть" (resume_cue, с той же позиции).
+function cueBtnState(active) {
+  if (!active) return { icon: "play", title: "Играть", action: "start" };
+  if (currentCue.paused) return { icon: "play", title: "Играть", action: "resume" };
+  return { icon: "pause", title: "Пауза", action: "pause" };
+}
+
+function renderPlaylistAccordion() {
+  playlistAccordion.innerHTML = "";
+  for (const p of playlists) playlistAccordion.appendChild(renderPlaylistItem(p));
+}
+
+function renderPlaylistItem(p) {
+  const expanded = openPlaylistIds.has(p.id);
+  const playing = isPlaylistPlaying(p);
+  const wrap = document.createElement("div");
+  wrap.className = "bt-playlist" + (expanded ? " expanded" : "") + (playing ? " playing" : "");
+
+  const header = document.createElement("div");
+  header.className = "bt-playlist-header";
+  header.onclick = () => {
+    if (expanded) openPlaylistIds.delete(p.id);
+    else openPlaylistIds.add(p.id);
+    renderPlaylistAccordion();
+  };
+
+  const caret = document.createElement("span");
+  caret.className = "bt-playlist-caret";
+  caret.innerHTML = icon("chevron-right", { size: 13 });
+
+  const playBtn = document.createElement("button");
+  playBtn.className = "bt-playlist-play";
+  const btnState = cueBtnState(playing);
+  playBtn.title = playing ? btnState.title : "Играть с первого трека";
+  playBtn.innerHTML = icon(btnState.icon, { size: 12 });
+  playBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (btnState.action === "pause") {
+      vtt.send({ type: "pause_cue" });
+      return;
+    }
+    if (btnState.action === "resume") {
+      vtt.send({ type: "resume_cue" });
+      return;
+    }
+    const first = (p.tracks || [])[0];
+    if (first) vtt.send({ type: "play_cue", cue: { url: first.url, name: first.name, volume: first.volume, loop: first.loop } });
+  };
+
+  const name = document.createElement("span");
+  name.className = "bt-playlist-name";
+  name.textContent = p.name;
+
+  const count = document.createElement("span");
+  count.className = "bt-playlist-count";
+  count.textContent = (p.tracks || []).length;
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "icon-btn";
+  addBtn.title = "Добавить трек";
+  addBtn.innerHTML = icon("plus", { size: 13 });
+  addBtn.onclick = (e) => {
+    e.stopPropagation();
+    openTrackModal({ playlist: p });
+  };
+
+  const renameBtn = document.createElement("button");
+  renameBtn.className = "icon-btn";
+  renameBtn.title = "Переименовать плейлист";
+  renameBtn.innerHTML = icon("pencil", { size: 13 });
+  renameBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
+    if (!newName) return;
+    try {
+      await renamePlaylist(p.id, newName);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = "Удалить плейлист";
+  delBtn.innerHTML = icon("trash", { size: 13 });
+  delBtn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylist(p.id);
+      openPlaylistIds.delete(p.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  header.append(caret, playBtn, name, count, addBtn, renameBtn, delBtn);
+  wrap.appendChild(header);
+  if (expanded) wrap.appendChild(renderTrackList(p));
+  return wrap;
+}
+
+function renderTrackList(p) {
+  const list = document.createElement("div");
+  list.className = "bt-playlist-tracks";
+  const tracks = p.tracks || [];
+  if (!tracks.length) {
+    const hint = document.createElement("div");
+    hint.className = "bt-playlist-empty-hint";
+    hint.textContent = "Нет треков — добавь через +";
+    list.appendChild(hint);
+    return list;
+  }
+  tracks.forEach((t) => list.appendChild(renderTrackRow(p, t)));
+  return list;
+}
+
+// draggedTrackId/draggedFromPlaylistId — состояние текущего перетаскивания
+// (см. renderTrackRow ниже). Модуль-level, а не замыкание строки: dragover
+// одной строки должен видеть, что тащат из другой (draggedFromPlaylistId),
+// и отказаться показывать индикатор вставки.
+let draggedTrackId = null;
+let draggedFromPlaylistId = null;
+
+function renderTrackRow(playlist, t) {
+  const isPlaying = !!(currentCue && currentCue.url === t.url);
+  const row = document.createElement("div");
+  row.className = "bt-track" + (isPlaying ? " playing" : "");
+  row.draggable = true;
+
+  const grip = document.createElement("span");
+  grip.className = "bt-track-drag";
+  grip.title = "Перетащи, чтобы изменить порядок";
+  grip.innerHTML = icon("grip-vertical", { size: 13 });
+
+  const playBtn = document.createElement("button");
+  playBtn.className = "bt-track-play";
+  const btnState = cueBtnState(isPlaying);
+  playBtn.title = btnState.title;
+  playBtn.innerHTML = icon(btnState.icon, { size: 11 });
+  playBtn.onclick = () => {
+    if (btnState.action === "pause") vtt.send({ type: "pause_cue" });
+    else if (btnState.action === "resume") vtt.send({ type: "resume_cue" });
+    else vtt.send({ type: "play_cue", cue: { url: t.url, name: t.name, volume: t.volume, loop: t.loop } });
+  };
+
+  const main = document.createElement("div");
+  main.className = "bt-track-main";
+  const name = document.createElement("span");
+  name.className = "bt-track-name";
+  name.textContent = t.name;
+  main.appendChild(name);
+  if (isPlaying) {
+    // прогресс-бар — только у реально играющего трека, синхронизируется по
+    // vtt.cueAudio (см. updateCueProgress) и перематывается кликом/драгом
+    // (см. wireSeekBar), так же как и общий бар в #nowPlayingBar.
+    const progress = document.createElement("div");
+    progress.className = "bt-track-progress";
+    progress.innerHTML = '<div class="progress-track"><div class="progress-fill"></div></div>';
+    main.appendChild(progress);
+    wireSeekBar(progress);
+  }
+
+  const volWrap = document.createElement("label");
+  volWrap.className = "bt-track-vol";
+  volWrap.title = "Громкость трека";
+  volWrap.innerHTML = icon("volume", { size: 12 });
+  const volSlider = document.createElement("input");
+  volSlider.type = "range";
+  volSlider.min = 0;
+  volSlider.max = 100;
+  volSlider.value = Math.round(t.volume * 100);
+  volSlider.onchange = async () => {
+    const vol = volSlider.value / 100;
+    try {
+      await updatePlaylistTrack(playlist.id, t.id, t.name, vol, t.loop);
+      t.volume = vol;
+      // трек играет прямо сейчас — обновляем громкость на лету, не
+      // дожидаясь следующего запуска.
+      if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_volume", cue: { volume: vol } });
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+  volWrap.appendChild(volSlider);
+
+  const loopBtn = document.createElement("button");
+  loopBtn.className = "icon-btn" + (t.loop ? " active" : "");
+  loopBtn.innerHTML = icon("repeat", { size: 13 });
+  loopBtn.title = t.loop ? "Трек зациклен — нажми, чтобы играть один раз" : "Трек играет один раз — нажми, чтобы зациклить";
+  loopBtn.onclick = async () => {
+    const newLoop = !t.loop;
+    try {
+      await updatePlaylistTrack(playlist.id, t.id, t.name, t.volume, newLoop);
+      t.loop = newLoop;
+      // трек играет прямо сейчас — обновляем "зациклен" на лету, тем же
+      // приёмом, что и громкость чуть выше: без этого играющий трек
+      // доигрывает со старым флагом и на конце останавливается/уходит на
+      // следующий вместо цикла (см. set_cue_loop в room.go).
+      if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_loop", cue: { loop: newLoop } });
+      renderPlaylistAccordion();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.title = "Изменить трек";
+  editBtn.innerHTML = icon("pencil", { size: 13 });
+  editBtn.onclick = () => openTrackModal({ playlist, track: t });
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = "Удалить трек";
+  delBtn.innerHTML = icon("trash", { size: 13 });
+  delBtn.onclick = async () => {
+    if (!(await showConfirm(`Удалить трек «${t.name}»?`, { title: "Удалить трек", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylistTrack(playlist.id, t.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  row.append(grip, playBtn, main, volWrap, loopBtn, editBtn, delBtn);
+
+  // ---- drag-and-drop переупорядочивание внутри плейлиста ----
+  row.addEventListener("dragstart", () => {
+    draggedTrackId = t.id;
+    draggedFromPlaylistId = playlist.id;
+    row.classList.add("dragging");
+  });
+  row.addEventListener("dragend", () => {
+    row.classList.remove("dragging");
+    draggedTrackId = null;
+    draggedFromPlaylistId = null;
+  });
+  row.addEventListener("dragover", (e) => {
+    if (draggedFromPlaylistId !== playlist.id || draggedTrackId === t.id) return;
+    e.preventDefault();
+    const before = e.clientY - row.getBoundingClientRect().top < row.offsetHeight / 2;
+    row.classList.toggle("drag-over-top", before);
+    row.classList.toggle("drag-over-bottom", !before);
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drag-over-top", "drag-over-bottom"));
+  row.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    const before = row.classList.contains("drag-over-top");
+    row.classList.remove("drag-over-top", "drag-over-bottom");
+    if (draggedFromPlaylistId !== playlist.id || !draggedTrackId || draggedTrackId === t.id) return;
+    await reorderPlaylistTrack(playlist, draggedTrackId, t.id, before);
+  });
+
+  return row;
+}
+
+// reorderPlaylistTrack — драг задаёт желаемый порядок целиком на клиенте, но
+// бэкенд умеет только сдвигать трек на одну позицию за раз (см. MoveTrack в
+// internal/repository/sqlite/playlists.go — обмен местами с соседом),
+// поэтому досылаем нужное число шагов "up"/"down" подряд и один раз
+// перечитываем плейлисты в конце.
+async function reorderPlaylistTrack(playlist, trackId, targetId, before) {
+  const ids = (playlist.tracks || []).map((t) => t.id);
+  const fromIdx = ids.indexOf(trackId);
+  if (fromIdx === -1) return;
+  ids.splice(fromIdx, 1);
+  let insertAt = ids.indexOf(targetId);
+  if (!before) insertAt += 1;
+  ids.splice(insertAt, 0, trackId);
+  const steps = ids.indexOf(trackId) - fromIdx;
+  if (steps === 0) return;
+  try {
+    const dir = steps > 0 ? "down" : "up";
+    for (let i = 0; i < Math.abs(steps); i++) {
+      await movePlaylistTrack(playlist.id, trackId, dir);
+    }
+    await refreshPlaylists();
+  } catch (err) {
+    showAlert(err.message);
   }
 }
 
-function renderTrackPanel() {
-  const playlist = playlists.find((p) => p.id === selectedPlaylistId);
-  if (!playlist) return;
-  trackPanelTitle.textContent = playlist.name;
-  trackList.innerHTML = "";
-  const tracks = playlist.tracks || [];
-  tracks.forEach((t, i) => {
-    const isPlaying = !!(currentCue && currentCue.url === t.url);
-    const row = document.createElement("div");
-    row.className = "track-row" + (isPlaying ? " playing" : "");
-    const playBtn = document.createElement("button");
-    playBtn.innerHTML = icon("play", { size: 13 });
-    playBtn.title = isPlaying ? "Играет сейчас — нажми, чтобы перезапустить" : "Играть";
-    playBtn.onclick = () => vtt.send({ type: "play_cue", cue: { url: t.url, name: t.name, volume: t.volume, loop: t.loop } });
-    const name = document.createElement("span");
-    name.className = "track-name";
-    name.textContent = t.name;
-    const volSlider = document.createElement("input");
-    volSlider.type = "range";
-    volSlider.min = 0;
-    volSlider.max = 100;
-    volSlider.value = Math.round(t.volume * 100);
-    volSlider.title = "Громкость трека";
-    volSlider.onchange = async () => {
-      const vol = volSlider.value / 100;
-      try {
-        await updatePlaylistTrack(playlist.id, t.id, t.name, vol, t.loop);
-        t.volume = vol;
-        // трек играет прямо сейчас — обновляем громкость на лету, не
-        // дожидаясь следующего запуска.
-        if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_volume", cue: { volume: vol } });
-      } catch (err) {
-        showAlert(err.message);
+// openTrackModal — то же окно и для новой записи (playlist задан, track —
+// нет), и для правки существующей (задан track): url трека неизменяем после
+// создания (см. updatePlaylistTrack — там нет параметра url), поэтому в
+// режиме правки вместо загрузки/библиотеки показывается имя файла как текст.
+function openTrackModal({ playlist, track }) {
+  const isEdit = !!track;
+  let pendingUrl = "";
+  let nameInput, librarySelect, volumeInput, loopInput, msgEl;
+
+  openModal({
+    title: isEdit ? "Изменить трек" : "Добавить трек",
+    okLabel: isEdit ? "Сохранить" : "Добавить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const nameField = document.createElement("div");
+      nameField.className = "field";
+      nameField.innerHTML = "<label>Имя трека</label>";
+      nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.maxLength = 60;
+      nameInput.value = track ? track.name : "";
+      nameField.appendChild(nameInput);
+      body.appendChild(nameField);
+
+      if (isEdit) {
+        const srcField = document.createElement("div");
+        srcField.className = "field";
+        const fileLabel = document.createElement("label");
+        fileLabel.textContent = "Файл";
+        const fileName = document.createElement("p");
+        fileName.className = "bt-modal-text dim";
+        fileName.textContent = decodeURIComponent(track.url.split("/").pop());
+        srcField.append(fileLabel, fileName);
+        body.appendChild(srcField);
+      } else {
+        const uploadField = document.createElement("div");
+        uploadField.className = "field";
+        uploadField.innerHTML = "<label>Загрузить файл</label>";
+        const uploadInput = document.createElement("input");
+        uploadInput.type = "file";
+        uploadInput.accept = "audio/*";
+        uploadInput.onchange = async () => {
+          const file = uploadInput.files[0];
+          if (!file) return;
+          try {
+            const { url } = await uploadFile(file, "audio");
+            pendingUrl = url;
+            if (!nameInput.value.trim()) nameInput.value = stripExt(file.name);
+            await refreshLibrary();
+            fillLibrary(librarySelect, latestAssets.audio || []);
+          } catch (err) {
+            msgEl.textContent = "Не удалось загрузить: " + err.message;
+          }
+        };
+        uploadField.appendChild(uploadInput);
+        body.appendChild(uploadField);
+
+        const libField = document.createElement("div");
+        libField.className = "field";
+        libField.innerHTML = "<label>или из библиотеки</label>";
+        librarySelect = document.createElement("select");
+        fillLibrary(librarySelect, latestAssets.audio || []);
+        librarySelect.onchange = () => {
+          if (!librarySelect.value) return;
+          pendingUrl = librarySelect.value;
+          if (!nameInput.value.trim()) nameInput.value = librarySelect.options[librarySelect.selectedIndex].textContent;
+        };
+        libField.appendChild(librarySelect);
+        body.appendChild(libField);
       }
-    };
-    const loopBtn = document.createElement("button");
-    const setLoopBtnLabel = () => {
-      loopBtn.innerHTML = icon(t.loop ? "repeat" : "minus", { size: 13 });
-      loopBtn.append(t.loop ? " Луп" : " Один раз");
-      loopBtn.title = t.loop
-        ? "Трек зациклен — нажми, чтобы играть один раз"
-        : "Трек играет один раз — нажми, чтобы зациклить";
-    };
-    setLoopBtnLabel();
-    loopBtn.onclick = async () => {
-      const newLoop = !t.loop;
-      try {
-        await updatePlaylistTrack(playlist.id, t.id, t.name, t.volume, newLoop);
-        t.loop = newLoop;
-        setLoopBtnLabel();
-      } catch (err) {
-        showAlert(err.message);
+
+      const volField = document.createElement("div");
+      volField.className = "field";
+      volField.innerHTML = "<label>Громкость</label>";
+      volumeInput = document.createElement("input");
+      volumeInput.type = "range";
+      volumeInput.min = 0;
+      volumeInput.max = 100;
+      volumeInput.value = Math.round((track ? track.volume : 0.8) * 100);
+      volField.appendChild(volumeInput);
+      body.appendChild(volField);
+
+      const loopRow = document.createElement("label");
+      loopRow.className = "checkbox-row";
+      loopInput = document.createElement("input");
+      loopInput.type = "checkbox";
+      loopInput.checked = track ? track.loop : false;
+      loopRow.append(loopInput, " зациклен");
+      body.appendChild(loopRow);
+
+      msgEl = document.createElement("p");
+      msgEl.className = "bt-modal-text dim";
+      body.appendChild(msgEl);
+
+      return nameInput;
+    },
+    onOk: async () => {
+      const name = nameInput.value.trim();
+      const url = isEdit ? track.url : pendingUrl || (librarySelect && librarySelect.value);
+      if (!name || !url) {
+        showAlert("Нужны имя и файл/трек из библиотеки.");
+        return;
       }
-    };
-    const upBtn = document.createElement("button");
-    upBtn.innerHTML = icon("arrow-up", { size: 13 });
-    upBtn.title = "Передвинуть выше";
-    upBtn.disabled = i === 0;
-    upBtn.onclick = async () => {
-      await movePlaylistTrack(playlist.id, t.id, "up");
-      await refreshPlaylists();
-    };
-    const downBtn = document.createElement("button");
-    downBtn.innerHTML = icon("arrow-down", { size: 13 });
-    downBtn.title = "Передвинуть ниже";
-    downBtn.disabled = i === tracks.length - 1;
-    downBtn.onclick = async () => {
-      await movePlaylistTrack(playlist.id, t.id, "down");
-      await refreshPlaylists();
-    };
-    const delBtn = document.createElement("button");
-    delBtn.innerHTML = icon("trash", { size: 13 });
-    delBtn.onclick = async () => {
-      if (!(await showConfirm(`Удалить трек «${t.name}»?`, { title: "Удалить трек", okLabel: "Удалить", danger: true }))) return;
+      const volume = volumeInput.value / 100;
+      const loop = loopInput.checked;
       try {
-        await deletePlaylistTrack(playlist.id, t.id);
+        if (isEdit) {
+          await updatePlaylistTrack(playlist.id, track.id, name, volume, loop);
+          // трек играет прямо сейчас — громкость и "зациклен" применяем на
+          // лету тем же приёмом, что и в loopBtn выше (см. set_cue_loop).
+          if (currentCue && currentCue.url === track.url) {
+            vtt.send({ type: "set_cue_volume", cue: { volume } });
+            vtt.send({ type: "set_cue_loop", cue: { loop } });
+          }
+        } else {
+          await addPlaylistTrack(playlist.id, url, name, volume, loop);
+          openPlaylistIds.add(playlist.id);
+        }
         await refreshPlaylists();
       } catch (err) {
         showAlert(err.message);
       }
-    };
-    delBtn.title = "Удалить трек";
-    row.append(playBtn, name, volSlider, loopBtn, upBtn, downBtn, delBtn);
-    trackList.appendChild(row);
+    },
+    onCancel: () => undefined,
   });
 }
 
 onPanelOpen("playlists", async () => {
-  backToPlaylistList(); // всегда открываемся на списке, не на треках прошлой сессии
-  refreshNewTrackLibrary();
   await refreshPlaylists();
 });
+
+// Плейлисты поменялись мимо этой вкладки — другая вкладка ДМ или импорт
+// Foundry (см. RoomService.NotifyPlaylistsChanged/net.js: "playlists_changed").
+// Перечитываем список сразу, а не только при следующем открытии панели —
+// иначе новый плейлист/трек был бы не виден без ручной перезагрузки страницы.
+document.addEventListener("vtt:playlistsChanged", refreshPlaylists);
 
 document.getElementById("newPlaylistForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1895,65 +2208,12 @@ document.getElementById("newPlaylistForm").addEventListener("submit", async (e) 
   const name = nameInput.value.trim();
   if (!name) return;
   try {
-    await createPlaylist(name);
+    const p = await createPlaylist(name);
     nameInput.value = "";
+    if (p && p.id) openPlaylistIds.add(p.id); // сразу разворачиваем новый — добавлять треки некуда, кроме как внутрь
     await refreshPlaylists();
   } catch (err) {
     showAlert(err.message);
-  }
-});
-
-// stripExt — "тема_боя.mp3" → "тема_боя", чтобы автоподставленное имя трека
-// не тащило за собой расширение файла.
-function stripExt(fileName) {
-  const idx = fileName.lastIndexOf(".");
-  return idx > 0 ? fileName.slice(0, idx) : fileName;
-}
-document.getElementById("newTrackUpload").onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const { url } = await uploadFile(file, "audio");
-    pendingNewTrackUrl = url;
-    if (!newTrackName.value.trim()) newTrackName.value = stripExt(file.name);
-    await refreshLibrary(); // заодно обновит newTrackLibrary через refreshNewTrackLibrary()
-  } catch (err) {
-    addTrackMsg.textContent = "Не удалось загрузить: " + err.message;
-  }
-};
-newTrackLibrary.onchange = () => {
-  if (!newTrackLibrary.value) return;
-  pendingNewTrackUrl = newTrackLibrary.value;
-  if (!newTrackName.value.trim()) {
-    newTrackName.value = newTrackLibrary.options[newTrackLibrary.selectedIndex].textContent;
-  }
-};
-
-addTrackForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  addTrackMsg.textContent = "";
-  const name = newTrackName.value.trim();
-  const url = pendingNewTrackUrl || newTrackLibrary.value;
-  if (!name || !url) {
-    addTrackMsg.textContent = "Нужны имя и файл/трек из библиотеки.";
-    return;
-  }
-  try {
-    await addPlaylistTrack(
-      selectedPlaylistId,
-      url,
-      name,
-      document.getElementById("newTrackVolume").value / 100,
-      document.getElementById("newTrackLoop").checked
-    );
-    newTrackName.value = "";
-    document.getElementById("newTrackUpload").value = "";
-    newTrackLibrary.value = "";
-    document.getElementById("newTrackLoop").checked = false;
-    pendingNewTrackUrl = "";
-    await refreshPlaylists();
-  } catch (err) {
-    addTrackMsg.textContent = err.message;
   }
 });
 
@@ -1962,21 +2222,55 @@ function renderNowPlaying() {
   if (!currentCue) {
     nowPlayingLabel.textContent = "Ничего не играет";
     cueVolumeSlider.value = 80;
+    nowPlayingProgressFill.style.width = "0%";
+    cuePlayPauseBtn.disabled = true;
+    cuePlayPauseBtn.classList.remove("active");
+    cuePlayPauseBtn.innerHTML = icon("play", { size: 12 });
+    cuePlayPauseBtn.title = "Ничего не играет";
   } else {
-    nowPlayingLabel.textContent = "▶ " + currentCue.name;
+    nowPlayingLabel.textContent = (currentCue.paused ? "⏸ " : "▶ ") + currentCue.name;
     cueVolumeSlider.value = Math.round(currentCue.volume * 100);
+    const btnState = cueBtnState(true);
+    cuePlayPauseBtn.disabled = false;
+    cuePlayPauseBtn.classList.toggle("active", btnState.action === "pause");
+    cuePlayPauseBtn.innerHTML = icon(btnState.icon, { size: 12 });
+    cuePlayPauseBtn.title = btnState.title;
   }
 }
 document.addEventListener("vtt:cueChanged", (e) => {
   currentCue = e.detail;
   renderNowPlaying();
-  if (openPanelSection === "playlists" && playlistsView === "tracks") renderTrackPanel(); // подсветить playing-трек
+  if (currentCue) {
+    // авто-разворачиваем плейлист с играющим треком — как и в Foundry, сразу
+    // видно, что и где сейчас звучит, не нужно искать вручную.
+    const owner = playlists.find((pl) => (pl.tracks || []).some((t) => t.url === currentCue.url));
+    if (owner) openPlaylistIds.add(owner.id);
+  }
+  renderPlaylistAccordion();
 });
+cuePlayPauseBtn.onclick = () => {
+  if (!currentCue) return;
+  vtt.send({ type: currentCue.paused ? "resume_cue" : "pause_cue" });
+};
 document.getElementById("cueStopBtn").onclick = () => vtt.send({ type: "stop_cue" });
 cueVolumeSlider.oninput = () => {
   if (!currentCue) return;
   vtt.send({ type: "set_cue_volume", cue: { volume: cueVolumeSlider.value / 100 } });
 };
+
+// updateCueProgress — тонкая полоска прогресса и в баре "сейчас играет", и у
+// самого трека в развёрнутом плейлисте (если он сейчас виден), по timeupdate
+// на канале ДМ (vtt.cueAudio, слушатель вешается в boot() выше). Пока ДМ
+// тащит полоску сам (scrubbing, см. wireSeekBar), сюда не лезем — иначе ещё
+// не перемотанный timeupdate дёргал бы её обратно под курсором.
+function updateCueProgress() {
+  if (scrubbing) return;
+  const audio = vtt.cueAudio;
+  const pct = audio && audio.duration ? Math.min(100, (audio.currentTime / audio.duration) * 100) : 0;
+  nowPlayingProgressFill.style.width = pct + "%";
+  const activeFill = playlistAccordion.querySelector(".bt-track.playing .bt-track-progress .progress-fill");
+  if (activeFill) activeFill.style.width = pct + "%";
+}
 
 // Автопереключение плейлиста ведёт клиент ДМ: сервер не декодирует аудио и
 // не знает длительность трека, поэтому следующий трек шлём сами по событию

@@ -38,6 +38,7 @@ const PATHS = {
   eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>',
   "eye-off": '<path d="M3 3l18 18"/><path d="M10.6 5.2A11 11 0 0112 5c7 0 11 7 11 7a17.7 17.7 0 01-3.2 4.1M6.6 6.6C3.6 8.3 1 12 1 12s4 7 11 7a11 11 0 004.4-.9"/><path d="M9.5 9.5a3 3 0 004.2 4.2"/>',
   play: '<polygon points="6 4 20 12 6 20 6 4"/>',
+  pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
   headphones: '<path d="M4 15v-3a8 8 0 0116 0v3"/><rect x="2.5" y="14" width="4" height="6" rx="1.5"/><rect x="17.5" y="14" width="4" height="6" rx="1.5"/>',
   pencil: '<path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/>',
   "external-link": '<path d="M9 4H4v16h16v-5"/><path d="M13 4h7v7"/><line x1="10" y1="14" x2="20" y2="4"/>',

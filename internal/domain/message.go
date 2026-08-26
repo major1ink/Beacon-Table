@@ -74,8 +74,6 @@ type ClientMsg struct {
 	// Label её не подменяет.
 	Label string `json:"label,omitempty"`
 
-	// Cue — только для "play_cue"/"set_cue_volume" (канал ДМ). "stop_cue" его
-	// не использует.
 	Cue *CueState `json:"cue,omitempty"`
 
 	// поля трекера инициативы (см. domain.CombatState/Combatant,
@@ -221,10 +219,22 @@ type WallPointRef struct {
 // Unix-миллисекундах, от него каждый клиент сам считает currentTime — так
 // подключившийся позже клиент слышит трек с той же позиции, а не с нуля,
 // без стриминга позиции по WS. nil *CueState = ничего не играет.
+//
+// Paused/PositionMs — пауза и перемотка (см. Room: pause_cue/resume_cue/
+// seek_cue). Пока Paused==false, StartedAtMs — обычный "виртуальный старт":
+// currentTime = now - StartedAtMs (с учётом Loop по модулю). На паузе
+// StartedAtMs больше не годится (время идёт, а трек стоит), поэтому позиция
+// замораживается в PositionMs; возобновление пересчитывает StartedAtMs =
+// now - PositionMs и снимает Paused, чтобы формула снова заработала как ни в
+// чём не бывало. Тот же PositionMs клиент присылает при перемотке (see
+// seek_cue) — сервер сам решает, во что его превратить (в новый StartedAtMs,
+// если играет, или в саму заморозку, если на паузе).
 type CueState struct {
 	URL         string  `json:"url"`
 	Name        string  `json:"name"`
 	Volume      float64 `json:"volume"`
 	Loop        bool    `json:"loop"`
 	StartedAtMs int64   `json:"startedAtMs"`
+	Paused      bool    `json:"paused"`
+	PositionMs  int64   `json:"positionMs"`
 }

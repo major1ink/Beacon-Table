@@ -96,6 +96,11 @@ export function createNet(ctx, audio) {
       // как ctx.combat.
       ctx.hub = data.entries || [];
       document.dispatchEvent(new CustomEvent("vtt:hubState", { detail: ctx.hub }));
+    } else if (data.type === "playlists_changed") {
+      // Плейлисты канала ДМ поменялись мимо этой вкладки (другая вкладка
+      // ДМ, импорт Foundry — см. RoomService.NotifyPlaylistsChanged): панель
+      // "Плейлисты" (pages/dm.js) сама перечитает список по этому событию.
+      document.dispatchEvent(new CustomEvent("vtt:playlistsChanged"));
     }
   };
 

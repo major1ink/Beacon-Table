@@ -374,6 +374,12 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 		}
 		result.Applied[foundry.TargetScenes] = added
 	}
+	if result.Applied[foundry.TargetPlaylists] > 0 {
+		// Панель "Плейлисты" (см. web/src/pages/dm.js), если уже открыта в
+		// другой вкладке ДМ, сама перечитает список — без этого новые
+		// плейлисты появлялись бы только после ручной перезагрузки страницы.
+		s.room.NotifyPlaylistsChanged()
+	}
 	result.Assets = assets.Count()
 	result.AssetsMissing = assets.Missing
 
