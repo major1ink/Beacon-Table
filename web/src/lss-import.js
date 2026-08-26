@@ -197,14 +197,30 @@ export function applyLssImport(sheet, parsed, targetIsClassic) {
   }
 
   // ---- боевые показатели ----
-  if (typeof val(vitality.ac) === "number") sheet.combat.ac = val(vitality.ac);
+  // AC и КД на lss хранятся как value:number почти всегда, но в некоторых
+  // экспортах (см. пример из задачи) ac.value — строка "14", а не число —
+  // поэтому здесь и ниже парсим через parseInt вместо строгой проверки типа.
+  const acVal = val(vitality.ac);
+  if (acVal !== undefined) {
+    const n = parseInt(acVal, 10);
+    if (!Number.isNaN(n)) sheet.combat.ac = n;
+  }
   const speedVal = val(vitality.speed);
   if (speedVal !== undefined) {
     const n = parseInt(speedVal, 10);
     if (!Number.isNaN(n)) sheet.combat.speed = n;
   }
   if (typeof val(vitality.darkvision) === "number") sheet.combat.darkvision = val(vitality.darkvision);
-  if (typeof val(vitality["hp-max"]) === "number") sheet.combat.hpMax = val(vitality["hp-max"]);
+  const hpMaxVal = val(vitality["hp-max"]);
+  if (hpMaxVal !== undefined) {
+    const n = parseInt(hpMaxVal, 10);
+    if (!Number.isNaN(n)) sheet.combat.hpMax = n;
+  }
+  const hpCurrentVal = val(vitality["hp-current"]);
+  if (hpCurrentVal !== undefined) {
+    const n = parseInt(hpCurrentVal, 10);
+    if (!Number.isNaN(n)) sheet.combat.hpCurrent = n;
+  }
   if (typeof vitality.isDying === "boolean") sheet.combat.isDying = vitality.isDying;
   const hitDieMatch = /d(\d+)/i.exec(val(vitality["hit-die"]) || "");
   if (hitDieMatch) {
