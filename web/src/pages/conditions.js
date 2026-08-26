@@ -37,6 +37,53 @@ function normalizeCondition(raw) {
   return c;
 }
 
+// mergeConditionInPlace — после автосохранения переносим ответ сервера В ТОТ
+// ЖЕ объект `condition`, а не подменяем переменную целиком (было раньше:
+// `condition = normalizeCondition(await updateCondition(...))`).
+//
+// Почему это важно: renderModifierEditor/riders-редактор получают массив
+// (condition.modifiers, condition.riders) ОДИН РАЗ при монтировании секции
+// и потом мутируют его на месте (push/splice) — сами по ссылке, а не через
+// геттер вроде textInput'а. Если подменить саму переменную `condition`
+// (и тем самым — ссылки на её массивы) ответом сервера, уже смонтированная
+// форма продолжает держать СТАРЫЙ массив: следующие правки в открытых полях
+// «Изменения»/«Зависимые состояния»/«Теги» уходят в осиротевший массив,
+// который ни один будущий scheduleSave() уже не увидит. Внешне это
+// выглядело как «правка изменения тихо не сохраняется, при перезаходе в
+// карточку — пусто»: только жизни хватало ровно до первого успешного
+// автосохранения, а любая дальнейшая правка того же списка терялась молча.
+function mergeConditionInPlace(target, saved) {
+  for (const key of Object.keys(target)) {
+    if (!(key in saved)) delete target[key];
+  }
+  for (const [key, value] of Object.entries(saved)) {
+    if (Array.isArray(target[key]) && Array.isArray(value)) {
+      mergeArrayInPlace(target[key], value);
+    } else {
+      target[key] = value;
+    }
+  }
+}
+
+// mergeArrayInPlace — как mergeConditionInPlace, но для одного массива:
+// держит по ссылке не только сам массив, но и (для массива объектов, как
+// modifiers) каждый элемент по индексу. У «Значения»/«Заметки» в редакторе
+// изменений нет перерисовки строки на каждый символ (см. modifier-editor.js:
+// valueInp/noteInp) — поле держит объект-модификатор по ссылке напрямую;
+// подмена этого объекта на новый с тем же содержимым оторвала бы поле от
+// массива точно так же, как раньше отрывала подмена самого массива.
+function mergeArrayInPlace(cur, value) {
+  for (let i = 0; i < value.length; i++) {
+    const v = value[i];
+    if (cur[i] && typeof cur[i] === "object" && v && typeof v === "object") {
+      Object.assign(cur[i], v);
+    } else {
+      cur[i] = v;
+    }
+  }
+  cur.length = value.length;
+}
+
 // ==================== DOM helpers (та же схема, что referencebook.js) ====================
 
 function h(tag, attrs, children) {
@@ -148,6 +195,18 @@ function renderEditView(root) {
     renderApp();
   });
 
+  // slugWarnBox — обёртка для slugConflictWarning(), которую обновляем точечно
+  // при каждом вводе в поле Slug, не перестраивая всю форму (см. поле Slug
+  // ниже: полная renderApp() здесь недопустима — она пересоздаёт сам <input>
+  // и роняет фокус на каждой букве).
+  const slugWarnBox = h("div", {});
+  function refreshSlugWarning() {
+    slugWarnBox.innerHTML = "";
+    const w = slugConflictWarning();
+    if (w) slugWarnBox.appendChild(w);
+  }
+  refreshSlugWarning();
+
   root.appendChild(
     h("div", { class: "section" }, [
       h("div", { class: "portrait-wrap" }, [
@@ -187,7 +246,7 @@ function renderEditView(root) {
         ]),
       ]),
       glyphPicker(),
-      slugConflictWarning(),
+      slugWarnBox,
       h("div", { class: "row" }, [
         field(
           "Slug",
@@ -195,14 +254,14 @@ function renderEditView(root) {
             () => condition.slug,
             (v) => {
               condition.slug = normalizeSlug(v);
-              // Перерисовка нужна ради предупреждения о дубле (см.
-              // slugConflictWarning) — поле при этом не теряет фокус, потому
-              // что renderApp пересобирает секцию целиком уже после ввода.
-              queueMicrotask(renderApp);
+              // Полная перерисовка (renderApp) тут не годится: она пересоздаёт
+              // сам <input>, и фокус слетает после каждой буквы. Обновляем
+              // только предупреждение о дубле slug'а, само поле не трогаем.
+              refreshSlugWarning();
             },
             { placeholder: "blinded" }
           ),
-          "Машинный ключ состояния: по нему метка ссылается на карточку, по нему же сопоставляется импорт из Foundry (там это код вида blinded/prone/exhaustion). Латиница, цифры и дефис."
+          "Машинный ключ состояния: по нему метка ссылается на карточку, по нему же сопоставляется импорт из Foundry (там это код вида blinded/prone/exhaustion). Латиница, цифры и дефис. Должен быть уникальным в пределах библиотеки — иначе метка будет вешаться то с одной карточкой, то с другой."
         ),
         field("Источник", textInput(() => condition.source, (v) => (condition.source = v), { placeholder: "PHB'24" })),
         field(
@@ -558,7 +617,8 @@ async function doSave() {
   dirty = false;
   setSaveStatus("saving");
   try {
-    condition = normalizeCondition(await updateCondition(conditionId, condition));
+    const saved = normalizeCondition(await updateCondition(conditionId, condition));
+    mergeConditionInPlace(condition, saved);
     setSaveStatus("saved");
     // Палитра состояний (status-palette.js) кэширует список на страницу —
     // без этого пинга ДМ увидел бы в ней старое имя/иконку до перезагрузки.

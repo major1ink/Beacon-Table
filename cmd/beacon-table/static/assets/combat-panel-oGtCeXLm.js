@@ -1,4 +1,4 @@
-import{h as Z,d as tt,i as X}from"./api-m72PrEiY.js";import{w as et}from"./catalog-links-DQW6UocY.js";import{c as J,o as W,a as nt}from"./combatant-card-BdeWBwwH.js";import{i as H,b as Y,s as at}from"./modal-ClzvMhHz.js";import{e as U}from"./inline-rolls-BdFQkweV.js";import{r as ot}from"./markdown-DTEMrdvN.js";import{r as ct,o as it,a as rt,h as st,b as lt,p as dt,c as pt}from"./status-palette-Cwczu3Yg.js";import{s as mt}from"./loot-take-modal-Cajm1d6h.js";const ut=`
+import{h as Z,d as tt,i as X}from"./api-m72PrEiY.js";import{w as et}from"./catalog-links-DQW6UocY.js";import{c as J,o as W,a as nt}from"./combatant-card-BdeWBwwH.js";import{i as H,b as Y,s as at}from"./modal-ClzvMhHz.js";import{e as U}from"./inline-rolls-BdFQkweV.js";import{r as ot}from"./markdown-DTEMrdvN.js";import{r as ct,o as it,a as rt,h as st,b as lt,p as dt,c as pt}from"./status-palette-BiirE8Dy.js";import{s as mt}from"./loot-take-modal-Cajm1d6h.js";const ut=`
 .actions-peek {
   position: fixed; z-index: 60; width: 360px; max-width: calc(100vw - 16px); max-height: 74vh; overflow: auto;
   display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px;

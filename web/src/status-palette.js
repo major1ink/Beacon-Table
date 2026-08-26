@@ -259,17 +259,24 @@ export async function openStatusPalette({ x, y, target, send, statusesFor, title
   const el = document.createElement("div");
   el.className = "status-palette";
   document.body.appendChild(el);
-  openPalette = { el, target, send, statusesFor, title, detailSlug: "", filter: "" };
+  // x/y — точка открытия, держим её в состоянии: содержимое потом растёт
+  // (детали по ПКМ, поиск, свежие данные с сервера), и каждая такая
+  // перерисовка должна переставлять панель заново от той же точки, а не
+  // расти вниз за край экрана от однажды посчитанной позиции.
+  openPalette = { el, x, y, target, send, statusesFor, title, detailSlug: "", filter: "" };
   positionPalette(el, x, y);
   el.textContent = "Загрузка…";
   await Promise.all([loadConditions(), loadModifierTargets()]);
   if (!openPalette || openPalette.el !== el) return; // успели закрыть, пока грузились
   renderPalette(openPalette);
-  positionPalette(el, x, y);
 }
 
 // positionPalette — держим палитру в пределах окна (у нижнего/правого края
 // разворачиваем вверх/влево), как это уже делает контекстное меню токена.
+// Вызывается из renderPalette при КАЖДОЙ перерисовке (а не только при
+// открытии) — иначе, например, раскрытые по ПКМ подробности резко наращивают
+// высоту панели, а её верх остаётся там, где панель встала изначально, и низ
+// уезжает за нижний край экрана.
 function positionPalette(el, x, y) {
   const w = el.offsetWidth || 296;
   const h = el.offsetHeight || 320;
@@ -386,6 +393,10 @@ function renderPalette(state) {
   clear.onclick = () => dispatch(send, target, "clear_statuses", {});
   foot.appendChild(clear);
   el.appendChild(foot);
+
+  // Высота могла измениться (детали по ПКМ, поиск, свежий список меток) —
+  // переставляем панель от исходной точки открытия заново.
+  positionPalette(el, state.x, state.y);
 }
 
 // detailBlock — раскрытая по ПКМ карточка: описание, механика и точная
@@ -404,7 +415,20 @@ function detailBlock(cond, applied, state) {
   // Сначала то, что приложение реально применяет (см. domain.Modifier), —
   // ДМ должен видеть, что метка не просто значок; потом текстовая механика
   // (преимущество/помеха и прочее неарифметическое).
-  for (const m of cond.modifiers || []) {
+  //
+  // Модификаторы берём с УЖЕ НАЛОЖЕННОЙ метки (applied.modifiers), а не с
+  // карточки состояния (cond.modifiers), когда метка реально висит: это
+  // снимок на момент наложения (см. domain.AppliedStatus.Modifiers,
+  // room_statuses.go: snapshotStatus) и он специально не идёт по ссылке на
+  // карточку — правка карточки посреди боя не должна задним числом менять
+  // цифры уже висящих меток. Показывать здесь cond.modifiers означало бы
+  // врать: ДМ видел бы актуальный текст карточки и решил бы, что метка
+  // считает по нему, хотя реально применяется то, что было в момент
+  // наложения — старое, если карточку поправили уже после. Карточку без
+  // наложенной метки (applied == null) показываем как есть — другого
+  // источника для предпросмотра ещё нет.
+  const modifiers = applied ? applied.modifiers || [] : cond.modifiers || [];
+  for (const m of modifiers) {
     const line = document.createElement("p");
     line.textContent = "▸ " + describeModifier(m);
     line.style.color = "var(--text)";

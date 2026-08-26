@@ -78,17 +78,24 @@ func TestSanitizeModifiersDropsJunk(t *testing.T) {
 		// период у цели, которая его не поддерживает — молча делаем постоянным
 		{Target: domain.ModifierTargetAC, Mode: domain.ModifierAdd, Value: "1", Period: domain.ModifierPeriodTurnStart},
 	})
-	if len(got) != 3 {
-		t.Fatalf("осталось %d записей, ожидалось 3: %+v", len(got), got)
+	// Запись с пустым Value (после обрезки пробелов) НЕ выбрасывается — см.
+	// комментарий у sanitizeModifiers: это недописанная строка конструктора,
+	// а не мусор, и она безопасна как есть (ApplyModifiers её просто
+	// пропускает). Выбрасывается только запись с чужой целью.
+	if len(got) != 4 {
+		t.Fatalf("осталось %d записей, ожидалось 4: %+v", len(got), got)
 	}
 	if got[0].Mode != domain.ModifierAdd {
 		t.Errorf("неизвестный режим должен становиться «прибавить», получено %q", got[0].Mode)
 	}
-	if got[1].Value != "-2" || got[1].Note != "от щита" {
-		t.Errorf("значение/подпись не обрезаны по краям: %+v", got[1])
+	if got[1].Value != "" {
+		t.Errorf("запись с пустым значением должна сохраниться как есть, получено %q", got[1].Value)
 	}
-	if got[2].Period != domain.ModifierPeriodNone {
-		t.Errorf("период у КД должен быть сброшен, получено %q", got[2].Period)
+	if got[2].Value != "-2" || got[2].Note != "от щита" {
+		t.Errorf("значение/подпись не обрезаны по краям: %+v", got[2])
+	}
+	if got[3].Period != domain.ModifierPeriodNone {
+		t.Errorf("период у КД должен быть сброшен, получено %q", got[3].Period)
 	}
 }
 
