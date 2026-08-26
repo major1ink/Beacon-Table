@@ -218,6 +218,33 @@ export function createInteraction(ctx) {
     let dragLastPos = null;
     let dragTraveled = 0;
 
+    // selectedTokenIds — множественное выделение токенов инструментом
+    // "Выбор" (см. mousedown/mousemove/mouseup ниже, аналог рамки-лассо и
+    // shift-клика в Foundry). ctx.selectedTokenIds — то же зеркало наружу,
+    // что и ctx.tool выше: layers/tokens.js читает его на каждой перерисовке
+    // токена, чтобы решить, рисовать ли рамку выделения (selectionRing).
+    // marquee — резиновая рамка, которую тянет ДМ по пустому месту карты
+    // (не по токену/значку заметки): {x0,y0} — точка mousedown, {x,y} —
+    // текущая точка курсора, additive — зажат ли был Shift в момент старта
+    // (тогда рамка ДОБАВЛЯЕТ токены к уже выделенным, а не заменяет их).
+    // groupDragOrigins — снимок стартовых позиций ВСЕХ выделенных токенов на
+    // mousedown (Map<id,{x,y}>): пока "анкорный" токен под курсором
+    // (dragTokenId) едет со снаппингом к сетке через обычный
+    // trackMovementStep, остальные из группы просто получают ту же дельту
+    // от своей исходной позиции — иначе выделение расползалось бы, если бы
+    // каждый токен снаппился независимо.
+    let selectedTokenIds = new Set();
+    ctx.selectedTokenIds = selectedTokenIds;
+    let marquee = null;
+    let groupDragOrigins = null;
+
+    function setSelection(ids) {
+      selectedTokenIds = new Set(ids);
+      ctx.selectedTokenIds = selectedTokenIds;
+      ctx.dirty.tokens = true;
+      ctx.render();
+    }
+
     // lightEditActive — открыта ли ПРЯМО СЕЙЧАС панель "Освещение" (см.
     // pages/dm.js: setSidePanelSection шлёт "vtt:lightEditMode"). Токены
     // света (domain.Token.LightOnly) — это разметка карты, а не фигурки на
@@ -267,6 +294,7 @@ export function createInteraction(ctx) {
       buildingChain = null;
       fogPath = null;
       gridDragStart = null;
+      marquee = null;
       rulerFrom = null;
       rulerLine.clear();
       distanceLabel.hide();
@@ -533,11 +561,34 @@ export function createInteraction(ctx) {
         return;
       }
       if (hitId) {
+        // Shift+клик по токену — только переключить его в/из текущего
+        // выделения (как в Foundry), само перетаскивание НЕ начинается: это
+        // жест "поправить состав группы", не "подвинуть".
+        if (e.shiftKey) {
+          const next = new Set(selectedTokenIds);
+          if (next.has(hitId)) next.delete(hitId);
+          else next.add(hitId);
+          setSelection(next);
+          return;
+        }
+        // Клик без Shift по токену, который УЖЕ входит в групповое
+        // выделение, — тащим всю группу, состав не трогаем. По токену вне
+        // выделения — обычный клик заменяет выделение им одним (ровно как
+        // одиночный драг работал раньше).
+        if (!selectedTokenIds.has(hitId)) setSelection([hitId]);
         dragTokenId = hitId;
         const t0 = ctx.scene.tokens[hitId];
         dragStart = { x: t0.x, y: t0.y };
         dragLastPos = dragStart;
         dragTraveled = 0;
+        // Снимок стартовых позиций остальных выделенных токенов — двигать
+        // их на mousemove той же дельтой, что и анкорный hitId (см.
+        // rationale у groupDragOrigins выше).
+        groupDragOrigins = new Map();
+        for (const id of selectedTokenIds) {
+          const tok = ctx.scene.tokens[id];
+          if (tok) groupDragOrigins.set(id, { x: tok.x, y: tok.y });
+        }
         return;
       }
       // Значок заметки перетаскивается только инструментом "выбор" — как и
@@ -552,6 +603,13 @@ export function createInteraction(ctx) {
           resizeArmedNoteMarkerId = null;
         } else if (markerId) {
           dragNoteMarkerId = markerId;
+        } else {
+          // Пусто под курсором — начинаем резиновую рамку множественного
+          // выделения (см. mousemove/mouseup ниже). additive — зажат ли
+          // Shift: тогда по mouseup рамка ДОБАВЛЯЕТ токены к уже выделенным
+          // вместо замены — тот же приём, что и shift-клик по одному токену
+          // выше.
+          marquee = { x0: x, y0: y, x, y, additive: e.shiftKey };
         }
       }
     });
@@ -559,6 +617,18 @@ export function createInteraction(ctx) {
     canvas.addEventListener("mousemove", (e) => {
       const { x, y } = mousePos(e);
       const scale = ctx.world.scale.x || 1;
+
+      if (marquee) {
+        marquee.x = x;
+        marquee.y = y;
+        const rx = Math.min(marquee.x0, marquee.x);
+        const ry = Math.min(marquee.y0, marquee.y);
+        const rw = Math.abs(marquee.x - marquee.x0);
+        const rh = Math.abs(marquee.y - marquee.y0);
+        preview.clear();
+        preview.rect(rx, ry, rw, rh).fill({ color: 0x5dd0ff, alpha: 0.12 }).stroke({ width: 1.5 / scale, color: 0x5dd0ff, alpha: 0.9 });
+        return;
+      }
 
       if (tool === "wall" && (wallChainLast || wallDragFrom)) {
         const from = wallChainLast || wallDragFrom;
@@ -782,6 +852,7 @@ export function createInteraction(ctx) {
       if (!t || isLocked(t)) {
         dragTokenId = null;
         distanceLabel.hide();
+        groupDragOrigins = null;
         return;
       }
       // У ДМ перемещение ничем не ограничено (maxAllowed=Infinity — полная
@@ -801,9 +872,57 @@ export function createInteraction(ctx) {
       ctx.render();
       distanceLabel.show(t.x, t.y, formatDistanceValue(dragTraveled, ctx.scene.grid));
       ctx.send({ type: "move_token", token: t });
+
+      // Остальные токены группового выделения едут ТОЙ ЖЕ дельтой от своей
+      // исходной позиции (groupDragOrigins, снятой на mousedown) — без
+      // собственного снаппинга: иначе фигура выделения "разъезжалась" бы по
+      // сетке, если бы каждый токен подгонялся к ближайшей клетке отдельно.
+      if (groupDragOrigins && groupDragOrigins.size > 1) {
+        const anchorOrigin = groupDragOrigins.get(dragTokenId) || dragStart;
+        const dx = t.x - anchorOrigin.x;
+        const dy = t.y - anchorOrigin.y;
+        for (const [id, origin] of groupDragOrigins) {
+          if (id === dragTokenId) continue;
+          const other = ctx.scene.tokens[id];
+          if (!other || isLocked(other)) continue;
+          other.x = origin.x + dx;
+          other.y = origin.y + dy;
+          ctx.send({ type: "move_token", token: other });
+        }
+      }
     });
 
     canvas.addEventListener("mouseup", (e) => {
+      if (marquee) {
+        const rx0 = Math.min(marquee.x0, marquee.x);
+        const ry0 = Math.min(marquee.y0, marquee.y);
+        const rx1 = Math.max(marquee.x0, marquee.x);
+        const ry1 = Math.max(marquee.y0, marquee.y);
+        // Порог в мировых пикселях — отличить реальную рамку от дрожания
+        // руки на обычном клике по пустому месту (тот просто снимает
+        // выделение, см. ветку ниже).
+        const dragged = Math.hypot(marquee.x - marquee.x0, marquee.y - marquee.y0) > 4;
+        preview.clear();
+        if (dragged) {
+          const hitIds = Object.entries(ctx.scene.tokens)
+            .filter(([, tok]) => !tok.lightOnly && !isLocked(tok) && tok.x >= rx0 && tok.x <= rx1 && tok.y >= ry0 && tok.y <= ry1)
+            .map(([id]) => id);
+          if (marquee.additive) {
+            const next = new Set(selectedTokenIds);
+            for (const id of hitIds) next.add(id);
+            setSelection(next);
+          } else {
+            setSelection(hitIds);
+          }
+        } else if (!marquee.additive) {
+          // Просто клик по пустому месту карты — снять выделение (как клик
+          // по пустоте в Foundry).
+          setSelection([]);
+        }
+        marquee = null;
+        return;
+      }
+
       // wallChainLast/wallDragFrom/buildingChain ставятся ТОЛЬКО при
       // зажатом Ctrl на mousedown (см. выше) — значит их наличие тут само
       // по себе означает "идёт рисование нового", и перепроверять Ctrl на
@@ -900,6 +1019,7 @@ export function createInteraction(ctx) {
       dragStart = null;
       dragLastPos = null;
       dragTraveled = 0;
+      groupDragOrigins = null;
       distanceLabel.hide();
       dragNoteMarkerId = null;
       resizingNoteMarkerId = null; // одноразовый резайз — один драг и всё, армировать заново через меню
@@ -923,6 +1043,36 @@ export function createInteraction(ctx) {
         rulerLine.clear();
         distanceLabel.hide();
       }
+      if (marquee) {
+        marquee = null;
+        preview.clear();
+      }
+      if (selectedTokenIds.size) setSelection([]);
+    });
+
+    // isTypingTarget — активный элемент прямо сейчас принимает текстовый
+    // ввод (поле имени токена, чат, любая форма панели). Delete/Backspace в
+    // такой момент — это правка текста, а НЕ команда "удалить выделенные
+    // токены" (см. keydown ниже), иначе стирание последнего символа в поле
+    // сносило бы выделенных монстров со сцены.
+    function isTypingTarget() {
+      const el = document.activeElement;
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+
+    // Delete/Backspace — удалить со сцены всё групповое выделение разом
+    // (аналог того же действия в Foundry). Тот же remove_token, что шлёт
+    // ПКМ-меню одного токена (см. vtt:removeToken ниже) — просто по одному
+    // сообщению на каждый выделенный id.
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (!selectedTokenIds.size || isTypingTarget()) return;
+      e.preventDefault();
+      for (const id of selectedTokenIds) ctx.send({ type: "remove_token", id });
+      setSelection([]);
     });
 
     // двойной клик — во время рисования цепочки стен просто заканчивает её
@@ -1168,6 +1318,13 @@ export function createInteraction(ctx) {
     // из панели "Персонажи" на канвас (см. pages/dm.js: обработчик "drop").
     document.addEventListener("vtt:removeToken", (e) => {
       ctx.send({ type: "remove_token", id: e.detail.id });
+      // Убитый через ПКМ-меню токен мог быть частью группового выделения —
+      // не оставляем в selectedTokenIds ссылку на уже несуществующий id.
+      if (selectedTokenIds.has(e.detail.id)) {
+        const next = new Set(selectedTokenIds);
+        next.delete(e.detail.id);
+        setSelection(next);
+      }
     });
 
     // vtt:setMapObjectLocked — универсальный замок (см. map-objects.js и

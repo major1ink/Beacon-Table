@@ -266,6 +266,12 @@ export function createTokensLayer(ctx) {
     lockIcon.visible = false;
     const label = new Text({ text: "", style: { fill: 0xffffff, fontSize: 12, fontFamily: "sans-serif", align: "center" } });
     label.anchor.set(0.5, 0);
+    // selectionRing — рамка множественного выделения ДМ (см.
+    // interaction.js: selectedTokenIds/рамка-лассо, аналог выделения
+    // токенов в Foundry). Отдельная фигура от ownerRing — оба кольца могут
+    // быть видны одновременно (свой/чужой токен всё равно можно выделить
+    // групповой рамкой), и им не следует друг друга перекрывать/затирать.
+    const selectionRing = new Graphics();
     // statusLayer — наложенные состояния (domain.AppliedStatus): значки-
     // кружки по верхней кромке токена плюс, если состояние помечено
     // Overlay, крупный глиф поверх самого арта — прямой аналог палитры и
@@ -273,8 +279,8 @@ export function createTokensLayer(ctx) {
     // значков переменное число, они целиком пересоздаются при изменении
     // набора меток (это происходит только по dirty.tokens, не каждый кадр).
     const statusLayer = new Container();
-    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, statusLayer, lockIcon, label);
-    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, lightRings, lightIcon, deadIcon, statusLayer, lockIcon, label, artUrl: null, artSize: 0, artShape: null };
+    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, selectionRing, statusLayer, lockIcon, label);
+    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, selectionRing, lightRings, lightIcon, deadIcon, statusLayer, lockIcon, label, artUrl: null, artSize: 0, artShape: null };
   }
 
   // MAX_STATUS_BADGES — сколько значков рисуем в ряд, прежде чем свернуть
@@ -448,6 +454,15 @@ export function createTokensLayer(ctx) {
       view.ownerRing
         .circle(0, 0, size + 3)
         .stroke({ width: (mine ? 3 : 1.5) / scale, color: mine ? 0x2ecc71 : 0xffffff, alpha: mine ? 1 : 0.35 });
+    }
+
+    // Рамка группового выделения (только ДМ, см. interaction.js:
+    // selectedTokenIds) — толще и ярче ownerRing/hiddenOutline, чтобы не
+    // теряться среди них, когда выделен уже помеченный чужой/скрытый токен.
+    view.selectionRing.clear();
+    if (ctx.isDM && ctx.selectedTokenIds && ctx.selectedTokenIds.has(id) && !t.lightOnly) {
+      const scale = ctx.world.scale.x || 1;
+      view.selectionRing.circle(0, 0, size + 6).stroke({ width: 2.5 / scale, color: 0x5dd0ff, alpha: 0.95 });
     }
 
     // Радиусы источника света — ориентир только для ДМ (как и линии стен,
