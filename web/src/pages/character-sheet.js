@@ -27,7 +27,9 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "../hp-bar.js";
 import { renderStatusChips } from "../status-palette.js";
 import { applyModifiers, explainModifiers, collectModifiers, ABILITY_TARGETS, TARGET_AC, TARGET_SPEED, TARGET_HP_MAX } from "../modifiers.js";
-import { showAlert } from "../modal.js";
+import { showAlert, openModal } from "../modal.js";
+import { renderNoteHtml } from "../notes/markdown.js";
+import { wireCatalogLinks } from "../catalog-links.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -1209,10 +1211,18 @@ function renderTab5() {
       onclick: () => removeInventoryEntry(e.id),
     });
 
+    const nameBtn = h("button", {
+      type: "button",
+      class: "inv-name-btn",
+      title: "Открыть карточку предмета",
+      text: e.name,
+      onclick: (ev) => openItemPeek(e, ev.currentTarget),
+    });
+
     tbody.appendChild(
       h("tr", {}, [
         h("td", {}, [avatar]),
-        h("td", { text: e.name }),
+        h("td", {}, [nameBtn]),
         h("td", { text: (e.weightLb || 0) + " фнт" }),
         h("td", {}, [qtyInput]),
         h("td", {}, [equippedInput]),
@@ -1903,6 +1913,198 @@ function vAttunementCard() {
   return vCard("Настройка на предметы", rows);
 }
 
+// ==================== карточка предмета из инвентаря ====================
+//
+// Инвентарь хранит только id/имя/вес/кол-во (см. domain.InventoryEntry) —
+// сами характеристики предмета лежат в общей библиотеке (domain.Item) и уже
+// подтянуты целиком в itemCatalog (см. loadInventory, ради модификаторов
+// надетых вещей). Здесь та же карточка используется ещё раз, чтобы её можно
+// было посмотреть из инвентаря — в двух видах:
+//   - openItemPeek  — мини-окно рядом с предметом, только самое важное;
+//   - showItemCard  — полноценное модальное окно с описанием целиком, тот же
+//     "read-режим", что и в pages/itembook.js (readHeader/readInfoGrid/
+//     renderReadView), скопирован сюда по той же схеме, что используют
+//     spellbook.js/bestiary.js — свой набор функций на страницу, без общего
+//     модуля.
+function itemLineIf(label, value) {
+  const v = (value ?? "").toString().trim();
+  if (!v) return null;
+  return h("div", { class: "ib-line" }, [h("strong", { text: label + " " }), v]);
+}
+
+function itemAttunementText(it) {
+  if (!it.requiresAttunement) return "";
+  return it.attunementNote ? `требуется настройка (${it.attunementNote})` : "требуется настройка";
+}
+
+function itemReadInfoGrid(it) {
+  const wrap = h("div", { class: "ib-info" });
+  const add = (label, value) => {
+    const line = itemLineIf(label, value);
+    if (line) wrap.appendChild(line);
+  };
+  add("Настройка:", itemAttunementText(it));
+  add("Стоимость:", it.cost);
+  add("Вес:", it.weight || (it.weightLb ? it.weightLb + " фнт" : ""));
+  add("Активация:", it.activation);
+  add("Урон:", it.damage);
+  add("Класс доспеха:", it.armorClass);
+  add("Свойства:", it.properties);
+  add("Заряды:", it.charges);
+  return wrap;
+}
+
+function itemReadHeader(it) {
+  const portrait = it.imageUrl ? h("img", { class: "ib-portrait", src: it.imageUrl }) : null;
+  const subtitleBits = [it.type, it.rarity].filter(Boolean).join(", ");
+  const pills = [...(it.source ? [it.source] : []), ...(it.tags || [])].map((t) => h("span", { class: "ib-tag-pill", text: t }));
+  const text = h("div", { class: "ib-header-text" }, [
+    h("h2", { class: "ib-name", text: it.name || "Без имени" }),
+    h("div", { class: "ib-subtitle", text: subtitleBits }),
+    pills.length ? h("div", { class: "ib-tags" }, pills) : null,
+  ]);
+  return portrait ? h("div", { class: "ib-header" }, [portrait, text]) : text;
+}
+
+// showItemCard — вариант 2, "полноценное модальное окно": тот же bt-modal,
+// что и у showAlert/showConfirm (см. modal.js), с телом целиком под карточку
+// предмета вместо строки текста. cancelLabel: "" — как у showAlert, кнопка
+// в подвале только закрывает, а не подтверждает что-либо.
+function showItemCard(it) {
+  openModal({
+    title: it.name || "Предмет",
+    okLabel: "Закрыть",
+    cancelLabel: "",
+    buildBody: (body) => {
+      body.appendChild(itemReadHeader(it));
+      body.appendChild(h("div", { class: "ib-hr" }));
+      const info = itemReadInfoGrid(it);
+      body.appendChild(info);
+      enhanceRolls(info, sendRoll);
+      const desc = (it.description || "").trim();
+      if (desc) {
+        body.appendChild(h("div", { class: "ib-hr" }));
+        const prose = h("div", { class: "ib-prose" });
+        prose.innerHTML = renderNoteHtml(it.description);
+        enhanceRolls(prose, sendRoll);
+        wireCatalogLinks(prose);
+        body.appendChild(h("div", { class: "ib-block" }, [h("h3", { class: "ib-section-title", text: "Описание" }), prose]));
+      }
+      return null;
+    },
+    onOk: () => undefined,
+    onCancel: () => undefined,
+  });
+}
+
+// stripMarkup — грубая чистка markdown/HTML для превью в мини-окне: там нет
+// места (и смысла) рендерить разметку целиком, только пара строк текста
+// (обрезаются визуально, см. .item-peek-desc line-clamp в character-sheet.html).
+function stripMarkup(text) {
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`#>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+let itemPeekEl = null;
+let itemPeekEntryId = null;
+
+function closeItemPeek() {
+  if (!itemPeekEl) return;
+  itemPeekEl.remove();
+  itemPeekEl = null;
+  itemPeekEntryId = null;
+  document.removeEventListener("mousedown", onItemPeekOutside, true);
+  document.removeEventListener("keydown", onItemPeekKey, true);
+  window.removeEventListener("scroll", closeItemPeek, true);
+  window.removeEventListener("resize", closeItemPeek);
+}
+
+function onItemPeekOutside(ev) {
+  if (itemPeekEl && !itemPeekEl.contains(ev.target)) closeItemPeek();
+}
+
+function onItemPeekKey(ev) {
+  if (ev.key === "Escape") closeItemPeek();
+}
+
+function positionItemPeek(el, anchorEl) {
+  const margin = 8;
+  const r = anchorEl.getBoundingClientRect();
+  const width = Math.min(300, window.innerWidth - margin * 2);
+  el.style.width = width + "px";
+  el.style.left = Math.min(Math.max(r.left, margin), window.innerWidth - width - margin) + "px";
+  el.style.top = r.bottom + 6 + "px";
+  // Высоту знаем только после вставки в DOM — если снизу не влезает, окно
+  // переносится над предметом вместо того, чтобы вылезти за край экрана.
+  const boxHeight = el.getBoundingClientRect().height;
+  if (r.bottom + 6 + boxHeight > window.innerHeight - margin) {
+    el.style.top = Math.max(margin, r.top - 6 - boxHeight) + "px";
+  }
+}
+
+// openItemPeek — вариант 1, "мини-окно рядом с предметом": повторный клик по
+// уже открытому предмету закрывает его же (тоггл), клик по другому —
+// перерисовывает на новом месте. Нет карточки в библиотеке (itemId пуст —
+// запись добавлена вручную, либо предмет с тех пор удалён из каталога, см.
+// domain.InventoryEntry.ItemID) — показываем то, что есть в самой записи
+// инвентаря, без кнопки "Открыть карточку" (открывать нечего).
+function openItemPeek(entry, anchorEl) {
+  if (itemPeekEl && itemPeekEntryId === entry.id) {
+    closeItemPeek();
+    return;
+  }
+  closeItemPeek();
+
+  const it = entry.itemId ? itemCatalog.get(entry.itemId) : null;
+  const children = [
+    h("div", { class: "item-peek-head" }, [
+      h("b", { text: entry.name }),
+      h("button", { type: "button", class: "item-peek-close", html: icon("close", { size: 11 }), title: "Закрыть", onclick: closeItemPeek }),
+    ]),
+  ];
+  if (it) {
+    const sub = [it.type, it.rarity].filter(Boolean).join(", ");
+    if (sub) children.push(h("div", { class: "item-peek-sub", text: sub }));
+    children.push(itemReadInfoGrid(it));
+    const desc = (it.description || "").trim();
+    if (desc) children.push(h("p", { class: "item-peek-desc", text: stripMarkup(desc) }));
+    children.push(
+      h("div", { class: "item-peek-foot" }, [
+        h("button", {
+          type: "button",
+          text: "Открыть карточку",
+          onclick: () => {
+            closeItemPeek();
+            showItemCard(it);
+          },
+        }),
+      ])
+    );
+  } else {
+    children.push(h("div", { class: "item-peek-sub", text: "Предмета нет в библиотеке — правлен вручную" }));
+    if (entry.notes) children.push(h("p", { class: "item-peek-desc", text: entry.notes }));
+  }
+
+  itemPeekEl = h("div", { class: "item-peek" }, children);
+  document.body.appendChild(itemPeekEl);
+  itemPeekEntryId = entry.id;
+  positionItemPeek(itemPeekEl, anchorEl);
+
+  // Подписка отложена на следующий тик — иначе тот же клик, что открыл окно
+  // (mousedown на кнопке-триггере), тут же поймает себя как "клик мимо" и
+  // закроет только что созданное окно.
+  setTimeout(() => {
+    document.addEventListener("mousedown", onItemPeekOutside, true);
+    document.addEventListener("keydown", onItemPeekKey, true);
+    window.addEventListener("scroll", closeItemPeek, true);
+    window.addEventListener("resize", closeItemPeek);
+  }, 0);
+}
+
 function vInventoryCard() {
   // У ДМ, открывшего ЧУЖОЙ лист, эндпоинты инвентаря отдают 404 (см.
   // renderTab5) — секции просто нет, как и вкладки.
@@ -1917,7 +2119,11 @@ function vInventoryCard() {
       onclick: () => saveInventoryEntry(e, { equipped: !e.equipped }),
     });
     return h("div", { class: "v-inv" }, [
-      h("span", { class: "v-inv-name" }, [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + e.weightLb + " фнт" }) : null]),
+      h(
+        "button",
+        { type: "button", class: "v-inv-name", title: "Открыть карточку предмета", onclick: (ev) => openItemPeek(e, ev.currentTarget) },
+        [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + e.weightLb + " фнт" }) : null]
+      ),
       qty,
       // Только "потратить" — набрать себе лишнего игрок не может (см.
       // комментарий у `let inventory`), пополнение только через лут/ДМ.

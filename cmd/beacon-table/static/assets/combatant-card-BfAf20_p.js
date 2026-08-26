@@ -1,4 +1,4 @@
-import{b as B}from"./modal-DUy-NyPP.js";let I=!1;function H(){if(I)return;I=!0;const e=document.createElement("style");e.textContent=`
+import{b as B}from"./modal-DlkIlT3U.js";let I=!1;function H(){if(I)return;I=!0;const e=document.createElement("style");e.textContent=`
     .fw-window {
       position: fixed; display: flex; flex-direction: column;
       background: #1c1c24; border: 1px solid rgba(255,255,255,0.14); border-radius: 10px;
