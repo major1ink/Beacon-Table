@@ -69,7 +69,9 @@ type ClientMsg struct {
 	// показываемый текст со стороны недоверенного клиента — сервер не
 	// проверяет его смысл, только ограничивает длину (см. Room.handleRollDice)
 	// и ретранслирует как есть. Личность бросающего (name в roll_result)
-	// по-прежнему берётся с сервера (c.PlayerName()), Label её не подменяет.
+	// по-прежнему решает сервер (см. Room.rollerName): CharacterID ниже, если
+	// передан и подтверждён владением/ролью, иначе — c.PlayerName()/"ДМ".
+	// Label её не подменяет.
 	Label string `json:"label,omitempty"`
 
 	// Cue — только для "play_cue"/"set_cue_volume" (канал ДМ). "stop_cue" его
@@ -91,6 +93,11 @@ type ClientMsg struct {
 	TokenID     string `json:"tokenId,omitempty"`
 	CharacterID string `json:"characterId,omitempty"`
 	MonsterID   string `json:"monsterId,omitempty"`
+
+	// CharacterID выше также переиспользуется "roll_dice" (см.
+	// character-sheet.js: sendRoll) — какой лист персонажа кинул кубик, чтобы
+	// в общем логе (roll_result.name) стояло имя персонажа, а не логин
+	// игрока/роль сокета (см. Room.rollerName).
 
 	// CombatantID — цель "remove_combatant"/"set_combatant_initiative"/
 	// "set_combatant_hp".

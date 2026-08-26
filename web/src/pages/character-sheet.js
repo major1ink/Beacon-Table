@@ -2059,10 +2059,11 @@ function connectRollSocket() {
   // /ws/player требует роль "player" (см. internal/api/ws/routes.go) — ДМ
   // туда просто не пустят, поэтому в режиме ДМ бросок идёт через /ws/dm
   // (авторизован ролью admin из той же cookie сессии). Сервер разрешает DM
-  // отправлять roll_dice как и все остальные типы сообщений (authorize),
-  // и подписывает бросок именем "ДМ" (room.go: handleRollDice) — здесь
-  // важен только сам roll_result, остальной трафик DM-сокета (снапшот
-  // сцены и т.п.) молча игнорируется.
+  // отправлять roll_dice как и все остальные типы сообщений (authorize) и
+  // подписывает бросок именем ПЕРСОНАЖА этого листа, раз sendRoll шлёт его
+  // characterId (room.go: handleRollDice/rollerName) — здесь важен только
+  // сам roll_result, остальной трафик DM-сокета (снапшот сцены и т.п.)
+  // молча игнорируется.
   rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
@@ -2110,13 +2111,12 @@ function connectRollSocket() {
 
 function sendRoll(formula, label) {
   if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
-  // Бросок с чужого листа уходит по /ws/dm и в общем логе подписывается
-  // просто "ДМ" (см. connectRollSocket, room.go: handleRollDice — имя там
-  // берётся из роли сокета, персонажа сервер не знает) — без имени
-  // персонажа в самом label непонятно, за кого именно бросал ДМ, если
-  // открыто несколько листов подряд.
-  const fullLabel = isAdminView && character ? `${character.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
-  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
+  // characterId — сервер сам подставит имя ПЕРСОНАЖА в общий лог вместо
+  // логина игрока/роли "ДМ" сокета (см. room.go: handleRollDice/rollerName),
+  // раз бросок сделан именно с его листа. Так лог всегда называет того, кто
+  // за столом реально кидал кубик — даже когда открыто несколько листов
+  // подряд или ДМ бросает за чужого персонажа.
+  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label, characterId: charId }));
 }
 
 // isEmbedded — лист открыт ВНУТРИ страницы стола: боковым доком

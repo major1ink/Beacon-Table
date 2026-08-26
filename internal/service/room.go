@@ -840,11 +840,29 @@ func (r *Room) handleRollDice(c RoomClient, msg domain.ClientMsg) {
 	if err != nil {
 		return // некорректная/вне-лимитов формула — просто игнорируем
 	}
-	name := c.PlayerName()
-	if c.Role() == domain.RoleDM {
-		name = "ДМ"
+	r.relayRoll(r.rollerName(c, msg.CharacterID), msg.Formula, clampRunes(msg.Label, maxRollLabel), result)
+}
+
+// rollerName — кто указан бросающим в общем логе. Если бросок пришёл с
+// конкретного листа персонажа (msg.CharacterID, см. character-sheet.js:
+// sendRoll), в лог идёт ИМЯ ПЕРСОНАЖА, а не логин игрока — за столом важно
+// видеть, кто из партии кинул кубик, а не под каким аккаунтом это сделал.
+// Игроку id доверяем не целиком: сверяем AccountID листа с PlayerID
+// сокета — иначе можно было бы подделать WS-сообщением чужого персонажа.
+// ДМ так не ограничен: с листа любого игрока или через /ws/dm за NPC — по
+// умолчанию (CharacterID пуст) под своим именем "ДМ".
+func (r *Room) rollerName(c RoomClient, characterID string) string {
+	if characterID != "" && r.characters != nil {
+		if ch, err := r.characters.ByID(context.Background(), characterID); err == nil {
+			if c.Role() == domain.RoleDM || ch.AccountID == c.PlayerID() {
+				return ch.Name
+			}
+		}
 	}
-	r.relayRoll(name, msg.Formula, clampRunes(msg.Label, maxRollLabel), result)
+	if c.Role() == domain.RoleDM {
+		return "ДМ"
+	}
+	return c.PlayerName()
 }
 
 // maxRollLabel — потолок длины Label (см. domain.ClientMsg), чтобы кривой
