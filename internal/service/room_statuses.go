@@ -89,6 +89,19 @@ func (r *Room) combatantByToken(tokenID string) *domain.Combatant {
 	return nil
 }
 
+// turnAllowsTokenMove — можно ли сейчас двигать этот токен. Вне активного
+// боя — всегда да (свободное перемещение до начала инициативы). В бою —
+// только если у токена вообще нет привязки к трекеру (декорация/фон, не
+// участвует в инициативе) или он принадлежит бойцу, чей сейчас ход;
+// остальные, включая ДМ, двигают лишь текущего бойца — см. handleTurnStep.
+func (r *Room) turnAllowsTokenMove(tokenID string) bool {
+	if !r.combat.Active {
+		return true
+	}
+	cmb := r.combatantByToken(tokenID)
+	return cmb == nil || cmb.ID == r.combat.CurrentID
+}
+
 // resolveStatusTarget — единая точка «куда прикладывать метки» для всех
 // команд состояний. Цель задаётся ОДНИМ из двух полей сообщения: TokenID
 // (ПКМ по токену на карте) или CombatantID (карточка в трекере).

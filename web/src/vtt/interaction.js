@@ -194,21 +194,48 @@ export function createInteraction(ctx) {
         .catch(() => {});
     }
   }
-  // currentCombatantFor — боец из трекера инициативы, чей СЕЙЧАС ход, если
-  // это именно данный токен (лимит скорости — только в свой ход). TokenID у
-  // бойца проставляется, когда его добавили в инициативу через ПКМ-меню
-  // токена (обычный путь) — characterId/monsterId подстраховывают случай,
-  // когда TokenID почему-то не сохранился.
-  function currentCombatantFor(token) {
+  // combatantForToken — боец из трекера инициативы, стоящий за этим токеном,
+  // вне зависимости от того, чей сейчас ход (null, если токен в бою не
+  // участвует — декорация/фон). Точный TokenID — приоритет и единственный
+  // однозначный признак: если на карте два одинаковых монстра ("Гоблин-
+  // воитель" и "Гоблин-воитель 2"), у них общий monsterId, и сопоставление
+  // по нему различить бойцов не может. characterId/monsterId — фолбэк ТОЛЬКО
+  // для бойца, у которого своего TokenID ещё нет (в инициативу добавили, на
+  // карту ещё не поставили, см. handlePlaceCombatantToken) — иначе первый
+  // подвернувшийся боец с тем же шаблоном перехватывал бы чужой токен (был
+  // баг: движение одного гоблина то разрешало двигать обоих, то не
+  // разрешало двигать никого).
+  function combatantForToken(token) {
     const combat = ctx.combat;
-    if (!combat || !combat.active || !Array.isArray(combat.combatants)) return null;
-    return combat.combatants.find(
-      (c) =>
-        c.id === combat.currentId &&
-        (c.tokenId === token.id ||
-          (token.characterId && c.characterId === token.characterId) ||
-          (token.monsterId && c.monsterId === token.monsterId))
+    if (!combat || !Array.isArray(combat.combatants)) return null;
+    const exact = combat.combatants.find((c) => c.tokenId === token.id);
+    if (exact) return exact;
+    return (
+      combat.combatants.find(
+        (c) =>
+          !c.tokenId &&
+          ((token.characterId && c.characterId === token.characterId) ||
+            (token.monsterId && c.monsterId === token.monsterId))
+      ) || null
     );
+  }
+  // currentCombatantFor — то же самое, но только если сейчас именно его ход
+  // (лимит скорости — только в свой ход, см. speedLimitFor).
+  function currentCombatantFor(token) {
+    if (!ctx.combat || !ctx.combat.active) return null;
+    const cmb = combatantForToken(token);
+    return cmb && cmb.id === ctx.combat.currentId ? cmb : null;
+  }
+  // turnBlocksMove — бой идёт, у токена есть боец в трекере инициативы, но
+  // сейчас не его ход: двигать нельзя никому, включая ДМ (см.
+  // room.go: turnAllowsTokenMove — сервер отбрасывает такую правку молча,
+  // тут та же проверка нужна ДО отправки, чтобы токен не дёргался туда-обратно).
+  // Токены вне инициативы (декорация/фон) не блокируются — они не участвуют
+  // в порядке ходов вовсе.
+  function turnBlocksMove(token) {
+    if (!ctx.combat || !ctx.combat.active) return false;
+    const cmb = combatantForToken(token);
+    return !!cmb && cmb.id !== ctx.combat.currentId;
   }
   // speedLimitFor — потолок драга ДЛЯ ЭТОГО mousemove: mировые px
   // (maxAllowed, для trackMovementStep) и тот же потолок в единицах линейки
@@ -914,8 +941,13 @@ export function createInteraction(ctx) {
       const t = ctx.scene.tokens[dragTokenId];
       // Токен мог быть заперт (или удалён) уже ПОСЛЕ начала жеста — с
       // другого экрана ДМ или из списка источников света; тогда жест просто
-      // прекращается, а не продолжает двигать запертое.
-      if (!t || isLocked(t)) {
+      // прекращается, а не продолжает двигать запертое. Тем же способом
+      // обрывается жест, если за это время начался бой (или наступил чужой
+      // ход) — ДМ двигает только текущего бойца, как и все остальные, см.
+      // turnBlocksMove выше и room.go: turnAllowsTokenMove (сервер такую
+      // правку и так отбросит — тут та же проверка ДО отправки, чтобы токен
+      // не дёргался туда-обратно).
+      if (!t || isLocked(t) || turnBlocksMove(t)) {
         dragTokenId = null;
         distanceLabel.hide();
         groupDragOrigins = null;
@@ -923,9 +955,8 @@ export function createInteraction(ctx) {
       }
       // Лимит скорости — та же логика, что и у драга игроком своего токена
       // (см. speedLimitFor выше): работает, только пока идёт бой И сейчас
-      // ход именно этого токена, иначе ДМ по-прежнему двигает что угодно
-      // без ограничений — полная авторская власть над картой вне чужого
-      // хода. "Одометр" для подсказки дистанции считается тем же способом
+      // ход именно этого токена. Вне боя или не в чужой ход ограничения нет,
+      // "Одометр" для подсказки дистанции считается тем же способом
       // (см. geometry.trackMovementStep): накопленный путь, обнуляется
       // только при точном возврате в точку начала жеста.
       const { maxAllowed, limitUnits } = speedLimitFor(t);
@@ -952,7 +983,7 @@ export function createInteraction(ctx) {
         for (const [id, origin] of groupDragOrigins) {
           if (id === dragTokenId) continue;
           const other = ctx.scene.tokens[id];
-          if (!other || isLocked(other)) continue;
+          if (!other || isLocked(other) || turnBlocksMove(other)) continue;
           other.x = origin.x + dx;
           other.y = origin.y + dy;
           ctx.send({ type: "move_token", token: other });
@@ -1506,7 +1537,7 @@ export function createInteraction(ctx) {
       // "залипал" на месте — сойти он не мог, пока ДМ не убирал то, на что
       // он наступил (см. geometry.tokenAt о порядке выбора из стопки).
       const hitId = tokenAt(x, y, ctx.scene.tokens, {
-        filter: (t) => t.ownerId === ctx.playerId && !isLocked(t),
+        filter: (t) => t.ownerId === ctx.playerId && !isLocked(t) && !turnBlocksMove(t),
       });
       if (hitId) {
         dragTokenId = hitId;
@@ -1531,7 +1562,10 @@ export function createInteraction(ctx) {
 
       if (!dragTokenId) return;
       const t = ctx.scene.tokens[dragTokenId];
-      if (!t || t.ownerId !== ctx.playerId || isLocked(t)) {
+      // Бой мог начаться (или дойти до чужого хода) уже ПОСЛЕ начала жеста —
+      // тем же способом, что и isLocked ниже: жест просто обрывается, см.
+      // turnBlocksMove выше и room.go: turnAllowsTokenMove.
+      if (!t || t.ownerId !== ctx.playerId || isLocked(t) || turnBlocksMove(t)) {
         dragTokenId = null;
         distanceLabel.hide();
         return;
@@ -1539,8 +1573,8 @@ export function createInteraction(ctx) {
       const snapped = snapToGrid(x, y, ctx.scene.grid);
 
       // Лимит скорости (см. speedLimitFor выше) — только пока идёт бой И
-      // сейчас ход именно этого персонажа. Вне боя или не в его ход —
-      // только подсказка ниже, без ограничения.
+      // сейчас ход именно этого персонажа (вне своего хода в бою движение уже
+      // отсечено проверкой turnBlocksMove выше). Вне боя — без ограничения.
       const { maxAllowed, limitUnits } = speedLimitFor(t);
 
       // Расстояние — накопленный путь этого жеста (см.

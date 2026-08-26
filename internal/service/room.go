@@ -843,6 +843,9 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	if existing.Locked {
 		return // ДМ запер токен на карте (см. domain.Token.Locked) — не двигается ничем
 	}
+	if !r.turnAllowsTokenMove(existing.ID) {
+		return // бой идёт, но сейчас не его ход — двигаться нельзя, см. turnAllowsTokenMove
+	}
 	existing.X = msg.Token.X
 	existing.Y = msg.Token.Y
 	r.markDirty(r.currentSceneID)
@@ -1949,6 +1952,18 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 	switch msg.Type {
 	case "move_token", "add_token":
 		if msg.Token != nil {
+			// move_token несёт токен целиком (позиция + любые другие правки
+			// вроде hidden/shape/light — см. web/src/vtt/interaction.js), а не
+			// только координаты. Ограничение хода касается именно позиции:
+			// если X/Y реально меняются и сейчас чужой ход в активном бою —
+			// всё сообщение отбрасывается (turnAllowsTokenMove решает и за
+			// ДМ тоже, см. её комментарий), остальные правки токена в свой
+			// ход или вне боя проходят как раньше.
+			if existing, ok := r.scene.Tokens[msg.Token.ID]; ok && msg.Type == "move_token" &&
+				(existing.X != msg.Token.X || existing.Y != msg.Token.Y) &&
+				!r.turnAllowsTokenMove(msg.Token.ID) {
+				return
+			}
 			// У персонажа может быть только один токен "на столе"
 			// одновременно (см. web/src/pages/dm.js: drag&drop персонажа из
 			// панели "Персонажи" на карту) — повторное перетаскивание того
