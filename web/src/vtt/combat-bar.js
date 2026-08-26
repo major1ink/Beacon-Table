@@ -31,15 +31,28 @@ const BAR_H = 32;
 const MIN_FREE_W = 240;
 
 export function createCombatBar(ctx) {
+  // inline — режим встраивания в чужой контейнер (топбар игрока, см.
+  // vtt/index.js: ctx.combatBarMount и player.html: #combatBarMount) вместо
+  // собственного плавающего оверлея. Раньше полоса ВСЕГДА была
+  // position:fixed по центру канваса поверх всего — у игрока это накрывало
+  // кнопки топбара (Хаб/Линейка/Настройки), потому что #topbar тоже сидит
+  // у верхнего края. Без mount (ДМ/TV) поведение не меняется — там своя
+  // компоновка (боковой рейл/чистый зритель), и центрированный оверлей
+  // конфликтов не создаёт.
+  const inline = !!ctx.combatBarMount;
   const bar = document.createElement("div");
-  bar.style.cssText =
-    "display:none;position:fixed;top:10px;transform:translateX(-50%);z-index:40;" +
-    "align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;border-radius:" + (BAR_H / 2 + 2) + "px;" +
-    "background:var(--glass-bg-strong,rgba(22,22,29,0.88));backdrop-filter:var(--glass-blur,blur(20px));" +
-    "-webkit-backdrop-filter:var(--glass-blur,blur(20px));border:1px solid var(--glass-border,rgba(255,255,255,0.08));" +
-    "box-shadow:var(--shadow-float,0 6px 20px rgba(0,0,0,0.5));" +
-    "font:12px/1 sans-serif;color:#eee;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
-  document.body.appendChild(bar);
+  bar.style.cssText = inline
+    ? "display:none;align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;" +
+      "border-radius:" + (BAR_H / 2 + 2) + "px;flex:0 1 auto;min-width:0;max-width:100%;" +
+      "background:var(--surface,rgba(255,255,255,0.07));" +
+      "font:12px/1 sans-serif;color:var(--text,#eee);box-sizing:border-box;overflow-x:auto;overflow-y:hidden;"
+    : "display:none;position:fixed;top:10px;transform:translateX(-50%);z-index:40;" +
+      "align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;border-radius:" + (BAR_H / 2 + 2) + "px;" +
+      "background:var(--glass-bg-strong,rgba(22,22,29,0.88));backdrop-filter:var(--glass-blur,blur(20px));" +
+      "-webkit-backdrop-filter:var(--glass-blur,blur(20px));border:1px solid var(--glass-border,rgba(255,255,255,0.08));" +
+      "box-shadow:var(--shadow-float,0 6px 20px rgba(0,0,0,0.5));" +
+      "font:12px/1 sans-serif;color:#eee;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
+  (inline ? ctx.combatBarMount : document.body).appendChild(bar);
 
   const roundLabel = document.createElement("div");
   roundLabel.style.cssText =
@@ -213,31 +226,36 @@ export function createCombatBar(ctx) {
   document.addEventListener("vtt:combatState", (e) => render(e.detail));
 
   // ---- где стоит сама полоса ----
-  // Центр берём по СВОБОДНОЙ части карты, а не по окну. Слева от карты
-  // лежат панели: у ДМ — рейл, панель рейла и колонка со статблоком (они
-  // канвас не ужимают, а накрывают: #canvasWrap{position:absolute;inset:0}
-  // в dm.html), у игрока — боковой док листа (этот как раз ужимает канвас,
-  // и его видно по rect канваса). Поэтому слагаемых два: rect канваса плюс
-  // отступ, о котором сообщает страница событием "vtt:chromeInset" (шлёт
-  // pages/dm.js: updateChromeInset — тем же числом он двигает плашку
-  // статуса). Без этого полоса центрировалась по всему окну и наезжала на
-  // шапку колонки со статблоком.
-  let leftInset = 0;
-  function position() {
-    const rect = ctx.canvas.getBoundingClientRect();
-    const free = Math.max(MIN_FREE_W, rect.width - leftInset);
-    bar.style.left = Math.round(rect.left + leftInset + free / 2) + "px";
-    bar.style.maxWidth = Math.round(free - 24) + "px";
-  }
-  document.addEventListener("vtt:chromeInset", (e) => {
-    leftInset = (e.detail && e.detail.left) || 0;
+  // Встроенную (inline) полосу в позиционировании не нуждается вовсе: она
+  // обычный flex-ребёнок топбара, ширину/сжатие ему считает сам топбар
+  // (см. player.html: #combatBarMount).
+  if (!inline) {
+    // Центр берём по СВОБОДНОЙ части карты, а не по окну. Слева от карты
+    // лежат панели: у ДМ — рейл, панель рейла и колонка со статблоком (они
+    // канвас не ужимают, а накрывают: #canvasWrap{position:absolute;inset:0}
+    // в dm.html), у игрока — боковой док листа (этот как раз ужимает канвас,
+    // и его видно по rect канваса). Поэтому слагаемых два: rect канваса плюс
+    // отступ, о котором сообщает страница событием "vtt:chromeInset" (шлёт
+    // pages/dm.js: updateChromeInset — тем же числом он двигает плашку
+    // статуса). Без этого полоса центрировалась по всему окну и наезжала на
+    // шапку колонки со статблоком.
+    let leftInset = 0;
+    const position = () => {
+      const rect = ctx.canvas.getBoundingClientRect();
+      const free = Math.max(MIN_FREE_W, rect.width - leftInset);
+      bar.style.left = Math.round(rect.left + leftInset + free / 2) + "px";
+      bar.style.maxWidth = Math.round(free - 24) + "px";
+    };
+    document.addEventListener("vtt:chromeInset", (e) => {
+      leftInset = (e.detail && e.detail.left) || 0;
+      position();
+    });
+    window.addEventListener("resize", position);
+    // Канвас меняет размер и без ресайза окна (у игрока — открытый док листа),
+    // тот же приём, что в side-menu.js.
+    new ResizeObserver(position).observe(ctx.canvas);
     position();
-  });
-  window.addEventListener("resize", position);
-  // Канвас меняет размер и без ресайза окна (у игрока — открытый док листа),
-  // тот же приём, что в side-menu.js.
-  new ResizeObserver(position).observe(ctx.canvas);
-  position();
+  }
 
   return { render };
 }

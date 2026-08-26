@@ -120,7 +120,14 @@ let vtt = null;
   initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg), document.getElementById("diceLog"));
   renderCharDock();
 
-  vtt = await initVTT({ canvasId: "scene", role: "player", playerId: me.id });
+  vtt = await initVTT({
+    canvasId: "scene",
+    role: "player",
+    playerId: me.id,
+    // Трекер инициативы встраивается в топбар (см. player.html), а не
+    // плавает отдельным оверлеем поверх него (см. vtt/index.js/combat-bar.js).
+    combatBarMount: document.getElementById("combatBarMount"),
+  });
   // Справочник — та же боковая колонка канваса, что и у ДМ (см. pages/dm.js —
   // тот же sticky, см. комментарий там), первая иконка тут (игрок кубы
   // бросает через #diceDock снизу, не через sideMenu — у него это основной

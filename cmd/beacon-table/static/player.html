@@ -37,6 +37,14 @@
       overflow-x: auto; scrollbar-width: none; padding: 0 4px;
     }
     #charDock::-webkit-scrollbar { display: none; }
+
+    /* #combatBarMount — трекер инициативы (см. src/vtt/combat-bar.js) теперь
+       живёт прямо в топбаре, а не отдельным плавающим оверлеем поверх него:
+       раньше combat-bar.js рисовал свою полосу position:fixed по центру
+       канваса, и она перекрывала кнопки топбара (Хаб/Линейка/Настройки),
+       когда бой шёл, а панель — короткой. Пустой (бой не идёт) места не
+       занимает — сам combat-bar.js прячет полосу через display:none. */
+    #combatBarMount { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; }
     .char-chip {
       flex: 0 0 auto; display: flex; align-items: center; gap: 6px; max-width: 150px;
       cursor: pointer; padding: 3px 10px 3px 3px; border: 1px solid transparent; border-radius: var(--radius-pill);
@@ -186,11 +194,11 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/player-C3knd10U.js"></script>
+  <script type="module" crossorigin src="/assets/player-YuZIP_qs.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-yUNNMsWW.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-DlkIlT3U.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-BfAf20_p.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-13nbl3Sx.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-Yzq3_Vge.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-Dv1NmzuD.js">
   <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
@@ -204,6 +212,7 @@
         <div id="topbar">
           <span id="topbarUsername"></span>
           <div id="charDock"></div>
+          <div id="combatBarMount"></div>
           <button id="charsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-4 3.4-6.4 7-6.4s7 2.4 7 6.4"/></svg> Мои персонажи</button>
           <button id="lootHubBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg> Хаб</button>
           <button id="rulerBtn" title="Линейка — ЛКМ и тяни по карте, отпустил — замер исчезает"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg> Линейка</button>
