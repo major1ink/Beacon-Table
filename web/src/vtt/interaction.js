@@ -23,7 +23,7 @@ import {
 import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
 import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
-import { fetchCharacter } from "../api.js";
+import { fetchCharacter, fetchMonster } from "../api.js";
 
 // EDGE_HIT_PX — порог (в экранных px) для попадания в край "ручки"
 // редактора сетки (см. tool "grid-edit" ниже): ближе к краю квадрата — это
@@ -159,6 +159,71 @@ export function createInteraction(ctx) {
   // оба сценария в обеих ролевых ветках ниже.
   const rulerLine = createRulerLine(ctx);
   const distanceLabel = createDistanceLabel(ctx);
+
+  // ---- лимит скорости в бою — общий и для ДМ, и для игрока ----
+  // Раньше это было заведено только в ветке ctx.isPlayer (свой токен, свой
+  // ход), а ДМ двигал ЛЮБОЙ токен без ограничений вовсе — включая токен
+  // текущего бойца в его же ход. По ТЗ максимум перемещения токена = его
+  // скорость из карточки, и это должно работать независимо от того, кто
+  // именно тащит токен (ДМ чаще всего двигает и монстров, и — с общего
+  // экрана — токены игроков). Поэтому механизм один на оба сценария: кэш
+  // speedCache (ключ — characterId ИЛИ monsterId) и currentCombatantFor,
+  // определяющий, что сейчас именно ход этого токена в активном бою.
+  //
+  // speedCache подтягивается заново на каждый mousedown (не кешируется
+  // намертво) — правка скорости на листе персонажа/карточке бестиария
+  // подхватывается к следующему же перетаскиванию, без перезагрузки
+  // страницы.
+  const speedCache = new Map();
+  function parseMonsterWalkSpeed(speedText) {
+    // Monster.Speed — свободный текст вида "30 фт., полёт 60 фт. (парит)"
+    // (см. web/src/monster-import.js:buildSpeed) — для лимита берём только
+    // пешую скорость, первое число в строке.
+    if (!speedText) return 0;
+    const m = /(\d+)/.exec(speedText);
+    return m ? Number(m[1]) : 0;
+  }
+  function ensureSpeedLoaded(token) {
+    if (token.characterId) {
+      fetchCharacter(token.characterId)
+        .then((c) => speedCache.set(token.characterId, (c.sheet && c.sheet.combat && c.sheet.combat.speed) || 0))
+        .catch(() => {});
+    } else if (token.monsterId) {
+      fetchMonster(token.monsterId)
+        .then((m) => speedCache.set(token.monsterId, parseMonsterWalkSpeed(m.speed)))
+        .catch(() => {});
+    }
+  }
+  // currentCombatantFor — боец из трекера инициативы, чей СЕЙЧАС ход, если
+  // это именно данный токен (лимит скорости — только в свой ход). TokenID у
+  // бойца проставляется, когда его добавили в инициативу через ПКМ-меню
+  // токена (обычный путь) — characterId/monsterId подстраховывают случай,
+  // когда TokenID почему-то не сохранился.
+  function currentCombatantFor(token) {
+    const combat = ctx.combat;
+    if (!combat || !combat.active || !Array.isArray(combat.combatants)) return null;
+    return combat.combatants.find(
+      (c) =>
+        c.id === combat.currentId &&
+        (c.tokenId === token.id ||
+          (token.characterId && c.characterId === token.characterId) ||
+          (token.monsterId && c.monsterId === token.monsterId))
+    );
+  }
+  // speedLimitFor — потолок драга ДЛЯ ЭТОГО mousemove: mировые px
+  // (maxAllowed, для trackMovementStep) и тот же потолок в единицах линейки
+  // (limitUnits, для подписи "15/30 фт"). speed===0 (лист/карточка не
+  // заполнены — 0 нулевое значение по умолчанию, а не осознанно
+  // проставленная неподвижность) тоже не ограничивает — иначе
+  // свежесозданный персонаж/незаполненный монстр не мог бы сдвинуться в
+  // первом же бою.
+  function speedLimitFor(token) {
+    if (!currentCombatantFor(token)) return { maxAllowed: Infinity, limitUnits: null };
+    const key = token.characterId || token.monsterId;
+    const speed = key ? speedCache.get(key) : null;
+    if (!speed) return { maxAllowed: Infinity, limitUnits: null };
+    return { maxAllowed: unitsToWorldDistance(speed, ctx.scene.grid), limitUnits: speed };
+  }
 
   if (ctx.isDM) {
     // Единый активный инструмент вместо трёх независимых булевых флагов.
@@ -581,6 +646,7 @@ export function createInteraction(ctx) {
         dragStart = { x: t0.x, y: t0.y };
         dragLastPos = dragStart;
         dragTraveled = 0;
+        ensureSpeedLoaded(t0);
         // Снимок стартовых позиций остальных выделенных токенов — двигать
         // их на mousemove той же дельтой, что и анкорный hitId (см.
         // rationale у groupDragOrigins выше).
@@ -855,13 +921,15 @@ export function createInteraction(ctx) {
         groupDragOrigins = null;
         return;
       }
-      // У ДМ перемещение ничем не ограничено (maxAllowed=Infinity — полная
-      // авторская власть над картой), в отличие от драга игроком СВОЕГО
-      // токена в его ход (см. ветку ctx.isPlayer ниже) — но "одометр" для
-      // подсказки дистанции считается тем же способом (см.
-      // geometry.trackMovementStep): накопленный путь, обнуляется только
-      // при точном возврате в точку начала жеста.
-      const step = trackMovementStep(dragLastPos, snapped, dragStart, dragTraveled, Infinity, ctx.scene.grid);
+      // Лимит скорости — та же логика, что и у драга игроком своего токена
+      // (см. speedLimitFor выше): работает, только пока идёт бой И сейчас
+      // ход именно этого токена, иначе ДМ по-прежнему двигает что угодно
+      // без ограничений — полная авторская власть над картой вне чужого
+      // хода. "Одометр" для подсказки дистанции считается тем же способом
+      // (см. geometry.trackMovementStep): накопленный путь, обнуляется
+      // только при точном возврате в точку начала жеста.
+      const { maxAllowed, limitUnits } = speedLimitFor(t);
+      const step = trackMovementStep(dragLastPos, snapped, dragStart, dragTraveled, maxAllowed, ctx.scene.grid);
       t.x = step.pos.x;
       t.y = step.pos.y;
       dragLastPos = step.pos;
@@ -870,7 +938,7 @@ export function createInteraction(ctx) {
       ctx.dirty.vision = true;
       ctx.dirty.buildings = true; // мог войти/выйти из контура здания — occupied() пересчитать
       ctx.render();
-      distanceLabel.show(t.x, t.y, formatDistanceValue(dragTraveled, ctx.scene.grid));
+      distanceLabel.show(t.x, t.y, formatDistanceValue(dragTraveled, ctx.scene.grid, limitUnits));
       ctx.send({ type: "move_token", token: t });
 
       // Остальные токены группового выделения едут ТОЙ ЖЕ дельтой от своей
@@ -1395,35 +1463,12 @@ export function createInteraction(ctx) {
     let dragLastPos = null;
     let dragTraveled = 0;
 
-    // speedCache — характеристика "Скорость" (domain.CombatStats.Speed, в
-    // единицах линейки сцены, обычно футы) персонажей игрока, подтянутая с
-    // сервера отдельным запросом (токен/сцена её не несут — это поле листа
-    // персонажа, см. internal/domain/character_sheet.go). Ключ —
-    // characterId. Перезапрашивается на каждый mousedown по токену (не
-    // кешируется намертво), чтобы правка скорости на листе персонажа
-    // подхватывалась к следующему же перетаскиванию, а не требовала
-    // перезагрузки страницы.
-    const speedCache = new Map();
-    function ensureSpeedLoaded(characterId) {
-      if (!characterId) return;
-      fetchCharacter(characterId)
-        .then((c) => speedCache.set(characterId, (c.sheet && c.sheet.combat && c.sheet.combat.speed) || 0))
-        .catch(() => {});
-    }
-
-    // currentCombatantFor — боец из трекера инициативы, чей СЕЙЧАС ход,
-    // если это именно данный токен (лимит скорости — только в свой ход, см.
-    // README/уточнение задачи). TokenID у бойца проставляется, когда его
-    // добавили в инициативу через ПКМ-меню токена (обычный путь для
-    // игровых персонажей, см. room.go:handleAddCombatant) — characterId
-    // подстраховывает случай, когда TokenID почему-то не сохранился.
-    function currentCombatantFor(token) {
-      const combat = ctx.combat;
-      if (!combat || !combat.active || !Array.isArray(combat.combatants)) return null;
-      return combat.combatants.find(
-        (c) => c.id === combat.currentId && (c.tokenId === token.id || (token.characterId && c.characterId === token.characterId))
-      );
-    }
+    // speedCache/ensureSpeedLoaded/currentCombatantFor — общие с ДМ-веткой
+    // выше (см. их определение и обоснование там): характеристика
+    // "Скорость" персонажа, подтянутая с сервера отдельным запросом (токен/
+    // сцена её не несут — это поле листа персонажа, см.
+    // internal/domain/character_sheet.go), и лимит применяется только в свой
+    // ход активного боя.
 
     // Единственный ДМ-инструмент, доступный игроку, — линейка; событие то
     // же самое ("vtt:setTool"), что дёргает кнопка в топбаре player.html.
@@ -1469,7 +1514,7 @@ export function createInteraction(ctx) {
         dragStart = { x: t0.x, y: t0.y };
         dragLastPos = dragStart;
         dragTraveled = 0;
-        ensureSpeedLoaded(t0.characterId);
+        ensureSpeedLoaded(t0);
       }
     });
 
@@ -1493,21 +1538,10 @@ export function createInteraction(ctx) {
       }
       const snapped = snapToGrid(x, y, ctx.scene.grid);
 
-      // Лимит скорости — только пока идёт бой И сейчас ход именно этого
-      // персонажа (currentCombatantFor). Вне боя или не в его ход — только
-      // подсказка ниже, без ограничения (см. уточнение задачи). speed===0
-      // (лист персонажа не заполнен — 0 нулевое значение по умолчанию, а не
-      // осознанно проставленная неподвижность) тоже не ограничивает —
-      // иначе свежесозданный персонаж не мог бы сдвинуться в первом же бою.
-      let maxAllowed = Infinity;
-      let limitUnits = null; // потолок В ЕДИНИЦАХ ЛИНЕЙКИ (не px) — для подписи "15/30 фт"
-      if (currentCombatantFor(t)) {
-        const speed = speedCache.get(t.characterId);
-        if (speed) {
-          maxAllowed = unitsToWorldDistance(speed, ctx.scene.grid);
-          limitUnits = speed;
-        }
-      }
+      // Лимит скорости (см. speedLimitFor выше) — только пока идёт бой И
+      // сейчас ход именно этого персонажа. Вне боя или не в его ход —
+      // только подсказка ниже, без ограничения.
+      const { maxAllowed, limitUnits } = speedLimitFor(t);
 
       // Расстояние — накопленный путь этого жеста (см.
       // geometry.trackMovementStep), а не прямая от точки старта: шаг
@@ -1520,7 +1554,8 @@ export function createInteraction(ctx) {
       // токена игроком (см. clampMoveByWalls в geometry.js) — путь до
       // снапнутой клетки останавливается чуть НЕ доходя до преграды, если
       // пересекает её. У ДМ (ветка выше) такого ограничения нет — полная
-      // авторская власть над картой, как и у лимита скорости не бывает.
+      // авторская власть над картой в смысле стен, лимит скорости в свой
+      // ход при этом всё равно применяется (см. speedLimitFor выше).
       const wallClamped = clampMoveByWalls(dragLastPos.x, dragLastPos.y, snapped.x, snapped.y, ctx.scene.walls);
 
       const step = trackMovementStep(dragLastPos, wallClamped, dragStart, dragTraveled, maxAllowed, ctx.scene.grid);
