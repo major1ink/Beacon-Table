@@ -30,6 +30,7 @@ import { applyModifiers, explainModifiers, collectModifiers, ABILITY_TARGETS, TA
 import { showAlert, openModal } from "../modal.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { wireCatalogLinks } from "../catalog-links.js";
+import { createRollLog } from "../roll-log.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -178,6 +179,8 @@ let readOnly = false;
 // (свой/админский) дёргать при автосохранении, см. doSave().
 let isAdminView = false;
 let rollWS = null;
+let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js); null во встроенном листе — там лог показывает стол
+
 // liveStatuses/liveStatusesEl — наложенные состояния этого персонажа (см.
 // domain.AppliedStatus): приходят с сервера в combat_state тем же сокетом,
 // что и броски (см. connectRollSocket), лист их только показывает.
@@ -2271,10 +2274,19 @@ function connectRollSocket() {
   // characterId (room.go: handleRollDice/rollerName) — здесь важен только
   // сам roll_result, остальной трафик DM-сокета (снапшот сцены и т.п.)
   // молча игнорируется.
+  // Своя подвальная лента лога — только у листа, вынесенного в настоящее
+  // отдельное окно/вкладку. Внутри стола (боковой док sheet-dock.js или
+  // плавающее окно floating-window.js — то есть iframe) приходит ТОТ ЖЕ
+  // roll_result, что и в плашку стола (бросок ретранслируется всей комнате,
+  // см. internal/service/room.go: relayRoll), и два лога в паре сантиметров
+  // друг от друга дублировали бы строку — поэтому там rollLog остаётся null.
+  if (!rollLog && !isEmbedded()) {
+    rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
+  }
   rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") showRollResult(data);
+    if (data.type === "roll_result") rollLog?.push(data);
     // Наложенные состояния этого персонажа (см. domain.AppliedStatus)
     // приезжают тем же сокетом в combat_state — сервер уже свёл их с токена
     // бойца (см. room_statuses.go: statusesOf) и вырезал скрытые от игрока.
@@ -2331,26 +2343,6 @@ function sendRoll(formula, label) {
 // iframe, а не отдельной вкладкой/окном браузера.
 function isEmbedded() {
   return window.parent !== window;
-}
-
-function showRollResult(data) {
-  // У страницы стола свой лог бросков поверх карты (см. player.html:
-  // #diceLog, dm.html — то же самое), и приходит в него ТОТ ЖЕ самый
-  // roll_result: бросок ретранслируется всей комнате (см.
-  // internal/service/room.go: relayRoll), а сокетов у вкладки теперь два —
-  // страницы и листа. Пока лист жил отдельной вкладкой, это были два разных
-  // экрана; в доке оба лога оказались в паре сантиметров друг от друга и
-  // дублировали строку. Своя подвальная лента остаётся только у листа,
-  // вынесенного в настоящее отдельное окно, — там она единственная.
-  if (isEmbedded()) return;
-  const wrap = document.getElementById("rollLogWrap");
-  wrap.classList.remove("hidden");
-  const log = document.getElementById("rollLog");
-  const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
-  const who = data.label ? `${data.name} — ${data.label}` : data.name;
-  const row = h("div", { class: "dice-log-row", text: `${who}: ${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}` });
-  log.prepend(row);
-  while (log.children.length > 20) log.removeChild(log.lastChild);
 }
 
 // ==================== boot ====================

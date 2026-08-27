@@ -886,16 +886,11 @@
     #newPlaylistForm input { flex: 1 1 auto; min-width: 0; background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
     #newPlaylistForm button { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
 
-    /* ---- лог бросков кубов: правый верхний угол, поверх канваса ----
-       Сами кнопки броска теперь в меню громкости справа (см. audio.js —
-       туда JS-ом монтируется .dice-controls-menu), здесь только результаты. */
-    #diceLog {
-      position: absolute; right: 10px; top: 10px; z-index: 5; width: 220px;
-      background: rgba(38,38,47,0.92); border-radius: 8px; padding: 8px; font-size: 12px;
-      max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; opacity: 0.85;
-    }
-    #diceLog:empty { display: none; } /* не занимать место, пока не было ни одного броска */
-    .dice-log-row { font-size: 11px; }
+    /* ---- лог бросков кубов: правый верхний угол, поверх канваса (общий
+       виджет .roll-log--plate, см. web/src/roll-log.js и theme.css); здесь
+       только выбор угла. Кнопки броска — в меню громкости справа (см.
+       audio.js — туда монтируется .dice-controls-menu). ---- */
+    #diceLog { right: 10px; top: 10px; }
 
     /* ---- лоток кубов (.dice-tray, см. web/src/dice.js и theme.css) —
        монтируется JS-ом (dm.js) в свою иконку бокового меню справа от
@@ -914,24 +909,25 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BMVmx8To.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-m72PrEiY.js">
+  <script type="module" crossorigin src="/assets/dm-_mkGrvmD.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-C8_N-kk-.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-ClzvMhHz.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-BdeWBwwH.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-B50MuuVe.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-DOsxiha_.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DQW6UocY.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-Bgz5PGYY.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-9VmRHThr.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-BdFQkweV.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-CEELzg08.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-DdHTaeQg.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-DbfKjl7H.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-Bkc-VJiF.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Cajm1d6h.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CToP8VTe.js">
-  <link rel="modulepreload" crossorigin href="/assets/toolbar-BsgWWWqR.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CEzn43a4.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DNctnztq.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-D-H0K0G7.js">
+  <link rel="modulepreload" crossorigin href="/assets/toolbar-CJW7BJEh.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-TAHg_jLi.js">
+  <link rel="stylesheet" crossorigin href="/assets/api-bGF1xgk3.css">
 </head>
 <body>
   <div id="appBody">

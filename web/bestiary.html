@@ -111,10 +111,6 @@
     .md-render p { margin: 0.4em 0; }
     .md-render strong { color: #fff; }
 
-    #rollLogWrap { border-top: 1px solid var(--border); background: var(--panel-bg); padding: 6px 12px; max-height: 22vh; overflow-y: auto; flex: 0 0 auto; }
-    #rollLogWrap.hidden { display: none; }
-    .dice-log-row { font-size: 11px; padding: 1px 0; }
-
     /* ---- read-режим: аккуратный статблок вместо формы (см. bestiary.js: renderReadView) ---- */
     .sb-header { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 4px; }
     .sb-portrait { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; background: var(--surface); flex: 0 0 auto; box-shadow: 0 0 0 2px var(--border); }
@@ -161,7 +157,7 @@
   </div>
   <div id="loadingHint">Загрузка…</div>
   <div id="app"></div>
-  <div id="rollLogWrap" class="hidden"><div id="rollLog"></div></div>
+  <div id="rollLogWrap"></div>
 
   <script type="module" src="/src/pages/bestiary.js"></script>
 </body>

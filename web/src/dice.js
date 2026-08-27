@@ -14,13 +14,9 @@
 // собственным состоянием, которые надо синхронизировать.
 //
 // controlsContainer — пустой div для лотка, send — функция отправки
-// WS-сообщения (vtt.send). logContainer — опциональный отдельный div под
-// лог результатов (нужен dm.html: там лоток переехал в боковое меню справа,
-// а лог остался отдельно сверху канваса, см. pages/dm.js); если не передан —
-// лог, как раньше, живёт внутри того же controlsContainer (player.html).
-// Лог — чисто клиентский (последние ~30 бросков на вкладку), сервер ничего
-// не хранит (см. internal/service/room.go: relayRoll — бросок эфемерен, как
-// animate_attack).
+// WS-сообщения (vtt.send). Лог результатов лоток не рисует: это отдельный
+// общий виджет (см. web/src/roll-log.js) — страница сама монтирует
+// createRollLog и кормит его событием vtt:rollResult.
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 
@@ -68,12 +64,13 @@ export function serializeFormula(pool) {
   return out;
 }
 
-// formatRolls — "3d4+2d6+1" + [2,4,1,5,3] → "3d4[2, 4, 1] + 2d6[5, 3]".
-// Сервер отдаёт значения ПЛОСКИМ списком в порядке блоков формулы (см.
-// domain.RollResult.Rolls), так что разбить их обратно можно только тут, по
-// той же формуле. Не сошлось (чужая формула, старый сервер) — печатаем
-// плоский список, как раньше.
-export function formatRolls(formula, rolls) {
+// rollGroups — "3d4+2d6+1" + [2,4,1,5,3] → [{label:"3d4", sides:4, values:[2,4,1]},
+// {label:"2d6", sides:6, values:[5,3]}]. Сервер отдаёт значения ПЛОСКИМ списком
+// в порядке блоков формулы (см. domain.RollResult.Rolls), разбить обратно можно
+// только тут, по той же формуле. Вернёт null, если раскладка не сошлась с
+// длиной списка (чужая/битая формула, старый сервер) — вызывающий код тогда
+// показывает плоский список как есть.
+export function rollGroups(formula, rolls) {
   const list = rolls || [];
   const normalized = String(formula || "").toLowerCase().replace(/\s+/g, "");
   const groups = [];
@@ -82,15 +79,23 @@ export function formatRolls(formula, rolls) {
   for (let m = diceTermRe.exec(normalized); m; m = diceTermRe.exec(normalized)) {
     if (m[3] === undefined) continue;
     const count = m[2] === "" ? 1 : Number(m[2]);
-    groups.push({ label: `${count}d${m[3]}`, values: list.slice(used, used + count) });
+    groups.push({ label: `${count}d${m[3]}`, sides: Number(m[3]), values: list.slice(used, used + count) });
     used += count;
   }
-  if (groups.length < 2 || used !== list.length) return `[${list.join(", ")}]`;
+  if (used !== list.length) return null;
+  return groups;
+}
+
+// formatRolls — то же плоским текстом: "3d4[2, 4, 1] + 2d6[5, 3]" для смешанной
+// формулы, "[2, 4, 1]" для одиночной или неразобранной.
+export function formatRolls(formula, rolls) {
+  const list = rolls || [];
+  const groups = rollGroups(formula, rolls);
+  if (!groups || groups.length < 2) return `[${list.join(", ")}]`;
   return groups.map((g) => `${g.label}[${g.values.join(", ")}]`).join(" + ");
 }
 
-export function initDiceRoller(controlsContainer, send, logContainer) {
-  const ownLog = !logContainer;
+export function initDiceRoller(controlsContainer, send) {
   controlsContainer.classList.add("dice-tray");
   controlsContainer.innerHTML = `
     <div class="dice-buttons">${DICE.map(
@@ -107,10 +112,7 @@ export function initDiceRoller(controlsContainer, send, logContainer) {
       <input type="text" placeholder="напр. 2d6+3" aria-label="Формула броска" />
       <button type="button" data-roll-custom>Бросить</button>
     </div>
-    ${ownLog ? '<div class="dice-log"></div>' : ""}
   `;
-  const log = ownLog ? controlsContainer.querySelector(".dice-log") : logContainer;
-  log.classList.add("dice-log");
   const customInput = controlsContainer.querySelector(".dice-custom input");
   const modValue = controlsContainer.querySelector(".dice-mod-value");
   const dieButtons = [...controlsContainer.querySelectorAll("[data-d]")];
@@ -172,22 +174,4 @@ export function initDiceRoller(controlsContainer, send, logContainer) {
     if (e.key === "Enter") roll(customInput.value.trim());
   });
   renderFromInput();
-
-  document.addEventListener("vtt:rollResult", (e) => {
-    const { name, label, formula, rolls, modifier, total } = e.detail;
-    const row = document.createElement("div");
-    row.className = "dice-log-row";
-    const mod = modifier ? (modifier > 0 ? " +" + modifier : " " + modifier) : "";
-    // label — необязательная подпись броска с листа персонажа ("Атлетика",
-    // "Спасбросок Ловкости"...), см. internal/domain/message.go: ClientMsg.Label.
-    const who = label ? `${name} — ${label}` : name;
-    // Периодический модификатор без кубика («-1» от кровотечения — см.
-    // service.Room.applyPeriodicModifiers) шлёт пустой rolls: кидать
-    // нечего, число уже готово. Без кубиков стрелка на formatRolls([])
-    // печатала бы бессмысленное «→ []» — просто показываем итог.
-    const rolled = rolls && rolls.length ? ` → ${formatRolls(formula, rolls)}${mod}` : "";
-    row.textContent = `${who}: ${formula}${rolled} = ${total}`;
-    log.prepend(row);
-    while (log.children.length > 30) log.removeChild(log.lastChild);
-  });
 }

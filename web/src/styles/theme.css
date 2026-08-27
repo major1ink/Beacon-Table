@@ -323,3 +323,58 @@
   background: var(--accent); color: #fff; font: inherit; font-size: 12px;
 }
 .dice-tray .dice-custom [data-roll-custom]:hover { background: var(--accent-hover); }
+
+/* ---- .roll-log — единственный лог бросков кубов (см. web/src/roll-log.js).
+   Одна вёрстка карточки на все места; хост-страница выбирает раскладку
+   контейнера классом-модификатором:
+     .roll-log--plate — плавающая стеклянная плашка в углу канваса (стол,
+       player.html / dm.html); в какой угол — задаёт сама страница (left/bottom
+       у игрока, right/top у ДМ).
+     .roll-log--strip — приклеенная снизу лента в панели книги/листа
+       (bestiary/spellbook/itembook/character-sheet).
+   Карточка — в стиле Foundry: «кто», тусклая строка-формула, ниже раскладка
+   блоками (значение кости + модификатор + итог). ---- */
+.roll-log { display: flex; flex-direction: column; min-height: 0; }
+.roll-log.hidden { display: none; }
+.roll-log-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.roll-log--plate {
+  position: absolute; z-index: 5; width: 264px; max-height: 220px; padding: 7px;
+  border-radius: var(--radius); background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
+}
+
+.roll-log--strip {
+  flex: 0 0 auto; max-height: 24vh; padding: 8px 12px;
+  border-top: 1px solid var(--border); background: var(--panel-bg);
+}
+
+.roll-card {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 8px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.roll-card-who { font-size: 11px; font-weight: 600; color: var(--text); }
+.roll-card-formula {
+  font-size: 10.5px; color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.roll-card-break {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 2px;
+  font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+/* Значение каждой кости — отдельным блоком, как в Foundry. */
+.roll-die {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 4px; border-radius: 6px;
+  background: var(--panel-bg); border: 1px solid var(--border);
+  color: var(--text); font-weight: 700; font-size: 12.5px;
+}
+.roll-die.is-crit { border-color: var(--green-bright); color: var(--green-bright); }
+.roll-die.is-fumble { border-color: var(--danger-hover); color: #e07a7a; }
+.roll-op { color: var(--text-dim); }
+.roll-eq { margin-left: 2px; color: var(--text-dim); }
+.roll-eq b { color: var(--text); font-size: 13px; }

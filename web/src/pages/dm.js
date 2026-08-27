@@ -5,6 +5,7 @@
 import { initVTT } from "../vtt/index.js";
 import { mapObjectsOf } from "../vtt/map-objects.js";
 import { initDiceRoller } from "../dice.js";
+import { createRollLog } from "../roll-log.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
 import { invalidateActionsPeek } from "../combat-actions-peek.js";
 import { initCombatPanel } from "../combat-panel.js";
@@ -86,14 +87,15 @@ let vtt;
   // Кубы — отдельная иконка 🎲 в той же боковой колонке, что и 🔊 громкость
   // (см. vtt/side-menu.js — vtt.sideMenu тоже появляется только теперь).
   // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
-  // формулы, "Бросить", см. dice.js); лог результатов остаётся отдельно, в
-  // #diceLog сверху канваса (см. dm.html) — initDiceRoller поддерживает
-  // раздельные контейнеры именно ради этого случая.
+  // формулы, "Бросить", см. dice.js); лог результатов — отдельный виджет
+  // (roll-log.js) в плашке #diceLog сверху канваса (см. dm.html).
   const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240 });
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
-  initDiceRoller(diceControls, (msg) => vtt.send(msg), document.getElementById("diceLog"));
+  initDiceRoller(diceControls, (msg) => vtt.send(msg));
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   // Справочник — та же боковая колонка, следующая иконка после кубов (см.
   // compendium-menu.js: дерево категорий, само содержимое — отдельные
   // плавающие окна web/catalog.html). sticky — не закрывается кликом мимо

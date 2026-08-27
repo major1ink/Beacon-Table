@@ -109,18 +109,10 @@
        не становится, а километровый инпут вдоль всего экрана только мешает. */
     #diceDock .dice-custom { flex: 0 1 300px; min-width: 170px; }
 
-    /* Лог бросков — плавающая плашка в левом нижнем углу карты, тем же
-       приёмом, что #diceLog у ДМ (см. dm.html): пока броска не было —
-       :empty, места не занимает. */
-    #diceLog {
-      position: absolute; left: 10px; bottom: 10px; z-index: 5; width: 260px; max-height: 180px;
-      overflow-y: auto; padding: 8px 10px; border-radius: var(--radius);
-      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-      border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
-      display: flex; flex-direction: column-reverse; gap: 2px; opacity: 0.9;
-    }
-    #diceLog:empty { display: none; }
-    #diceLog .dice-log-row { font-size: 11px; }
+    /* Лог бросков — плавающая плашка в левом нижнем углу карты (общий виджет
+       .roll-log--plate, см. web/src/roll-log.js и theme.css); здесь только
+       выбор угла. */
+    #diceLog { left: 10px; bottom: 10px; }
 
     /* ---- модалка "Мои персонажи" ---- */
     #charsOverlay {
@@ -194,15 +186,16 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/player-BNzYTp4X.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-m72PrEiY.js">
+  <script type="module" crossorigin src="/assets/player-DM7vLcu-.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-C8_N-kk-.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-ClzvMhHz.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-BdeWBwwH.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-B50MuuVe.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-Bgz5PGYY.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-DOsxiha_.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-D-H0K0G7.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Cajm1d6h.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
+  <link rel="stylesheet" crossorigin href="/assets/api-bGF1xgk3.css">
 </head>
 <body>
   <div id="app">

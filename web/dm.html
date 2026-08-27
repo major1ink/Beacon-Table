@@ -887,16 +887,11 @@
     #newPlaylistForm input { flex: 1 1 auto; min-width: 0; background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
     #newPlaylistForm button { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
 
-    /* ---- лог бросков кубов: правый верхний угол, поверх канваса ----
-       Сами кнопки броска теперь в меню громкости справа (см. audio.js —
-       туда JS-ом монтируется .dice-controls-menu), здесь только результаты. */
-    #diceLog {
-      position: absolute; right: 10px; top: 10px; z-index: 5; width: 220px;
-      background: rgba(38,38,47,0.92); border-radius: 8px; padding: 8px; font-size: 12px;
-      max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; opacity: 0.85;
-    }
-    #diceLog:empty { display: none; } /* не занимать место, пока не было ни одного броска */
-    .dice-log-row { font-size: 11px; }
+    /* ---- лог бросков кубов: правый верхний угол, поверх канваса (общий
+       виджет .roll-log--plate, см. web/src/roll-log.js и theme.css); здесь
+       только выбор угла. Кнопки броска — в меню громкости справа (см.
+       audio.js — туда монтируется .dice-controls-menu). ---- */
+    #diceLog { right: 10px; top: 10px; }
 
     /* ---- лоток кубов (.dice-tray, см. web/src/dice.js и theme.css) —
        монтируется JS-ом (dm.js) в свою иконку бокового меню справа от

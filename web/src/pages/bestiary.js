@@ -15,6 +15,7 @@ import { wireCatalogLinks } from "../catalog-links.js";
 import { icon } from "../icons.js";
 import { initItemPicker } from "../item-picker.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { createRollLog } from "../roll-log.js";
 
 const ABILITIES = [
   { key: "str", label: "Сил" },
@@ -37,6 +38,7 @@ function fmtMod(n) {
 let monsterId = null;
 let monster = null; // объект domain.Monster целиком (сервер отдаёт camelCase — см. json-теги)
 let rollWS = null;
+let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js)
 // editMode — по умолчанию карточка открывается в чистом read-режиме (как
 // статблок в Foundry), редактирование — по явному клику на ✎ (см.
 // editToggleBtn ниже), тот же приём, что у заметок ДМ (note-window.js:
@@ -642,11 +644,12 @@ window.addEventListener("beforeunload", () => {
 // (в отличие от character-sheet.js, где ещё бывает роль игрока).
 
 function connectRollSocket() {
+  if (!rollLog) rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   rollWS = new WebSocket(`${scheme}//${location.host}/ws/dm`);
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") showRollResult(data);
+    if (data.type === "roll_result") rollLog.push(data);
   };
 }
 
@@ -654,17 +657,6 @@ function sendRoll(formula, label) {
   if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
   const fullLabel = monster && monster.name ? `${monster.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
   rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
-}
-
-function showRollResult(data) {
-  const wrap = document.getElementById("rollLogWrap");
-  wrap.classList.remove("hidden");
-  const log = document.getElementById("rollLog");
-  const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
-  const who = data.label ? `${data.name} — ${data.label}` : data.name;
-  const row = h("div", { class: "dice-log-row", text: `${who}: ${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}` });
-  log.prepend(row);
-  while (log.children.length > 20) log.removeChild(log.lastChild);
 }
 
 // ==================== boot ====================

@@ -2,6 +2,7 @@
 // не менялась, только глобальные вызовы app.js заменены на импорты.
 import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
+import { createRollLog } from "../roll-log.js";
 import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
 import { openSheetDock } from "../sheet-dock.js";
 import { setCardOpener } from "../combatant-card.js";
@@ -117,7 +118,9 @@ let vtt = null;
   // важен: док задаёт высоту, которая остаётся канвасу, а Pixi снимает её
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
-  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg), document.getElementById("diceLog"));
+  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg));
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   renderCharDock();
 
   vtt = await initVTT({

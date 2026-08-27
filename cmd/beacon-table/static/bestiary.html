@@ -110,10 +110,6 @@
     .md-render p { margin: 0.4em 0; }
     .md-render strong { color: #fff; }
 
-    #rollLogWrap { border-top: 1px solid var(--border); background: var(--panel-bg); padding: 6px 12px; max-height: 22vh; overflow-y: auto; flex: 0 0 auto; }
-    #rollLogWrap.hidden { display: none; }
-    .dice-log-row { font-size: 11px; padding: 1px 0; }
-
     /* ---- read-режим: аккуратный статблок вместо формы (см. bestiary.js: renderReadView) ---- */
     .sb-header { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 4px; }
     .sb-portrait { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; background: var(--surface); flex: 0 0 auto; box-shadow: 0 0 0 2px var(--border); }
@@ -148,17 +144,18 @@
     .sb-prose p:last-child { margin-bottom: 0; }
     .sb-prose strong { color: #fff; }
   </style>
-  <script type="module" crossorigin src="/assets/bestiary-BpIJuPl5.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-m72PrEiY.js">
+  <script type="module" crossorigin src="/assets/bestiary-D8CKZbX6.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-C8_N-kk-.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-DTEMrdvN.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-DwlZmB-I.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-text-CyuXAfKg.js">
   <link rel="modulepreload" crossorigin href="/assets/monster-import-DPZft_6s.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-BdFQkweV.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DQW6UocY.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-9VmRHThr.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-ClzvMhHz.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CEzn43a4.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-rS-ciWvP.css">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-TAHg_jLi.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
+  <link rel="stylesheet" crossorigin href="/assets/api-bGF1xgk3.css">
 </head>
 <body>
   <div id="topBar">
@@ -171,7 +168,7 @@
   </div>
   <div id="loadingHint">Загрузка…</div>
   <div id="app"></div>
-  <div id="rollLogWrap" class="hidden"><div id="rollLog"></div></div>
+  <div id="rollLogWrap"></div>
 
 </body>
 </html>

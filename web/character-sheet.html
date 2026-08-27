@@ -112,10 +112,6 @@
 
     .checkbox-line { display: flex; align-items: center; gap: 5px; font-size: 11.5px; }
 
-    #rollLogWrap { border-top: 1px solid var(--border); background: var(--panel-bg); padding: 6px 12px; max-height: 22vh; overflow-y: auto; flex: 0 0 auto; }
-    #rollLogWrap.hidden { display: none; }
-    .dice-log-row { font-size: 11px; padding: 1px 0; }
-
     #readonlyBanner {
       display: none; background: var(--accent-bg); color: var(--accent); font-size: 11px; padding: 6px 14px;
       border-bottom: 1px solid var(--border);
@@ -415,7 +411,7 @@
     <div class="tab-panel" id="tab4"></div>
     <div class="tab-panel" id="tab5"></div>
   </div>
-  <div id="rollLogWrap" class="hidden"><div id="rollLog"></div></div>
+  <div id="rollLogWrap"></div>
 
   <script type="module" src="/src/pages/character-sheet.js"></script>
 </body>
