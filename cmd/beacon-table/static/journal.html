@@ -163,6 +163,23 @@
     .note-render blockquote { margin: .6em 0; padding: 2px 14px; border-left: 3px solid var(--accent); opacity: .85; }
     .note-render ul, .note-render ol { margin: .4em 0; padding-left: 1.6em; }
     .note-render img { max-width: 100%; border-radius: 6px; }
+    /* ---- «Показать игрокам» на картинке в тексте (только ДМ, см.
+       web/src/pages/journal.js: wireShowcaseImages) — кнопка всплывает по
+       ховеру в углу картинки; у показываемой сейчас картинки рамка. ---- */
+    .note-img-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+    .note-img-wrap.showing img { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .note-img-show {
+      position: absolute; top: 8px; right: 8px;
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 9px; border: none; border-radius: 7px; cursor: pointer;
+      font: inherit; font-size: 12px; line-height: 1;
+      background: rgba(12, 12, 16, 0.82); color: #fff;
+      opacity: 0; transition: opacity 0.12s ease;
+    }
+    .note-img-wrap:hover .note-img-show,
+    .note-img-wrap.showing .note-img-show { opacity: 1; }
+    .note-img-show:hover { background: rgba(12, 12, 16, 0.95); }
+    .note-img-show svg { flex: 0 0 auto; }
     .note-render hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
     .note-render table { border-collapse: collapse; }
     .note-render th, .note-render td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
@@ -199,12 +216,12 @@
     #accessSaveBtn:hover { background: var(--green-hover); }
     #accessMsg { flex: 1 1 auto; align-self: center; font-size: 12px; color: #e74c3c; }
   </style>
-  <script type="module" crossorigin src="/assets/journal-D53JFNa0.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-W1vV0PH0.js">
+  <script type="module" crossorigin src="/assets/journal-CIZHlewt.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-YWvSdLKd.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-g49pjxWl.js">
-  <link rel="modulepreload" crossorigin href="/assets/toolbar-i1BGk41E.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-Dd0sD_AI.js">
+  <link rel="modulepreload" crossorigin href="/assets/toolbar-DUgILtjb.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-BnPXMbHd.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="stylesheet" crossorigin href="/assets/api-Cc7gT-d9.css">
 </head>

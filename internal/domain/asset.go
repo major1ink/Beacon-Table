@@ -26,11 +26,17 @@ const (
 	// токен-арт монстров/аватары персонажей в папки не требовалось.
 	// Доступ — только ДМ, как у maps/audio (см. AssetService.Upload).
 	AssetKindProps = "props"
+	// AssetKindHandouts — картинки для показа «поверх всего» на экранах
+	// игроков и трансляции (раздел «Показ» у ДМ, см. web/dm.html и
+	// web/src/showcase-overlay.js). Не токены и не декорации сцены — это
+	// хендауты (портрет NPC, письмо, символ), поэтому своя библиотека, а не
+	// AssetKindProps. Доступ — только ДМ, как у maps/audio/props.
+	AssetKindHandouts = "handouts"
 )
 
 // AssetKinds — все известные виды ассетов, в порядке отображения в
 // библиотеке DM.
-var AssetKinds = []string{AssetKindMaps, AssetKindTokens, AssetKindAudio, AssetKindNotes, AssetKindProps}
+var AssetKinds = []string{AssetKindMaps, AssetKindTokens, AssetKindAudio, AssetKindNotes, AssetKindProps, AssetKindHandouts}
 
 // AssetInfo — одна запись в библиотеке ранее загруженных файлов. Name —
 // человекочитаемое имя (без "<unixnano>-" префикса, добавленного при

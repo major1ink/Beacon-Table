@@ -129,8 +129,8 @@ type Room struct {
 	// NotifyPlaylistsChanged: admin-CRUD плейлистов и импорт Foundry) — тот
 	// же принцип и те же свойства, что journalChanged выше.
 	playlistsChanged chan struct{}
-	dirty                 bool            // есть хоть одна несохранённая мутация с последнего флаша
-	dirtyScenes           map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
+	dirty            bool            // есть хоть одна несохранённая мутация с последнего флаша
+	dirtyScenes      map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
 	// combat — трекер инициативы всего стола (см. domain.CombatState), не
 	// привязан к конкретной сцене — переживает switch_scene. combatDirty —
@@ -160,6 +160,11 @@ type Room struct {
 	// подключения. Игнорируется клиентом, если текущий фон — не видео.
 	mapStartedAtMs int64
 	cue            *domain.CueState // канал ДМ — независим от амбиента сцены, nil = ничего не играет
+	// showcase — картинка «поверх всего» на экранах игроков и трансляции
+	// (раздел «Показ» у ДМ, см. domain.ShowcaseState). Эфемерна, как cue:
+	// в state сцены не пишется, шлётся всем и досылается свежеподключившимся
+	// (см. showcasePayload/broadcastShowcase). nil = ничего не показывается.
+	showcase *domain.ShowcaseState
 }
 
 // NewRoom поднимает комнату из sceneRepo (все сцены с прошлого запуска,
@@ -347,9 +352,10 @@ func (r *Room) run() {
 		case c := <-r.join:
 			r.clients[c] = true
 			c.Send(r.snapshotPayload(c))
-			c.Send(r.cuePayload())     // канал ДМ — что уже играет, если играет
-			c.Send(r.combatPayload(c)) // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
-			c.Send(r.hubPayload())     // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
+			c.Send(r.cuePayload())      // канал ДМ — что уже играет, если играет
+			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
+			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
+			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
 
@@ -372,6 +378,21 @@ func (r *Room) run() {
 				continue
 			case "show_journal":
 				r.relayJournalShow(im.from, im.msg) // эфемерно, как fx: state не трогает
+				continue
+			case "show_image":
+				// «Показать игрокам» из раздела «Показ» — картинка поверх
+				// всего на экранах игроков и трансляции. Эфемерно, как cue:
+				// в state сцены не пишется (см. showcasePayload).
+				if im.msg.ImageURL == "" {
+					r.showcase = nil
+				} else {
+					r.showcase = &domain.ShowcaseState{URL: im.msg.ImageURL}
+				}
+				r.broadcastShowcase()
+				continue
+			case "hide_image":
+				r.showcase = nil
+				r.broadcastShowcase()
 				continue
 			case "move_own_token":
 				r.applyOwnTokenMove(im.from, im.msg) // сам шлёт broadcastAll при успехе
@@ -770,6 +791,22 @@ func (r *Room) broadcastCue() {
 
 func (r *Room) cuePayload() map[string]any {
 	return map[string]any{"type": "audio_cue", "cue": r.cue, "serverNow": time.Now().UnixMilli()}
+}
+
+// broadcastShowcase / showcasePayload — картинка «Показать игрокам» (см.
+// domain.ShowcaseState, web/src/showcase-overlay.js). Как и канал ДМ, шлётся
+// всем клиентам (игроки, трансляция, сам ДМ — у него это предпросмотр) и
+// досылается свежеподключившимся в Room.run. r.showcase == nil уходит как
+// JSON null — клиент трактует это как «убрать показ».
+func (r *Room) broadcastShowcase() {
+	payload := r.showcasePayload()
+	for c := range r.clients {
+		c.Send(payload)
+	}
+}
+
+func (r *Room) showcasePayload() map[string]any {
+	return map[string]any{"type": "showcase", "showcase": r.showcase}
 }
 
 // broadcastSceneList шлёт только DM-клиентам список всех сцен комнаты (для

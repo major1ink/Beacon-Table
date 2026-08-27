@@ -433,6 +433,9 @@ function renderEntry() {
     // Формулы в тексте кликабельны, как в карточках библиотек — бросок
     // уходит в общий лог стола (см. inline-rolls.js).
     enhanceRolls(renderEl, sendRoll);
+    // Картинки из текста записи — кнопка «Показать игрокам» при наведении
+    // (только ДМ), см. wireShowcaseImages ниже.
+    wireShowcaseImages();
     headingNav.refresh(); // кнопка «перейти к разделу» — только если разделов ≥2
     scrollToSection();
   }
@@ -704,6 +707,75 @@ pinBtn.onclick = () => {
   msgEl.textContent = "Кликни на карте, куда поставить значок.";
 };
 
+// ---- «Показать игрокам» для картинок из текста записи (только ДМ) ----
+//
+// В приключении картинка (портрет NPC, карта локации, раздатка) обычно лежит
+// прямо в тексте записи — и её нужно быстро вывести игрокам, не выясняя, где
+// её файл. При наведении на картинку у ДМ всплывает кнопка: она шлёт ту же
+// WS-команду show_image, что и раздел «Показ» у ДМ (см.
+// web/src/showcase-overlay.js, broadcastShowcase в internal/service/room.go).
+// Идёт через тот же сокет rollWS, что и броски из текста.
+
+let shownImageUrl = ""; // что сейчас на экране у игроков (из сообщений showcase)
+
+// imgShowUrl — что слать в show_image: для своих же файлов путь без хоста
+// (как хранит раздел «Показ»), для внешних картинок — абсолютный URL.
+function imgShowUrl(img) {
+  try {
+    const u = new URL(img.currentSrc || img.src, location.href);
+    return u.origin === location.origin ? u.pathname + u.search : u.href;
+  } catch {
+    return img.currentSrc || img.src;
+  }
+}
+
+function sendShowImage(url) {
+  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) {
+    msgEl.className = "";
+    msgEl.textContent = "Нет связи со столом — обнови страницу и попробуй снова.";
+    return;
+  }
+  rollWS.send(JSON.stringify(url ? { type: "show_image", imageUrl: url } : { type: "hide_image" }));
+}
+
+// wireShowcaseImages — оборачивает каждую <img> в тексте записи span'ом с
+// кнопкой (появляется по ховеру). Повторный запуск на уже обёрнутых
+// картинках пропускает их (renderEntry зовёт нас на каждый ре-рендер).
+function wireShowcaseImages() {
+  if (!isDM) return;
+  for (const img of renderEl.querySelectorAll("img")) {
+    if (img.parentElement && img.parentElement.classList.contains("note-img-wrap")) continue;
+    const wrap = document.createElement("span");
+    wrap.className = "note-img-wrap";
+    img.replaceWith(wrap);
+    wrap.appendChild(img);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "note-img-show";
+    btn.onclick = (e) => {
+      e.preventDefault();
+      const url = imgShowUrl(img);
+      sendShowImage(url === shownImageUrl ? "" : url); // повторный клик по показываемой — снять
+    };
+    wrap.appendChild(btn);
+  }
+  refreshShowcaseButtons();
+}
+
+// refreshShowcaseButtons — подписи/подсветка кнопок под текущее состояние
+// показа (приходит в сообщениях showcase, см. connectRollSocket).
+function refreshShowcaseButtons() {
+  for (const wrap of renderEl.querySelectorAll(".note-img-wrap")) {
+    const img = wrap.querySelector("img");
+    const btn = wrap.querySelector(".note-img-show");
+    if (!img || !btn) continue;
+    const showing = !!shownImageUrl && imgShowUrl(img) === shownImageUrl;
+    wrap.classList.toggle("showing", showing);
+    btn.innerHTML =
+      icon(showing ? "eye-off" : "eye", { size: 13 }) + (showing ? " Убрать с экрана" : " Показать игрокам");
+  }
+}
+
 // ---- броски из текста записи ----
 // Своя WS-связь, как у карточек предмета/заклинания (см. itembook.js):
 // страница живёт отдельным окном и общего сокета стола не видит. /ws/player
@@ -718,6 +790,15 @@ function connectRollSocket() {
     const data = JSON.parse(ev.data);
     if (data.type === "journal_changed") {
       onJournalChanged(data.id);
+      return;
+    }
+    if (data.type === "showcase") {
+      // Что сейчас на экране у игроков (см. broadcastShowcase) — чтобы
+      // кнопка на картинке в тексте знала, показывается ли ИМЕННО она, и
+      // переключалась на «Убрать с экрана». Приходит и при открытии окна
+      // (Room.run досылает свежеподключившемуся).
+      shownImageUrl = (data.showcase && data.showcase.url) || "";
+      refreshShowcaseButtons();
       return;
     }
     if (data.type === "journal_shown_ack") {

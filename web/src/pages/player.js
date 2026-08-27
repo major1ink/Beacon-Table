@@ -21,6 +21,7 @@ import {
 import { icon } from "../icons.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
+import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
@@ -145,6 +146,11 @@ let vtt = null;
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
   // выезжающей плашке бокового меню.
   vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow);
+
+  // Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
+  // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
+  // управляет ДМ.
+  initShowcaseOverlay({ role: "player" });
 
   document.addEventListener("vtt:authFailed", () => {
     document.getElementById("authFailedOverlay").classList.add("open");

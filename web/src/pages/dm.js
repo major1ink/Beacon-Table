@@ -12,6 +12,7 @@ import { initCombatPanel } from "../combat-panel.js";
 import { setCardOpener } from "../combatant-card.js";
 import { openSheetDock } from "../sheet-dock.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
+import { initShowcaseOverlay } from "../showcase-overlay.js";
 import {
   fetchMe,
   apiLogout,
@@ -109,6 +110,10 @@ let vtt;
   // "мимо"), только своей кнопкой ✕ в шапке.
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
   mountCompendiumMenu(compendiumPanel, { role: "dm" });
+  // Оверлей «Показать игрокам» — на экране ДМ это предпросмотр того, что
+  // видят игроки, плюс кнопка «✕» (шлёт hide_image всем, см.
+  // web/src/showcase-overlay.js). Раздел рейла «Показ» — ниже по файлу.
+  initShowcaseOverlay({ role: "dm", send: (m) => vtt.send(m) });
 })();
 document.addEventListener("vtt:authFailed", () => {
   document.getElementById("authFailedOverlay").classList.add("open");
@@ -175,13 +180,14 @@ function fillLibrary(select, items) {
   select.value = current && [...select.options].some((o) => o.value === current) ? current : "";
 }
 
-let latestAssets = { maps: [], tokens: [], audio: [], props: [], folders: {} };
+let latestAssets = { maps: [], tokens: [], audio: [], props: [], handouts: [], folders: {} };
 async function refreshLibrary() {
   try {
     latestAssets = await fetchAssets();
     if (bgTab.classList.contains("active")) renderAssetTable();
     if (audioTab.classList.contains("active")) renderAudioAssetTable();
     if (assetsPanelSection.classList.contains("active")) renderAssetsGrid();
+    if (showcasePanelSection.classList.contains("active")) renderShowcaseGrid();
   } catch (err) {
     console.error("не удалось загрузить библиотеку ассетов:", err);
   }
@@ -359,6 +365,129 @@ document.getElementById("assetUpload").onchange = async (e) => {
     e.target.value = "";
     await refreshLibrary();
     renderAssetsGrid();
+  }
+};
+
+// ================= раздел "Показ игрокам" =================
+// Своя библиотека картинок (domain.AssetKindHandouts = "handouts"), отдельная
+// от декораций карты ("props") и токен-арта ("tokens") — это хендауты
+// (портрет NPC, письмо, символ). Клик по плитке выводит картинку «поверх
+// всего» на экраны игроков и трансляции (WS "show_image" → r.showcase →
+// broadcastShowcase, см. internal/service/room.go; сам оверлей —
+// web/src/showcase-overlay.js). Состояние эфемерно, как канал ДМ: сервер его
+// не сохраняет на диск, но досылает свежеподключившимся.
+const HANDOUT_KIND = "handouts";
+const showcasePanelSection = document.querySelector('.panel-section[data-panel="showcase"]');
+const showcaseGrid = document.getElementById("showcaseGrid");
+const showcaseNowEl = document.getElementById("showcaseNow");
+// latestShowcase — URL сейчас показываемой картинки ("" — ничего). Держим
+// синхронно из того же события vtt:showcase, что слушает и оверлей: сервер —
+// единственный источник правды, кнопки только шлют show_image/hide_image.
+let latestShowcase = "";
+document.addEventListener("vtt:showcase", (e) => {
+  latestShowcase = (e.detail && e.detail.url) || "";
+  if (showcasePanelSection.classList.contains("active")) {
+    renderShowcaseNow();
+    renderShowcaseGrid();
+  }
+});
+
+function showImage(url) {
+  vtt.send({ type: "show_image", imageUrl: url });
+}
+function hideImage() {
+  vtt.send({ type: "hide_image" });
+}
+
+function renderShowcaseNow() {
+  showcaseNowEl.innerHTML = "";
+  if (!latestShowcase) {
+    showcaseNowEl.className = "showcase-now empty";
+    showcaseNowEl.textContent = "Сейчас ничего не показывается";
+    return;
+  }
+  showcaseNowEl.className = "showcase-now";
+  const thumb = document.createElement("div");
+  thumb.className = "showcase-now-thumb";
+  thumb.style.backgroundImage = `url("${latestShowcase}")`;
+  const body = document.createElement("div");
+  body.className = "showcase-now-body";
+  const title = document.createElement("div");
+  title.textContent = "На экране у игроков";
+  const nameEl = document.createElement("div");
+  nameEl.className = "showcase-now-name";
+  nameEl.textContent = decodeURIComponent(latestShowcase.split("/").pop() || "").replace(/^\d+-/, "");
+  body.append(title, nameEl);
+  const off = document.createElement("button");
+  off.type = "button";
+  off.className = "danger";
+  off.textContent = "Убрать с экрана";
+  off.onclick = hideImage;
+  showcaseNowEl.append(thumb, body, off);
+}
+
+function renderShowcaseGrid() {
+  const files = (latestAssets[HANDOUT_KIND] || []).filter((a) => !isVideoUrl(a.url));
+  showcaseGrid.innerHTML = "";
+  if (files.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "assets-empty-hint";
+    empty.textContent = "Пока пусто — загрузи картинку выше.";
+    showcaseGrid.appendChild(empty);
+    return;
+  }
+  for (const a of files) {
+    const tile = document.createElement("div");
+    tile.className = "asset-tile item-tile";
+    if (a.url === latestShowcase) tile.classList.add("showing");
+    tile.title = a.url === latestShowcase ? "Снять с экрана игроков" : "Показать на экране игроков и трансляции";
+    tile.style.backgroundImage = `url("${a.url}")`;
+    tile.onclick = () => (a.url === latestShowcase ? hideImage() : showImage(a.url));
+    const name = document.createElement("span");
+    name.className = "asset-tile-name";
+    name.textContent = a.name;
+    tile.appendChild(name);
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "asset-tile-del";
+    delBtn.title = "Удалить из библиотеки";
+    delBtn.innerHTML = icon("trash", { size: 12 });
+    delBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!(await showConfirm(`Удалить «${a.name}» из библиотеки показа?`, { title: "Удалить файл", okLabel: "Удалить", danger: true }))) return;
+      try {
+        if (a.url === latestShowcase) hideImage();
+        await deleteAsset(HANDOUT_KIND, a.url);
+        await refreshLibrary();
+        renderShowcaseGrid();
+      } catch (err) {
+        showAlert("Не удалось удалить: " + err.message);
+      }
+    };
+    tile.appendChild(delBtn);
+    showcaseGrid.appendChild(tile);
+  }
+}
+
+onPanelOpen("showcase", () => {
+  renderShowcaseNow();
+  renderShowcaseGrid();
+  refreshLibrary();
+});
+
+document.getElementById("showcaseUpload").onchange = async (e) => {
+  const files = [...e.target.files];
+  if (files.length === 0) return;
+  try {
+    for (const file of files) {
+      await uploadFile(file, HANDOUT_KIND);
+    }
+  } catch (err) {
+    showAlert("Не удалось загрузить файл: " + err.message);
+  } finally {
+    e.target.value = "";
+    await refreshLibrary();
+    renderShowcaseGrid();
   }
 };
 

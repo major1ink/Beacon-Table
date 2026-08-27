@@ -23,11 +23,12 @@ import (
 // остальное (пустой/незнакомый kind) падает в корень rootDir с urlPrefix как
 // есть — так вело себя исходное приложение, сохраняем поведение 1-в-1.
 var knownKinds = map[string]bool{
-	domain.AssetKindMaps:   true,
-	domain.AssetKindTokens: true,
-	domain.AssetKindAudio:  true,
-	domain.AssetKindNotes:  true,
-	domain.AssetKindProps:  true,
+	domain.AssetKindMaps:     true,
+	domain.AssetKindTokens:   true,
+	domain.AssetKindAudio:    true,
+	domain.AssetKindNotes:    true,
+	domain.AssetKindProps:    true,
+	domain.AssetKindHandouts: true,
 }
 
 // Store — реализация repository.AssetRepository. rootDir — корневая папка

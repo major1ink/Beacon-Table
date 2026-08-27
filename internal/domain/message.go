@@ -76,6 +76,13 @@ type ClientMsg struct {
 
 	Cue *CueState `json:"cue,omitempty"`
 
+	// ImageURL — только для "show_image": какую картинку ДМ выводит «поверх
+	// всего» на экраны игроков и трансляции (раздел «Показ», см.
+	// web/src/showcase-overlay.js). Пустая строка / "hide_image" — убрать
+	// показ. Эфемерно, как Cue: в snapshot сцены не пишется (см.
+	// Room.showcase / broadcastShowcase).
+	ImageURL string `json:"imageUrl,omitempty"`
+
 	// поля трекера инициативы (см. domain.CombatState/Combatant,
 	// service.Room: handleAddCombatant и соседи). "start_combat"/"end_combat"/
 	// "next_turn"/"prev_turn" не используют ни одно из полей ниже — они сами
@@ -242,4 +249,14 @@ type CueState struct {
 	StartedAtMs int64   `json:"startedAtMs"`
 	Paused      bool    `json:"paused"`
 	PositionMs  int64   `json:"positionMs"`
+}
+
+// ShowcaseState — картинка, которую ДМ вывел «поверх всего» на экраны
+// игроков и трансляции (кнопка показа в разделе «Показ», см. web/dm.html и
+// web/src/showcase-overlay.js). Эфемерно, как CueState: в snapshot сцены не
+// пишется, живёт в памяти комнаты и досылается свежеподключившимся в
+// Room.run (см. Room.showcase / showcasePayload). nil = сейчас ничего не
+// показывается.
+type ShowcaseState struct {
+	URL string `json:"url"`
 }
