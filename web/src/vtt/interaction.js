@@ -254,7 +254,7 @@ export function createInteraction(ctx) {
 
   if (ctx.isDM) {
     // Единый активный инструмент вместо трёх независимых булевых флагов.
-    let tool = "select"; // 'select' | 'attack' | 'wall' | 'building' | 'fog' | 'grid-edit' | 'ruler'
+    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'grid-edit' | 'ruler'
     // ctx.tool — зеркало локальной `tool` наружу: layers/walls.js,
     // layers/manual-fog.js и layers/buildings.js читают его, чтобы решить,
     // рисовать ли кружки-ручки на вершинах (см. setTool ниже — точки
@@ -263,7 +263,6 @@ export function createInteraction(ctx) {
     // инструмента — гейтится только возможность их редактировать и сами
     // точки-ручки.
     ctx.tool = tool;
-    let attackFromId = null;
     // wallChainLast — последняя ЗАКОММИЧЕННАЯ точка текущей цепочки стен (см.
     // ниже); wallDragFrom — точка mousedown, пока цепочка ещё не начата (одно
     // "было" на двоих: либо цепочка уже идёт, либо мы ждём mouseup первого
@@ -376,7 +375,6 @@ export function createInteraction(ctx) {
     function setTool(name) {
       tool = name || "select";
       ctx.tool = tool;
-      attackFromId = null;
       wallChainLast = null;
       wallDragFrom = null;
       draggingWallPoint = null;
@@ -637,21 +635,8 @@ export function createInteraction(ctx) {
       }
 
       // skipLocked — запертый токен (domain.Token.Locked) для ЛКМ просто не
-      // существует: ни утащить, ни выбрать целью атаки.
+      // существует: ни утащить, ни выбрать.
       const hitId = dmTokenAt(x, y, { skipLocked: true });
-      if (tool === "attack") {
-        if (!attackFromId) {
-          attackFromId = hitId;
-        } else if (hitId) {
-          const from = ctx.scene.tokens[attackFromId];
-          const to = ctx.scene.tokens[hitId];
-          if (from && to) {
-            ctx.send({ type: "animate_attack", fromX: from.x, fromY: from.y, toX: to.x, toY: to.y, color: "#ff5555" });
-          }
-          setTool("select");
-        }
-        return;
-      }
       if (hitId) {
         // Shift+клик по токену — только переключить его в/из текущего
         // выделения (как в Foundry), само перетаскивание НЕ начинается: это

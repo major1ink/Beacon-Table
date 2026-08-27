@@ -367,8 +367,7 @@ document.getElementById("zoomInBtn").onclick = () => document.dispatchEvent(new 
 document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1 / 1.3 }));
 document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
 
-// ================= единый инструмент: Атака / Стены / Здание / Туман =================
-const attackBtn = document.getElementById("attackBtn");
+// ================= единый инструмент: Стены / Здание / Туман =================
 const wallBtn = document.getElementById("wallBtn");
 const buildingBtn = document.getElementById("buildingBtn");
 const fogBtn = document.getElementById("fogBtn");
@@ -379,12 +378,10 @@ function toggleTool(name) {
   const next = current && current.dataset.tool === name ? "select" : name;
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: next }));
 }
-attackBtn.dataset.tool = "attack";
 wallBtn.dataset.tool = "wall";
 buildingBtn.dataset.tool = "building";
 fogBtn.dataset.tool = "fog";
 rulerBtn.dataset.tool = "ruler";
-attackBtn.onclick = () => toggleTool("attack");
 wallBtn.onclick = () => toggleTool("wall");
 buildingBtn.onclick = () => toggleTool("building");
 fogBtn.onclick = () => toggleTool("fog");
@@ -392,7 +389,6 @@ rulerBtn.onclick = () => toggleTool("ruler");
 
 const gridEditDone = document.getElementById("gridEditDone");
 document.addEventListener("vtt:toolChanged", (e) => {
-  attackBtn.classList.toggle("active", e.detail === "attack");
   wallBtn.classList.toggle("active", e.detail === "wall");
   buildingBtn.classList.toggle("active", e.detail === "building");
   fogBtn.classList.toggle("active", e.detail === "fog");
