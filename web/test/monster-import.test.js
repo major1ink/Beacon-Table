@@ -143,3 +143,51 @@ test("не-оружие (feat) строку атаки не получает", (
   );
   assert.doesNotMatch(m.bonusActions, /к попаданию/);
 });
+
+// v4/2024 (экспорт TTG Club "5e14") убрал system.activation с предмета —
+// тип активации теперь лежит в system.activities.<id>.activation.type.
+// bucketFor должен это учитывать, иначе все атаки/способности сваливаются в
+// «Особенности» вместо «Действий»/«Бонусных действий»/«Реакций».
+test("v4-предмет с activities.<id>.activation.type раскладывается по разделам", () => {
+  const m = mapFoundryMonsterJson(
+    goblin([
+      {
+        name: "Скимитар",
+        type: "weapon",
+        system: {
+          description: { value: "<p>Рукопашная атака оружием.</p>" },
+          activities: { dnd5eactivity000: { type: "attack", activation: { type: "action" } } },
+        },
+      },
+      {
+        name: "Быстрый отход",
+        type: "feat",
+        system: {
+          description: { value: "<p>Гоблин совершает действие Отход бонусным действием.</p>" },
+          activities: { dnd5eactivity001: { type: "utility", activation: { type: "bonus" } } },
+        },
+      },
+    ])
+  );
+  assert.match(m.actions, /Скимитар/);
+  assert.doesNotMatch(m.traits, /Скимитар/);
+  assert.match(m.bonusActions, /Быстрый отход/);
+  assert.doesNotMatch(m.traits, /Быстрый отход/);
+});
+
+// Старая схема v2/v3 (system.activation.type) должна продолжать работать.
+test("v2/v3-предмет с system.activation.type по-прежнему раскладывается по разделам", () => {
+  const m = mapFoundryMonsterJson(
+    goblin([
+      {
+        name: "Короткий лук",
+        type: "weapon",
+        system: {
+          description: { value: "<p>Дальнобойная атака оружием.</p>" },
+          activation: { type: "action" },
+        },
+      },
+    ])
+  );
+  assert.match(m.actions, /Короткий лук/);
+});

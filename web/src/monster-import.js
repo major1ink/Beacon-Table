@@ -22,7 +22,9 @@
 // Способности (Traits/Actions/Бонусные/Реакции/Легендарные/Логово) в Foundry
 // не размечены отдельным полем "раздел статблока" — при экспорте с TTG Club
 // они приходят россыпью в items[] (type "weapon"/"feat"), и в какой раздел
-// попадает предмет, определяется его system.activation.type (см. bucketFor).
+// попадает предмет, определяется его типом активации (см. bucketFor и
+// activationType — v2/v3 держат его в system.activation.type, v4/2024 —
+// в system.activities.<id>.activation.type).
 // Это эвристика, не гарантия: пассивная особенность, формально дающая право
 // на бонусное действие (как "Ловкий побег" гоблина), из Foundry приходит с
 // activation.type "bonus" и попадёт в "Бонусные действия" вместо "Особенностей"
@@ -371,6 +373,18 @@ function itemParagraph(item, name, scores, prof) {
 // печатается отдельным абзацем.
 const ABILITY_ITEM_TYPES = new Set(["weapon", "feat"]);
 
+// activationType — тип активации предмета, устойчивый к смене схемы dnd5e:
+// v2/v3 держат его в system.activation.type, v4/2024 (экспорт TTG Club
+// "5e14") убрали system.activation с предмета — активация переехала внутрь
+// system.activities.<id>.activation (см. одноимённый primaryActivation в
+// item-import.js). Берём тип первой активности, у которой он реально задан.
+function activationType(sys) {
+  if (sys && sys.activation && sys.activation.type) return sys.activation.type;
+  const activities = sys && sys.activities && typeof sys.activities === "object" ? Object.values(sys.activities) : [];
+  const found = activities.find((act) => act && act.activation && act.activation.type);
+  return (found && found.activation.type) || "";
+}
+
 // bucketFor — раздел статблока для предмета. Два предмета TTG Club всегда
 // называет одинаково служебными именами (не зависящими от конкретного
 // монстра) — это не эвристика по activation.type, а прямое опознавание:
@@ -380,7 +394,7 @@ const ABILITY_ITEM_TYPES = new Set(["weapon", "feat"]);
 function bucketFor(item) {
   if (item.name === "Легендарные действия") return "legendaryIntro";
   if (item.name === "Эффекты местности") return "lairIntro";
-  const t = (item.system && item.system.activation && item.system.activation.type) || "";
+  const t = activationType(item.system);
   if (t === "action") return "actions";
   if (t === "bonus") return "bonusActions";
   if (t === "reaction") return "reactions";
