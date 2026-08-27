@@ -240,6 +240,77 @@ function joinEquipment(items) {
     .join(", ");
 }
 
+// --- Производные боевые показатели ---
+// Foundry держит их на актёре только как «расчётные»: у предгенерированного
+// персонажа приключения (dnd5e v4) system.attributes.hp.max, .ac.value,
+// .movement.walk и .senses.darkvision пусты (null) — движок собирает их на
+// лету из вида, класса и надетого снаряжения. Экран импорта их не считает,
+// поэтому в листе выходили нули (КЗ/скорость/тёмное зрение/макс. ХП). Ниже —
+// та же оценка «как показал бы Foundry», глазами сверяемая игроком.
+
+// raceSpeed / raceDarkvision — база от вида, когда на актёре пусто.
+function raceSpeed(race) {
+  const m = (race && race.system && race.system.movement) || {};
+  return toInt(m.walk, 0);
+}
+function raceDarkvision(race) {
+  const s = (race && race.system && race.system.senses) || {};
+  return toInt(s.darkvision, 0);
+}
+
+// computeHpMax — максимум ХП по костям хитов класса и Телосложению (правило
+// PHB: 1-й уровень — максимум кости, дальше среднее). Приблизительно: не
+// учитывает черты вроде «Живучий», поэтому берётся лишь когда на актёре нет
+// ни hp.max, ни hp.value.
+function computeHpMax(items, conMod, level) {
+  const classes = itemsOfType(items, "class");
+  if (!classes.length) return 0;
+  let total = 0;
+  for (const c of classes) {
+    const lv = toInt(c.system && (c.system.levels || c.system.level), 0) || (classes.length === 1 ? level : 0);
+    if (!lv) continue;
+    const hd = c.system && (c.system.hd || c.system.hitDice);
+    const faces = toInt(String((typeof hd === "object" ? hd && hd.denomination : hd) || "").replace(/^d/i, ""), 8) || 8;
+    total += faces + conMod + (lv - 1) * (Math.floor(faces / 2) + 1 + conMod);
+  }
+  return Math.max(total, 1);
+}
+
+// computeArmorClass — КЗ из надетого снаряжения (лёгкий/средний/тяжёлый +
+// щит), иначе базовая формула 10 + Ловкость с «Защитой без брони» варвара
+// (+ Телосложение) и монаха (+ Мудрость). Явно заданный КЗ (calc "flat"/
+// "natural" или уже посчитанный экспортом) не трогаем.
+function computeArmorClass(ac, items, scores) {
+  const explicit = toInt(ac.value, 0) || toInt(ac.flat, 0);
+  if (explicit) return explicit;
+
+  const dexMod = abilityMod(scores.dex);
+  const worn = itemsOfType(items, "equipment").filter(
+    (it) => it.system && it.system.equipped && it.system.type && typeof it.system.type === "object",
+  );
+  const kindOf = (it) => it.system.type.value;
+  const body = worn.find((it) => ["light", "medium", "heavy"].includes(kindOf(it)));
+  const shield = worn.find((it) => kindOf(it) === "shield");
+  const shieldBonus = shield ? toInt((shield.system.armor || {}).value, 2) || 2 : 0;
+
+  if (body) {
+    const a = body.system.armor || {};
+    const base = toInt(a.value, 10);
+    const kind = kindOf(body);
+    let dexPart = dexMod;
+    if (kind === "heavy") dexPart = 0;
+    else if (kind === "medium") dexPart = Math.min(dexMod, a.dex == null ? 2 : toInt(a.dex, 2));
+    else if (a.dex != null) dexPart = Math.min(dexMod, toInt(a.dex));
+    return base + dexPart + toInt(a.magicalBonus) + shieldBonus;
+  }
+
+  const classIds = itemsOfType(items, "class").map((c) => ((c.system && c.system.identifier) || "").toLowerCase());
+  let unarmored = dexMod;
+  if (classIds.includes("barbarian")) unarmored = dexMod + abilityMod(scores.con);
+  else if (classIds.includes("monk")) unarmored = dexMod + abilityMod(scores.wis);
+  return 10 + unarmored + shieldBonus;
+}
+
 // mapFoundryCharacterJson — основной вход модуля. raw — уже распарсенный
 // объект актёра Foundry. Бросает Error, если это не персонаж.
 export function mapFoundryCharacterJson(raw) {
@@ -322,13 +393,13 @@ export function mapFoundryCharacterJson(raw) {
     },
     toolsLanguages: buildLanguages(traits),
     combat: {
-      ac: toInt(ac.value, 0) || toInt(ac.flat, 0),
-      hpCurrent: toInt(hp.value, 0) || toInt(hp.max, 0),
+      ac: computeArmorClass(ac, items, scores),
+      hpCurrent: toInt(hp.value, 0) || toInt(hp.max, 0) || computeHpMax(items, abilityMod(scores.con), level),
       hpTemp: toInt(hp.temp, 0),
-      hpMax: toInt(hp.max, 0),
+      hpMax: toInt(hp.max, 0) || toInt(hp.value, 0) || computeHpMax(items, abilityMod(scores.con), level),
       hitDiceTotal: level ? `${level}к?` : "",
-      speed: toInt(movement.walk, 0),
-      darkvision: toInt(senses.darkvision, 0),
+      speed: toInt(movement.walk, 0) || raceSpeed(race),
+      darkvision: toInt(senses.darkvision, 0) || raceDarkvision(race),
     },
     weapons,
     features: joinFeatures(items),

@@ -227,6 +227,7 @@ function normalizeSheet(raw) {
       : ["", "", "", "", "", "", "", "", ""];
   s.preparedSpells = Array.isArray(s.preparedSpells) ? s.preparedSpells : [];
   s.coins = s.coins || {};
+  for (const k of ["cp", "sp", "gp", "ep", "pp"]) s.coins[k] = Math.max(0, parseInt(s.coins[k], 10) || 0);
   // personalityTraits/ideals/bonds/flaws — показываются на обеих системах
   // (см. renderTab1/renderTab4 ниже), просто в разных местах листа;
   // race/species — только 2014/2024 соответственно, у "чужой" системы
@@ -1885,9 +1886,7 @@ const COIN_FIELDS = [
 
 function vMoneyCard() {
   const grid = h("div", { class: "v-money" });
-  let any = false;
   for (const c of COIN_FIELDS) {
-    if (sheet.coins[c.key]) any = true;
     const value = h("b", { text: String(sheet.coins[c.key] || 0) });
     vRefresh.push(() => (value.textContent = String(sheet.coins[c.key] || 0)));
     const cell = h("div", { class: "v-money-cell" }, [value, h("span", { text: c.label })]);
@@ -1900,10 +1899,9 @@ function vMoneyCard() {
     );
     grid.appendChild(cell);
   }
-  // Пустой кошелёк на листе 1-го уровня — обычное дело, но карточку из пяти
-  // нулей в самом верху колонки видеть незачем; появится, как только деньги
-  // будут (или их впишут в правке).
-  return any ? vCard("Монеты", grid) : null;
+  // Кошелёк показываем всегда, даже из пяти нулей: игроку нужно место, куда
+  // вписать первую добычу, не переключаясь в режим правки.
+  return vCard("Монеты", grid);
 }
 
 function vAttunementCard() {

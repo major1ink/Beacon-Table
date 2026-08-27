@@ -107,6 +107,72 @@ test("бой: HP/AC/скорость/тёмное зрение", () => {
   assert.equal(sheet.combat.darkvision, 60);
 });
 
+// Предген приключения из Foundry dnd5e v4: производные показатели на актёре
+// пусты (hp.max/ac.value/movement.walk/senses.darkvision = null) — движок
+// собирает их из вида, класса и снаряжения. Импорт обязан посчитать сам,
+// иначе в листе нули (см. web/src/character-import.js: computeArmorClass и др.).
+const v4Pregen = {
+  name: "Нико",
+  type: "character",
+  system: {
+    abilities: {
+      str: { value: 12 },
+      dex: { value: 10 },
+      con: { value: 13 },
+      int: { value: 10 },
+      wis: { value: 15 },
+      cha: { value: 8 },
+    },
+    attributes: {
+      hp: { value: 11, max: null, temp: 0 },
+      ac: { calc: "default" },
+      movement: { walk: null },
+      senses: { darkvision: null },
+    },
+    details: { xp: { value: 0 } },
+  },
+  items: [
+    { type: "race", name: "Человек", system: { movement: { walk: 30 }, senses: { darkvision: null } } },
+    { type: "class", name: "Жрец", system: { levels: 1, identifier: "cleric", hd: { denomination: "d8" } } },
+    {
+      type: "equipment",
+      name: "Кольчужная рубаха",
+      system: { equipped: true, type: { value: "medium" }, armor: { value: 13, dex: 2 } },
+    },
+    {
+      type: "equipment",
+      name: "Щит",
+      system: { equipped: true, type: { value: "shield" }, armor: { value: 2 } },
+    },
+  ],
+};
+
+test("предген v4: КЗ/скорость/тёмное зрение/макс. ХП считаются из вида и снаряжения", () => {
+  const { sheet } = mapFoundryCharacterJson(v4Pregen);
+  // Кольчужная рубаха 13 + min(Лов 0, 2) + щит 2.
+  assert.equal(sheet.combat.ac, 15);
+  assert.equal(sheet.combat.hpMax, 11); // hp.max пуст → берём hp.value
+  assert.equal(sheet.combat.hpCurrent, 11);
+  assert.equal(sheet.combat.speed, 30); // от вида «Человек»
+  assert.equal(sheet.combat.darkvision, 0);
+});
+
+test("предген v4: «Защита без брони» варвара и монаха без доспеха", () => {
+  const base = { ...v4Pregen, items: [v4Pregen.items[0]] };
+  const barb = mapFoundryCharacterJson({
+    ...base,
+    items: [base.items[0], { type: "class", name: "Варвар", system: { levels: 1, identifier: "barbarian", hd: { denomination: "d12" } } }],
+  });
+  // 10 + Лов 0 + Тел +1.
+  assert.equal(barb.sheet.combat.ac, 11);
+  const monk = mapFoundryCharacterJson({
+    ...base,
+    items: [base.items[0], { type: "class", name: "Монах", system: { levels: 1, identifier: "monk", hd: { denomination: "d8" } } }],
+  });
+  // 10 + Лов 0 + Мдр +2.
+  assert.equal(monk.sheet.combat.ac, 12);
+});
+
 test("ячейки заклинаний и подготовленные заклинания", () => {
   const { sheet } = mapFoundryCharacterJson(sampleActor);
   assert.equal(sheet.spellcasting.ability, "int");
