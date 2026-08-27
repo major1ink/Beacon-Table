@@ -21,10 +21,12 @@ import {
   fetchConditions, createCondition, updateCondition,
   fetchNotes, fetchNote, createNote, updateNote,
   fetchJournal, fetchJournalEntry, createJournalEntry, updateJournalEntry,
+  fetchAdminPregens, createAdminPregen, updateAdminPregen,
 } from "../api.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
+import { mapFoundryCharacterJson } from "../character-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 
@@ -51,6 +53,14 @@ const TARGETS = [
   // существ: по нему потом сойдутся карточка бестиария и токены, уже
   // стоящие на импортированных сценах (см. domain.Token.FoundryActorID и
   // вызов linkFoundrySceneTokens в конце импорта).
+  // Готовые персонажи (актёры type "character") — пул предгенерированных
+  // листов мира (см. internal/domain/pregen.go). Тот же покарточный контракт,
+  // что и у остальных: mapOne → {name, avatarUrl, sheet}, createOne(name),
+  // updateOne(id, карточка). Повторный импорт без правок может показать диалог
+  // «карточка изменилась» — sheet после round-trip через сервер обрастает
+  // дефолтными полями и JSON-сравнение в sameCard уже не совпадает точь-в-точь;
+  // это не ошибка, ДМ выбирает «пропустить».
+  { id: "pregens", label: "Готовые персонажи", fetchAll: fetchAdminPregens, createOne: createAdminPregen, updateOne: updateAdminPregen, mapOne: mapFoundryCharacterJson, art: (doc) => (doc && doc.img) || tokenArt(doc) },
   { id: "monsters", label: "Существа", fetchAll: fetchBestiary, createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt, linkField: "foundryActorId" },
   { id: "spells", label: "Заклинания", fetchAll: fetchSpells, createOne: createSpell, updateOne: updateSpell, mapOne: mapFoundrySpellJson },
   { id: "items", label: "Снаряжение", fetchAll: fetchItems, createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },

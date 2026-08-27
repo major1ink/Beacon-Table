@@ -124,7 +124,29 @@ func Open(path string) (*sql.DB, error) {
 			imported_at TEXT NOT NULL,
 			PRIMARY KEY (id, company_id)
 		)`,
+		// pregen_characters — пул «готовых персонажей» мира (см. domain.Pregen):
+		// актёры type "character" из импортированных приключений Foundry. Игрок
+		// берёт свободного, ДМ назначает/возвращает в пул. Захват создаёт
+		// обычную строку characters (claimed_character_id) — она и есть
+		// персонаж игрока; строка тут остаётся шаблоном с пометкой занятости.
+		// company_id денормализован на строку (как у characters) — стор
+		// company-scoped, JOIN не нужен. FK на claimed_by нет нарочно: аккаунт
+		// удаляют вместе с его персонажами (FK characters), а пул-запись при
+		// этом лишь освобождается (см. sqlite/pregens.go: FreeByAccount,
+		// вызывается из handleAdminAccountDelete).
+		`CREATE TABLE IF NOT EXISTS pregen_characters (
+			id TEXT PRIMARY KEY,
+			company_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			avatar_url TEXT NOT NULL DEFAULT '',
+			sheet_json TEXT NOT NULL DEFAULT '{}',
+			source TEXT NOT NULL DEFAULT '',
+			claimed_by TEXT NOT NULL DEFAULT '',
+			claimed_character_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_pregen_characters_company ON pregen_characters(company_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks(playlist_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_inventory_items_character ON inventory_items(character_id)`,

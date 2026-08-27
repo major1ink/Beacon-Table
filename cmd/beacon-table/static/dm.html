@@ -434,6 +434,19 @@
     }
     .dmchar-name { flex: 1 1 auto; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dmchar-row button { padding: 4px 7px; font-size: 11px; }
+    /* Готовые персонажи: у строки три кнопки-иконки подряд (лист / назначить
+       или вернуть / убрать). Имя обязано ужиматься (min-width:0), кнопки —
+       нет; рамка отделяет их друг от друга, чтобы не читались как один
+       сегментированный элемент. */
+    .dmchar-row--pregen { flex-wrap: wrap; }
+    .dmchar-row--pregen .dmchar-name { min-width: 0; }
+    .dmchar-row--pregen button {
+      flex: 0 0 auto; padding: 4px 6px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface-hover);
+      display: inline-flex; align-items: center;
+    }
+    .dmchar-row--pregen button:hover { background: #3c3c48; }
+    .dmchar-row--pregen button + button { margin-left: 4px; }
 
     /* ---- раздел "Ассеты" (в панели) — библиотека ассетов карты с
        подпапками: хлебные крошки текущего пути + сетка плиток (папки и
@@ -915,24 +928,24 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-DVUoPguV.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DNvZmt1E.js">
+  <script type="module" crossorigin src="/assets/dm-D2gx5EPL.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-W1vV0PH0.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-g49pjxWl.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-BMFo98Kf.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-iKqTkQ05.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-MIEzVt4J.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DuaPXiI_.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-Dd0sD_AI.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-DBkbEHBL.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-DYZ5657M.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BcRx7rDx.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-uCBQnL-H.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-CIWxIQ39.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CuHgpX5r.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DKtAC9aD.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-Cp6qOlRl.js">
-  <link rel="modulepreload" crossorigin href="/assets/toolbar-Cwzr7N2Y.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-D43UpNWT.js">
+  <link rel="modulepreload" crossorigin href="/assets/toolbar-i1BGk41E.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-C65QrQS6.js">
   <link rel="stylesheet" crossorigin href="/assets/api-Cc7gT-d9.css">
 </head>
 <body>

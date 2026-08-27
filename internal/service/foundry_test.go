@@ -344,7 +344,7 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	room := &fakeRoom{}
 	playlists := &fakePlaylists{}
 	svc := NewFoundryService(t.TempDir(), assets, room, playlists, memory.NewFoundryModuleStore(),
-		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
 	ctx := context.Background()
 	account := &domain.Account{ID: "dm", Role: "admin"}
 
@@ -466,7 +466,7 @@ func TestFoundryModuleDelete(t *testing.T) {
 	spells := newFakeSpells()
 	assets := &fakeAssets{}
 	svc := NewFoundryService(t.TempDir(), assets, &fakeRoom{}, &fakePlaylists{}, modules,
-		bestiary, spells, newFakeItems(), newFakeReferences(), newFakeConditions())
+		bestiary, spells, newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
 	ctx := context.Background()
 
 	if err := modules.Upsert(ctx, domain.FoundryModule{
@@ -532,7 +532,7 @@ func TestFoundryModuleDelete(t *testing.T) {
 
 func TestFoundryInspectRejectsBadURL(t *testing.T) {
 	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, &fakeRoom{}, &fakePlaylists{}, memory.NewFoundryModuleStore(),
-		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
 	if _, err := svc.Inspect(context.Background(), "file:///etc/passwd"); err == nil {
 		t.Fatal("не-http ссылка должна отклоняться")
 	}
@@ -548,7 +548,7 @@ func TestFoundryLinkSceneTokens(t *testing.T) {
 	bestiary := newFakeBestiary()
 	room := &fakeRoom{}
 	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, room, &fakePlaylists{}, memory.NewFoundryModuleStore(),
-		bestiary, newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
+		bestiary, newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
 	ctx := context.Background()
 
 	scene := domain.NewScene("sc1", "Логово")

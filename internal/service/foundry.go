@@ -190,6 +190,11 @@ type foundryService struct {
 	items      ItemService
 	references ReferenceService
 	conditions ConditionService
+	// pregens — только для Delete: снести пул-записи «готовых персонажей»
+	// этого модуля (созданных из них персонажей игроков это не касается,
+	// см. sqlite.PregenStore.DeleteBySource). Импорт складывает пре-генов
+	// через клиента, как и остальные карточки.
+	pregens repository.PregenRepository
 
 	// links — индекс перекрёстных ссылок модуля (см. foundry.LinkIndex),
 	// ключ — папка распакованного модуля. Строится обходом ВСЕХ паков, а
@@ -217,6 +222,7 @@ func NewFoundryService(
 	cacheDir string,
 	assets AssetService, room RoomService, playlists PlaylistService, modules repository.FoundryModuleRepository,
 	bestiary BestiaryService, spells SpellService, items ItemService, references ReferenceService, conditions ConditionService,
+	pregens repository.PregenRepository,
 ) FoundryService {
 	client := &http.Client{Timeout: foundryHTTPTimeout}
 	return &foundryService{
@@ -230,6 +236,7 @@ func NewFoundryService(
 		items:      items,
 		references: references,
 		conditions: conditions,
+		pregens:    pregens,
 		links:      map[string]*foundry.LinkIndex{},
 	}
 }
@@ -488,6 +495,16 @@ func (s *foundryService) Delete(ctx context.Context, account *domain.Account, id
 			}
 			result.Cards[set.target]++
 		}
+	}
+
+	// Пул «готовых персонажей» этого модуля — одним запросом (в отличие от
+	// карточек выше, у пре-генов нет отдельного сервиса с List/Delete).
+	// Персонажей игроков, уже созданных захватом пре-генов, это не касается —
+	// они живут отдельными строками characters (см. domain.Pregen).
+	if n, err := s.pregens.DeleteBySource(ctx, id); err != nil {
+		result.Warnings = appendWarning(result.Warnings, fmt.Sprintf("%s: %s", foundry.TargetPregens, err.Error()))
+	} else if n > 0 {
+		result.Cards[foundry.TargetPregens] = n
 	}
 
 	// Файлы — вся папка "foundry/<id>" во всех разделах, куда импорт вообще

@@ -46,6 +46,7 @@ type ActiveWorld struct {
 	Company    *domain.Company
 	Room       service.RoomService
 	Characters service.CharacterService
+	Pregens    service.PregenService
 	Admin      service.AdminService
 	Bestiary   service.BestiaryService
 	Spells     service.SpellService
@@ -261,6 +262,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	}
 
 	characterRepo := sqlite.NewCharacterStore(m.db, company.ID, company.System)
+	pregenRepo := sqlite.NewPregenStore(m.db, company.ID)
 	playlistRepo := sqlite.NewPlaylistStore(m.db, company.ID)
 	foundryModuleRepo := sqlite.NewFoundryModuleStore(m.db, company.ID)
 
@@ -288,6 +290,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Company:    company,
 		Room:       room,
 		Characters: service.NewCharacterService(characterRepo),
+		Pregens:    service.NewPregenService(pregenRepo, characterRepo),
 		Admin:      service.NewAdminService(m.accounts, m.sessions, characterRepo, company.ID),
 		Bestiary:   bestiary,
 		Spells:     spells,
@@ -300,7 +303,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Assets:     assets,
 		Foundry: service.NewFoundryService(
 			filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists, foundryModuleRepo,
-			bestiary, spells, items, references, conditions,
+			bestiary, spells, items, references, conditions, pregenRepo,
 		),
 	}
 

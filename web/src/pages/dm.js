@@ -23,6 +23,10 @@ import {
   deleteAsset,
   fetchAdminCharacters,
   updateAdminCharacter,
+  fetchAdminPregens,
+  assignPregen,
+  releasePregen,
+  deleteAdminPregen,
   fetchAdminAccounts,
   createAdminAccount,
   approveAdminAccount,
@@ -1556,6 +1560,141 @@ function openDmCharEditForm(c) {
   dmCharEditForm.style.display = "block";
 }
 
+// renderDmPregenSection — секция «Готовые персонажи» в панели «Персонажи»:
+// пул предгенерированных листов мира из импортированного приключения (см.
+// internal/domain/pregen.go). ДМ видит статус занятости, назначает пре-гена
+// аккаунту игрока, возвращает в пул или убирает из пула. Полный лист до
+// захвата не показываем (в characters его ещё нет) — после назначения он
+// открывается обычной кнопкой у персонажа игрока ниже.
+async function renderDmPregenSection() {
+  let pregens = [];
+  try {
+    pregens = await fetchAdminPregens();
+  } catch {
+    return; // нет пула — секции просто нет
+  }
+  if (!pregens.length) return;
+
+  const group = document.createElement("div");
+  group.className = "dmchar-owner-group";
+  group.textContent = "Готовые персонажи";
+  dmCharactersList.appendChild(group);
+
+  for (const p of pregens) {
+    const row = document.createElement("div");
+    row.className = "dmchar-row dmchar-row--pregen";
+    const avatar = document.createElement("div");
+    avatar.className = "dmchar-avatar";
+    if (p.avatarUrl) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+    else avatar.textContent = "—";
+    const name = document.createElement("div");
+    name.className = "dmchar-name";
+    const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+    name.innerHTML = `${p.name}<div style="font-size:11px;opacity:0.55;">${
+      p.claimedBy ? `у ${p.claimedByUsername || "игрока"}` : "свободен"
+    }${sub ? ` · ${sub}` : ""}</div>`;
+    row.append(avatar, name);
+
+    const sheetBtn = document.createElement("button");
+    sheetBtn.className = "icon-btn";
+    sheetBtn.innerHTML = icon("scroll", { size: 14 });
+    sheetBtn.title = p.claimedBy ? "Лист персонажа игрока" : "Посмотреть лист (без назначения)";
+    sheetBtn.onclick = () =>
+      openFloatingWindow({
+        key: p.claimedCharacterId ? "char-" + p.claimedCharacterId : "pregen-" + p.id,
+        title: p.name,
+        url: p.claimedCharacterId
+          ? `/character-sheet.html?id=${p.claimedCharacterId}`
+          : `/character-sheet.html?pregen=${p.id}`,
+      });
+    row.appendChild(sheetBtn);
+
+    if (p.claimedBy) {
+      const releaseBtn = document.createElement("button");
+      releaseBtn.className = "icon-btn";
+      releaseBtn.innerHTML = icon("chevron-left", { size: 14 });
+      releaseBtn.title = "Вернуть в пул (персонаж игрока останется у него)";
+      releaseBtn.onclick = async () => {
+        try {
+          await releasePregen(p.id);
+          await renderDmCharacters();
+        } catch (err) {
+          showAlert("Не удалось вернуть в пул: " + err.message);
+        }
+      };
+      row.appendChild(releaseBtn);
+    } else {
+      const assignBtn = document.createElement("button");
+      assignBtn.className = "icon-btn";
+      assignBtn.innerHTML = icon("user", { size: 14 });
+      assignBtn.title = "Назначить готового персонажа аккаунту игрока";
+      assignBtn.onclick = () => assignPregenFlow(p);
+      row.appendChild(assignBtn);
+    }
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "icon-btn";
+    delBtn.innerHTML = icon("trash", { size: 14 });
+    delBtn.title = "Убрать из пула";
+    delBtn.onclick = async () => {
+      if (!(await showConfirm(`Убрать «${p.name}» из пула готовых персонажей?`, { title: "Убрать из пула", okLabel: "Убрать", danger: true }))) return;
+      try {
+        await deleteAdminPregen(p.id);
+        await renderDmCharacters();
+      } catch (err) {
+        showAlert("Не удалось убрать: " + err.message);
+      }
+    };
+    row.appendChild(delBtn);
+    dmCharactersList.appendChild(row);
+  }
+}
+
+// assignPregenFlow — выбор аккаунта игрока и назначение пре-гена ему.
+async function assignPregenFlow(pregen) {
+  let accounts = [];
+  try {
+    accounts = (await fetchAdminAccounts()).filter((a) => a.role === "player" && a.status === "active");
+  } catch (err) {
+    showAlert("Не удалось загрузить список игроков: " + err.message);
+    return;
+  }
+  if (!accounts.length) {
+    showAlert("Нет активных аккаунтов игроков — сначала заведи их в разделе «Аккаунты».");
+    return;
+  }
+  let select;
+  const accountId = await openModal({
+    title: `Назначить «${pregen.name}»`,
+    okLabel: "Назначить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const label = document.createElement("label");
+      label.textContent = "Игрок:";
+      label.style.cssText = "display:block;font-size:12px;opacity:0.7;margin-bottom:6px;";
+      select = document.createElement("select");
+      select.style.cssText = "width:100%;padding:7px 8px;font-size:13px;";
+      for (const a of accounts) {
+        const opt = document.createElement("option");
+        opt.value = a.id;
+        opt.textContent = a.username;
+        select.appendChild(opt);
+      }
+      body.append(label, select);
+      return select;
+    },
+    onOk: () => select.value,
+    onCancel: () => null,
+  });
+  if (!accountId) return;
+  try {
+    await assignPregen(pregen.id, accountId);
+    await renderDmCharacters();
+  } catch (err) {
+    showAlert("Не удалось назначить: " + err.message);
+  }
+}
+
 async function renderDmCharacters() {
   try {
     dmCharacters = await fetchAdminCharacters();
@@ -1565,10 +1704,11 @@ async function renderDmCharacters() {
   }
   closeDmCharEditForm();
   dmCharactersList.innerHTML = "";
+  await renderDmPregenSection();
   if (dmCharacters.length === 0) {
     const empty = document.createElement("p");
     empty.className = "hint";
-    empty.textContent = "Персонажей пока нет — игроки заводят их сами на своей стороне.";
+    empty.textContent = "Персонажей у игроков пока нет — они заводят их сами или берут готового из пула выше.";
     dmCharactersList.appendChild(empty);
     return;
   }

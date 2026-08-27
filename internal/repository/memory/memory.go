@@ -364,6 +364,127 @@ func (s *CharacterStore) RemoveInventoryEntry(ctx context.Context, characterID, 
 	return false, nil
 }
 
+// PregenStore — in-memory repository.PregenRepository.
+type PregenStore struct {
+	mu   sync.Mutex
+	byID map[string]*domain.Pregen
+}
+
+func NewPregenStore() *PregenStore {
+	return &PregenStore{byID: map[string]*domain.Pregen{}}
+}
+
+func clonePregen(p *domain.Pregen) *domain.Pregen {
+	cp := *p
+	return &cp
+}
+
+func (s *PregenStore) List(ctx context.Context) ([]*domain.Pregen, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*domain.Pregen, 0, len(s.byID))
+	for _, p := range s.byID {
+		out = append(out, clonePregen(p))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (s *PregenStore) Available(ctx context.Context) ([]*domain.Pregen, error) {
+	all, _ := s.List(ctx)
+	out := all[:0]
+	for _, p := range all {
+		if p.ClaimedBy == "" {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (s *PregenStore) ByID(ctx context.Context, id string) (*domain.Pregen, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return clonePregen(p), nil
+}
+
+func (s *PregenStore) Create(ctx context.Context, p *domain.Pregen) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byID[p.ID] = clonePregen(p)
+	return nil
+}
+
+func (s *PregenStore) Update(ctx context.Context, id, name, avatarURL, source string, sheet domain.CharacterSheet) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok {
+		return false, nil
+	}
+	p.Name, p.AvatarURL, p.Source, p.Sheet = name, avatarURL, source, sheet
+	return true, nil
+}
+
+func (s *PregenStore) SetClaim(ctx context.Context, id, accountID, characterID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok || (p.ClaimedBy != "" && p.ClaimedBy != accountID) {
+		return false, nil
+	}
+	p.ClaimedBy, p.ClaimedCharacterID = accountID, characterID
+	return true, nil
+}
+
+func (s *PregenStore) ClearClaim(ctx context.Context, id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok {
+		return false, nil
+	}
+	p.ClaimedBy, p.ClaimedCharacterID = "", ""
+	return true, nil
+}
+
+func (s *PregenStore) Delete(ctx context.Context, id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.byID[id]; !ok {
+		return false, nil
+	}
+	delete(s.byID, id)
+	return true, nil
+}
+
+func (s *PregenStore) FreeByAccount(ctx context.Context, accountID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, p := range s.byID {
+		if p.ClaimedBy == accountID {
+			p.ClaimedBy, p.ClaimedCharacterID = "", ""
+		}
+	}
+	return nil
+}
+
+func (s *PregenStore) DeleteBySource(ctx context.Context, moduleID string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, p := range s.byID {
+		if p.Source == moduleID {
+			delete(s.byID, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
 // SessionStore — in-memory repository.SessionRepository.
 type SessionStore struct {
 	mu       sync.Mutex

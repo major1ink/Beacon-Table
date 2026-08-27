@@ -53,6 +53,13 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/characters/{id}/sheet", a.handleCharacterSheetUpdate)
 	mux.HandleFunc("DELETE /api/characters/{id}", a.handleCharacterDelete)
 
+	// «Готовые персонажи» — пул предгенерированных листов мира из
+	// импортированных приключений Foundry (см. domain.Pregen). Игрок берёт
+	// свободного, ДМ управляет пулом — см. pregen_handlers.go.
+	mux.HandleFunc("GET /api/pregens", a.handlePregensList)
+	mux.HandleFunc("GET /api/pregens/{id}", a.handlePregenGet)
+	mux.HandleFunc("POST /api/pregens/{id}/claim", a.handlePregenClaim)
+
 	// Инвентарь персонажа (см. domain.InventoryEntry) — своя sub-collection,
 	// не часть /sheet выше (см. комментарий repository.CharacterRepository и
 	// план фичи про гонку с автосейвом листа).
@@ -69,6 +76,16 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/characters/{id}", a.handleAdminCharacterGet)
 	mux.HandleFunc("PUT /api/admin/characters/{id}", a.handleAdminCharacterUpdate)
 	mux.HandleFunc("PUT /api/admin/characters/{id}/sheet", a.handleAdminCharacterSheetUpdate)
+
+	// Пул «готовых персонажей» — ДМ: обзор, назначение аккаунту, возврат в
+	// пул. POST/PUT без {id}/с {id} — покарточное заведение из экрана импорта
+	// Foundry (ср. /api/bestiary). См. pregen_handlers.go.
+	mux.HandleFunc("GET /api/admin/pregens", a.handleAdminPregensList)
+	mux.HandleFunc("POST /api/admin/pregens", a.handleAdminPregenCreate)
+	mux.HandleFunc("PUT /api/admin/pregens/{id}", a.handleAdminPregenUpdate)
+	mux.HandleFunc("POST /api/admin/pregens/{id}/assign", a.handleAdminPregenAssign)
+	mux.HandleFunc("POST /api/admin/pregens/{id}/release", a.handleAdminPregenRelease)
+	mux.HandleFunc("DELETE /api/admin/pregens/{id}", a.handleAdminPregenDelete)
 
 	mux.HandleFunc("GET /api/admin/playlists", a.handleAdminPlaylistsList)
 	mux.HandleFunc("POST /api/admin/playlists", a.handleAdminPlaylistCreate)

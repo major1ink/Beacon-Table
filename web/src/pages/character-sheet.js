@@ -20,6 +20,7 @@ import {
   updateCharacterInventoryItem,
   deleteCharacterInventoryItem,
   fetchReferences,
+  fetchPregen,
 } from "../api.js";
 import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
@@ -2372,12 +2373,51 @@ function currentId() {
   return new URLSearchParams(location.search).get("id");
 }
 
+// pregenId — режим предпросмотра «готового персонажа» из пула мира БЕЗ
+// захвата (character-sheet.html?pregen=<id>, см. internal/domain/pregen.go).
+// Лист открывается только на чтение: у пре-гена ещё нет записи characters,
+// сохранять и бросать кубы не за кого.
+function currentPregenId() {
+  return new URLSearchParams(location.search).get("pregen");
+}
+
 (async function boot() {
   me = await fetchMe();
   if (!me || (me.role !== "player" && me.role !== "admin")) {
     location.href = "/";
     return;
   }
+
+  const pregenId = currentPregenId();
+  if (pregenId) {
+    readOnly = true;
+    try {
+      character = await fetchPregen(pregenId);
+    } catch (err) {
+      document.getElementById("loadingHint").textContent = "Не удалось загрузить готового персонажа: " + err.message;
+      return;
+    }
+    sheet = normalizeSheet(character.sheet);
+    references = await fetchReferences().catch(() => []);
+
+    document.getElementById("charTitle").textContent = character.name;
+    document.getElementById("charSub").textContent = "готовый персонаж приключения";
+    const banner = document.getElementById("readonlyBanner");
+    banner.textContent = "Предпросмотр — этого персонажа ещё никто не взял. Полноценно откроется после «Взять» / назначения ДМ.";
+    banner.classList.add("shown");
+    // Правка и инвентарь пре-гену недоступны — прячем переключатель режима,
+    // статус автосохранения и вкладку инвентаря.
+    document.getElementById("modeBtn").style.display = "none";
+    saveStatusEl.style.display = "none";
+    const tab5Btn = document.querySelector('.tab-btn[data-tab="5"]');
+    if (tab5Btn) tab5Btn.style.display = "none";
+
+    setMode("view");
+    document.getElementById("loadingHint").style.display = "none";
+    document.getElementById("app").classList.add("ready");
+    return;
+  }
+
   charId = currentId();
   if (!charId) {
     document.getElementById("loadingHint").textContent = "Не указан id персонажа (?id=...).";

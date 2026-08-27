@@ -10,6 +10,7 @@ const (
 	TargetItems      = "items"      // domain.Item
 	TargetSpells     = "spells"     // domain.Spell
 	TargetMonsters   = "monsters"   // domain.Monster
+	TargetPregens    = "pregens"    // domain.Pregen — актёры типа "character" (предгенерированные персонажи приключения)
 	TargetReferences = "references" // domain.Reference — классы/архетипы/виды/предыстории/черты
 	TargetConditions = "conditions" // domain.Condition — документы ActiveEffect
 	TargetNotes      = "notes"      // domain.Note — журналы
@@ -180,9 +181,18 @@ func Classify(d Doc, packType string) string {
 // полях, что у npc (см. web/src/monster-import.js — маппер общий). Группы
 // (group) — не статблок, а обёртка со ссылками на актёров пака; сами актёры
 // приедут своими документами, тащить группу отдельно значило бы задвоить.
+//
+// Актёр типа "character" — это лист ИГРОКА: модули-приключения кладут туда
+// предгенерированных персонажей («готовые персонажи, которых вы можете
+// использовать в приключении»). Он едет в пул готовых персонажей мира
+// (TargetPregens), а не в бестиарий — оттуда его берёт игрок или назначает
+// ДМ (см. domain.Pregen, service.PregenService). Пустой type у актёра обычно
+// всё же NPC, поэтому он остаётся в бестиарии.
 func actorTarget(docType string) string {
 	switch docType {
-	case "", "npc", "character", "vehicle":
+	case "character":
+		return TargetPregens
+	case "", "npc", "vehicle":
 		return TargetMonsters
 	default:
 		return TargetSkipped

@@ -126,6 +126,30 @@ type CharacterRepository interface {
 	RemoveInventoryEntry(ctx context.Context, characterID, accountID, entryID string) (bool, error)
 }
 
+// PregenRepository — пул «готовых персонажей» мира (см. domain.Pregen):
+// предгенерированные листы из импортированных приключений Foundry. Company-
+// scoped, как CharacterRepository.
+type PregenRepository interface {
+	List(ctx context.Context) ([]*domain.Pregen, error)
+	// Available — только свободные (claimed_by пуст).
+	Available(ctx context.Context) ([]*domain.Pregen, error)
+	ByID(ctx context.Context, id string) (*domain.Pregen, error)
+	Create(ctx context.Context, p *domain.Pregen) error
+	// Update правит имя/аватар/лист/метку модуля (импорт), занятость не трогает.
+	Update(ctx context.Context, id, name, avatarURL, source string, sheet domain.CharacterSheet) (bool, error)
+	// SetClaim помечает занятым — только если свободен или уже занят этим же
+	// аккаунтом (идемпотентно). false — занят кем-то другим / не найден.
+	SetClaim(ctx context.Context, id, accountID, characterID string) (bool, error)
+	// ClearClaim снимает пометку (пре-ген снова в пуле); созданную запись
+	// characters не трогает.
+	ClearClaim(ctx context.Context, id string) (bool, error)
+	Delete(ctx context.Context, id string) (bool, error)
+	// FreeByAccount освобождает всё, занятое удаляемым аккаунтом.
+	FreeByAccount(ctx context.Context, accountID string) error
+	// DeleteBySource сносит записи импорта модуля (см. FoundryService.Delete).
+	DeleteBySource(ctx context.Context, moduleID string) (int, error)
+}
+
 // SessionRepository — сессии логина (cookie-токен → аккаунт).
 type SessionRepository interface {
 	Create(ctx context.Context, token, accountID string) error

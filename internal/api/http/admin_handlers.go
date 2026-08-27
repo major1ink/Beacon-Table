@@ -100,6 +100,10 @@ func (a *API) handleAdminAccountDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	// Персонажи аккаунта ушли каскадом (FK characters), а пул-записи
+	// «готовых персонажей», которые он держал занятыми, FK не имеют —
+	// освобождаем их отдельно, иначе висели бы «занят удалённым игроком».
+	_ = world.Pregens.FreeByAccount(r.Context(), id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

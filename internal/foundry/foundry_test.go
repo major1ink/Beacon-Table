@@ -197,6 +197,7 @@ func TestClassify(t *testing.T) {
 		{"предыстория", Doc{"type": "background"}, "Item", TargetReferences},
 		{"NPC", Doc{"type": "npc"}, "Actor", TargetMonsters},
 		{"транспорт едет в бестиарий как статблок", Doc{"type": "vehicle"}, "Actor", TargetMonsters},
+		{"готовый персонаж приключения — в пул, не в бестиарий", Doc{"type": "character"}, "Actor", TargetPregens},
 		{"группа актёров не статблок", Doc{"type": "group"}, "Actor", TargetSkipped},
 		{"журнал", Doc{"pages": []any{map[string]any{}}}, "JournalEntry", TargetNotes},
 		{"таблица", Doc{"results": []any{}}, "RollTable", TargetSkipped},
@@ -214,8 +215,11 @@ func TestClassify(t *testing.T) {
 // разворачиваем её в документы по разделам, а не тащим как одну запись.
 func TestExpandAdventure(t *testing.T) {
 	adventure := Doc{
-		"name":   "Шахта",
-		"actors": []any{map[string]any{"type": "npc", "name": "Гоблин"}},
+		"name": "Шахта",
+		"actors": []any{
+			map[string]any{"type": "npc", "name": "Гоблин"},
+			map[string]any{"type": "character", "name": "Шила"},
+		},
 		"items":  []any{map[string]any{"type": "spell", "name": "Свет"}},
 		"scenes": []any{map[string]any{"name": "Вход", "walls": []any{}}},
 	}
@@ -224,7 +228,7 @@ func TestExpandAdventure(t *testing.T) {
 	for _, e := range entries {
 		got[e.Target]++
 	}
-	if got[TargetMonsters] != 1 || got[TargetSpells] != 1 || got[TargetScenes] != 1 {
+	if got[TargetMonsters] != 1 || got[TargetSpells] != 1 || got[TargetScenes] != 1 || got[TargetPregens] != 1 {
 		t.Fatalf("приключение развернулось не туда: %v", got)
 	}
 }

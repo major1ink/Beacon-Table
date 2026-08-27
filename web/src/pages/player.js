@@ -15,6 +15,8 @@ import {
   updateCharacterApi,
   deleteCharacterApi,
   uploadFile,
+  fetchPregens,
+  claimPregen,
 } from "../api.js";
 import { icon } from "../icons.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
@@ -265,7 +267,67 @@ function resetCharForm() {
   charFormMsg.textContent = "";
 }
 
+// renderPregens — блок «Готовые персонажи приключения» над списком своих:
+// свободные предгенерированные листы из импортированного модуля (см.
+// internal/domain/pregen.go). «Взять» создаёт из шаблона обычного персонажа,
+// принадлежащего игроку, — он тут же появляется в списке ниже и в доке.
+// Пул пуст → блок скрыт целиком.
+async function renderPregens() {
+  const block = document.getElementById("pregensBlock");
+  const list = document.getElementById("pregensList");
+  let pregens = [];
+  try {
+    pregens = await fetchPregens();
+  } catch {
+    /* нет пула / сеть моргнула — просто не показываем блок */
+  }
+  list.innerHTML = "";
+  if (!pregens.length) {
+    block.style.display = "none";
+    return;
+  }
+  block.style.display = "";
+  for (const p of pregens) {
+    const row = document.createElement("div");
+    row.className = "char-row";
+    const avatar = document.createElement("div");
+    avatar.className = "char-avatar";
+    if (p.avatarUrl && !isVideoUrl(p.avatarUrl)) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+    else avatar.textContent = (p.name || "?").trim().charAt(0).toUpperCase();
+    const nameWrap = document.createElement("div");
+    nameWrap.className = "char-name";
+    nameWrap.textContent = p.name;
+    const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+    if (sub) {
+      const subEl = document.createElement("div");
+      subEl.className = "char-sub";
+      subEl.textContent = sub;
+      nameWrap.appendChild(subEl);
+    }
+    const sheetBtn = document.createElement("button");
+    sheetBtn.innerHTML = icon("scroll", { size: 13 });
+    sheetBtn.title = "Посмотреть лист (без выбора)";
+    sheetBtn.onclick = () =>
+      openFloatingWindow({ key: "pregen-" + p.id, title: p.name, url: `/character-sheet.html?pregen=${p.id}` });
+    const takeBtn = document.createElement("button");
+    takeBtn.textContent = "Взять";
+    takeBtn.onclick = async () => {
+      takeBtn.disabled = true;
+      try {
+        await claimPregen(p.id);
+        await renderChars();
+      } catch (err) {
+        takeBtn.disabled = false;
+        showAlert("Не удалось взять персонажа: " + err.message);
+      }
+    };
+    row.append(avatar, nameWrap, sheetBtn, takeBtn);
+    list.appendChild(row);
+  }
+}
+
 async function renderChars() {
+  await renderPregens();
   let chars;
   try {
     chars = await fetchCharacters();

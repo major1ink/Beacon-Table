@@ -145,6 +145,11 @@
     .char-row button:hover { background: #3c3c48; }
     .char-row button.danger { background: var(--danger); }
     .char-row button.danger:hover { background: var(--danger-hover); }
+    .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.6; margin: 2px 0 8px; }
+    #pregensBlock { border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px; }
+    .char-row .char-sub { font-size: 11px; opacity: 0.6; }
+    #pregensList .char-row button { border: 1px solid var(--border); border-radius: var(--radius); }
+    #pregensList .char-row button + button { margin-left: 4px; }
 
     #charForm { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 6px; }
     #charForm label { display: block; font-size: 12px; opacity: 0.7; margin-bottom: 4px; }
@@ -186,11 +191,11 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/player-JSQyhoka.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DNvZmt1E.js">
+  <script type="module" crossorigin src="/assets/player-AWYfPjk7.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-W1vV0PH0.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-g49pjxWl.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-BMFo98Kf.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-iKqTkQ05.js">
+  <link rel="modulepreload" crossorigin href="/assets/index-MIEzVt4J.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-menu-Cp6qOlRl.js">
@@ -227,6 +232,15 @@
   <div id="charsOverlay">
     <div id="charsModal">
       <h2><span>Мои персонажи</span><button id="charsCloseBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></h2>
+
+      <!-- Готовые персонажи: пул предгенерированных листов из импортированного
+           приключения (см. pages/player.js: renderPregens). Скрыт, если пул
+           пуст. «Взять» создаёт персонажа из шаблона — дальше он в списке ниже. -->
+      <div id="pregensBlock" style="display:none;">
+        <div class="section-label">Готовые персонажи приключения</div>
+        <div id="pregensList"></div>
+      </div>
+
       <div id="charsList"></div>
 
       <div id="charForm">
