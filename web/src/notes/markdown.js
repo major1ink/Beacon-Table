@@ -1,6 +1,6 @@
-// Рендер заметок ДМ: обычный markdown (через marked) + вики-ссылки [[...]] —
-// общий модуль для боковой панели (pages/dm.js) и отдельного окна заметки
-// (pages/note-window.js), чтобы обе поверхности вели себя одинаково.
+// Рендер markdown-записей: обычный markdown (через marked) + вики-ссылки
+// [[...]] — общий модуль для журнала стола (pages/journal.js) и текста
+// карточек библиотек, чтобы все поверхности вели себя одинаково.
 import { marked } from "marked";
 
 // wikiLinkRe — [[Заголовок]] или [[Заголовок|Текст ссылки]]. Не жадный (.+?),
@@ -17,7 +17,7 @@ const wikiLinkRe = /\[\[(?!\/)([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
 
 // noteTitleFromContent — первая непустая строка вида "# Заголовок" (без "# "),
 // иначе "Без названия". Та же логика, что и на сервере
-// (internal/repository/notefile/notefile.go:deriveTitle) — здесь нужна для
+// (internal/repository/journalfile/journalfile.go:deriveTitle) — здесь нужна для
 // мгновенного локального предпросмотра заголовка при вводе, до сохранения.
 export function noteTitleFromContent(content) {
   for (const raw of (content || "").split("\n")) {
@@ -153,6 +153,46 @@ export function renderNoteHtml(rawMarkdown) {
     return `[${label}](wikilink:${encodeURIComponent(t)}${hint})`;
   });
   return marked.parse(withLinks, { breaks: true });
+}
+
+// scrollToHeading — прокрутить containerEl к заголовку (h1–h4) с текстом
+// section и коротко подсветить его. Общий код для журнала, окна заметки и
+// боковой панели ДМ (значок с карты, ссылка @Embed на страницу).
+//
+// Возни с картинками ради одного вызова scrollIntoView здесь столько потому,
+// что тексты приключений — это десятки <img>, которые грузятся уже ПОСЛЕ
+// вставки HTML и сдвигают разметку вниз: сразу после innerHTML заголовок
+// стоит не там, где окажется через секунду, и «открыть на разделе»
+// промахивалось в конец. Держим заголовок у верхнего края, пока картинки
+// доезжают, плюс один добор по таймеру — на случай, если какая-то не
+// загрузится вовсе.
+export function scrollToHeading(containerEl, section) {
+  const wanted = (section || "").trim().toLowerCase();
+  if (!containerEl || !wanted) return;
+  const heading = [...containerEl.querySelectorAll("h1, h2, h3, h4")].find(
+    (h) => h.textContent.trim().toLowerCase() === wanted
+  );
+  scrollHeadingIntoView(containerEl, heading);
+}
+
+// scrollHeadingIntoView — то же, но заголовок уже известен (клик по пункту
+// оглавления, см. notes/heading-nav.js): по тексту искать нельзя — в
+// приключениях полно одинаковых «Заключение»/«Введение», и find() увёл бы
+// к первому.
+export function scrollHeadingIntoView(containerEl, heading) {
+  if (!containerEl || !heading) return;
+  heading.scrollIntoView({ block: "start" });
+  heading.classList.add("section-target");
+  setTimeout(() => heading.classList.remove("section-target"), 2000);
+
+  const pending = [...containerEl.querySelectorAll("img")].filter((im) => !im.complete);
+  if (!pending.length) return;
+  const restick = () => heading.isConnected && heading.scrollIntoView({ block: "start" });
+  for (const im of pending) {
+    im.addEventListener("load", restick, { once: true });
+    im.addEventListener("error", restick, { once: true });
+  }
+  setTimeout(restick, 2500);
 }
 
 // wireWikiLinks — делегированный клик по ссылкам wikilink: внутри уже

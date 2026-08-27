@@ -34,39 +34,6 @@ func (a *API) handleCharacterInventoryList(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, entries)
 }
 
-func (a *API) handleCharacterInventoryAdd(w http.ResponseWriter, r *http.Request) {
-	acc, ok := a.requireAccount(w, r)
-	if !ok {
-		return
-	}
-	world, ok := a.requireWorld(w)
-	if !ok {
-		return
-	}
-	var req struct {
-		ItemID   string `json:"itemId"`
-		Quantity int    `json:"quantity"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad request")
-		return
-	}
-	entry, err := world.Characters.AddInventoryItem(r.Context(), r.PathValue("id"), acc.ID, req.ItemID, req.Quantity)
-	if err != nil {
-		var verr *domain.ValidationError
-		switch {
-		case errors.As(err, &verr):
-			writeErr(w, http.StatusBadRequest, verr.Msg)
-		case errors.Is(err, domain.ErrNotFound):
-			writeErr(w, http.StatusNotFound, "персонаж или предмет не найден")
-		default:
-			writeErr(w, http.StatusInternalServerError, "ошибка сервера")
-		}
-		return
-	}
-	writeJSON(w, http.StatusCreated, entry)
-}
-
 func (a *API) handleCharacterInventoryUpdate(w http.ResponseWriter, r *http.Request) {
 	acc, ok := a.requireAccount(w, r)
 	if !ok {

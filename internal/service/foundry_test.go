@@ -61,16 +61,43 @@ func (f *fakeAssets) DeleteFolder(_ context.Context, _ *domain.Account, kind, fo
 }
 func (f *fakeAssets) DeleteAsset(context.Context, *domain.Account, string, string) error { return nil }
 
-type fakeRoom struct{ scenes []*domain.SceneState }
+type fakeRoom struct {
+	scenes []*domain.SceneState
+	// linkedWith — карта, с которой позвали LinkTokensToMonsters (nil, если
+	// не звали вовсе): тесты связывания смотрят именно на неё.
+	linkedWith map[string]string
+}
 
 func (f *fakeRoom) Join(RoomClient)                       {}
 func (f *fakeRoom) Leave(RoomClient)                      {}
 func (f *fakeRoom) Dispatch(RoomClient, domain.ClientMsg) {}
 func (f *fakeRoom) Shutdown()                             {}
 func (f *fakeRoom) NotifyJournalChanged(string)           {}
+func (f *fakeRoom) NotifyCharacterSheetChanged(string)    {}
+func (f *fakeRoom) NotifyPlaylistsChanged()               {}
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil
+}
+
+// LinkTokensToMonsters — фейк повторяет ровно то, что делает настоящая
+// комната (см. Room.linkTokensToMonsters): дописывает MonsterID токенам с
+// известным FoundryActorID, не трогая уже связанные.
+func (f *fakeRoom) LinkTokensToMonsters(_ context.Context, monsterByActor map[string]string) (int, error) {
+	f.linkedWith = monsterByActor
+	linked := 0
+	for _, s := range f.scenes {
+		for _, t := range s.Tokens {
+			if t.MonsterID != "" || t.FoundryActorID == "" {
+				continue
+			}
+			if id, ok := monsterByActor[t.FoundryActorID]; ok {
+				t.MonsterID = id
+				linked++
+			}
+		}
+	}
+	return linked, nil
 }
 
 type fakePlaylists struct{ lists []*domain.Playlist }
@@ -288,14 +315,15 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 		{"packs/_source/places/town.json", `{"_id":"s1","name":"Городок","width":1000,"height":800,"padding":0,` +
 			`"grid":{"type":1,"size":100,"distance":5,"units":"фт"},` +
 			`"background":{"src":"modules/my-module/maps/town.webp"},` +
-			`"walls":[{"c":[0,0,100,0]}]}`},
+			`"walls":[{"c":[0,0,100,0]}],` +
+			`"notes":[{"entryId":"j1","x":150,"y":150}]}`},
 		{"packs/_source/music/tavern.json", `{"_id":"p1","name":"Таверна","playing":false,` +
 			`"sounds":[{"name":"Лютня","path":"modules/my-module/audio/tavern.ogg","volume":0.4,"repeat":true}]}`},
 		// Журнал лежит во вложенной папке компендиума — в библиотеке заметок
 		// должна получиться такая же (плюс два верхних уровня: модуль и пак).
 		{"packs/_source/lore/folder-chapter.json", `{"_key":"!folders!f1","_id":"f1","name":"Глава 1","type":"JournalEntry","sorting":"a"}`},
 		{"packs/_source/lore/folder-npc.json", `{"_key":"!folders!f2","_id":"f2","name":"NPC","type":"JournalEntry","sorting":"a","folder":"f1"}`},
-		{"packs/_source/lore/legends.json", `{"_key":"!journal!j1","_id":"j1","name":"Легенды","folder":"f2","pages":[{"name":"Пролог","type":"text","text":{"content":"<p>Текст</p>"}}]}`},
+		{"packs/_source/lore/legends.json", `{"_key":"!journal!j1","_id":"j1","name":"Легенды","folder":"f2","pages":[{"name":"Пролог","type":"text","text":{"content":"<p>Карта: @UUID[Compendium.my-module.places.Scene.s1], музыка: @UUID[Compendium.my-module.music.Playlist.p1]{включить}</p>"}}]}`},
 	}
 
 	var archive []byte
@@ -316,7 +344,7 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	room := &fakeRoom{}
 	playlists := &fakePlaylists{}
 	svc := NewFoundryService(t.TempDir(), assets, room, playlists, memory.NewFoundryModuleStore(),
-		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
 	ctx := context.Background()
 	account := &domain.Account{ID: "dm", Role: "admin"}
 
@@ -381,6 +409,18 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	if !strings.HasPrefix(room.scenes[0].MapURL, "/uploads/maps/") {
 		t.Fatalf("фон карты не перенесён: %q", room.scenes[0].MapURL)
 	}
+	// Значок Foundry на карте (notes[]) → domain.NoteMarker с «якорем» на
+	// запись журнала (её id ещё неизвестен — заводит клиент).
+	if len(room.scenes[0].NoteMarkers) != 1 {
+		t.Fatalf("значков на карте %d, ожидали 1", len(room.scenes[0].NoteMarkers))
+	}
+	var marker *domain.NoteMarker
+	for _, nm := range room.scenes[0].NoteMarkers {
+		marker = nm
+	}
+	if marker.FoundryEntry != "Легенды" || marker.FoundryFolder != "Мой модуль/Лор/Глава 1/NPC" || marker.NoteID != "" {
+		t.Fatalf("значок связался неверно: %+v", marker)
+	}
 	if _, err := svc.ImportPack(ctx, account, srv.URL+"/module.json", "music", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -407,6 +447,14 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	if note.Folder != "Мой модуль/Лор/Глава 1/NPC" {
 		t.Fatalf("папка заметки: %q", note.Folder)
 	}
+	// Ссылка на сцену внутри текста → кликабельный <a data-kind="scene">
+	// (клиент по имени переключит карту стола, см. web/src/catalog-links.js).
+	if !strings.Contains(note.Content, `data-kind="scene" data-name="Городок"`) {
+		t.Fatalf("ссылка на сцену не стала кликабельной: %q", note.Content)
+	}
+	if !strings.Contains(note.Content, `data-kind="playlist" data-name="Таверна"`) {
+		t.Fatalf("ссылка на плейлист не стала кликабельной: %q", note.Content)
+	}
 }
 
 // TestFoundryModuleDelete проверяет, что "Удалить модуль" сносит только
@@ -418,7 +466,7 @@ func TestFoundryModuleDelete(t *testing.T) {
 	spells := newFakeSpells()
 	assets := &fakeAssets{}
 	svc := NewFoundryService(t.TempDir(), assets, &fakeRoom{}, &fakePlaylists{}, modules,
-		bestiary, spells, newFakeItems(), newFakeReferences(), newFakeConditions())
+		bestiary, spells, newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
 	ctx := context.Background()
 
 	if err := modules.Upsert(ctx, domain.FoundryModule{
@@ -484,8 +532,80 @@ func TestFoundryModuleDelete(t *testing.T) {
 
 func TestFoundryInspectRejectsBadURL(t *testing.T) {
 	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, &fakeRoom{}, &fakePlaylists{}, memory.NewFoundryModuleStore(),
-		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions())
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
 	if _, err := svc.Inspect(context.Background(), "file:///etc/passwd"); err == nil {
 		t.Fatal("не-http ссылка должна отклоняться")
+	}
+}
+
+// TestFoundryLinkSceneTokens — отложенное связывание токенов импортированной
+// сцены со статблоками (см. FoundryService.LinkSceneTokens).
+//
+// Проверяется именно ПОРЯДОК, из-за которого связывание вообще пришлось
+// делать отдельным шагом: сцена уже разложена, а карточки существ появляются
+// в бестиарии позже (их заводит клиент, см. package doc FoundryService).
+func TestFoundryLinkSceneTokens(t *testing.T) {
+	bestiary := newFakeBestiary()
+	room := &fakeRoom{}
+	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, room, &fakePlaylists{}, memory.NewFoundryModuleStore(),
+		bestiary, newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
+	ctx := context.Background()
+
+	scene := domain.NewScene("sc1", "Логово")
+	scene.Tokens["t-goblin"] = &domain.Token{ID: "t-goblin", Label: "Гоблин-воитель", FoundryActorID: "actor-goblin"}
+	scene.Tokens["t-orc"] = &domain.Token{ID: "t-orc", Label: "Орк", FoundryActorID: "actor-orc"}
+	// Токен, которого ДМ привязал руками к своей карточке: повторный импорт
+	// не должен перебивать его выбор.
+	scene.Tokens["t-manual"] = &domain.Token{ID: "t-manual", Label: "Вожак", FoundryActorID: "actor-goblin", MonsterID: "my-own"}
+	// Декорация/свет — якоря нет вовсе, связывать нечего.
+	scene.Tokens["t-lamp"] = &domain.Token{ID: "t-lamp", LightOnly: true}
+	if _, err := room.ImportScenes(ctx, []*domain.SceneState{scene}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Пока бестиарий пуст, шаг ничего не делает и до комнаты вообще не идёт.
+	linked, err := svc.LinkSceneTokens(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked != 0 || room.linkedWith != nil {
+		t.Fatalf("без карточек существ связывать нечего: linked=%d, linkedWith=%v", linked, room.linkedWith)
+	}
+
+	goblin, _ := bestiary.Create(ctx, "Гоблин-воитель")
+	goblin.FoundryActorID = "actor-goblin"
+	if _, err := bestiary.Update(ctx, goblin.ID, *goblin); err != nil {
+		t.Fatal(err)
+	}
+	manual, _ := bestiary.Create(ctx, "Ручной монстр") // без FoundryActorID — в карту не попадёт
+	_ = manual
+
+	linked, err = svc.LinkSceneTokens(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked != 1 {
+		t.Fatalf("связали %d токенов, ожидали 1", linked)
+	}
+	if got := scene.Tokens["t-goblin"].MonsterID; got != goblin.ID {
+		t.Fatalf("гоблин не получил статблок: %q", got)
+	}
+	if got := scene.Tokens["t-manual"].MonsterID; got != "my-own" {
+		t.Fatalf("ручная привязка перебита: %q", got)
+	}
+	if got := scene.Tokens["t-orc"].MonsterID; got != "" {
+		t.Fatalf("орка не с чем было связывать, а он связался: %q", got)
+	}
+	if _, ok := room.linkedWith["actor-goblin"]; !ok || len(room.linkedWith) != 1 {
+		t.Fatalf("в комнату уехала неверная карта: %v", room.linkedWith)
+	}
+
+	// Повтор идемпотентен: связывать больше нечего, ничего не ломается.
+	linked, err = svc.LinkSceneTokens(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked != 0 {
+		t.Fatalf("повторный проход связал %d токенов, ожидали 0", linked)
 	}
 }

@@ -21,7 +21,7 @@ func TestAdminService_UpdateCharacter_BypassesOwnership(t *testing.T) {
 	sessions := memory.NewSessionStore(accounts)
 	characters := memory.NewCharacterStore()
 
-	chars := service.NewCharacterService(characters, nil)
+	chars := service.NewCharacterService(characters)
 	admin := service.NewAdminService(accounts, sessions, characters, "co-1")
 
 	c, err := chars.Create(ctx, "acc-player", "Drizzt", "")
@@ -53,7 +53,7 @@ func TestAdminService_UpdateCharacterSheet_BypassesOwnership(t *testing.T) {
 	sessions := memory.NewSessionStore(accounts)
 	characters := memory.NewCharacterStore()
 
-	chars := service.NewCharacterService(characters, nil)
+	chars := service.NewCharacterService(characters)
 	admin := service.NewAdminService(accounts, sessions, characters, "co-1")
 
 	c, err := chars.Create(ctx, "acc-player", "Bruenor", "")

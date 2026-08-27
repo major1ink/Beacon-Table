@@ -112,10 +112,6 @@
 
     .checkbox-line { display: flex; align-items: center; gap: 5px; font-size: 11.5px; }
 
-    #rollLogWrap { border-top: 1px solid var(--border); background: var(--panel-bg); padding: 6px 12px; max-height: 22vh; overflow-y: auto; flex: 0 0 auto; }
-    #rollLogWrap.hidden { display: none; }
-    .dice-log-row { font-size: 11px; padding: 1px 0; }
-
     #readonlyBanner {
       display: none; background: var(--accent-bg); color: var(--accent); font-size: 11px; padding: 6px 14px;
       border-bottom: 1px solid var(--border);
@@ -179,7 +175,9 @@
       margin-left: auto; font-size: 11.5px; font-weight: 700; color: #7fc4ff;
       background: rgba(58, 140, 220, 0.18); border-radius: var(--radius-pill); padding: 3px 9px;
     }
-    .v-bar { height: 7px; border-radius: var(--radius-pill); background: var(--surface); overflow: hidden; margin: 9px 0; }
+    /* Полоску хитов тянут мышью/пальцем (см. web/src/hp-bar.js), поэтому она
+       чуть толще декоративной и с курсором-стрелкой: в 7px попасть трудно. */
+    .v-bar { height: 10px; border-radius: var(--radius-pill); background: var(--surface); overflow: hidden; margin: 9px 0; cursor: ew-resize; touch-action: none; }
     .v-bar > i { display: block; height: 100%; border-radius: var(--radius-pill); transition: width .18s ease, background .18s ease; }
 
     /* .v-quick — ряд быстрых правок числа: −5 −1 [ввод] +1 +5. Поле принимает
@@ -328,6 +326,64 @@
     }
     .v-inv-eq.on { background: var(--green); color: #fff; }
     .v-empty { font-size: 11.5px; color: var(--text-dim); }
+
+    /* Название предмета в инвентаре — теперь кнопка (открывает карточку, см.
+       openItemPeek/showItemCard в character-sheet.js), но должна выглядеть
+       как прежний <span>: сброс кнопочных стилей, подсветка только по hover. */
+    button.v-inv-name { background: none; border: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+    button.v-inv-name:hover, button.v-inv-name:focus-visible { color: var(--accent); }
+    .inv-name-btn {
+      background: none; border: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer;
+    }
+    .inv-name-btn:hover, .inv-name-btn:focus-visible { color: var(--accent); text-decoration: underline; }
+
+    /* ---- карточка предмета (мини-окно и модалка) — те же классы .ib-*, что
+       и в itembook.html, чтобы описание предмета выглядело одинаково везде,
+       где оно показывается. ---- */
+    .ib-header { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 4px; }
+    .ib-portrait { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: var(--surface); flex: 0 0 auto; box-shadow: 0 0 0 2px var(--border); }
+    .ib-header-text { margin-bottom: 4px; flex: 1 1 auto; min-width: 0; }
+    .ib-name { margin: 0 0 2px; font-size: 18px; font-weight: 700; color: #fff; overflow-wrap: anywhere; }
+    .ib-subtitle { font-style: italic; color: var(--text-dim); font-size: 12px; }
+    .ib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+    .ib-tag-pill { background: var(--surface); border-radius: 10px; padding: 1px 8px; font-size: 10.5px; color: var(--text-dim); }
+    .ib-hr { height: 2px; background: linear-gradient(to right, var(--accent), transparent 85%); margin: 12px 0; border-radius: 2px; opacity: 0.7; }
+    .ib-info { display: flex; flex-direction: column; gap: 3px; }
+    .ib-line { font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; }
+    .ib-line strong { color: #fff; font-weight: 600; }
+    .ib-block { margin: 12px 0 0; }
+    .ib-section-title { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .ib-prose { font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+    .ib-prose p { margin: 0.5em 0; }
+    .ib-prose p:first-child { margin-top: 0; }
+    .ib-prose p:last-child { margin-bottom: 0; }
+    .ib-prose strong { color: #fff; }
+
+    /* ---- мини-окно предмета (вариант 1) — плавающая карточка рядом с
+       предметом, не модальная (нет затемнения фона), закрывается кликом
+       мимо/Esc/скроллом, см. openItemPeek. ---- */
+    .item-peek {
+      position: fixed; z-index: 60; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 14px;
+      box-shadow: var(--shadow-float, 0 16px 40px rgba(0,0,0,0.45)); padding: 10px 12px;
+      font-size: 12px; max-height: min(360px, calc(100vh - 16px)); overflow-y: auto;
+    }
+    .item-peek-head { display: flex; align-items: flex-start; gap: 8px; }
+    .item-peek-head b { flex: 1 1 auto; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+    .item-peek-close {
+      flex: 0 0 auto; width: 20px; height: 20px; padding: 0; border-radius: 6px; background: var(--surface);
+      color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+    }
+    .item-peek-close:hover { background: var(--surface-hover); color: var(--text); }
+    .item-peek-sub { color: var(--text-dim); font-size: 11px; font-style: italic; margin: 2px 0 6px; }
+    .item-peek-desc {
+      color: var(--text-dim); font-size: 11.5px; line-height: 1.45; margin: 6px 0 0;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .item-peek-foot { margin-top: 9px; display: flex; justify-content: flex-end; }
+    .item-peek-foot button {
+      font-size: 11.5px; padding: 5px 10px; border-radius: 8px; background: var(--accent-bg); color: var(--accent); font-weight: 600;
+    }
+    .item-peek-foot button:hover { background: var(--accent); color: #fff; }
   </style>
 </head>
 <body>
@@ -355,7 +411,7 @@
     <div class="tab-panel" id="tab4"></div>
     <div class="tab-panel" id="tab5"></div>
   </div>
-  <div id="rollLogWrap" class="hidden"><div id="rollLog"></div></div>
+  <div id="rollLogWrap"></div>
 
   <script type="module" src="/src/pages/character-sheet.js"></script>
 </body>

@@ -15,6 +15,7 @@ import { wireCatalogLinks } from "../catalog-links.js";
 import { icon } from "../icons.js";
 import { initItemPicker } from "../item-picker.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { createRollLog } from "../roll-log.js";
 
 const ABILITIES = [
   { key: "str", label: "Сил" },
@@ -37,6 +38,7 @@ function fmtMod(n) {
 let monsterId = null;
 let monster = null; // объект domain.Monster целиком (сервер отдаёт camelCase — см. json-теги)
 let rollWS = null;
+let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js)
 // editMode — по умолчанию карточка открывается в чистом read-режиме (как
 // статблок в Foundry), редактирование — по явному клику на ✎ (см.
 // editToggleBtn ниже), тот же приём, что у заметок ДМ (note-window.js:
@@ -52,7 +54,7 @@ function normalizeMonster(raw) {
   m.spells = Array.isArray(m.spells) ? m.spells : [];
   // inventory — шаблон добычи монстра (см. domain.InventoryEntry) — список
   // предметов каталога, снимаемый в Token.Loot убитого токена (см. план
-  // фичи/service.Room.snapshotTokenLoot).
+  // фичи/service.Room.snapshotTokenSpoils).
   m.inventory = Array.isArray(m.inventory) ? m.inventory : [];
   return m;
 }
@@ -61,7 +63,7 @@ function normalizeMonster(raw) {
 // тут в редакторе (сервер при сохранении карточки не проверяет уникальность
 // ID записей — целиком доверяет клиенту, как и остальным полям "умного
 // бланка"; настоящие устойчивые ID запись получает только при снимке в
-// Token.Loot в момент смерти монстра, см. service.Room.snapshotTokenLoot).
+// Token.Loot в момент смерти монстра, см. service.Room.snapshotTokenSpoils).
 function tmpInventoryId() {
   return "tmp-" + Math.random().toString(36).slice(2);
 }
@@ -374,10 +376,11 @@ function renderReadView(root) {
     proseBlock("Действия", monster.actions),
     proseBlock("Бонусные действия", monster.bonusActions),
     proseBlock("Реакции", monster.reactions),
-    proseBlock(
-      "Легендарные действия",
-      (monster.legendaryActionsIntro ? `<p>${monster.legendaryActionsIntro}</p>` : "") + (monster.legendaryActions || "")
-    ),
+    // Вступление и сами действия склеиваются пустой строкой, а не через
+    // <p>…</p>: после HTML-блока marked считает следующие строки его
+    // продолжением и markdown в них не разбирает — названия действий так и
+    // оставались текстом "**Рывок.**" вместо жирного.
+    proseBlock("Легендарные действия", [monster.legendaryActionsIntro, monster.legendaryActions].filter(Boolean).join("\n\n")),
     proseBlock("Действия и эффекты логова", monster.lairActions),
     proseBlock("Описание", monster.description),
   ].filter(Boolean);
@@ -641,11 +644,12 @@ window.addEventListener("beforeunload", () => {
 // (в отличие от character-sheet.js, где ещё бывает роль игрока).
 
 function connectRollSocket() {
+  if (!rollLog) rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   rollWS = new WebSocket(`${scheme}//${location.host}/ws/dm`);
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") showRollResult(data);
+    if (data.type === "roll_result") rollLog.push(data);
   };
 }
 
@@ -653,17 +657,6 @@ function sendRoll(formula, label) {
   if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
   const fullLabel = monster && monster.name ? `${monster.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
   rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
-}
-
-function showRollResult(data) {
-  const wrap = document.getElementById("rollLogWrap");
-  wrap.classList.remove("hidden");
-  const log = document.getElementById("rollLog");
-  const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
-  const who = data.label ? `${data.name} — ${data.label}` : data.name;
-  const row = h("div", { class: "dice-log-row", text: `${who}: ${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}` });
-  log.prepend(row);
-  while (log.children.length > 20) log.removeChild(log.lastChild);
 }
 
 // ==================== boot ====================

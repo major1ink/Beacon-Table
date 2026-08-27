@@ -81,7 +81,8 @@ func (a *API) handleCharacterSheetUpdate(w http.ResponseWriter, r *http.Request)
 		writeErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
-	if err := world.Characters.UpdateSheet(r.Context(), r.PathValue("id"), acc.ID, sheet); err != nil {
+	id := r.PathValue("id")
+	if err := world.Characters.UpdateSheet(r.Context(), id, acc.ID, sheet); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "персонаж не найден")
 			return
@@ -89,6 +90,10 @@ func (a *API) handleCharacterSheetUpdate(w http.ResponseWriter, r *http.Request)
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	// Хиты в листе могли поменяться — трекер инициативы держит их копию у
+	// бойца, и без этого числа разъезжались бы до конца боя (см.
+	// service.Room.applyCharacterSheetHP).
+	world.Room.NotifyCharacterSheetChanged(id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

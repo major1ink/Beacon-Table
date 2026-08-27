@@ -3,10 +3,16 @@
 // initVTT(...) стал await initVTT(...) (см. vtt/index.js — единственное
 // вынужденное отличие от прежнего classic-script вызова).
 import { initVTT } from "../vtt/index.js";
+import { mapObjectsOf } from "../vtt/map-objects.js";
 import { initDiceRoller } from "../dice.js";
+import { createRollLog } from "../roll-log.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
+import { invalidateActionsPeek } from "../combat-actions-peek.js";
 import { initCombatPanel } from "../combat-panel.js";
+import { setCardOpener } from "../combatant-card.js";
+import { openSheetDock } from "../sheet-dock.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
+import { initShowcaseOverlay } from "../showcase-overlay.js";
 import {
   fetchMe,
   apiLogout,
@@ -18,6 +24,10 @@ import {
   deleteAsset,
   fetchAdminCharacters,
   updateAdminCharacter,
+  fetchAdminPregens,
+  assignPregen,
+  releasePregen,
+  deleteAdminPregen,
   fetchAdminAccounts,
   createAdminAccount,
   approveAdminAccount,
@@ -31,27 +41,14 @@ import {
   updatePlaylistTrack,
   deletePlaylistTrack,
   movePlaylistTrack,
-  fetchNotes,
-  fetchNote,
-  createNote,
-  updateNote,
-  moveNote,
-  deleteNote,
-  fetchNoteFolders,
-  createNoteFolder,
-  renameNoteFolder,
-  deleteNoteFolder,
+  fetchJournal,
   fetchMonster,
   fetchFoundryModules,
   checkFoundryModuleUpdates,
   deleteFoundryModule,
 } from "../api.js";
-import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
-import { mountNoteToolbar } from "../notes/toolbar.js";
-import { showAlert, showConfirm, showPrompt } from "../modal.js";
+import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
-import { wireCatalogLinks } from "../catalog-links.js";
-import { enhanceRolls } from "../inline-rolls.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
@@ -76,17 +73,21 @@ let vtt;
   // Плейлист двигает вперёд сам клиент ДМ (см. handleCueEnded ниже) —
   // vtt.cueAudio появляется только сейчас, поэтому слушатель вешаем здесь.
   vtt.cueAudio.addEventListener("ended", handleCueEnded);
+  // Прогресс-бар "сейчас играет" (см. updateCueProgress) — та же логика:
+  // vtt.cueAudio существует только с этого момента.
+  vtt.cueAudio.addEventListener("timeupdate", updateCueProgress);
   // Кубы — отдельная иконка 🎲 в той же боковой колонке, что и 🔊 громкость
   // (см. vtt/side-menu.js — vtt.sideMenu тоже появляется только теперь).
   // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
-  // формулы, "Бросить", см. dice.js); лог результатов остаётся отдельно, в
-  // #diceLog сверху канваса (см. dm.html) — initDiceRoller поддерживает
-  // раздельные контейнеры именно ради этого случая.
+  // формулы, "Бросить", см. dice.js); лог результатов — отдельный виджет
+  // (roll-log.js) в плашке #diceLog сверху канваса (см. dm.html).
   const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240 });
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
-  initDiceRoller(diceControls, (msg) => vtt.send(msg), document.getElementById("diceLog"));
+  initDiceRoller(diceControls, (msg) => vtt.send(msg));
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   // Справочник — та же боковая колонка, следующая иконка после кубов (см.
   // compendium-menu.js: дерево категорий, само содержимое — отдельные
   // плавающие окна web/catalog.html). sticky — не закрывается кликом мимо
@@ -94,6 +95,10 @@ let vtt;
   // "мимо"), только своей кнопкой ✕ в шапке.
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
   mountCompendiumMenu(compendiumPanel, { role: "dm" });
+  // Оверлей «Показать игрокам» — на экране ДМ это предпросмотр того, что
+  // видят игроки, плюс кнопка «✕» (шлёт hide_image всем, см.
+  // web/src/showcase-overlay.js). Раздел рейла «Показ» — ниже по файлу.
+  initShowcaseOverlay({ role: "dm", send: (m) => vtt.send(m) });
 })();
 document.addEventListener("vtt:authFailed", () => {
   document.getElementById("authFailedOverlay").classList.add("open");
@@ -112,11 +117,14 @@ document.getElementById("logoutBtn").onclick = async () => {
 // openJournalWindow — окно журнала одно на весь стол (key "journal", как и
 // у игрока, см. pages/player.js): entryId открывает его сразу на нужной
 // записи — так работают и значок журнала на карте, и ссылки внутри текстов.
-function openJournalWindow(entryId) {
+function openJournalWindow(entryId, section) {
   openFloatingWindow({
     key: "journal",
     title: "Журнал стола",
-    url: "/journal.html" + (entryId ? "?id=" + encodeURIComponent(entryId) : ""),
+    url:
+      "/journal.html" +
+      (entryId ? "?id=" + encodeURIComponent(entryId) : "") +
+      (entryId && section ? "#" + encodeURIComponent(section) : ""),
     navigate: !!entryId,
     width: 900,
     height: 640,
@@ -143,7 +151,7 @@ let counter = 0;
 
 // ================= библиотека загруженных файлов =================
 // fillLibrary — общий рендер select'ов "из библиотеки" (сейчас остался
-// только у аудио-треков, см. newTrackLibrary ниже — токен-арт ушёл в
+// только у аудио-треков, см. openTrackModal ниже — токен-арт ушёл в
 // раздел "Ассеты" с сеткой плиток, см. renderAssetsGrid).
 function fillLibrary(select, items) {
   const current = select.value;
@@ -157,14 +165,14 @@ function fillLibrary(select, items) {
   select.value = current && [...select.options].some((o) => o.value === current) ? current : "";
 }
 
-let latestAssets = { maps: [], tokens: [], audio: [], props: [], folders: {} };
+let latestAssets = { maps: [], tokens: [], audio: [], props: [], handouts: [], folders: {} };
 async function refreshLibrary() {
   try {
     latestAssets = await fetchAssets();
     if (bgTab.classList.contains("active")) renderAssetTable();
     if (audioTab.classList.contains("active")) renderAudioAssetTable();
-    refreshNewTrackLibrary();
     if (assetsPanelSection.classList.contains("active")) renderAssetsGrid();
+    if (showcasePanelSection.classList.contains("active")) renderShowcaseGrid();
   } catch (err) {
     console.error("не удалось загрузить библиотеку ассетов:", err);
   }
@@ -345,13 +353,135 @@ document.getElementById("assetUpload").onchange = async (e) => {
   }
 };
 
+// ================= раздел "Показ игрокам" =================
+// Своя библиотека картинок (domain.AssetKindHandouts = "handouts"), отдельная
+// от декораций карты ("props") и токен-арта ("tokens") — это хендауты
+// (портрет NPC, письмо, символ). Клик по плитке выводит картинку «поверх
+// всего» на экраны игроков и трансляции (WS "show_image" → r.showcase →
+// broadcastShowcase, см. internal/service/room.go; сам оверлей —
+// web/src/showcase-overlay.js). Состояние эфемерно, как канал ДМ: сервер его
+// не сохраняет на диск, но досылает свежеподключившимся.
+const HANDOUT_KIND = "handouts";
+const showcasePanelSection = document.querySelector('.panel-section[data-panel="showcase"]');
+const showcaseGrid = document.getElementById("showcaseGrid");
+const showcaseNowEl = document.getElementById("showcaseNow");
+// latestShowcase — URL сейчас показываемой картинки ("" — ничего). Держим
+// синхронно из того же события vtt:showcase, что слушает и оверлей: сервер —
+// единственный источник правды, кнопки только шлют show_image/hide_image.
+let latestShowcase = "";
+document.addEventListener("vtt:showcase", (e) => {
+  latestShowcase = (e.detail && e.detail.url) || "";
+  if (showcasePanelSection.classList.contains("active")) {
+    renderShowcaseNow();
+    renderShowcaseGrid();
+  }
+});
+
+function showImage(url) {
+  vtt.send({ type: "show_image", imageUrl: url });
+}
+function hideImage() {
+  vtt.send({ type: "hide_image" });
+}
+
+function renderShowcaseNow() {
+  showcaseNowEl.innerHTML = "";
+  if (!latestShowcase) {
+    showcaseNowEl.className = "showcase-now empty";
+    showcaseNowEl.textContent = "Сейчас ничего не показывается";
+    return;
+  }
+  showcaseNowEl.className = "showcase-now";
+  const thumb = document.createElement("div");
+  thumb.className = "showcase-now-thumb";
+  thumb.style.backgroundImage = `url("${latestShowcase}")`;
+  const body = document.createElement("div");
+  body.className = "showcase-now-body";
+  const title = document.createElement("div");
+  title.textContent = "На экране у игроков";
+  const nameEl = document.createElement("div");
+  nameEl.className = "showcase-now-name";
+  nameEl.textContent = decodeURIComponent(latestShowcase.split("/").pop() || "").replace(/^\d+-/, "");
+  body.append(title, nameEl);
+  const off = document.createElement("button");
+  off.type = "button";
+  off.className = "danger";
+  off.textContent = "Убрать с экрана";
+  off.onclick = hideImage;
+  showcaseNowEl.append(thumb, body, off);
+}
+
+function renderShowcaseGrid() {
+  const files = (latestAssets[HANDOUT_KIND] || []).filter((a) => !isVideoUrl(a.url));
+  showcaseGrid.innerHTML = "";
+  if (files.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "assets-empty-hint";
+    empty.textContent = "Пока пусто — загрузи картинку выше.";
+    showcaseGrid.appendChild(empty);
+    return;
+  }
+  for (const a of files) {
+    const tile = document.createElement("div");
+    tile.className = "asset-tile item-tile";
+    if (a.url === latestShowcase) tile.classList.add("showing");
+    tile.title = a.url === latestShowcase ? "Снять с экрана игроков" : "Показать на экране игроков и трансляции";
+    tile.style.backgroundImage = `url("${a.url}")`;
+    tile.onclick = () => (a.url === latestShowcase ? hideImage() : showImage(a.url));
+    const name = document.createElement("span");
+    name.className = "asset-tile-name";
+    name.textContent = a.name;
+    tile.appendChild(name);
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "asset-tile-del";
+    delBtn.title = "Удалить из библиотеки";
+    delBtn.innerHTML = icon("trash", { size: 12 });
+    delBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!(await showConfirm(`Удалить «${a.name}» из библиотеки показа?`, { title: "Удалить файл", okLabel: "Удалить", danger: true }))) return;
+      try {
+        if (a.url === latestShowcase) hideImage();
+        await deleteAsset(HANDOUT_KIND, a.url);
+        await refreshLibrary();
+        renderShowcaseGrid();
+      } catch (err) {
+        showAlert("Не удалось удалить: " + err.message);
+      }
+    };
+    tile.appendChild(delBtn);
+    showcaseGrid.appendChild(tile);
+  }
+}
+
+onPanelOpen("showcase", () => {
+  renderShowcaseNow();
+  renderShowcaseGrid();
+  refreshLibrary();
+});
+
+document.getElementById("showcaseUpload").onchange = async (e) => {
+  const files = [...e.target.files];
+  if (files.length === 0) return;
+  try {
+    for (const file of files) {
+      await uploadFile(file, HANDOUT_KIND);
+    }
+  } catch (err) {
+    showAlert("Не удалось загрузить файл: " + err.message);
+  } finally {
+    e.target.value = "";
+    await refreshLibrary();
+    renderShowcaseGrid();
+  }
+};
+
 // ================= зум =================
 document.getElementById("zoomInBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1.3 }));
 document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1 / 1.3 }));
 document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
 
-// ================= единый инструмент: Атака / Стены / Здание / Туман =================
-const attackBtn = document.getElementById("attackBtn");
+// ================= единый инструмент: Стены / Здание / Туман =================
 const wallBtn = document.getElementById("wallBtn");
 const buildingBtn = document.getElementById("buildingBtn");
 const fogBtn = document.getElementById("fogBtn");
@@ -362,12 +492,10 @@ function toggleTool(name) {
   const next = current && current.dataset.tool === name ? "select" : name;
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: next }));
 }
-attackBtn.dataset.tool = "attack";
 wallBtn.dataset.tool = "wall";
 buildingBtn.dataset.tool = "building";
 fogBtn.dataset.tool = "fog";
 rulerBtn.dataset.tool = "ruler";
-attackBtn.onclick = () => toggleTool("attack");
 wallBtn.onclick = () => toggleTool("wall");
 buildingBtn.onclick = () => toggleTool("building");
 fogBtn.onclick = () => toggleTool("fog");
@@ -375,7 +503,6 @@ rulerBtn.onclick = () => toggleTool("ruler");
 
 const gridEditDone = document.getElementById("gridEditDone");
 document.addEventListener("vtt:toolChanged", (e) => {
-  attackBtn.classList.toggle("active", e.detail === "attack");
   wallBtn.classList.toggle("active", e.detail === "wall");
   buildingBtn.classList.toggle("active", e.detail === "building");
   fogBtn.classList.toggle("active", e.detail === "fog");
@@ -427,6 +554,8 @@ document.addEventListener("vtt:sceneUpdated", (e) => {
 // ================= контекстное меню токена =================
 const tokenMenu = document.getElementById("tokenMenu");
 const tokenMenuLightHeader = document.getElementById("tokenMenuLightHeader");
+const tokenMenuMultiHeader = document.getElementById("tokenMenuMultiHeader");
+const tokenMenuMultiHeaderText = document.getElementById("tokenMenuMultiHeaderText");
 const tokenMenuSheetBtn = document.getElementById("tokenMenuSheetBtn");
 const tokenMenuBestiaryBtn = document.getElementById("tokenMenuBestiaryBtn");
 const tokenMenuAddInitiativeBtn = document.getElementById("tokenMenuAddInitiativeBtn");
@@ -444,8 +573,28 @@ const tokenMenuLightBrightField = document.getElementById("tokenMenuLightBrightF
 const tokenMenuLightDimField = document.getElementById("tokenMenuLightDimField");
 const tokenMenuLightToggleBtn = document.getElementById("tokenMenuLightToggleBtn");
 const tokenMenuStatusBtn = document.getElementById("tokenMenuStatusBtn");
+const tokenMenuCopyBtn = document.getElementById("tokenMenuCopyBtn");
+const tokenMenuLockBtn = document.getElementById("tokenMenuLockBtn");
+const tokenMenuLockLabel = document.getElementById("tokenMenuLockLabel");
 const tokenMenuDelete = document.getElementById("tokenMenuDelete");
+// menuCombatTokenIds — множество tokenId, у которых уже есть боец в трекере
+// инициативы (см. domain.Combatant.TokenID) — синкается с каждым
+// "combat_state" (см. vtt:combatState ниже). Нужно только чтобы погасить
+// "Добавить в инициативу" у токена, который туда уже добавлен: повторный клик
+// заводил бы ВТОРОГО бойца с тем же TokenID — токен на карте один, вытащить
+// для дубля новый уже неоткуда (см. room.go: handleAddCombatant).
+let menuCombatTokenIds = new Set();
+document.addEventListener("vtt:combatState", (e) => {
+  const combatants = (e.detail && e.detail.combatants) || [];
+  menuCombatTokenIds = new Set(combatants.filter((c) => c.tokenId).map((c) => c.tokenId));
+});
 let menuTokenId = null;
+// menuTokenIds — все id токенов, к которым применится действие в ОТКРЫТОМ
+// СЕЙЧАС меню: обычно [menuTokenId], но при ПКМ по токену, входящему в
+// групповое выделение (interaction.js: contextmenu, поле ids в detail
+// vtt:tokenContextMenu), сюда попадает весь состав выделения — тогда меню
+// сокращается до пачечных действий (см. vtt:tokenContextMenu ниже).
+let menuTokenIds = [];
 let menuCharacterId = ""; // characterId токена в открытом сейчас меню — "" у обычных NPC-токенов
 let menuCharacterLabel = ""; // token.label того же токена — для заголовка плавающего окна листа
 let menuMonsterId = ""; // monsterId токена в открытом сейчас меню — "" у токенов без привязки к бестиарию
@@ -456,6 +605,11 @@ let menuMonsterId = ""; // monsterId токена в открытом сейча
 // tokenMenuLight.checked, когда меню в этом режиме.
 let menuIsLightOnly = false;
 let menuLightEnabled = false;
+// menuTokenLocked — заперт ли токен в ОТКРЫТОМ СЕЙЧАС меню (см.
+// domain.Token.Locked и web/src/vtt/map-objects.js). Меню запертого токена
+// открывается как обычно — иначе замок было бы нечем снять, — но всё, что
+// его правит, в нём гасится (класс .locked-disabled, см. web/dm.html).
+let menuTokenLocked = false;
 // menuTokenLoot — снимок Token.Loot (см. domain.InventoryEntry) токена в
 // открытом сейчас меню — "Лутить" виден, только если тут реально есть что
 // разобрать (token.dead && loot.length), см. handler ниже.
@@ -464,6 +618,8 @@ let menuTokenLoot = [];
 function closeTokenMenu() {
   tokenMenu.style.display = "none";
   menuTokenId = null;
+  menuTokenIds = [];
+  menuTokenLocked = false;
   menuCharacterId = "";
   menuCharacterLabel = "";
   menuMonsterId = "";
@@ -493,6 +649,7 @@ function closeWallPointMenu() {
 }
 
 document.addEventListener("vtt:wallPointContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeNoteMarkerMenu();
   closeFogAreaMenu();
@@ -515,6 +672,8 @@ wallPointMenuDelete.onclick = () => {
 // меню, как у токена/значка заметки, а не остаётся единственным ПКМ-действием.
 const fogAreaMenu = document.getElementById("fogAreaMenu");
 const fogAreaMenuDelete = document.getElementById("fogAreaMenuDelete");
+const fogAreaMenuLockBtn = document.getElementById("fogAreaMenuLockBtn");
+const fogAreaMenuLockLabel = document.getElementById("fogAreaMenuLockLabel");
 let menuFogAreaId = null;
 
 function closeFogAreaMenu() {
@@ -523,12 +682,14 @@ function closeFogAreaMenu() {
 }
 
 document.addEventListener("vtt:fogAreaContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeWallMenu();
   closeBuildingMenu();
   menuFogAreaId = e.detail.id;
+  wireMapObjectLock("fogArea", menuFogAreaId, fogAreaMenuLockBtn, fogAreaMenuLockLabel, [fogAreaMenuDelete], closeFogAreaMenu);
   fogAreaMenu.style.left = e.detail.pageX + "px";
   fogAreaMenu.style.top = e.detail.pageY + "px";
   fogAreaMenu.style.display = "block";
@@ -569,6 +730,7 @@ function closeWallMenu() {
 }
 
 document.addEventListener("vtt:wallContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
@@ -663,6 +825,8 @@ wallMenuDelete.onclick = () => {
 // режиме "Здание" не сносил контур мгновенно.
 const buildingMenu = document.getElementById("buildingMenu");
 const buildingMenuDelete = document.getElementById("buildingMenuDelete");
+const buildingMenuLockBtn = document.getElementById("buildingMenuLockBtn");
+const buildingMenuLockLabel = document.getElementById("buildingMenuLockLabel");
 let menuBuildingId = null;
 
 function closeBuildingMenu() {
@@ -671,12 +835,14 @@ function closeBuildingMenu() {
 }
 
 document.addEventListener("vtt:buildingContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeFogAreaMenu();
   closeWallMenu();
   menuBuildingId = e.detail.id;
+  wireMapObjectLock("building", menuBuildingId, buildingMenuLockBtn, buildingMenuLockLabel, [buildingMenuDelete], closeBuildingMenu);
   buildingMenu.style.left = e.detail.pageX + "px";
   buildingMenu.style.top = e.detail.pageY + "px";
   buildingMenu.style.display = "block";
@@ -692,6 +858,8 @@ buildingMenuDelete.onclick = () => {
 const noteMarkerMenu = document.getElementById("noteMarkerMenu");
 const noteMarkerResizeBtn = document.getElementById("noteMarkerResizeBtn");
 const noteMarkerDeleteBtn = document.getElementById("noteMarkerDeleteBtn");
+const noteMarkerMenuLockBtn = document.getElementById("noteMarkerMenuLockBtn");
+const noteMarkerMenuLockLabel = document.getElementById("noteMarkerMenuLockLabel");
 let menuNoteMarkerId = null;
 
 function closeNoteMarkerMenu() {
@@ -700,12 +868,21 @@ function closeNoteMarkerMenu() {
 }
 
 document.addEventListener("vtt:noteMarkerContextMenu", (e) => {
+  closeCanvasMenu();
   closeTokenMenu();
   closeWallPointMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
   menuNoteMarkerId = e.detail.id;
+  wireMapObjectLock(
+    "noteMarker",
+    menuNoteMarkerId,
+    noteMarkerMenuLockBtn,
+    noteMarkerMenuLockLabel,
+    [noteMarkerResizeBtn, noteMarkerDeleteBtn],
+    closeNoteMarkerMenu
+  );
   noteMarkerMenu.style.left = e.detail.pageX + "px";
   noteMarkerMenu.style.top = e.detail.pageY + "px";
   noteMarkerMenu.style.display = "flex";
@@ -729,52 +906,81 @@ function updateLightToggleBtnLabel() {
 }
 
 document.addEventListener("vtt:tokenContextMenu", (e) => {
+  closeCanvasMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
-  const { id, token, pageX, pageY } = e.detail;
+  const { id, token, ids, pageX, pageY } = e.detail;
   menuTokenId = id;
+  menuTokenIds = Array.isArray(ids) && ids.length ? ids : [id];
+  // Пачечный режим — ПКМ пришёлся по одному из группового выделения (см.
+  // interaction.js: contextmenu). Меню сокращается до действий, осмысленных
+  // сразу для НЕСКОЛЬКИХ токенов (инициатива/состояния/свет/удаление, см.
+  // требование "нельзя добавить в инициативу всю пачку разом") — лист
+  // персонажа, статблок, лут, форма и замок остаются штучными: они не имеют
+  // единого смысла для разнородной группы.
+  const menuIsMulti = menuTokenIds.length > 1;
   menuCharacterId = token.characterId || "";
   menuCharacterLabel = token.label || "";
   menuMonsterId = token.monsterId || "";
-  menuIsLightOnly = !!token.lightOnly;
+  menuIsLightOnly = !menuIsMulti && !!token.lightOnly;
+  tokenMenuMultiHeaderText.textContent = `выбрано токенов: ${menuTokenIds.length}`;
+  tokenMenuMultiHeader.style.display = menuIsMulti ? "flex" : "none";
   tokenMenuLightHeader.style.display = menuIsLightOnly ? "flex" : "none";
   // редактировать карточку персонажа прямо из его токена, не только
   // из панели "Персонажи". У токена света персонажа не бывает (см.
   // domain.Token.LightOnly), поэтому эта кнопка с ним не пересекается.
-  tokenMenuSheetBtn.style.display = menuCharacterId ? "flex" : "none";
+  tokenMenuSheetBtn.style.display = !menuIsMulti && menuCharacterId ? "flex" : "none";
   // тот же приём для монстров бестиария (см. domain.Token.MonsterID) —
   // токены персонажей и монстров не пересекаются (характер и бестиарий не
   // ставятся на один токен), поэтому оба флага независимы.
-  tokenMenuBestiaryBtn.style.display = menuMonsterId ? "flex" : "none";
+  tokenMenuBestiaryBtn.style.display = !menuIsMulti && menuMonsterId ? "flex" : "none";
   // "Добавить в инициативу" — у токена света своего "хода" не бывает (см.
   // domain.Token.LightOnly), в остальном доступно любому существу — и
-  // игрока, и монстра, и голому NPC-токену без карточки бестиария/листа.
-  tokenMenuAddInitiativeBtn.style.display = menuIsLightOnly ? "none" : "flex";
+  // игрока, и монстра, и голому NPC-токену без карточки бестиария/листа. У
+  // УЖЕ убитого монстра (token.dead) кнопки тоже нет — вернуть его в бой
+  // можно только через "Восстановить" на вкладке "Убитые" трекера
+  // (см. combat-panel.js), а не заново нахватать ему полного HP шаблона
+  // случайным ПКМ. У токена, УЖЕ привязанного к бойцу трекера
+  // (menuCombatTokenIds), кнопки тоже нет — иначе повторный клик заводил бы
+  // второго бойца с тем же TokenID без своего токена на карте (баг,
+  // см. handleAddCombatant). В пачечном режиме кнопку не гасим по одному
+  // токену под курсором — сами обработчики ниже молча пропускают
+  // токены-лампочки, убитых и уже добавленных внутри группы.
+  tokenMenuAddInitiativeBtn.style.display =
+    menuIsMulti || (!menuIsLightOnly && !token.dead && !menuCombatTokenIds.has(id)) ? "flex" : "none";
   // "Состояния" — по тому же признаку, что и инициатива: у токена-лампочки
   // (domain.Token.LightOnly) состояний не бывает, он не существо.
-  tokenMenuStatusBtn.style.display = menuIsLightOnly ? "none" : "flex";
+  tokenMenuStatusBtn.style.display = menuIsMulti || !menuIsLightOnly ? "flex" : "none";
   // "Лутить" — только у мёртвого токена (кости, см. domain.Token.Dead) с
   // непустым Loot; тумблер CombatState.LootingEnabled тут не проверяем — он
   // ограничивает только ИГРОКОВ (см. authorize в room.go), ДМ раздаёт лут
-  // вручную в любой момент.
-  menuTokenLoot = Array.isArray(token.loot) ? token.loot : [];
-  tokenMenuLootBtn.style.display = token.dead && menuTokenLoot.length ? "flex" : "none";
-  tokenMenuHiddenRow.style.display = menuIsLightOnly ? "none" : "flex";
-  tokenMenuShapeRow.style.display = menuIsLightOnly ? "none" : "flex";
+  // вручную в любой момент. Штучное действие — в пачке трупы лутаются по
+  // одному, разбор общего лута сразу нескольких тел не заказывали.
+  menuTokenLoot = !menuIsMulti && Array.isArray(token.loot) ? token.loot : [];
+  tokenMenuLootBtn.style.display = !menuIsMulti && token.dead && menuTokenLoot.length ? "flex" : "none";
+  tokenMenuHiddenRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
+  tokenMenuShapeRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
   tokenMenuLightRow.style.display = menuIsLightOnly ? "none" : "flex";
   tokenMenuLightToggleBtn.style.display = menuIsLightOnly ? "flex" : "none";
   // У токена персонажа игрока свет — это не "токен-лампочка", а факел/фонарь
   // у него в руках, поэтому формулировка чекбокса другая (сама механика
-  // радиусов ниже та же самая, см. TokenLight).
-  tokenMenuLightLabel.textContent = menuCharacterId ? "Держит факел" : "источник света";
+  // радиусов ниже та же самая, см. TokenLight). В пачке настройки не читаем
+  // ни с одного конкретного токена (у каждого могут быть свои) — чекбокс
+  // всегда стартует выключенным, чтобы случайно не залить всем чужой свет;
+  // включили — одинаковые ярк./тускл. уйдут сразу всем выделенным, а
+  // поправить каждого по отдельности можно потом обычным одиночным меню.
+  tokenMenuLightLabel.textContent = menuIsMulti ? "источник света — всем выделенным" : menuCharacterId ? "Держит факел" : "источник света";
 
-  tokenMenuLightBright.value = (token.light && token.light.bright) || 0;
-  tokenMenuLightDim.value = (token.light && token.light.dim) || 0;
+  tokenMenuLightBright.value = menuIsMulti ? 0 : (token.light && token.light.bright) || 0;
+  tokenMenuLightDim.value = menuIsMulti ? 0 : (token.light && token.light.dim) || 0;
 
-  if (menuIsLightOnly) {
+  if (menuIsMulti) {
+    tokenMenuLight.checked = false;
+    syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+  } else if (menuIsLightOnly) {
     menuLightEnabled = !!(token.light && token.light.enabled);
     updateLightToggleBtnLabel();
     tokenMenuLightBrightField.classList.add("visible");
@@ -786,10 +992,156 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
     syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
   }
 
+  // "Копировать" — снимок токена вставляется ПКМ по пустому месту карты
+  // (см. #canvasMenu). Кроме токена света годится для любого существа/
+  // декорации — быстро наплодить одинаковых монстров на карте, не таская
+  // каждый раз новую карточку из бестиария. Токен ИГРОКА (menuCharacterId)
+  // из этого исключён: у персонажа на сцене может быть только один токен
+  // (см. room.go: dropDuplicateCharacterTokens) — паста с тем же
+  // characterId тихо снесла бы оригинал, а не завела вторую фигурку.
+  tokenMenuCopyBtn.style.display = !menuIsMulti && (menuIsLightOnly || !menuCharacterId) ? "flex" : "none";
+
+  // Замок — универсальный для всех объектов карты (см. map-objects.js):
+  // здесь он на токене, тем же событием vtt:setMapObjectLocked его получат
+  // значки заметок, здания и фигуры тумана.
+  //
+  // Но НЕ на фигурках существ: у них запирать нечего — они ходят каждый
+  // ход, это и есть их работа на карте, а замок там только лишний пункт в
+  // меню и способ случайно обездвижить бойца посреди боя. Замок нужен
+  // ровно противоположному — РАЗМЕТКЕ карты: источникам света, декорациям
+  // из ассетов, значкам, зданиям, фигурам тумана; они стоят на тех же
+  // координатах, что и существа, и именно их промах мышью утаскивает.
+  //
+  // Признак ПОЛОЖИТЕЛЬНЫЙ ("это обстановка"), а не отрицательный ("нет
+  // characterId и monsterId"), и это принципиально: у токенов, приехавших
+  // вместе со сценой из Foundry, никаких id нет (см.
+  // internal/foundry/scene.go: mapToken переносит только имя, арт и
+  // размер), но это существа — и отрицательный признак предлагал бы для
+  // гоблина-воителя замок наравне с бочкой.
+  //
+  // Единственное исключение — токен, который УЖЕ заперт: кнопку
+  // показываем в любом случае, иначе запертое до появления этого правила
+  // нечем было бы освободить.
+  // Штучное действие — замок группе целиком не имеет смысла (это про одно
+  // конкретное место на карте), поэтому в пачечном режиме просто прячем.
+  const menuIsMapDecor = !menuIsMulti && (menuIsLightOnly || !!token.decor);
+  menuTokenLocked = !menuIsMulti && !!token.locked;
+  tokenMenuLockBtn.style.display = !menuIsMulti && (menuIsMapDecor || menuTokenLocked) ? "flex" : "none";
+  tokenMenuLockLabel.textContent = menuTokenLocked ? "Разблокировать" : "Заблокировать";
+  applyTokenMenuLockState();
+
   tokenMenu.style.left = pageX + "px";
   tokenMenu.style.top = pageY + "px";
   tokenMenu.style.display = "block";
 });
+
+// applyTokenMenuLockState — гасит в открытом меню всё, что правит запертый
+// токен. Список исключений короткий и осознанный: сама кнопка замка (иначе
+// его не снять) и чисто читающие пункты (лист персонажа/статблок) —
+// посмотреть, ЧТО именно заперто, замок мешать не должен.
+function applyTokenMenuLockState() {
+  const editable = [
+    tokenMenuAddInitiativeBtn,
+    tokenMenuStatusBtn,
+    tokenMenuLootBtn,
+    tokenMenuHiddenRow,
+    tokenMenuShapeRow,
+    tokenMenuLightRow,
+    tokenMenuLightBrightField,
+    tokenMenuLightDimField,
+    tokenMenuLightToggleBtn,
+    tokenMenuCopyBtn,
+    tokenMenuDelete,
+  ];
+  for (const el of editable) el.classList.toggle("locked-disabled", menuTokenLocked);
+}
+
+tokenMenuLockBtn.onclick = () => {
+  if (!menuTokenId) return;
+  document.dispatchEvent(
+    new CustomEvent("vtt:setMapObjectLocked", { detail: { kind: "token", id: menuTokenId, locked: !menuTokenLocked } })
+  );
+  closeTokenMenu();
+};
+
+// wireMapObjectLock — одна и та же обвязка кнопки замка для меню значка
+// заметки, фигуры тумана и здания (у токена свой вариант выше — там кнопок
+// и режимов больше). Текущий флаг читается из ЖИВОЙ сцены, а не из detail
+// события: меню держат открытым, а сцена за это время приходит с сервера
+// ещё много раз. editable — что погасить, пока объект заперт (сама кнопка
+// замка в список, разумеется, не входит).
+function wireMapObjectLock(kind, id, btn, label, editable, close) {
+  const obj = mapObjectsOf(vtt.getScene(), kind)[id];
+  const locked = !!(obj && obj.locked);
+  label.textContent = locked ? "Разблокировать" : "Заблокировать";
+  for (const el of editable) el.classList.toggle("locked-disabled", locked);
+  btn.onclick = () => {
+    document.dispatchEvent(new CustomEvent("vtt:setMapObjectLocked", { detail: { kind, id, locked: !locked } }));
+    close();
+  };
+}
+
+// ================= буфер обмена объектов карты =================
+// mapClipboard — {kind, object} последнего скопированного объекта карты (см.
+// map-objects.js: MAP_OBJECT_KINDS). Живёт только в этой вкладке ДМ и только
+// до перезагрузки — это буфер обмена, а не состояние стола, серверу о нём
+// знать незачем. Хранится СНИМОК объекта, а не его id: вставить копию
+// удалённого с тех пор источника — нормально и ожидаемо.
+let mapClipboard = null;
+const canvasMenu = document.getElementById("canvasMenu");
+const canvasMenuPasteBtn = document.getElementById("canvasMenuPasteBtn");
+const canvasMenuPasteLabel = document.getElementById("canvasMenuPasteLabel");
+let canvasMenuAt = null; // мировые координаты ПКМ — точка вставки
+
+function closeCanvasMenu() {
+  canvasMenu.style.display = "none";
+  canvasMenuAt = null;
+}
+
+tokenMenuCopyBtn.onclick = () => {
+  if (!menuTokenId) return;
+  const t = (vtt.getScene().tokens || {})[menuTokenId];
+  if (!t) return;
+  // Копию берём из ЖИВОЙ сцены, а не из снимка, с которым открывали меню:
+  // пока меню висело, свет могли переключить двойным кликом или из списка
+  // в панели "Освещение".
+  //
+  // dead/loot/xp/statuses сбрасываем явно — это боевые шрамы КОНКРЕТНОГО
+  // инстанса (см. domain.Token), а копия нужна как раз чтобы поставить на
+  // карту НОВОГО, ещё не участвовавшего в бою монстра. Без сброса паста с
+  // мёртвого гоблина ставила бы на карту готовый труп с чужим лутом.
+  mapClipboard = { kind: "token", object: { ...t, dead: false, loot: [], xp: 0, statuses: [] } };
+  closeTokenMenu();
+};
+
+// ПКМ по пустому месту карты (см. interaction.js: vtt:canvasContextMenu) —
+// меню появляется, только если есть что вставлять: пустое меню на каждый
+// промах мимо токена раздражало бы сильнее, чем помогало.
+document.addEventListener("vtt:canvasContextMenu", (e) => {
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  closeBuildingMenu();
+  if (!mapClipboard) return;
+  canvasMenuAt = { x: e.detail.x, y: e.detail.y };
+  canvasMenuPasteLabel.textContent = "Вставить: " + (mapClipboard.object.label || "объект");
+  canvasMenu.style.left = e.detail.pageX + "px";
+  canvasMenu.style.top = e.detail.pageY + "px";
+  canvasMenu.style.display = "block";
+});
+
+canvasMenuPasteBtn.onclick = () => {
+  if (!mapClipboard || !canvasMenuAt) return;
+  const src = mapClipboard.object;
+  counter++;
+  // Свой id и координаты точки вставки; замок копия НЕ наследует — вставили
+  // затем, чтобы поставить куда надо, а запертое сразу не поставишь.
+  const object = { ...src, id: "tok-" + Date.now() + "-" + counter, x: canvasMenuAt.x, y: canvasMenuAt.y, locked: false };
+  vtt.send({ type: "add_token", token: object });
+  closeCanvasMenu();
+};
 
 tokenMenuSheetBtn.onclick = () => {
   if (!menuCharacterId) return;
@@ -803,25 +1155,50 @@ tokenMenuBestiaryBtn.onclick = () => {
   closeTokenMenu();
 };
 
+// "Добавить в инициативу" — при пачечном выделении шлёт add_combatant по
+// одному сообщению на каждый токен (батч-команды сервер не знает, см.
+// room.go: handleAddCombatant); токены-лампочки (domain.Token.LightOnly)
+// внутри группы молча пропускаем — своего "хода" у них не бывает. Убитых
+// (token.dead) — тоже: иначе монстр вернулся бы в бой с полным HP шаблона
+// заново, минуя вкладку "Убитые" трекера, которая для этого и есть
+// (restore/лут — см. combat-panel.js). Сервер (handleAddCombatant) это же
+// правило перепроверяет сам — тут только чтобы не улетал заведомо бесполезный
+// WS-запрос и не мигал список инициативы лишний раз.
 tokenMenuAddInitiativeBtn.onclick = () => {
-  if (!menuTokenId) return;
-  vtt.send({ type: "add_combatant", tokenId: menuTokenId });
+  if (!menuTokenIds.length) return;
+  const tokens = vtt.getScene().tokens || {};
+  for (const tokenId of menuTokenIds) {
+    const t = tokens[tokenId];
+    if (t && (t.lightOnly || t.dead)) continue;
+    if (menuCombatTokenIds.has(tokenId)) continue; // уже боец трекера — см. menuCombatTokenIds
+    vtt.send({ type: "add_combatant", tokenId });
+  }
   closeTokenMenu();
 };
 
 // tokenMenuStatusBtn — "Состояния": палитра наложения метки прямо с карты,
 // аналог палитры статусов в Token HUD у Foundry (см. status-palette.js —
 // тот же модуль, что и "+" в карточке бойца трекера). Меню токена при этом
-// закрывается: палитра встаёт на его место и дальше живёт сама.
+// закрывается: палитра встаёт на его место и дальше живёт сама. При
+// пачечном выделении палитра получает весь список id (target.tokenIds) —
+// каждый клик по иконке уходит всем сразу (см. status-palette.js:
+// targetList/dispatch), а "активной" подсвечивается только метка, висящая
+// СРАЗУ на всех, иначе клик по ней визуально снял бы её лишь с части.
 tokenMenuStatusBtn.onclick = (e) => {
-  if (!menuTokenId) return;
-  const tokenId = menuTokenId; // menuTokenId обнулится в closeTokenMenu ниже
-  const title = menuCharacterLabel;
+  if (!menuTokenIds.length) return;
+  const tokens = vtt.getScene().tokens || {};
+  // Токены-лампочки внутри группы — не существа, состояний не бывает (тот
+  // же признак, что и у инициативы выше) — исключаем их из цели палитры.
+  const tokenIds = menuTokenIds.filter((tokenId) => !(tokens[tokenId] && tokens[tokenId].lightOnly));
+  if (!tokenIds.length) return;
+  const isSingle = tokenIds.length === 1;
+  const tokenId = tokenIds[0];
+  const title = isSingle ? menuCharacterLabel : `выбрано токенов: ${tokenIds.length}`;
   closeTokenMenu();
   openStatusPalette({
     x: e.clientX,
     y: e.clientY,
-    target: { tokenId },
+    target: isSingle ? { tokenId } : { tokenIds },
     send: vtt.send,
     title,
     // Читаем метки из ЖИВОЙ сцены на каждый рендер палитры, а не из снимка
@@ -829,8 +1206,11 @@ tokenMenuStatusBtn.onclick = (e) => {
     // "vtt:toggleTokenLight" ниже: пока палитра открыта, сцена приходит с
     // сервера ещё много раз.
     statusesFor: () => {
-      const t = (vtt.getScene().tokens || {})[tokenId];
-      return (t && t.statuses) || [];
+      const liveTokens = vtt.getScene().tokens || {};
+      if (isSingle) return (liveTokens[tokenId] && liveTokens[tokenId].statuses) || [];
+      const lists = tokenIds.map((id) => (liveTokens[id] && liveTokens[id].statuses) || []);
+      const [first, ...rest] = lists;
+      return (first || []).filter((st) => rest.every((list) => list.some((o) => o.slug === st.slug)));
     },
   });
 };
@@ -882,11 +1262,18 @@ tokenMenuShape.onchange = () => {
   );
 };
 
+// sendTokenMenuLight — шлёт одни и те же настройки света на каждый токен в
+// menuTokenIds (для одиночного меню это всегда [menuTokenId], для пачечного
+// — весь состав выделения: "Добавить источник света с одними и теми же
+// настройками", дальше каждый токен можно поправить отдельно через его
+// собственное одиночное меню — оно всегда читает АКТУАЛЬНОЕ состояние).
 function sendTokenMenuLight() {
-  if (!menuTokenId) return;
+  if (!menuTokenIds.length) return;
   const enabled = menuIsLightOnly ? menuLightEnabled : tokenMenuLight.checked;
   const light = { enabled, bright: +tokenMenuLightBright.value || 0, dim: +tokenMenuLightDim.value || 0 };
-  document.dispatchEvent(new CustomEvent("vtt:setTokenLight", { detail: { id: menuTokenId, light } }));
+  for (const id of menuTokenIds) {
+    document.dispatchEvent(new CustomEvent("vtt:setTokenLight", { detail: { id, light } }));
+  }
 }
 tokenMenuLight.onchange = () => {
   syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
@@ -909,8 +1296,12 @@ tokenMenuLightToggleBtn.onclick = () => {
 };
 
 tokenMenuDelete.onclick = () => {
-  if (!menuTokenId) return;
-  document.dispatchEvent(new CustomEvent("vtt:removeToken", { detail: { id: menuTokenId } }));
+  if (!menuTokenIds.length) return;
+  // vtt:removeToken сам чистит id из selectedTokenIds по одному (см.
+  // interaction.js) — дёргаем его по кругу, отдельного батч-события не надо.
+  for (const id of menuTokenIds) {
+    document.dispatchEvent(new CustomEvent("vtt:removeToken", { detail: { id } }));
+  }
   closeTokenMenu();
 };
 
@@ -1279,6 +1670,141 @@ function openDmCharEditForm(c) {
   dmCharEditForm.style.display = "block";
 }
 
+// renderDmPregenSection — секция «Готовые персонажи» в панели «Персонажи»:
+// пул предгенерированных листов мира из импортированного приключения (см.
+// internal/domain/pregen.go). ДМ видит статус занятости, назначает пре-гена
+// аккаунту игрока, возвращает в пул или убирает из пула. Полный лист до
+// захвата не показываем (в characters его ещё нет) — после назначения он
+// открывается обычной кнопкой у персонажа игрока ниже.
+async function renderDmPregenSection() {
+  let pregens = [];
+  try {
+    pregens = await fetchAdminPregens();
+  } catch {
+    return; // нет пула — секции просто нет
+  }
+  if (!pregens.length) return;
+
+  const group = document.createElement("div");
+  group.className = "dmchar-owner-group";
+  group.textContent = "Готовые персонажи";
+  dmCharactersList.appendChild(group);
+
+  for (const p of pregens) {
+    const row = document.createElement("div");
+    row.className = "dmchar-row dmchar-row--pregen";
+    const avatar = document.createElement("div");
+    avatar.className = "dmchar-avatar";
+    if (p.avatarUrl) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+    else avatar.textContent = "—";
+    const name = document.createElement("div");
+    name.className = "dmchar-name";
+    const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+    name.innerHTML = `${p.name}<div style="font-size:11px;opacity:0.55;">${
+      p.claimedBy ? `у ${p.claimedByUsername || "игрока"}` : "свободен"
+    }${sub ? ` · ${sub}` : ""}</div>`;
+    row.append(avatar, name);
+
+    const sheetBtn = document.createElement("button");
+    sheetBtn.className = "icon-btn";
+    sheetBtn.innerHTML = icon("scroll", { size: 14 });
+    sheetBtn.title = p.claimedBy ? "Лист персонажа игрока" : "Посмотреть лист (без назначения)";
+    sheetBtn.onclick = () =>
+      openFloatingWindow({
+        key: p.claimedCharacterId ? "char-" + p.claimedCharacterId : "pregen-" + p.id,
+        title: p.name,
+        url: p.claimedCharacterId
+          ? `/character-sheet.html?id=${p.claimedCharacterId}`
+          : `/character-sheet.html?pregen=${p.id}`,
+      });
+    row.appendChild(sheetBtn);
+
+    if (p.claimedBy) {
+      const releaseBtn = document.createElement("button");
+      releaseBtn.className = "icon-btn";
+      releaseBtn.innerHTML = icon("chevron-left", { size: 14 });
+      releaseBtn.title = "Вернуть в пул (персонаж игрока останется у него)";
+      releaseBtn.onclick = async () => {
+        try {
+          await releasePregen(p.id);
+          await renderDmCharacters();
+        } catch (err) {
+          showAlert("Не удалось вернуть в пул: " + err.message);
+        }
+      };
+      row.appendChild(releaseBtn);
+    } else {
+      const assignBtn = document.createElement("button");
+      assignBtn.className = "icon-btn";
+      assignBtn.innerHTML = icon("user", { size: 14 });
+      assignBtn.title = "Назначить готового персонажа аккаунту игрока";
+      assignBtn.onclick = () => assignPregenFlow(p);
+      row.appendChild(assignBtn);
+    }
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "icon-btn";
+    delBtn.innerHTML = icon("trash", { size: 14 });
+    delBtn.title = "Убрать из пула";
+    delBtn.onclick = async () => {
+      if (!(await showConfirm(`Убрать «${p.name}» из пула готовых персонажей?`, { title: "Убрать из пула", okLabel: "Убрать", danger: true }))) return;
+      try {
+        await deleteAdminPregen(p.id);
+        await renderDmCharacters();
+      } catch (err) {
+        showAlert("Не удалось убрать: " + err.message);
+      }
+    };
+    row.appendChild(delBtn);
+    dmCharactersList.appendChild(row);
+  }
+}
+
+// assignPregenFlow — выбор аккаунта игрока и назначение пре-гена ему.
+async function assignPregenFlow(pregen) {
+  let accounts = [];
+  try {
+    accounts = (await fetchAdminAccounts()).filter((a) => a.role === "player" && a.status === "active");
+  } catch (err) {
+    showAlert("Не удалось загрузить список игроков: " + err.message);
+    return;
+  }
+  if (!accounts.length) {
+    showAlert("Нет активных аккаунтов игроков — сначала заведи их в разделе «Аккаунты».");
+    return;
+  }
+  let select;
+  const accountId = await openModal({
+    title: `Назначить «${pregen.name}»`,
+    okLabel: "Назначить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const label = document.createElement("label");
+      label.textContent = "Игрок:";
+      label.style.cssText = "display:block;font-size:12px;opacity:0.7;margin-bottom:6px;";
+      select = document.createElement("select");
+      select.style.cssText = "width:100%;padding:7px 8px;font-size:13px;";
+      for (const a of accounts) {
+        const opt = document.createElement("option");
+        opt.value = a.id;
+        opt.textContent = a.username;
+        select.appendChild(opt);
+      }
+      body.append(label, select);
+      return select;
+    },
+    onOk: () => select.value,
+    onCancel: () => null,
+  });
+  if (!accountId) return;
+  try {
+    await assignPregen(pregen.id, accountId);
+    await renderDmCharacters();
+  } catch (err) {
+    showAlert("Не удалось назначить: " + err.message);
+  }
+}
+
 async function renderDmCharacters() {
   try {
     dmCharacters = await fetchAdminCharacters();
@@ -1288,10 +1814,11 @@ async function renderDmCharacters() {
   }
   closeDmCharEditForm();
   dmCharactersList.innerHTML = "";
+  await renderDmPregenSection();
   if (dmCharacters.length === 0) {
     const empty = document.createElement("p");
     empty.className = "hint";
-    empty.textContent = "Персонажей пока нет — игроки заводят их сами на своей стороне.";
+    empty.textContent = "Персонажей у игроков пока нет — они заводят их сами или берут готового из пула выше.";
     dmCharactersList.appendChild(empty);
     return;
   }
@@ -1494,6 +2021,10 @@ sceneCanvasEl.addEventListener("drop", (e) => {
       size: gridSize / 2,
       shape: "",
       hidden: false,
+      // decor — это обстановка, а не существо (см. domain.Token.Decor):
+      // единственное место, где признак вообще проставляется, — отсюда и
+      // берётся право предложить для этого токена замок.
+      decor: true,
     },
   });
 });
@@ -1522,30 +2053,66 @@ sceneCanvasEl.addEventListener("drop", (e) => {
 });
 
 // ================= плейлисты (канал ДМ) =================
-// Раньше список плейлистов и треки текущего лежали рядом (модалка шире
-// панели). В узкой выезжающей панели это мастер-детейл: playlistListView
-// (список) ⇄ playlistTracksView (треки одного плейлиста), переключаются
-// целиком, назад — кнопкой "‹ Все плейлисты".
-const playlistListView = document.getElementById("playlistListView");
-const playlistTracksView = document.getElementById("playlistTracksView");
-const playlistRows = document.getElementById("playlistRows");
-const trackPanelTitle = document.getElementById("trackPanelTitle");
-const trackList = document.getElementById("trackList");
-const addTrackForm = document.getElementById("addTrackForm");
-const addTrackMsg = document.getElementById("addTrackMsg");
-const newTrackLibrary = document.getElementById("newTrackLibrary");
-const newTrackName = document.getElementById("newTrackName");
+// Foundry-style аккордеон: все плейлисты видны сразу и разворачиваются на
+// месте (openPlaylistIds — какие именно), можно держать открытыми сразу
+// несколько — без прежнего мастер-детейла "список ⇄ треки" и экрана
+// "‹ Назад". Добавление/правка трека — через модалку (openTrackModal), а не
+// постоянно занимающую место форму внизу панели. Порядок треков — drag-and-
+// drop (см. renderTrackRow) вместо кнопок вверх/вниз.
+const playlistAccordion = document.getElementById("playlistAccordion");
 const nowPlayingLabel = document.getElementById("nowPlayingLabel");
+const nowPlayingProgressBar = document.getElementById("nowPlayingProgressBar");
+const nowPlayingProgressFill = document.getElementById("nowPlayingProgressFill");
+const cuePlayPauseBtn = document.getElementById("cuePlayPauseBtn");
 const cueVolumeSlider = document.getElementById("cueVolumeSlider");
 
 let playlists = [];
-let selectedPlaylistId = null;
-let playlistsView = "list"; // "list" | "tracks"
-let currentCue = null;
-let pendingNewTrackUrl = ""; // из аплоада/библиотеки, для формы "+ Добавить трек"
+let currentCue = null; // {url,name,volume,loop,startedAtMs,paused,positionMs} | null — см. domain.CueState
+const openPlaylistIds = new Set(); // id развёрнутых плейлистов
 
-function refreshNewTrackLibrary() {
-  fillLibrary(newTrackLibrary, latestAssets.audio || []);
+// scrubbing — тащит ли ДМ прямо сейчас полоску прогресса (см. wireSeekBar):
+// пока true, updateCueProgress не трогает заполнение баров — иначе
+// timeupdate от ещё не перемотанного vtt.cueAudio дёргал бы полоску назад
+// прямо под курсором.
+let scrubbing = false;
+
+// wireSeekBar — делает полоску прогресса перематываемой: клик/драг ставит
+// позицию визуально сразу (без сети), а на отпускании шлёт seek_cue один раз
+// — так драг не флудит WS десятками сообщений в секунду. barEl — контейнер с
+// .progress-fill внутри (см. #nowPlayingProgressBar и .bt-track-progress).
+function wireSeekBar(barEl) {
+  const fillEl = barEl.querySelector(".progress-fill");
+  const apply = (e, commit) => {
+    const audio = vtt.cueAudio;
+    if (!audio || !audio.duration || !currentCue) return;
+    const rect = barEl.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    fillEl.style.width = pct * 100 + "%";
+    if (commit) vtt.send({ type: "seek_cue", cue: { positionMs: Math.round(pct * audio.duration * 1000) } });
+  };
+  barEl.addEventListener("mousedown", (e) => {
+    if (!currentCue) return;
+    e.preventDefault();
+    scrubbing = true;
+    apply(e, false);
+    const onMove = (ev) => apply(ev, false);
+    const onUp = (ev) => {
+      apply(ev, true);
+      scrubbing = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+wireSeekBar(nowPlayingProgressBar);
+
+// stripExt — "тема_боя.mp3" → "тема_боя", чтобы автоподставленное имя трека
+// не тащило за собой расширение файла.
+function stripExt(fileName) {
+  const idx = fileName.lastIndexOf(".");
+  return idx > 0 ? fileName.slice(0, idx) : fileName;
 }
 
 async function refreshPlaylists() {
@@ -1555,164 +2122,439 @@ async function refreshPlaylists() {
     console.error("не удалось загрузить плейлисты:", err);
     playlists = [];
   }
-  renderPlaylistsPanel();
+  renderPlaylistAccordion();
 }
 
-function openPlaylistTracks(id) {
-  selectedPlaylistId = id;
-  playlistsView = "tracks";
-  renderPlaylistsPanel();
-}
-function backToPlaylistList() {
-  playlistsView = "list";
-  renderPlaylistsPanel();
-}
-document.getElementById("playlistBackBtn").onclick = backToPlaylistList;
-
-function renderPlaylistsPanel() {
-  const showTracks = playlistsView === "tracks" && playlists.some((p) => p.id === selectedPlaylistId);
-  playlistListView.style.display = showTracks ? "none" : "block";
-  playlistTracksView.style.display = showTracks ? "block" : "none";
-  renderPlaylistRows();
-  if (showTracks) renderTrackPanel();
+function isPlaylistPlaying(p) {
+  return !!(currentCue && (p.tracks || []).some((t) => t.url === currentCue.url));
 }
 
-function renderPlaylistRows() {
-  playlistRows.innerHTML = "";
-  for (const p of playlists) {
-    const row = document.createElement("div");
-    row.className = "playlist-row" + (p.id === selectedPlaylistId ? " active" : "");
-    const name = document.createElement("span");
-    name.className = "pl-name";
-    name.textContent = `${p.name} (${(p.tracks || []).length})`;
-    name.onclick = () => openPlaylistTracks(p.id);
-    const renameBtn = document.createElement("button");
-    renameBtn.innerHTML = icon("pencil", { size: 13 });
-    renameBtn.title = "Переименовать";
-    renameBtn.onclick = async (e) => {
-      e.stopPropagation();
-      const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
-      if (!newName) return;
-      try {
-        await renamePlaylist(p.id, newName);
-        await refreshPlaylists();
-      } catch (err) {
-        showAlert(err.message);
-      }
-    };
-    const delBtn = document.createElement("button");
-    delBtn.innerHTML = icon("trash", { size: 13 });
-    delBtn.title = "Удалить плейлист";
-    delBtn.onclick = async (e) => {
-      e.stopPropagation();
-      if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
-      try {
-        await deletePlaylist(p.id);
-        if (selectedPlaylistId === p.id) selectedPlaylistId = null;
-        await refreshPlaylists();
-      } catch (err) {
-        showAlert(err.message);
-      }
-    };
-    row.appendChild(name);
-    row.appendChild(renameBtn);
-    row.appendChild(delBtn);
-    playlistRows.appendChild(row);
+// cueBtnState — единая логика для play/pause-кнопки плейлиста/трека:
+// - трек не тот, что сейчас в canale ДМ → "играть" (свежий старт, play_cue);
+// - тот же трек, канал играет → "пауза" (pause_cue, не stop_cue — трек не
+//   сбрасывается, просто останавливается на месте);
+// - тот же трек, канал на паузе → "играть" (resume_cue, с той же позиции).
+function cueBtnState(active) {
+  if (!active) return { icon: "play", title: "Играть", action: "start" };
+  if (currentCue.paused) return { icon: "play", title: "Играть", action: "resume" };
+  return { icon: "pause", title: "Пауза", action: "pause" };
+}
+
+function renderPlaylistAccordion() {
+  playlistAccordion.innerHTML = "";
+  for (const p of playlists) playlistAccordion.appendChild(renderPlaylistItem(p));
+}
+
+function renderPlaylistItem(p) {
+  const expanded = openPlaylistIds.has(p.id);
+  const playing = isPlaylistPlaying(p);
+  const wrap = document.createElement("div");
+  wrap.className = "bt-playlist" + (expanded ? " expanded" : "") + (playing ? " playing" : "");
+
+  const header = document.createElement("div");
+  header.className = "bt-playlist-header";
+  header.onclick = () => {
+    if (expanded) openPlaylistIds.delete(p.id);
+    else openPlaylistIds.add(p.id);
+    renderPlaylistAccordion();
+  };
+
+  const caret = document.createElement("span");
+  caret.className = "bt-playlist-caret";
+  caret.innerHTML = icon("chevron-right", { size: 13 });
+
+  const playBtn = document.createElement("button");
+  playBtn.className = "bt-playlist-play";
+  const btnState = cueBtnState(playing);
+  playBtn.title = playing ? btnState.title : "Играть с первого трека";
+  playBtn.innerHTML = icon(btnState.icon, { size: 12 });
+  playBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (btnState.action === "pause") {
+      vtt.send({ type: "pause_cue" });
+      return;
+    }
+    if (btnState.action === "resume") {
+      vtt.send({ type: "resume_cue" });
+      return;
+    }
+    const first = (p.tracks || [])[0];
+    if (first) vtt.send({ type: "play_cue", cue: { url: first.url, name: first.name, volume: first.volume, loop: first.loop } });
+  };
+
+  const name = document.createElement("span");
+  name.className = "bt-playlist-name";
+  name.textContent = p.name;
+
+  const count = document.createElement("span");
+  count.className = "bt-playlist-count";
+  count.textContent = (p.tracks || []).length;
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "icon-btn";
+  addBtn.title = "Добавить трек";
+  addBtn.innerHTML = icon("plus", { size: 13 });
+  addBtn.onclick = (e) => {
+    e.stopPropagation();
+    openTrackModal({ playlist: p });
+  };
+
+  const renameBtn = document.createElement("button");
+  renameBtn.className = "icon-btn";
+  renameBtn.title = "Переименовать плейлист";
+  renameBtn.innerHTML = icon("pencil", { size: 13 });
+  renameBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
+    if (!newName) return;
+    try {
+      await renamePlaylist(p.id, newName);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = "Удалить плейлист";
+  delBtn.innerHTML = icon("trash", { size: 13 });
+  delBtn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylist(p.id);
+      openPlaylistIds.delete(p.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  header.append(caret, playBtn, name, count, addBtn, renameBtn, delBtn);
+  wrap.appendChild(header);
+  if (expanded) wrap.appendChild(renderTrackList(p));
+  return wrap;
+}
+
+function renderTrackList(p) {
+  const list = document.createElement("div");
+  list.className = "bt-playlist-tracks";
+  const tracks = p.tracks || [];
+  if (!tracks.length) {
+    const hint = document.createElement("div");
+    hint.className = "bt-playlist-empty-hint";
+    hint.textContent = "Нет треков — добавь через +";
+    list.appendChild(hint);
+    return list;
+  }
+  tracks.forEach((t) => list.appendChild(renderTrackRow(p, t)));
+  return list;
+}
+
+// draggedTrackId/draggedFromPlaylistId — состояние текущего перетаскивания
+// (см. renderTrackRow ниже). Модуль-level, а не замыкание строки: dragover
+// одной строки должен видеть, что тащат из другой (draggedFromPlaylistId),
+// и отказаться показывать индикатор вставки.
+let draggedTrackId = null;
+let draggedFromPlaylistId = null;
+
+function renderTrackRow(playlist, t) {
+  const isPlaying = !!(currentCue && currentCue.url === t.url);
+  const row = document.createElement("div");
+  row.className = "bt-track" + (isPlaying ? " playing" : "");
+  row.draggable = true;
+
+  const grip = document.createElement("span");
+  grip.className = "bt-track-drag";
+  grip.title = "Перетащи, чтобы изменить порядок";
+  grip.innerHTML = icon("grip-vertical", { size: 13 });
+
+  const playBtn = document.createElement("button");
+  playBtn.className = "bt-track-play";
+  const btnState = cueBtnState(isPlaying);
+  playBtn.title = btnState.title;
+  playBtn.innerHTML = icon(btnState.icon, { size: 11 });
+  playBtn.onclick = () => {
+    if (btnState.action === "pause") vtt.send({ type: "pause_cue" });
+    else if (btnState.action === "resume") vtt.send({ type: "resume_cue" });
+    else vtt.send({ type: "play_cue", cue: { url: t.url, name: t.name, volume: t.volume, loop: t.loop } });
+  };
+
+  const main = document.createElement("div");
+  main.className = "bt-track-main";
+  const name = document.createElement("span");
+  name.className = "bt-track-name";
+  name.textContent = t.name;
+  main.appendChild(name);
+  if (isPlaying) {
+    // прогресс-бар — только у реально играющего трека, синхронизируется по
+    // vtt.cueAudio (см. updateCueProgress) и перематывается кликом/драгом
+    // (см. wireSeekBar), так же как и общий бар в #nowPlayingBar.
+    const progress = document.createElement("div");
+    progress.className = "bt-track-progress";
+    progress.innerHTML = '<div class="progress-track"><div class="progress-fill"></div></div>';
+    main.appendChild(progress);
+    wireSeekBar(progress);
+  }
+
+  const volWrap = document.createElement("label");
+  volWrap.className = "bt-track-vol";
+  volWrap.title = "Громкость трека";
+  volWrap.innerHTML = icon("volume", { size: 12 });
+  const volSlider = document.createElement("input");
+  volSlider.type = "range";
+  volSlider.min = 0;
+  volSlider.max = 100;
+  volSlider.value = Math.round(t.volume * 100);
+  volSlider.onchange = async () => {
+    const vol = volSlider.value / 100;
+    try {
+      await updatePlaylistTrack(playlist.id, t.id, t.name, vol, t.loop);
+      t.volume = vol;
+      // трек играет прямо сейчас — обновляем громкость на лету, не
+      // дожидаясь следующего запуска.
+      if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_volume", cue: { volume: vol } });
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+  volWrap.appendChild(volSlider);
+
+  const loopBtn = document.createElement("button");
+  loopBtn.className = "icon-btn" + (t.loop ? " active" : "");
+  loopBtn.innerHTML = icon("repeat", { size: 13 });
+  loopBtn.title = t.loop ? "Трек зациклен — нажми, чтобы играть один раз" : "Трек играет один раз — нажми, чтобы зациклить";
+  loopBtn.onclick = async () => {
+    const newLoop = !t.loop;
+    try {
+      await updatePlaylistTrack(playlist.id, t.id, t.name, t.volume, newLoop);
+      t.loop = newLoop;
+      // трек играет прямо сейчас — обновляем "зациклен" на лету, тем же
+      // приёмом, что и громкость чуть выше: без этого играющий трек
+      // доигрывает со старым флагом и на конце останавливается/уходит на
+      // следующий вместо цикла (см. set_cue_loop в room.go).
+      if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_loop", cue: { loop: newLoop } });
+      renderPlaylistAccordion();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.title = "Изменить трек";
+  editBtn.innerHTML = icon("pencil", { size: 13 });
+  editBtn.onclick = () => openTrackModal({ playlist, track: t });
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = "Удалить трек";
+  delBtn.innerHTML = icon("trash", { size: 13 });
+  delBtn.onclick = async () => {
+    if (!(await showConfirm(`Удалить трек «${t.name}»?`, { title: "Удалить трек", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylistTrack(playlist.id, t.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  row.append(grip, playBtn, main, volWrap, loopBtn, editBtn, delBtn);
+
+  // ---- drag-and-drop переупорядочивание внутри плейлиста ----
+  row.addEventListener("dragstart", () => {
+    draggedTrackId = t.id;
+    draggedFromPlaylistId = playlist.id;
+    row.classList.add("dragging");
+  });
+  row.addEventListener("dragend", () => {
+    row.classList.remove("dragging");
+    draggedTrackId = null;
+    draggedFromPlaylistId = null;
+  });
+  row.addEventListener("dragover", (e) => {
+    if (draggedFromPlaylistId !== playlist.id || draggedTrackId === t.id) return;
+    e.preventDefault();
+    const before = e.clientY - row.getBoundingClientRect().top < row.offsetHeight / 2;
+    row.classList.toggle("drag-over-top", before);
+    row.classList.toggle("drag-over-bottom", !before);
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drag-over-top", "drag-over-bottom"));
+  row.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    const before = row.classList.contains("drag-over-top");
+    row.classList.remove("drag-over-top", "drag-over-bottom");
+    if (draggedFromPlaylistId !== playlist.id || !draggedTrackId || draggedTrackId === t.id) return;
+    await reorderPlaylistTrack(playlist, draggedTrackId, t.id, before);
+  });
+
+  return row;
+}
+
+// reorderPlaylistTrack — драг задаёт желаемый порядок целиком на клиенте, но
+// бэкенд умеет только сдвигать трек на одну позицию за раз (см. MoveTrack в
+// internal/repository/sqlite/playlists.go — обмен местами с соседом),
+// поэтому досылаем нужное число шагов "up"/"down" подряд и один раз
+// перечитываем плейлисты в конце.
+async function reorderPlaylistTrack(playlist, trackId, targetId, before) {
+  const ids = (playlist.tracks || []).map((t) => t.id);
+  const fromIdx = ids.indexOf(trackId);
+  if (fromIdx === -1) return;
+  ids.splice(fromIdx, 1);
+  let insertAt = ids.indexOf(targetId);
+  if (!before) insertAt += 1;
+  ids.splice(insertAt, 0, trackId);
+  const steps = ids.indexOf(trackId) - fromIdx;
+  if (steps === 0) return;
+  try {
+    const dir = steps > 0 ? "down" : "up";
+    for (let i = 0; i < Math.abs(steps); i++) {
+      await movePlaylistTrack(playlist.id, trackId, dir);
+    }
+    await refreshPlaylists();
+  } catch (err) {
+    showAlert(err.message);
   }
 }
 
-function renderTrackPanel() {
-  const playlist = playlists.find((p) => p.id === selectedPlaylistId);
-  if (!playlist) return;
-  trackPanelTitle.textContent = playlist.name;
-  trackList.innerHTML = "";
-  const tracks = playlist.tracks || [];
-  tracks.forEach((t, i) => {
-    const isPlaying = !!(currentCue && currentCue.url === t.url);
-    const row = document.createElement("div");
-    row.className = "track-row" + (isPlaying ? " playing" : "");
-    const playBtn = document.createElement("button");
-    playBtn.innerHTML = icon("play", { size: 13 });
-    playBtn.title = isPlaying ? "Играет сейчас — нажми, чтобы перезапустить" : "Играть";
-    playBtn.onclick = () => vtt.send({ type: "play_cue", cue: { url: t.url, name: t.name, volume: t.volume, loop: t.loop } });
-    const name = document.createElement("span");
-    name.className = "track-name";
-    name.textContent = t.name;
-    const volSlider = document.createElement("input");
-    volSlider.type = "range";
-    volSlider.min = 0;
-    volSlider.max = 100;
-    volSlider.value = Math.round(t.volume * 100);
-    volSlider.title = "Громкость трека";
-    volSlider.onchange = async () => {
-      const vol = volSlider.value / 100;
-      try {
-        await updatePlaylistTrack(playlist.id, t.id, t.name, vol, t.loop);
-        t.volume = vol;
-        // трек играет прямо сейчас — обновляем громкость на лету, не
-        // дожидаясь следующего запуска.
-        if (currentCue && currentCue.url === t.url) vtt.send({ type: "set_cue_volume", cue: { volume: vol } });
-      } catch (err) {
-        showAlert(err.message);
+// openTrackModal — то же окно и для новой записи (playlist задан, track —
+// нет), и для правки существующей (задан track): url трека неизменяем после
+// создания (см. updatePlaylistTrack — там нет параметра url), поэтому в
+// режиме правки вместо загрузки/библиотеки показывается имя файла как текст.
+function openTrackModal({ playlist, track }) {
+  const isEdit = !!track;
+  let pendingUrl = "";
+  let nameInput, librarySelect, volumeInput, loopInput, msgEl;
+
+  openModal({
+    title: isEdit ? "Изменить трек" : "Добавить трек",
+    okLabel: isEdit ? "Сохранить" : "Добавить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const nameField = document.createElement("div");
+      nameField.className = "field";
+      nameField.innerHTML = "<label>Имя трека</label>";
+      nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.maxLength = 60;
+      nameInput.value = track ? track.name : "";
+      nameField.appendChild(nameInput);
+      body.appendChild(nameField);
+
+      if (isEdit) {
+        const srcField = document.createElement("div");
+        srcField.className = "field";
+        const fileLabel = document.createElement("label");
+        fileLabel.textContent = "Файл";
+        const fileName = document.createElement("p");
+        fileName.className = "bt-modal-text dim";
+        fileName.textContent = decodeURIComponent(track.url.split("/").pop());
+        srcField.append(fileLabel, fileName);
+        body.appendChild(srcField);
+      } else {
+        const uploadField = document.createElement("div");
+        uploadField.className = "field";
+        uploadField.innerHTML = "<label>Загрузить файл</label>";
+        const uploadInput = document.createElement("input");
+        uploadInput.type = "file";
+        uploadInput.accept = "audio/*";
+        uploadInput.onchange = async () => {
+          const file = uploadInput.files[0];
+          if (!file) return;
+          try {
+            const { url } = await uploadFile(file, "audio");
+            pendingUrl = url;
+            if (!nameInput.value.trim()) nameInput.value = stripExt(file.name);
+            await refreshLibrary();
+            fillLibrary(librarySelect, latestAssets.audio || []);
+          } catch (err) {
+            msgEl.textContent = "Не удалось загрузить: " + err.message;
+          }
+        };
+        uploadField.appendChild(uploadInput);
+        body.appendChild(uploadField);
+
+        const libField = document.createElement("div");
+        libField.className = "field";
+        libField.innerHTML = "<label>или из библиотеки</label>";
+        librarySelect = document.createElement("select");
+        fillLibrary(librarySelect, latestAssets.audio || []);
+        librarySelect.onchange = () => {
+          if (!librarySelect.value) return;
+          pendingUrl = librarySelect.value;
+          if (!nameInput.value.trim()) nameInput.value = librarySelect.options[librarySelect.selectedIndex].textContent;
+        };
+        libField.appendChild(librarySelect);
+        body.appendChild(libField);
       }
-    };
-    const loopBtn = document.createElement("button");
-    const setLoopBtnLabel = () => {
-      loopBtn.innerHTML = icon(t.loop ? "repeat" : "minus", { size: 13 });
-      loopBtn.append(t.loop ? " Луп" : " Один раз");
-      loopBtn.title = t.loop
-        ? "Трек зациклен — нажми, чтобы играть один раз"
-        : "Трек играет один раз — нажми, чтобы зациклить";
-    };
-    setLoopBtnLabel();
-    loopBtn.onclick = async () => {
-      const newLoop = !t.loop;
-      try {
-        await updatePlaylistTrack(playlist.id, t.id, t.name, t.volume, newLoop);
-        t.loop = newLoop;
-        setLoopBtnLabel();
-      } catch (err) {
-        showAlert(err.message);
+
+      const volField = document.createElement("div");
+      volField.className = "field";
+      volField.innerHTML = "<label>Громкость</label>";
+      volumeInput = document.createElement("input");
+      volumeInput.type = "range";
+      volumeInput.min = 0;
+      volumeInput.max = 100;
+      volumeInput.value = Math.round((track ? track.volume : 0.8) * 100);
+      volField.appendChild(volumeInput);
+      body.appendChild(volField);
+
+      const loopRow = document.createElement("label");
+      loopRow.className = "checkbox-row";
+      loopInput = document.createElement("input");
+      loopInput.type = "checkbox";
+      loopInput.checked = track ? track.loop : false;
+      loopRow.append(loopInput, " зациклен");
+      body.appendChild(loopRow);
+
+      msgEl = document.createElement("p");
+      msgEl.className = "bt-modal-text dim";
+      body.appendChild(msgEl);
+
+      return nameInput;
+    },
+    onOk: async () => {
+      const name = nameInput.value.trim();
+      const url = isEdit ? track.url : pendingUrl || (librarySelect && librarySelect.value);
+      if (!name || !url) {
+        showAlert("Нужны имя и файл/трек из библиотеки.");
+        return;
       }
-    };
-    const upBtn = document.createElement("button");
-    upBtn.innerHTML = icon("arrow-up", { size: 13 });
-    upBtn.title = "Передвинуть выше";
-    upBtn.disabled = i === 0;
-    upBtn.onclick = async () => {
-      await movePlaylistTrack(playlist.id, t.id, "up");
-      await refreshPlaylists();
-    };
-    const downBtn = document.createElement("button");
-    downBtn.innerHTML = icon("arrow-down", { size: 13 });
-    downBtn.title = "Передвинуть ниже";
-    downBtn.disabled = i === tracks.length - 1;
-    downBtn.onclick = async () => {
-      await movePlaylistTrack(playlist.id, t.id, "down");
-      await refreshPlaylists();
-    };
-    const delBtn = document.createElement("button");
-    delBtn.innerHTML = icon("trash", { size: 13 });
-    delBtn.onclick = async () => {
-      if (!(await showConfirm(`Удалить трек «${t.name}»?`, { title: "Удалить трек", okLabel: "Удалить", danger: true }))) return;
+      const volume = volumeInput.value / 100;
+      const loop = loopInput.checked;
       try {
-        await deletePlaylistTrack(playlist.id, t.id);
+        if (isEdit) {
+          await updatePlaylistTrack(playlist.id, track.id, name, volume, loop);
+          // трек играет прямо сейчас — громкость и "зациклен" применяем на
+          // лету тем же приёмом, что и в loopBtn выше (см. set_cue_loop).
+          if (currentCue && currentCue.url === track.url) {
+            vtt.send({ type: "set_cue_volume", cue: { volume } });
+            vtt.send({ type: "set_cue_loop", cue: { loop } });
+          }
+        } else {
+          await addPlaylistTrack(playlist.id, url, name, volume, loop);
+          openPlaylistIds.add(playlist.id);
+        }
         await refreshPlaylists();
       } catch (err) {
         showAlert(err.message);
       }
-    };
-    delBtn.title = "Удалить трек";
-    row.append(playBtn, name, volSlider, loopBtn, upBtn, downBtn, delBtn);
-    trackList.appendChild(row);
+    },
+    onCancel: () => undefined,
   });
 }
 
 onPanelOpen("playlists", async () => {
-  backToPlaylistList(); // всегда открываемся на списке, не на треках прошлой сессии
-  refreshNewTrackLibrary();
   await refreshPlaylists();
 });
+
+// Плейлисты поменялись мимо этой вкладки — другая вкладка ДМ или импорт
+// Foundry (см. RoomService.NotifyPlaylistsChanged/net.js: "playlists_changed").
+// Перечитываем список сразу, а не только при следующем открытии панели —
+// иначе новый плейлист/трек был бы не виден без ручной перезагрузки страницы.
+document.addEventListener("vtt:playlistsChanged", refreshPlaylists);
 
 document.getElementById("newPlaylistForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1720,65 +2562,12 @@ document.getElementById("newPlaylistForm").addEventListener("submit", async (e) 
   const name = nameInput.value.trim();
   if (!name) return;
   try {
-    await createPlaylist(name);
+    const p = await createPlaylist(name);
     nameInput.value = "";
+    if (p && p.id) openPlaylistIds.add(p.id); // сразу разворачиваем новый — добавлять треки некуда, кроме как внутрь
     await refreshPlaylists();
   } catch (err) {
     showAlert(err.message);
-  }
-});
-
-// stripExt — "тема_боя.mp3" → "тема_боя", чтобы автоподставленное имя трека
-// не тащило за собой расширение файла.
-function stripExt(fileName) {
-  const idx = fileName.lastIndexOf(".");
-  return idx > 0 ? fileName.slice(0, idx) : fileName;
-}
-document.getElementById("newTrackUpload").onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const { url } = await uploadFile(file, "audio");
-    pendingNewTrackUrl = url;
-    if (!newTrackName.value.trim()) newTrackName.value = stripExt(file.name);
-    await refreshLibrary(); // заодно обновит newTrackLibrary через refreshNewTrackLibrary()
-  } catch (err) {
-    addTrackMsg.textContent = "Не удалось загрузить: " + err.message;
-  }
-};
-newTrackLibrary.onchange = () => {
-  if (!newTrackLibrary.value) return;
-  pendingNewTrackUrl = newTrackLibrary.value;
-  if (!newTrackName.value.trim()) {
-    newTrackName.value = newTrackLibrary.options[newTrackLibrary.selectedIndex].textContent;
-  }
-};
-
-addTrackForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  addTrackMsg.textContent = "";
-  const name = newTrackName.value.trim();
-  const url = pendingNewTrackUrl || newTrackLibrary.value;
-  if (!name || !url) {
-    addTrackMsg.textContent = "Нужны имя и файл/трек из библиотеки.";
-    return;
-  }
-  try {
-    await addPlaylistTrack(
-      selectedPlaylistId,
-      url,
-      name,
-      document.getElementById("newTrackVolume").value / 100,
-      document.getElementById("newTrackLoop").checked
-    );
-    newTrackName.value = "";
-    document.getElementById("newTrackUpload").value = "";
-    newTrackLibrary.value = "";
-    document.getElementById("newTrackLoop").checked = false;
-    pendingNewTrackUrl = "";
-    await refreshPlaylists();
-  } catch (err) {
-    addTrackMsg.textContent = err.message;
   }
 });
 
@@ -1787,21 +2576,55 @@ function renderNowPlaying() {
   if (!currentCue) {
     nowPlayingLabel.textContent = "Ничего не играет";
     cueVolumeSlider.value = 80;
+    nowPlayingProgressFill.style.width = "0%";
+    cuePlayPauseBtn.disabled = true;
+    cuePlayPauseBtn.classList.remove("active");
+    cuePlayPauseBtn.innerHTML = icon("play", { size: 12 });
+    cuePlayPauseBtn.title = "Ничего не играет";
   } else {
-    nowPlayingLabel.textContent = "▶ " + currentCue.name;
+    nowPlayingLabel.textContent = (currentCue.paused ? "⏸ " : "▶ ") + currentCue.name;
     cueVolumeSlider.value = Math.round(currentCue.volume * 100);
+    const btnState = cueBtnState(true);
+    cuePlayPauseBtn.disabled = false;
+    cuePlayPauseBtn.classList.toggle("active", btnState.action === "pause");
+    cuePlayPauseBtn.innerHTML = icon(btnState.icon, { size: 12 });
+    cuePlayPauseBtn.title = btnState.title;
   }
 }
 document.addEventListener("vtt:cueChanged", (e) => {
   currentCue = e.detail;
   renderNowPlaying();
-  if (openPanelSection === "playlists" && playlistsView === "tracks") renderTrackPanel(); // подсветить playing-трек
+  if (currentCue) {
+    // авто-разворачиваем плейлист с играющим треком — как и в Foundry, сразу
+    // видно, что и где сейчас звучит, не нужно искать вручную.
+    const owner = playlists.find((pl) => (pl.tracks || []).some((t) => t.url === currentCue.url));
+    if (owner) openPlaylistIds.add(owner.id);
+  }
+  renderPlaylistAccordion();
 });
+cuePlayPauseBtn.onclick = () => {
+  if (!currentCue) return;
+  vtt.send({ type: currentCue.paused ? "resume_cue" : "pause_cue" });
+};
 document.getElementById("cueStopBtn").onclick = () => vtt.send({ type: "stop_cue" });
 cueVolumeSlider.oninput = () => {
   if (!currentCue) return;
   vtt.send({ type: "set_cue_volume", cue: { volume: cueVolumeSlider.value / 100 } });
 };
+
+// updateCueProgress — тонкая полоска прогресса и в баре "сейчас играет", и у
+// самого трека в развёрнутом плейлисте (если он сейчас виден), по timeupdate
+// на канале ДМ (vtt.cueAudio, слушатель вешается в boot() выше). Пока ДМ
+// тащит полоску сам (scrubbing, см. wireSeekBar), сюда не лезем — иначе ещё
+// не перемотанный timeupdate дёргал бы её обратно под курсором.
+function updateCueProgress() {
+  if (scrubbing) return;
+  const audio = vtt.cueAudio;
+  const pct = audio && audio.duration ? Math.min(100, (audio.currentTime / audio.duration) * 100) : 0;
+  nowPlayingProgressFill.style.width = pct + "%";
+  const activeFill = playlistAccordion.querySelector(".bt-track.playing .bt-track-progress .progress-fill");
+  if (activeFill) activeFill.style.width = pct + "%";
+}
 
 // Автопереключение плейлиста ведёт клиент ДМ: сервер не декодирует аудио и
 // не знает длительность трека, поэтому следующий трек шлём сами по событию
@@ -1826,548 +2649,31 @@ function handleCueEnded() {
 // верхнем уровне — ей нужен vtt.sideMenu, который появляется только после
 // initVTT().
 
-// ================= заметки ДМ =================
-// Мастер-детейл в стиле "Плейлистов" (noteListView ⇄ noteDetailView), плюс
-// рендер markdown + вики-ссылки [[...]] (см. notes/markdown.js — общий модуль
-// с web/src/pages/note-window.js, отдельным окном заметки).
-const noteListView = document.getElementById("noteListView");
-const noteDetailView = document.getElementById("noteDetailView");
-const noteRows = document.getElementById("noteRows");
-const noteSearch = document.getElementById("noteSearch");
-const noteCurrentFolderEl = document.getElementById("noteCurrentFolder");
-const noteFolderSelect = document.getElementById("noteFolderSelect");
-const noteDetailTitle = document.getElementById("noteDetailTitle");
-const noteRenderView = document.getElementById("noteRenderView");
-const noteEditView = document.getElementById("noteEditView");
-const noteEditArea = document.getElementById("noteEditArea");
-const noteEditToggleBtn = document.getElementById("noteEditToggleBtn");
-const noteMsg = document.getElementById("noteMsg");
-mountNoteToolbar(document.getElementById("noteToolbar"), noteEditArea);
+// ================= значки журнала на карте =================
+// Значок-свиток на карте (двойной клик, см. vtt/interaction.js) ведёт на
+// запись журнала стола (domain.NoteMarker с library:"journal"). Раскладка
+// значков и меню по ПКМ — выше (noteMarkerMenu) и в vtt/interaction.js; сам
+// журнал открывается плавающим окном (openJournalWindow).
+document.addEventListener("vtt:openNoteMarker", async (e) => {
+  const { section, foundryEntry, foundryFolder } = e.detail;
+  let entryId = e.detail.noteId;
 
-let notesList = []; // [{id,title,folder,updatedAt}] — метаданные, для дерева и резолва вики-ссылок
-let noteFolders = []; // ["Приключение", "Приключение/Глава 1", ...] — включая пустые
-let notesView = "list"; // "list" | "detail"
-let selectedNote = null; // {id,title,folder,content,updatedAt} заметки, открытой в детейле
-let noteEditing = false;
-// openNoteFolders — какие ветки дерева раскрыты; currentNoteFolder — в какую
-// папку попадёт следующая созданная заметка/подпапка ("" — корень).
-const openNoteFolders = new Set();
-let currentNoteFolder = "";
-// lastOpenedNoteId — подсветка «вот где ты был» в дереве после возврата из
-// открытой заметки: в библиотеке на сотни записей найти её глазами заново
-// иначе не проще, чем в первый раз.
-let lastOpenedNoteId = "";
-
-async function refreshNotesList() {
-  try {
-    [notesList, noteFolders] = await Promise.all([fetchNotes(), fetchNoteFolders()]);
-  } catch (err) {
-    console.error("не удалось загрузить список заметок:", err);
-    notesList = [];
-    noteFolders = [];
-  }
-  renderNoteRows();
-}
-
-// noteFolderTree — дерево из плоских путей заметок и папок. Узел:
-// {path, name, children: Map, notes: []}. Пустые папки приезжают отдельным
-// списком (см. fetchNoteFolders) — иначе только что созданная папка
-// пропадала бы до первой заметки в ней.
-function noteFolderTree() {
-  const root = { path: "", name: "", children: new Map(), notes: [] };
-  const nodeFor = (path) => {
-    let node = root;
-    if (!path) return node;
-    let acc = "";
-    for (const segment of path.split("/")) {
-      acc = acc ? acc + "/" + segment : segment;
-      if (!node.children.has(segment)) {
-        node.children.set(segment, { path: acc, name: segment, children: new Map(), notes: [] });
-      }
-      node = node.children.get(segment);
+  // Значок из импорта модуля (см. domain.NoteMarker.FoundryEntry): настоящей
+  // записи на момент разбора сцены ещё не было — резолвим её сейчас по имени
+  // в журнале стола.
+  if (!entryId && foundryEntry) {
+    const norm = (s) => (s || "").trim().toLowerCase();
+    const journal = await fetchJournal().catch(() => []);
+    const named = journal.filter((x) => norm(x.title) === norm(foundryEntry));
+    const hit = named.find((x) => norm(x.folder) === norm(foundryFolder)) || named[0];
+    if (!hit) {
+      showAlert("Запись, на которую ведёт этот значок, не найдена — её могли не импортировать.");
+      return;
     }
-    return node;
-  };
-  for (const folder of noteFolders) nodeFor(folder);
-  for (const n of notesList) nodeFor(n.folder || "").notes.push(n);
-  return root;
-}
-
-// noteRowEl — лист дерева: та же плоская строка-узел, что .compendium-node
-// у Справочника (иконка + название), а не карточка в две строки, как было.
-// Дата правки ушла в подсказку — в дереве из сотен импортированных заметок
-// (см. импорт Foundry) она только шумит, а место под неё съедает название.
-function noteRowEl(n, { showFolder = false, depth = 0 } = {}) {
-  const row = document.createElement("div");
-  row.className = "note-row" + (lastOpenedNoteId === n.id ? " current" : "");
-  row.style.setProperty("--depth", String(depth));
-  const iconEl = document.createElement("span");
-  iconEl.className = "note-row-icon";
-  iconEl.innerHTML = icon("file-text", { size: 13 });
-  const title = document.createElement("span");
-  title.className = "note-title";
-  title.textContent = n.title;
-  row.append(iconEl, title);
-  // В плоском списке поиска папка — единственный способ понять, какая из
-  // двух одноимённых заметок перед тобой, поэтому там она в строке.
-  if (showFolder && n.folder) {
-    const meta = document.createElement("span");
-    meta.className = "note-meta";
-    meta.textContent = n.folder;
-    row.appendChild(meta);
+    entryId = hit.id;
   }
-  row.title = (n.folder ? n.folder + "/" : "") + n.title + " — правка " + formatDate(n.updatedAt);
-  row.onclick = () => openNote(n.id);
-  return row;
-}
-
-function noteFolderRowEl(node, depth) {
-  const open = openNoteFolders.has(node.path);
-  const row = document.createElement("div");
-  row.className = "note-folder-row" + (open ? " open" : "") + (currentNoteFolder === node.path ? " current" : "");
-  row.style.setProperty("--depth", String(depth));
-
-  // Шеврон всегда один и тот же (chevron-right), раскрытие показывает
-  // поворотом через CSS-класс .open — при подмене иконки строка заметно
-  // дёргалась на каждый клик.
-  const chevron = document.createElement("span");
-  chevron.className = "note-folder-chevron";
-  chevron.innerHTML = icon("chevron-right", { size: 12 });
-  const folderIcon = document.createElement("span");
-  folderIcon.className = "note-folder-icon";
-  folderIcon.innerHTML = icon("folder", { size: 13 });
-  const name = document.createElement("span");
-  name.className = "note-folder-name";
-  name.textContent = node.name;
-  const count = document.createElement("span");
-  count.className = "note-folder-count";
-  count.textContent = String(countNotesIn(node));
-
-  // Клик по папке делает две вещи сразу — раскрывает её и делает "текущей"
-  // (новая заметка/подпапка создаётся именно в ней): это то же поведение,
-  // что у файловых менеджеров, и избавляет от отдельного «выбрать папку».
-  const select = () => {
-    currentNoteFolder = node.path;
-    if (open) openNoteFolders.delete(node.path);
-    else openNoteFolders.add(node.path);
-    renderNoteRows();
-  };
-
-  const actions = document.createElement("span");
-  actions.className = "note-folder-actions";
-  actions.append(
-    folderActionBtn("folder-plus", "Создать подпапку", () => createNoteFolderPrompt(node.path)),
-    folderActionBtn("pencil", "Переименовать папку", () => renameNoteFolderPrompt(node)),
-    folderActionBtn("trash", "Удалить папку вместе с заметками", () => deleteNoteFolderPrompt(node))
-  );
-  row.append(chevron, folderIcon, name, count, actions);
-  row.title = node.path;
-  row.onclick = select;
-  return row;
-}
-
-// noteRootRowEl — «корень библиотеки»: и заголовок дерева, и цель создания
-// (клик возвращает currentNoteFolder в ""), вместо отдельной кнопки-крестика
-// рядом с формой, которая раньше делала то же самое неочевидным способом.
-function noteRootRowEl(root) {
-  const row = document.createElement("div");
-  row.className = "note-root-row" + (currentNoteFolder === "" ? " current" : "");
-  row.title = "Создавать в корне библиотеки";
-  const name = document.createElement("span");
-  name.className = "note-folder-name";
-  name.textContent = "Библиотека заметок";
-  const count = document.createElement("span");
-  count.className = "note-folder-count";
-  count.textContent = String(countNotesIn(root));
-  row.append(name, count);
-  row.onclick = () => {
-    currentNoteFolder = "";
-    renderNoteRows();
-  };
-  return row;
-}
-
-function folderActionBtn(iconName, title, onClick) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "note-icon-btn";
-  btn.title = title;
-  btn.innerHTML = icon(iconName, { size: 12 });
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    onClick();
-  };
-  return btn;
-}
-
-function countNotesIn(node) {
-  let total = node.notes.length;
-  for (const child of node.children.values()) total += countNotesIn(child);
-  return total;
-}
-
-// renderNoteTree — вложенность выражается ЛЕВЫМ ОТСТУПОМ строки (--depth,
-// см. .note-folder-row/.note-row в dm.html), а не вложенными контейнерами и
-// не marginLeft: строка остаётся во всю ширину панели, поэтому её фон при
-// наведении не «съезжает» уступами вправо с глубиной.
-function renderNoteTree(node, container, depth) {
-  const folders = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  for (const child of folders) {
-    container.appendChild(noteFolderRowEl(child, depth));
-    if (openNoteFolders.has(child.path)) renderNoteTree(child, container, depth + 1);
-  }
-  const notes = [...node.notes].sort((a, b) => a.title.localeCompare(b.title, "ru"));
-  for (const n of notes) container.appendChild(noteRowEl(n, { depth }));
-}
-
-let noteRowsKey = null;
-
-function noteRowsStateKey(filter) {
-  return JSON.stringify([
-    filter,
-    currentNoteFolder,
-    lastOpenedNoteId,
-    [...openNoteFolders].sort(),
-    notesList.map((n) => [n.id, n.title, n.folder || "", n.updatedAt]),
-    noteFolders,
-  ]);
-}
-
-function renderNoteRows() {
-  const filter = noteSearch.value.trim().toLowerCase();
-
-  noteCurrentFolderEl.textContent = currentNoteFolder || "корень библиотеки";
-
-  const key = noteRowsStateKey(filter);
-  if (key === noteRowsKey) return;
-  noteRowsKey = key;
-
-  // Позицию прокрутки дерева сохраняем через перерисовку: без этого любой
-  // клик по папке в глубине длинного списка отбрасывал бы список наверх.
-  const scrollTop = noteRows.scrollTop;
-  const rows = document.createDocumentFragment();
-
-  // Поиск показывает плоский список по всей библиотеке: искать заметку,
-  // раскрывая ветки руками, — ровно то, от чего поиск и избавляет. Папка
-  // при этом видна в строке справа.
-  if (filter) {
-    const found = notesList.filter(
-      (n) => n.title.toLowerCase().includes(filter) || (n.folder || "").toLowerCase().includes(filter)
-    );
-    if (!found.length) rows.appendChild(hintEl("Ничего не найдено."));
-    else for (const n of found) rows.appendChild(noteRowEl(n, { showFolder: true }));
-    noteRows.replaceChildren(rows);
-    noteRows.scrollTop = 0; // новый список — новая система координат, старая прокрутка бессмысленна
-    return;
-  }
-
-  const tree = noteFolderTree();
-  rows.appendChild(noteRootRowEl(tree));
-  renderNoteTree(tree, rows, 0);
-  if (!notesList.length && !noteFolders.length) {
-    rows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка» в шапке."));
-  }
-  noteRows.replaceChildren(rows);
-  noteRows.scrollTop = scrollTop;
-}
-
-function hintEl(text) {
-  const p = document.createElement("p");
-  p.className = "hint";
-  p.textContent = text;
-  return p;
-}
-noteSearch.oninput = renderNoteRows;
-
-// ---- папки: создание/переименование/удаление ----
-
-async function createNoteFolderPrompt(parent) {
-  const name = await showPrompt("Название папки:", {
-    title: "Новая папка",
-    okLabel: "Создать",
-    hint: parent ? `Внутри «${parent}».` : "В корне библиотеки.",
-  });
-  if (!name || !name.trim()) return;
-  const path = parent ? parent + "/" + name.trim() : name.trim();
-  try {
-    await createNoteFolder(path);
-    openNoteFolders.add(parent);
-    currentNoteFolder = path;
-    await refreshNotesList();
-  } catch (err) {
-    showAlert("Не удалось создать папку: " + err.message);
-  }
-}
-
-async function renameNoteFolderPrompt(node) {
-  const name = await showPrompt("Новое название:", { title: "Переименовать папку", value: node.name, okLabel: "Переименовать" });
-  if (!name || !name.trim() || name.trim() === node.name) return;
-  const parent = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
-  const target = parent ? parent + "/" + name.trim() : name.trim();
-  try {
-    await renameNoteFolder(node.path, target);
-    // Раскрытые ветки и «текущая папка» ссылались на старый путь — переносим
-    // их на новый, иначе дерево схлопнется прямо под руками.
-    for (const open of [...openNoteFolders]) {
-      if (open === node.path || open.startsWith(node.path + "/")) {
-        openNoteFolders.delete(open);
-        openNoteFolders.add(target + open.slice(node.path.length));
-      }
-    }
-    if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) {
-      currentNoteFolder = target + currentNoteFolder.slice(node.path.length);
-    }
-    await refreshNotesList();
-  } catch (err) {
-    showAlert("Не удалось переименовать: " + err.message);
-  }
-}
-
-async function deleteNoteFolderPrompt(node) {
-  const total = countNotesIn(node);
-  const what = total ? `папку «${node.path}» и ${total} заметок внутри` : `пустую папку «${node.path}»`;
-  if (!(await showConfirm(`Удалить ${what}?`, { title: "Удалить папку", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
-  try {
-    await deleteNoteFolder(node.path);
-    if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) currentNoteFolder = "";
-    await refreshNotesList();
-  } catch (err) {
-    showAlert("Не удалось удалить папку: " + err.message);
-  }
-}
-
-document.getElementById("newNoteFolderBtn").onclick = () => createNoteFolderPrompt(currentNoteFolder);
-
-function renderNotesPanel() {
-  const showDetail = notesView === "detail" && selectedNote;
-  // flex, а не block: обе половины — колонки со своей полосой прокрутки
-  // внутри (дерево / текст), см. .note-list-view и #noteDetailView в dm.html.
-  noteListView.style.display = showDetail ? "none" : "flex";
-  noteDetailView.style.display = showDetail ? "flex" : "none";
-  if (showDetail) renderNoteDetail();
-  else renderNoteRows();
-}
-
-// renderNoteFolderSelect — «в какой папке лежит эта заметка» в карточке.
-// Список — все существующие папки плюс корень; выбор сразу переносит файл
-// (см. moveNote), отдельной кнопки «сохранить» тут не нужно.
-function renderNoteFolderSelect() {
-  noteFolderSelect.innerHTML = "";
-  const options = ["", ...noteFolders];
-  if (selectedNote.folder && !options.includes(selectedNote.folder)) options.push(selectedNote.folder);
-  for (const folder of options) {
-    const opt = document.createElement("option");
-    opt.value = folder;
-    opt.textContent = folder || "— корень библиотеки —";
-    opt.selected = folder === (selectedNote.folder || "");
-    noteFolderSelect.appendChild(opt);
-  }
-}
-
-noteFolderSelect.onchange = async () => {
-  if (!selectedNote) return;
-  const target = noteFolderSelect.value;
-  try {
-    selectedNote = await moveNote(selectedNote.id, target);
-    noteMsg.textContent = target ? `Перенесено в «${target}».` : "Перенесено в корень библиотеки.";
-    refreshNotesList();
-  } catch (err) {
-    noteMsg.textContent = err.message;
-    renderNoteFolderSelect(); // вернуть селект к реальному состоянию
-  }
-};
-
-function renderNoteDetail() {
-  noteMsg.textContent = "";
-  noteDetailTitle.textContent = selectedNote.title;
-  renderNoteFolderSelect();
-  noteEditView.style.display = noteEditing ? "block" : "none";
-  noteRenderView.style.display = noteEditing ? "none" : "block";
-  noteEditToggleBtn.innerHTML = icon(noteEditing ? "eye" : "pencil", { size: 14 });
-  noteEditToggleBtn.title = noteEditing ? "Просмотр" : "Редактировать";
-  noteEditToggleBtn.classList.toggle("active", noteEditing);
-  if (noteEditing) {
-    noteEditArea.value = selectedNote.content;
-    noteEditArea.focus();
-  } else {
-    noteRenderView.innerHTML = renderNoteHtml(selectedNote.content);
-    enhanceRolls(noteRenderView, sendNoteRoll);
-  }
-}
-
-// sendNoteRoll — бросок из текста заметки уходит в общий лог стола тем же
-// сообщением, что и кнопки панели кубов (см. dice.js).
-function sendNoteRoll(formula, label) {
-  if (!vtt) return;
-  const title = selectedNote && selectedNote.title;
-  vtt.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
-}
-
-let noteOpenSeq = 0;
-
-async function openNote(id, { edit = false } = {}) {
-  const seq = ++noteOpenSeq;
-  notesView = "detail";
-  let note;
-  try {
-    note = await fetchNote(id);
-  } catch (err) {
-    if (seq !== noteOpenSeq) return;
-    showAlert("Не удалось открыть заметку: " + err.message);
-    notesView = "list";
-    renderNotesPanel();
-    return;
-  }
-  if (seq !== noteOpenSeq) return;
-  selectedNote = note;
-  noteEditing = edit;
-  lastOpenedNoteId = note.id;
-  revealNoteFolder(note.folder || "");
-  renderNotesPanel();
-}
-
-// revealNoteFolder — раскрыть всю цепочку папок до заметки и сделать её
-// папку текущей. Заметку открывают не только кликом по дереву (значок на
-// карте, вики-ссылка, поиск) — без этого возврат в список показывал бы
-// свёрнутое дерево без всякого следа того, что только что читали.
-function revealNoteFolder(folder) {
-  currentNoteFolder = folder;
-  let acc = "";
-  for (const segment of folder ? folder.split("/") : []) {
-    acc = acc ? acc + "/" + segment : segment;
-    openNoteFolders.add(acc);
-  }
-}
-
-function backToNoteList() {
-  notesView = "list";
-  selectedNote = null;
-  renderNotesPanel();
-  refreshNotesList(); // заголовок мог поменяться после правки
-}
-document.getElementById("noteBackBtn").onclick = backToNoteList;
-
-// Ссылки .catalog-ref внутри текста заметки — на карточки библиотек и на
-// другие заметки; их эмитит импорт модуля Foundry вместо своих @UUID[…]
-// (см. internal/foundry/links.go). Открываются плавающим окном, как и из
-// описаний карточек.
-wireCatalogLinks(noteRenderView);
-
-// клик по вики-ссылке [[...]] внутри рендера — существующая заметка
-// открывается тут же; для несуществующей предлагаем создать с этим заголовком.
-wireWikiLinks(noteRenderView, () => notesList, {
-  // Папка открытой заметки — точка отсчёта для ссылок вида [[NPC/Марго]] и
-  // для [[Заголовок]] без пути (см. resolveWikiTarget).
-  getFolder: () => (selectedNote && selectedNote.folder) || "",
-  onOpen: (id) => openNote(id),
-  onCreateMissing: async (title, folder) => {
-    const where = folder ? ` в папке «${folder}»` : " в корне библиотеки";
-    if (!(await showConfirm(`Заметки «${title}» не существует. Создать её${where}?`, { title: "Новая заметка", okLabel: "Создать" }))) return;
-    try {
-      const n = await createNote(`# ${title}\n\n`, folder);
-      await refreshNotesList();
-      await openNote(n.id, { edit: true });
-    } catch (err) {
-      showAlert("Не удалось создать заметку: " + err.message);
-    }
-  },
-});
-
-noteEditToggleBtn.onclick = () => {
-  noteEditing = !noteEditing;
-  renderNoteDetail();
-};
-
-document.getElementById("noteSaveBtn").onclick = async () => {
-  noteMsg.textContent = "";
-  try {
-    selectedNote = await updateNote(selectedNote.id, noteEditArea.value);
-    noteEditing = false;
-    renderNoteDetail();
-    refreshNotesList();
-  } catch (err) {
-    noteMsg.textContent = err.message;
-  }
-};
-
-document.getElementById("noteDeleteBtn").onclick = async () => {
-  if (!selectedNote) return;
-  const okDelete = await showConfirm(`Удалить заметку «${selectedNote.title}»?`, {
-    title: "Удалить заметку",
-    okLabel: "Удалить",
-    danger: true,
-    hint: "Это необратимо. Значки на карте, ссылающиеся на неё, останутся, но перестанут открываться.",
-  });
-  if (!okDelete) return;
-  try {
-    await deleteNote(selectedNote.id);
-    backToNoteList();
-  } catch (err) {
-    showAlert("Не удалось удалить: " + err.message);
-  }
-};
-
-document.getElementById("notePlaceBtn").onclick = () => {
-  if (!selectedNote) return;
-  closeSidePanel();
-  document.dispatchEvent(
-    new CustomEvent("vtt:placeNoteMarker", { detail: { noteId: selectedNote.id, label: selectedNote.title, library: "" } })
-  );
-  showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок заметки" });
-};
-
-document.getElementById("noteWindowBtn").onclick = () => {
-  if (!selectedNote) return;
-  // Как и лист персонажа: сначала плавающее окно поверх канваса (тот же
-  // приём, см. floating-window.js), настоящее отдельное окно браузера —
-  // уже кнопкой 🗗 В ШАПКЕ этого плавающего окна, не отсюда напрямую.
-  openFloatingWindow({
-    key: "note-" + selectedNote.id,
-    title: selectedNote.title,
-    url: `/note-window.html?id=${selectedNote.id}`,
-    width: 560,
-    height: 760,
-    popoutFeatures: "width=560,height=760",
-  });
-};
-
-document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const titleInput = document.getElementById("newNoteTitle");
-  const title = titleInput.value.trim();
-  if (!title) return;
-  try {
-    // Новая заметка ложится в выбранную сейчас папку дерева (см.
-    // currentNoteFolder) — то же, чего ждёшь от «создать» в файловом
-    // менеджере.
-    const n = await createNote(`# ${title}\n\n`, currentNoteFolder);
-    titleInput.value = "";
-    await refreshNotesList();
-    await openNote(n.id, { edit: true });
-  } catch (err) {
-    showAlert("Не удалось создать заметку: " + err.message);
-  }
-});
-
-// значок на карте (двойной клик, см. interaction.js) — открыть панель прямо
-// на нужной заметке, а не просто раскрыть раздел.
-document.addEventListener("vtt:openNoteMarker", (e) => {
-  // Значок может вести и в заметки ДМ, и в журнал стола (см.
-  // domain.NoteMarker.Library) — открываем то, на что он реально ссылается,
-  // а не всегда панель заметок.
-  if (e.detail.library === "journal") {
-    openJournalWindow(e.detail.noteId);
-    return;
-  }
-  showSidePanelSection("notes");
-  openNote(e.detail.noteId);
-});
-
-onPanelOpen("notes", () => {
-  notesView = "list";
-  selectedNote = null;
-  renderNotesPanel();
-  refreshNotesList();
+  if (!entryId) return;
+  openJournalWindow(entryId, section);
 });
 
 // ================= Компендиум (см. compendium-menu.js/catalog.js) =================
@@ -2384,10 +2690,21 @@ onPanelOpen("notes", () => {
 //   которое её открыло) — форвардим в открытые catalog-* окна через
 //   floating-window.js:postToOpenWindows, чтобы их список сам обновился без
 //   ручного закрытия/открытия.
-window.addEventListener("message", (e) => {
+window.addEventListener("message", async (e) => {
   if (e.origin !== location.origin || !e.data) return;
   if (e.data.type === "beacon:openFloatingWindow") {
     openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
+  } else if (e.data.type === "beacon:openCombatantCard") {
+    // Клик по бойцу в трекере, вынесенном в плавающее окно (iframe
+    // combat-tracker.html): своей колонки у него нет — показываем в нашей
+    // (см. combatant-card.js: openCombatantCard).
+    openCardInDock({ key: e.data.key, title: e.data.title, url: e.data.url });
+  } else if (e.data.type === "beacon:focusMapObject") {
+    // Кнопка "Показать на карте" в трекере, вынесенном в плавающее окно
+    // (iframe combat-tracker.html): своего канваса у него нет — наводим
+    // камеру здесь (см. combat-panel.js: focusCombatantToken, тот же жест,
+    // что и у "vtt:focusMapObject" из renderLightList ниже).
+    document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: e.data.kind, id: e.data.id } }));
   } else if (e.data.type === "beacon:placeJournalMarker") {
     // Значок записи журнала на карту. Просит окно журнала (iframe, см.
     // pages/journal.js) — расстановка живёт здесь, потому что канвас есть
@@ -2398,6 +2715,39 @@ window.addEventListener("message", (e) => {
       })
     );
     showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок журнала" });
+  } else if (e.data.type === "beacon:switchScene") {
+    // Ссылка на сцену внутри текста заметки/журнала (см. catalog-links.js,
+    // internal/foundry/links.go). Имя ищем в списке сцен стола без учёта
+    // регистра — ссылка родом из чужого модуля. Нашлась и не активна —
+    // переключаемся; нет — тихо ничего не делаем (сцену могли не
+    // импортировать или переименовать).
+    const norm = (s) => (s || "").trim().toLowerCase();
+    const scene = sceneList.find((s) => norm(s.name) === norm(e.data.name));
+    if (!scene) {
+      showAlert(`Сцены «${e.data.name}» нет за столом — импортируй карту из модуля или проверь её название.`);
+    } else if (vtt && scene.id !== currentSceneId) {
+      vtt.send({ type: "switch_scene", sceneId: scene.id });
+      closeSidePanel(); // убрать панель с карты, чтобы новую сцену было видно
+    }
+  } else if (e.data.type === "beacon:openPlaylist") {
+    // Ссылка на плейлист внутри текста заметки/журнала (@UUID[Playlist.…],
+    // см. internal/foundry/links.go). Открываем раздел «Плейлисты» и
+    // разворачиваем нужный — не запускаем сам: включать музыку по клику
+    // на слове посреди чтения было бы слишком.
+    showSidePanelSection("playlists");
+    await refreshPlaylists();
+    const norm = (s) => (s || "").trim().toLowerCase();
+    const p = playlists.find((x) => norm(x.name) === norm(e.data.name));
+    if (!p) {
+      showAlert(`Плейлиста «${e.data.name}» нет — импортируй музыку из модуля или проверь название.`);
+    } else {
+      openPlaylistIds.add(p.id);
+      renderPlaylistAccordion();
+      const row = [...playlistAccordion.querySelectorAll(".bt-playlist-name")].find(
+        (n) => norm(n.textContent) === norm(p.name)
+      );
+      if (row) row.scrollIntoView({ block: "center" });
+    }
   } else if (
     e.data.type === "beacon:monsterSaved" ||
     e.data.type === "beacon:spellSaved" ||
@@ -2405,26 +2755,19 @@ window.addEventListener("message", (e) => {
     e.data.type === "beacon:referenceSaved" ||
     e.data.type === "beacon:conditionSaved"
   ) {
+    // Статблок правили в соседнем окне — попап "действия" держит свой кэш
+    // монстров (см. combat-actions-peek.js), сбрасываем, иначе он ещё долго
+    // показывал бы старый текст.
+    if (e.data.type === "beacon:monsterSaved") invalidateActionsPeek(e.data.id);
     postToOpenWindows("catalog-", e.data);
   } else if (e.data.type === "beacon:foundryImported") {
-    // Импорт пакета Foundry (foundry-import.js) заводит заметки, сцены и сам
-    // пакет в списке установленных. Сцены приезжают сокетом сами (см.
-    // room.go: broadcastSceneList), а вот список заметок и раздел
-    // "Настройки" читаются только HTTP-ом при открытии панели — освежаем их
-    // здесь, иначе до F5 висел бы старый список.
+    // Импорт пакета Foundry (foundry-import.js) заводит сцены и сам пакет в
+    // списке установленных. Сцены приезжают сокетом сами (см.
+    // room.go: broadcastSceneList), а раздел "Настройки" читается только
+    // HTTP-ом при открытии панели — освежаем его здесь, иначе до F5 висел бы
+    // старый список.
     foundryModulesUpdates = null; // версии, проверенные ДО импорта, теперь врут
     refreshOpenPanel("settings");
-    refreshNotesList();
-  } else if (e.data.type === "beacon:noteSaved" || e.data.type === "beacon:noteDeleted") {
-    // Заметка, открытая отдельным окном (note-window.js): в дереве панели
-    // могло смениться название, а удалённую надо убрать и закрыть её карточку.
-    const isOpenHere = !!(selectedNote && selectedNote.id === e.data.id);
-    if (e.data.type === "beacon:noteDeleted" && isOpenHere) {
-      backToNoteList(); // сам перечитает список
-    } else {
-      if (isOpenHere) openNote(e.data.id); // тот же текст, что сохранили в окне
-      refreshNotesList();
-    }
   } else if (e.data.type === "beacon:applySpellStatus") {
     // Клик по чипу «Накладывает: …» в карточке заклинания (см.
     // pages/spellbook.js: readStatuses). Сама карточка живёт в iframe и цели
@@ -2595,8 +2938,39 @@ initCombatPanel({
     search: document.getElementById("combatSearch"),
     searchResults: document.getElementById("combatSearchResults"),
     list: document.getElementById("combatList"),
+    // followBtn — только у встроенной панели: колонка-док есть на этой
+    // странице и нигде больше (см. combat-panel.js: почему кнопки нет в
+    // вынесенном окне трекера).
+    followBtn: document.getElementById("combatFollowBtn"),
+    // вкладки "Инициатива"/"Убитые" (см. combat-panel.js: switchCombatTab) —
+    // разметка идентична вынесенному окну трекера (combat-tracker.html).
+    tabTrackerBtn: document.getElementById("combatTabTrackerBtn"),
+    tabKilledBtn: document.getElementById("combatTabKilledBtn"),
+    trackerTab: document.getElementById("combatTrackerTab"),
+    killedTab: document.getElementById("combatKilledTab"),
+    killedList: document.getElementById("combatKilledList"),
+    killedSummary: document.getElementById("combatKilledSummary"),
+    killedClearBtn: document.getElementById("combatKilledClearBtn"),
   },
 });
+
+// openCardInDock — куда попадает клик по бойцу в трекере и по фишке в
+// верхнем оверлее хода. Во время боя статблок нужен открытым постоянно, а
+// плавающее окно для этого приходится всё время оттаскивать с карты — та же
+// причина, по которой у игрока в доке живёт лист персонажа (см.
+// pages/player.js). Кнопка ⧉ в шапке дока переносит карточку в плавающее
+// окно, если ДМ хочет её на втором мониторе.
+function openCardInDock(target) {
+  openSheetDock(document.getElementById("sheetDock"), {
+    key: target.key,
+    title: target.title,
+    url: target.url,
+    // Колонка встаёт между панелью рейла и картой и накрывает канвас —
+    // плашке статуса надо отъехать правее, ровно как при открытии панели.
+    onLayoutChange: () => updateChromeInset(panelWidth),
+  });
+}
+setCardOpener(openCardInDock);
 
 // combatShowHpToggle — раздел "Настройки" (общий, не привязан к сцене):
 // показывать ли HP в верхнем оверлее хода (combat-bar.js) игрокам/TV, а не
@@ -2607,6 +2981,7 @@ initCombatPanel({
 // поменяли из другого места (например, из этой же комнаты в другой вкладке).
 const combatShowHpToggle = document.getElementById("combatShowHpToggle");
 document.addEventListener("vtt:combatState", (e) => {
+
   combatShowHpToggle.checked = !!e.detail.showHp;
 });
 combatShowHpToggle.onchange = () => {
@@ -2625,7 +3000,20 @@ lootingEnabledToggle.onchange = () => {
   vtt.send({ type: "set_looting_enabled", lootingEnabled: lootingEnabledToggle.checked });
 };
 
-// "🗗 Открыть в окне" — тот же приём, что у заметок (#noteWindowBtn): вся
+// combatHighlightActiveToggle — тот же приём: значение приходит внутри
+// "combat_state" (payload.highlightActiveToken, см.
+// domain.CombatState.HighlightActiveToken / "set_highlight_active_token" в
+// internal/service/room.go) — подсвечивать ли на карте токен бойца, чей
+// сейчас ход (см. web/src/vtt/layers/tokens.js: turnRing).
+const combatHighlightActiveToggle = document.getElementById("combatHighlightActiveToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  combatHighlightActiveToggle.checked = e.detail.highlightActiveToken !== false;
+});
+combatHighlightActiveToggle.onchange = () => {
+  vtt.send({ type: "set_highlight_active_token", highlightActiveToken: combatHighlightActiveToggle.checked });
+};
+
+// "🗗 Открыть в окне" — тот же приём, что у журнала (openJournalWindow): вся
 // панель целиком, тем же кодом (combat-panel.js), в плавающем окне поверх
 // канваса — удобно держать трекер открытым постоянно, не занимая рейл-панель.
 document.getElementById("combatPopoutBtn").onclick = () => {
@@ -2640,6 +3028,7 @@ document.addEventListener("mousedown", (e) => {
   if (fogAreaMenu.style.display === "block" && !fogAreaMenu.contains(e.target)) closeFogAreaMenu();
   if (wallMenu.style.display === "block" && !wallMenu.contains(e.target)) closeWallMenu();
   if (buildingMenu.style.display === "block" && !buildingMenu.contains(e.target)) closeBuildingMenu();
+  if (canvasMenu.style.display === "block" && !canvasMenu.contains(e.target)) closeCanvasMenu();
 });
 
 // ===================================================================
@@ -2682,6 +3071,11 @@ function setSidePanelSection(name) {
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
     panelOpenHandlers[openPanelSection]();
   }
+  // Токены света редактируются на карте ТОЛЬКО пока открыт этот раздел (см.
+  // interaction.js: lightEditActive). Событие шлём на каждое переключение
+  // раздела, а не только на открытие/закрытие света: уход в любой другой
+  // раздел так же выключает режим, как и закрытие панели.
+  document.dispatchEvent(new CustomEvent("vtt:lightEditMode", { detail: { active: openPanelSection === "light" } }));
 }
 
 // showSidePanelSection — «показать раздел», в отличие от setSidePanelSection
@@ -2742,16 +3136,22 @@ function applyPanelWidth(px) {
   return w;
 }
 
-// updateChromeInset — сдвинуть плашку статуса правее плавающего меню.
-// Канвас теперь лежит ПОД рейлом и панелью (см. #canvasWrap в dm.html), так
-// что всё, что раньше просто прижималось к левому краю канваса, оказалось бы
-// под ними. Числа — из тех же margin/border, что в dm.html: рейл 14+60,
-// панель 10 + ширина + 2 (рамка), ручка 10.
+// updateChromeInset — сколько места слева съели плавающие панели. Канвас
+// лежит ПОД рейлом и панелью (см. #canvasWrap в dm.html), сам про них ничего
+// не знает, и всё, что центрируется "по карте", обязано узнать это число
+// снаружи. Сегодняшний потребитель один — верхний оверлей хода
+// (vtt/combat-bar.js): без этого он центрировался по всему окну и наезжал на
+// шапку колонки со статблоком. Числа — из тех же margin/border, что в
+// dm.html: рейл 14+60, панель 10 + ширина + 2 (рамка), ручка 10.
 const RAIL_RIGHT = 74;
-const statusBar = document.getElementById("statusBar");
 function updateChromeInset(width) {
-  const chromeRight = openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT;
-  statusBar.style.left = chromeRight + 10 + "px";
+  // Колонка со статблоком (см. openCardInDock) — такой же слой поверх
+  // канваса, как рейл и панель, и её ширину ДМ тянет мышью: меряем по факту,
+  // а не по константе.
+  const dock = document.getElementById("sheetDock");
+  const dockWidth = dock && dock.classList.contains("open") ? dock.offsetWidth + 10 : 0;
+  const chromeRight = (openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT) + dockWidth;
+  document.dispatchEvent(new CustomEvent("vtt:chromeInset", { detail: { left: chromeRight + 10 } }));
 }
 
 let panelWidth = Math.min(Math.max(Number(localStorage.getItem(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN), panelWidthMax());
@@ -2814,6 +3214,145 @@ document.getElementById("addLightToken").onclick = () => {
   };
   vtt.send({ type: "add_token", token });
 };
+
+// ================= список источников света на карте =================
+// Токен света ничем не подписан на карте (см. layers/tokens.js — у него нет
+// label, только иконка лампочки), поэтому единственный способ понять, что
+// именно расставлено по сцене и где, — этот список. Он же закрывает три
+// вещи, которых у света не было вовсе: имя источника, быстрый тумблер
+// вкл/выкл без поиска токена мышью и «найди мне его» (кнопка 🎯 — камера
+// едет к источнику и подсвечивает его, см. map-objects.js).
+const lightList = document.getElementById("lightList");
+
+// lightTokensSorted — источники текущей сцены в стабильном порядке. Ключи
+// объекта tokens приходят с сервера в порядке обхода Go-мапы, то есть в
+// РАЗНОМ на каждый снапшот: без сортировки список бы перетасовывался сам
+// собой на каждое движение любого токена на карте.
+function lightTokensSorted() {
+  return Object.entries(vtt.getScene().tokens || {})
+    .filter(([, t]) => t.lightOnly)
+    .sort((a, b) => (a[1].label || "").localeCompare(b[1].label || "", "ru") || a[0].localeCompare(b[0]));
+}
+
+// sendLightToken — сохранить правку источника целиком (сервер делает апсерт
+// по id, см. service.Room.applyMutation "move_token"). Читаем токен из
+// ЖИВОЙ сцены, а не из замыкания строки списка: между отрисовкой списка и
+// кликом сцена приходит с сервера ещё много раз.
+function sendLightToken(id, patch) {
+  const t = (vtt.getScene().tokens || {})[id];
+  if (!t) return;
+  vtt.send({ type: "move_token", token: { ...t, ...patch } });
+}
+
+function renderLightList() {
+  // Пока ДМ ПЕЧАТАЕТ имя источника прямо в списке, перерисовка съела бы
+  // фокус и половину слова — снапшоты со сцены прилетают на каждый чужой
+  // драг токена. Ждём, пока поле отпустят (см. onblur ниже).
+  //
+  // Проверять надо ИМЕННО поле имени, а не "фокус где-то внутри списка":
+  // браузер отдаёт фокус и обычной <button> по клику, поэтому широкая
+  // проверка намертво замораживала список после первого же нажатия на
+  // лампочку или замок — состояние вкл/выкл и замок в строке переставали
+  // обновляться вообще (на самой карте при этом всё работало, что и делало
+  // симптом таким странным).
+  const editing = document.activeElement;
+  if (editing && lightList.contains(editing) && editing.classList.contains("light-row-name")) return;
+  // Строки пересоздаются целиком, значит нажатая кнопка сейчас будет
+  // уничтожена вместе с фокусом на ней. Мышь этого не замечает (курсор
+  // остаётся над новой кнопкой на том же месте), а вот Tab-навигация
+  // выкидывала бы в начало страницы после каждого щелчка — поэтому
+  // запоминаем "чья это была кнопка" и возвращаем фокус на её замену.
+  const refocus = editing && lightList.contains(editing) && editing.dataset && editing.dataset.lightBtn
+    ? { id: editing.dataset.lightId, btn: editing.dataset.lightBtn }
+    : null;
+  lightList.innerHTML = "";
+  const rows = lightTokensSorted();
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "На сцене пока нет источников света.";
+    lightList.appendChild(empty);
+    return;
+  }
+  for (const [id, t] of rows) {
+    const on = !!(t.light && t.light.enabled);
+    const locked = !!t.locked;
+    const row = document.createElement("div");
+    row.className = "light-row" + (on ? "" : " off") + (locked ? " locked" : "");
+
+    const name = document.createElement("input");
+    name.className = "light-row-name";
+    name.value = t.label || "Источник света";
+    name.title = "Название источника — видно только ДМ";
+    name.disabled = locked; // запертый не правится даже здесь — см. требование к замку
+    name.onblur = () => {
+      const next = name.value.trim() || "Источник света";
+      if (next !== (t.label || "")) sendLightToken(id, { label: next });
+      else renderLightList();
+    };
+    name.onkeydown = (e) => {
+      if (e.key === "Enter") name.blur();
+      if (e.key === "Escape") {
+        name.value = t.label || "Источник света";
+        name.blur();
+      }
+    };
+
+    const radii = document.createElement("span");
+    radii.className = "light-row-radii";
+    radii.textContent = `${(t.light && t.light.bright) || 0}/${(t.light && t.light.dim) || 0}`;
+    radii.title = "Радиусы яркого/тусклого света в единицах линейки сцены";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = on ? "on" : "";
+    toggle.innerHTML = icon("bulb", { size: 14 });
+    toggle.title = on ? "Потушить источник" : "Зажечь источник";
+    toggle.disabled = locked;
+    toggle.dataset.lightId = id;
+    toggle.dataset.lightBtn = "toggle";
+    toggle.onclick = () => document.dispatchEvent(new CustomEvent("vtt:toggleTokenLight", { detail: { id } }));
+
+    // Фокусировка работает и на запертом источнике: она ничего не меняет в
+    // мире, только наводит камеру — ровно то, ради чего замок и ставят
+    // («стоит на месте, но я хочу его найти»).
+    const focusBtn = document.createElement("button");
+    focusBtn.type = "button";
+    focusBtn.innerHTML = icon("target", { size: 14 });
+    focusBtn.title = "Показать на карте — камера наведётся и подсветит источник";
+    focusBtn.dataset.lightId = id;
+    focusBtn.dataset.lightBtn = "focus";
+    focusBtn.onclick = () => document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: "token", id } }));
+
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.className = locked ? "on" : "";
+    lockBtn.innerHTML = icon("lock", { size: 14 });
+    lockBtn.title = locked ? "Снять замок — источник снова двигается и правится" : "Запереть — источник не двигается и не правится, пока замок не снят";
+    lockBtn.dataset.lightId = id;
+    lockBtn.dataset.lightBtn = "lock";
+    lockBtn.onclick = () =>
+      document.dispatchEvent(new CustomEvent("vtt:setMapObjectLocked", { detail: { kind: "token", id, locked: !locked } }));
+
+    row.append(name, radii, toggle, focusBtn, lockBtn);
+    lightList.appendChild(row);
+  }
+
+  if (refocus) {
+    const again = lightList.querySelector(
+      `[data-light-id="${CSS.escape(refocus.id)}"][data-light-btn="${refocus.btn}"]`
+    );
+    // Кнопка могла и не появиться заново (источник удалили, или замок
+    // сделал её disabled) — тогда просто оставляем фокус там, куда его
+    // увёл браузер.
+    if (again && !again.disabled) again.focus();
+  }
+}
+
+onPanelOpen("light", renderLightList);
+document.addEventListener("vtt:sceneUpdated", () => {
+  if (openPanelSection === "light") renderLightList();
+});
 
 // ===================================================================
 // ==================== переключатель сцен ==========================

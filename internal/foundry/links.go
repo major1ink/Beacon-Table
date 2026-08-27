@@ -38,8 +38,9 @@ var enricherRe = regexp.MustCompile(`@(UUID|Embed|Compendium|Item|Actor|JournalE
 // LinkTarget — на что указывает ссылка после резолва по индексу модуля.
 type LinkTarget struct {
 	// Kind — раздел стола: "note" | "item" | "spell" | "reference" |
-	// "monster". Пусто — цель есть в модуле, но переносить её некуда
-	// (таблица, макрос, состояние), от ссылки останется только подпись.
+	// "monster" | "scene" | "playlist". Пусто — цель есть в модуле, но
+	// переносить её некуда (таблица, макрос, отдельный звук плейлиста), от
+	// ссылки останется только подпись.
 	Kind string
 	Name string
 	// Folder — папка библиотеки заметок (только для Kind == "note").
@@ -104,7 +105,7 @@ func (ix *LinkIndex) add(e Entry, folders *Folders, moduleTitle, packLabel strin
 			withSection.Section = strings.TrimSpace(asString(page["name"]))
 			ix.targets[pageID] = withSection
 		}
-	case TargetItems, TargetSpells, TargetReferences, TargetMonsters:
+	case TargetItems, TargetSpells, TargetReferences, TargetMonsters, TargetScenes, TargetPlaylists:
 		ix.targets[id] = LinkTarget{Kind: cardKind(e.Target), Name: name}
 	default:
 		ix.targets[id] = LinkTarget{Name: name} // цель известна, но переносить её некуда
@@ -122,6 +123,10 @@ func cardKind(target string) string {
 		return "reference"
 	case TargetMonsters:
 		return "monster"
+	case TargetScenes:
+		return "scene"
+	case TargetPlaylists:
+		return "playlist"
 	default:
 		return ""
 	}
@@ -142,7 +147,14 @@ func (ix *LinkIndex) Lookup(id string) (LinkTarget, bool) {
 // документ, другой модуль, документ мира) — остаётся только подпись: лучше
 // просто текст, чем «@UUID[Compendium.…]» посреди абзаца.
 func (ix *LinkIndex) Rewrite(text string) string {
-	return RewriteRolls(ix.rewriteLinks(text))
+	return ix.rewriteWithName(text, "")
+}
+
+// rewriteWithName — то же, что Rewrite, но обогатитель [[lookup @name]]
+// подставляет переданное имя документа (см. rolls.go: lookupValue). Пустое
+// name = поведение Rewrite (макрос сворачивается в свою подпись).
+func (ix *LinkIndex) rewriteWithName(text, name string) string {
+	return rewriteRollsNamed(ix.rewriteLinks(text), name)
 }
 
 func (ix *LinkIndex) rewriteLinks(text string) string {
@@ -211,10 +223,15 @@ func RewriteDocMacros(doc Doc, ix *LinkIndex) {
 	if ix == nil {
 		return
 	}
-	rewriteValue(map[string]any(doc), ix, 0)
+	// Имя документа верхнего уровня — для обогатителя [[lookup @name]] в
+	// описаниях его же способностей ("[[lookup @name]] совершает действие …").
+	// У владеемых предметов актёра @name в данных броска — это имя АКТЁРА, а
+	// не предмета, поэтому имя берём здесь один раз и несём вглубь.
+	name := strings.TrimSpace(asString(map[string]any(doc)["name"]))
+	rewriteValue(map[string]any(doc), ix, name, 0)
 }
 
-func rewriteValue(node any, ix *LinkIndex, depth int) {
+func rewriteValue(node any, ix *LinkIndex, name string, depth int) {
 	if depth > 12 {
 		return // защита от неожиданно глубокой вложенности чужого документа
 	}
@@ -222,18 +239,18 @@ func rewriteValue(node any, ix *LinkIndex, depth int) {
 	case map[string]any:
 		for key, value := range v {
 			if s, ok := value.(string); ok {
-				v[key] = ix.Rewrite(s)
+				v[key] = ix.rewriteWithName(s, name)
 				continue
 			}
-			rewriteValue(value, ix, depth+1)
+			rewriteValue(value, ix, name, depth+1)
 		}
 	case []any:
 		for i, value := range v {
 			if s, ok := value.(string); ok {
-				v[i] = ix.Rewrite(s)
+				v[i] = ix.rewriteWithName(s, name)
 				continue
 			}
-			rewriteValue(value, ix, depth+1)
+			rewriteValue(value, ix, name, depth+1)
 		}
 	}
 }

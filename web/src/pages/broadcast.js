@@ -3,8 +3,14 @@
 // README). initVTT остаётся async (PIXI.Application.init() в v8 — промис),
 // но результат странице не нужен — вызов "выстрелил и забыл".
 import { initVTT } from "../vtt/index.js";
+import { initShowcaseOverlay } from "../showcase-overlay.js";
 
 initVTT({ canvasId: "scene", role: "tv" });
+
+// Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
+// (см. web/src/showcase-overlay.js). На трансляции закрыть нельзя, показом
+// управляет ДМ.
+initShowcaseOverlay({ role: "tv" });
 
 // ---- HUD зума/полноэкранного режима — те же события vtt:zoomBy/vtt:resetView,
 // что и у ДМ (см. web/src/pages/dm.js), их слушает web/src/vtt/interaction.js

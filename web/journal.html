@@ -164,6 +164,23 @@
     .note-render blockquote { margin: .6em 0; padding: 2px 14px; border-left: 3px solid var(--accent); opacity: .85; }
     .note-render ul, .note-render ol { margin: .4em 0; padding-left: 1.6em; }
     .note-render img { max-width: 100%; border-radius: 6px; }
+    /* ---- «Показать игрокам» на картинке в тексте (только ДМ, см.
+       web/src/pages/journal.js: wireShowcaseImages) — кнопка всплывает по
+       ховеру в углу картинки; у показываемой сейчас картинки рамка. ---- */
+    .note-img-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+    .note-img-wrap.showing img { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .note-img-show {
+      position: absolute; top: 8px; right: 8px;
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 9px; border: none; border-radius: 7px; cursor: pointer;
+      font: inherit; font-size: 12px; line-height: 1;
+      background: rgba(12, 12, 16, 0.82); color: #fff;
+      opacity: 0; transition: opacity 0.12s ease;
+    }
+    .note-img-wrap:hover .note-img-show,
+    .note-img-wrap.showing .note-img-show { opacity: 1; }
+    .note-img-show:hover { background: rgba(12, 12, 16, 0.95); }
+    .note-img-show svg { flex: 0 0 auto; }
     .note-render hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
     .note-render table { border-collapse: collapse; }
     .note-render th, .note-render td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
@@ -231,6 +248,7 @@
           <span id="entryTitle"></span>
           <span class="badge" id="entryBadge" style="display:none"></span>
           <button id="showBtn" title="Открыть эту запись у всех игроков за столом"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg> Показать</button>
+          <button id="tocBtn" class="icon-btn" title="Перейти к разделу" style="display:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></button>
           <button id="pinBtn" class="icon-btn" title="Поставить значок этой записи на карту"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.9-6.5-10.5a6.5 6.5 0 0113 0C18.5 15.1 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg></button>
           <button id="accessBtn" class="icon-btn" title="Кому видно и кому можно править"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></button>
           <button id="editBtn" class="icon-btn" title="Редактировать"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/></svg></button>

@@ -75,6 +75,21 @@
       flex: 0 0 auto; width: 22px; height: 22px; padding: 0; font-size: 11px; background: var(--danger);
     }
     .combat-row .combat-remove:hover { background: var(--danger-hover); }
+    /* Кнопка "действия" в шапке карточки бойца — попап с боевыми блоками
+       статблока (см. web/src/combat-actions-peek.js) */
+    .combat-row .combat-peek {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-peek:hover { background: var(--surface-hover); color: var(--accent); }
+    /* "Показать на карте" — наводит камеру на токен бойца (см.
+       web/src/combat-panel.js: focusCombatantToken), тот же вид, что и
+       "действия" рядом. */
+    .combat-row .combat-focus {
+      flex: 0 0 auto; width: 22px; height: 22px; padding: 0; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .combat-row .combat-focus:hover { background: var(--surface-hover); color: var(--accent); }
     .combat-row-stats { display: flex; align-items: flex-end; gap: 12px; padding-left: 40px; }
     /* строка чипов наложенных состояний под характеристиками бойца (см.
        web/src/status-palette.js: renderStatusChips) — сами чипы стилизует
@@ -82,6 +97,12 @@
     .combat-row-statuses { padding-left: 40px; margin-top: 6px; }
     /* КД: поле с базой + стрелка с эффективным значением, когда его меняют
        состояния (см. web/src/combat-panel.js и domain.Modifier) */
+    /* Портрет и имя — быстрый вход в карточку бойца (статблок монстра/лист
+       персонажа), см. web/src/combatant-card.js. Класс вешается только тем
+       бойцам, у кого карточка есть, — курсор-палец не обещает лишнего. */
+    .combat-row .combat-card-link { cursor: pointer; }
+    .combat-row .combat-name.combat-card-link:hover { color: var(--accent); }
+    .combat-row .combat-avatar.combat-card-link:hover { box-shadow: 0 0 0 2px var(--accent) inset; }
     .combat-ac-group { display: flex; align-items: center; gap: 4px; }
     .combat-ac-eff { font-size: 11px; color: var(--amber); white-space: nowrap; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
@@ -96,6 +117,32 @@
       -webkit-appearance: none; margin: 0;
     }
     .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
+    /* Полоска хитов бойца: тянется мышью (см. web/src/hp-bar.js), за концом
+       заливки — хвост временных хитов другим цветом. Рядом узкое поле, куда
+       вбивают изменение ("-7"/"+4"/"17"). */
+    .combat-hp-row { display: flex; align-items: center; gap: 6px; padding-left: 40px; margin-top: 7px; }
+    .combat-bar {
+      position: relative; flex: 1 1 auto; height: 12px; border-radius: 6px; overflow: hidden;
+      background: var(--bg); border: 1px solid var(--border); cursor: ew-resize; touch-action: none;
+    }
+    .combat-bar-fill, .combat-bar-temp {
+      position: absolute; top: 0; bottom: 0; left: 0; display: block; transition: width .1s linear;
+    }
+    /* Хвост временных хитов — штриховкой и голубым (тот же #5dd0ff, что у
+       текущего хода в верхнем оверлее): чтобы его нельзя было спутать с
+       обычными хитами ни цветом, ни фактурой. --blue из темы тут слишком
+       тёмный, на полоске в 12px он читается как пустое место. */
+    .combat-bar-temp { background: repeating-linear-gradient(45deg, #5dd0ff, #5dd0ff 3px, rgba(93,208,255,0.45) 3px, rgba(93,208,255,0.45) 6px); }
+    .combat-bar-label {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); pointer-events: none;
+    }
+    .combat-row .combat-hp-quick {
+      flex: 0 0 auto; width: 42px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; font: inherit; font-size: 11px; text-align: center; padding: 3px 1px; box-sizing: border-box;
+    }
+    .combat-row .combat-hp-quick:focus { outline: none; border-color: var(--accent); }
+    .combat-row .combat-hp-temp { width: 30px; color: #5dd0ff; }
     .combat-hp-group { display: flex; align-items: center; gap: 3px; }
     .combat-hp-group input { width: 36px; }
     .combat-hp-group .combat-hp-sep { opacity: 0.4; font-size: 11px; }
@@ -111,29 +158,51 @@
     .bulb { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--text-dim); padding: 0; background: transparent; }
     .bulb.filled { background: var(--accent); border-color: var(--accent); }
     .bulb.filled.fail { background: var(--danger); border-color: var(--danger); }
+    /* вкладки "Инициатива"/"Убитые" — та же вёрстка, что и в dm.html (см.
+       web/src/combat-panel.js: switchCombatTab). */
+    .combat-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .combat-tabs .combat-tab { flex: 1 1 auto; background: var(--surface); border-radius: 8px; font-size: 12px; padding: 7px 8px; }
+    .combat-tabs .combat-tab.active { background: var(--accent); color: #fff; }
+    .killed-meta { padding-left: 40px; margin: -3px 0 0; }
+    .killed-actions { display: flex; gap: 6px; padding-left: 40px; margin-top: 6px; }
+    .killed-actions button { flex: 1 1 auto; font-size: 11px; padding: 6px 8px; }
+    .killed-clear-btn { justify-content: center; background: var(--danger); margin-bottom: 10px; }
+    .killed-clear-btn:hover { background: var(--danger-hover); }
   </style>
 </head>
 <body>
   <div id="topBar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg>Трекер инициативы</div>
   <div id="body">
-    <div id="combatHeaderRow">
-      <button id="combatStartBtn" class="primary-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg> Начать бой</button>
-      <button id="combatEndBtn" class="tool-btn" style="display:none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg> Завершить бой</button>
-      <div id="combatRoundRow" style="display:none;">
-        <button id="combatPrevBtn" title="Предыдущий ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg></button>
-        <span id="combatRoundLabel">Раунд 1</span>
-        <button id="combatNextBtn" title="Следующий ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></button>
+    <div class="combat-tabs">
+      <button type="button" id="combatTabTrackerBtn" class="combat-tab active">Инициатива</button>
+      <button type="button" id="combatTabKilledBtn" class="combat-tab">Убитые</button>
+    </div>
+    <div id="combatTrackerTab">
+      <div id="combatHeaderRow">
+        <button id="combatStartBtn" class="primary-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg> Начать бой</button>
+        <button id="combatEndBtn" class="tool-btn" style="display:none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg> Завершить бой</button>
+        <div id="combatRoundRow" style="display:none;">
+          <button id="combatPrevBtn" title="Предыдущий ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg></button>
+          <span id="combatRoundLabel">Раунд 1</span>
+          <button id="combatNextBtn" title="Следующий ход"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></button>
+        </div>
       </div>
+      <div class="section-divider"></div>
+      <button id="combatAddBtn" class="tool-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Добавить</button>
+      <div id="combatSearchWrap" style="display:none;">
+        <input type="text" id="combatSearch" placeholder="Поиск по бестиарию/персонажам…" autocomplete="off" />
+        <div id="combatSearchResults"></div>
+      </div>
+      <div class="section-divider"></div>
+      <div id="combatList"></div>
+      <p class="hint">Существ и персонажей можно добавить и через ПКМ на токене на карте → «⚔️ Добавить в инициативу». Боец без токена (добавлен через «+ Добавить») — перетащи его карточку из списка ниже на карту, чтобы поставить токен. Инициатива считается автоматически (1к20 + модификатор Ловкости); правка вручную — без переброски. КД и HP подтягиваются из листа/статблока и правятся вручную; видит их и правит только ДМ.</p>
     </div>
-    <div class="section-divider"></div>
-    <button id="combatAddBtn" class="tool-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Добавить</button>
-    <div id="combatSearchWrap" style="display:none;">
-      <input type="text" id="combatSearch" placeholder="Поиск по бестиарию/персонажам…" autocomplete="off" />
-      <div id="combatSearchResults"></div>
+    <div id="combatKilledTab" style="display:none;">
+      <button type="button" id="combatKilledClearBtn" class="tool-btn killed-clear-btn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> Очистить убитых</button>
+      <p id="combatKilledSummary" class="hint"></p>
+      <div id="combatKilledList"></div>
+      <p class="hint">Убитые монстры попадают сюда сами и остаются, пока их не восстановят. Отсюда же — их опыт и добыча. «Очистить убитых» удаляет их токены с карты насовсем — не забери сначала добычу, если она есть.</p>
     </div>
-    <div class="section-divider"></div>
-    <div id="combatList"></div>
-    <p class="hint">Существ и персонажей можно добавить и через ПКМ на токене на карте → «⚔️ Добавить в инициативу». Боец без токена (добавлен через «+ Добавить») — перетащи его карточку из списка ниже на карту, чтобы поставить токен. Инициатива считается автоматически (1к20 + модификатор Ловкости); правка вручную — без переброски. КД и HP подтягиваются из листа/статблока и правятся вручную; видит их и правит только ДМ.</p>
   </div>
 
   <div id="authFailedOverlay">Сессия истекла или недействительна. Закрой окно и войди заново.</div>

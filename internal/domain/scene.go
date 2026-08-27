@@ -24,8 +24,21 @@ type Token struct {
 	// Ставится один раз при создании токена драгом карточки из бестиария
 	// (web/src/pages/dm.js) и открывает статблок через ПКМ-меню токена
 	// (#tokenMenuBestiaryBtn), как CharacterID открывает лист персонажа.
-	MonsterID string      `json:"monsterId,omitempty"`
-	Light     *TokenLight `json:"light,omitempty"` // необязательный источник света — см. TokenLight
+	MonsterID string `json:"monsterId,omitempty"`
+	// FoundryActorID — id актёра Foundry, которого этот токен изображал на
+	// сцене исходного модуля (см. internal/foundry/scene.go: mapToken).
+	// Сам по себе он ничего не делает — это ЯКОРЬ для отложенного
+	// связывания с бестиарием: сцены и актёры приезжают РАЗНЫМИ паками, и
+	// пак с актёрами может быть импортирован после сцены или не
+	// импортирован вовсе, поэтому проставить MonsterID прямо в момент
+	// разбора сцены невозможно. Когда карточки существ появляются в
+	// бестиарии, они несут тот же id (Monster.FoundryActorID), и проход
+	// FoundryService.LinkSceneTokens сводит одно с другим, дописывая
+	// MonsterID уже стоящим на картах токенам. Остаётся на токене и после
+	// связывания — чтобы повторный импорт/переустановка модуля нашли его
+	// снова.
+	FoundryActorID string      `json:"foundryActorId,omitempty"`
+	Light          *TokenLight `json:"light,omitempty"` // необязательный источник света — см. TokenLight
 	// LightOnly — "токен света": не персонаж/арт, а голый маркер-лампочка,
 	// который DM ставит только ради Light. НЕ использует Hidden (тот целиком
 	// вырезает токен из PublicScene — см. service.Room.sceneFor — тогда
@@ -59,6 +72,15 @@ type Token struct {
 	// (не только наличие тут записей) регулируется общим тумблером стола
 	// CombatState.LootingEnabled — см. там же.
 	Loot []InventoryEntry `json:"loot,omitempty"`
+	// XP — опыт за победу над этим монстром: снимок Monster.CR→XP (см.
+	// CRToXP в xp.go), сделанный в тот же момент и по той же причине, что и
+	// Loot выше (service.Room.killMonsterCombatant) — карточка монстра
+	// могла измениться или быть удалена из бестиария уже после смерти
+	// токена, а вкладка "Убитые" трекера инициативы (web/src/combat-panel.js)
+	// должна и дальше показывать то число, за которое монстра реально
+	// убили. 0 — либо CR монстра не найден в таблице, либо это голый
+	// NPC-токен без MonsterID (опыт за него ДМ прикидывает сам).
+	XP int `json:"xp,omitempty"`
 	// Statuses — наложенные состояния этого конкретного токена (ослепление,
 	// испуг, истощение — см. AppliedStatus и domain.Condition). Живут именно
 	// на токене, а не на карточке монстра/персонажа: стая из пяти гоблинов
@@ -68,6 +90,41 @@ type Token struct {
 	// трекер читает и правит эти (см. service.Room.statusesOf) — тем же
 	// принципом сквозной связи токен↔боец, что уже работает у Token.Dead.
 	Statuses []AppliedStatus `json:"statuses,omitempty"`
+	// Locked — универсальная для ВСЕХ объектов карты (Token, NoteMarker,
+	// FogArea, Building) блокировка правки: заблокированный объект нельзя ни
+	// двигать, ни менять, ни удалять с карты, пока ДМ явно не снимет замок
+	// через ПКМ-меню этого объекта. Смысл — не права доступа (роль игрока и
+	// так ничего этого не может, см. Room.authorize), а защита от СВОЕЙ же
+	// случайной мыши: расставленный по карте свет/декор/значки живут на тех же
+	// координатах, что и токены существ, и без замка любой промах драгом
+	// утаскивает фонарь вместо монстра. Флаг умышленно один и тот же во всех
+	// четырёх структурах, а не свой на каждую: клиент проверяет его одним
+	// общим хелпером (web/src/vtt/map-objects.js: isLocked), поэтому новый
+	// объект карты получает блокировку, просто добавив это поле.
+	//
+	// У ТОКЕНА замок относится к разметке карты, а не к фигуркам существ:
+	// клиент не предлагает запереть токен персонажа (CharacterID) или
+	// монстра (MonsterID) — их двигают каждый ход, это и есть их работа на
+	// карте (см. web/src/pages/dm.js: vtt:tokenContextMenu). Остаётся он
+	// ровно тому, что стоит на карте неподвижно и мешается под мышью:
+	// токенам света (LightOnly) и декорациям из ассетов. Сервер это НЕ
+	// проверяет — здесь поле есть у любого токена, и уже запертое существо
+	// клиент даст разблокировать.
+	Locked bool `json:"locked,omitempty"`
+	// Decor — токен-декорация: не существо, а предмет обстановки, который ДМ
+	// поставил на карту перетаскиванием файла из раздела "Ассеты" (бочка,
+	// ковёр, сундук). Отличить его от существа по остальным полям НЕЛЬЗЯ:
+	// у безымянного NPC и у бочки одинаково пусто в CharacterID/MonsterID и
+	// одинаково заполнен Image — в частности, у токенов, приехавших со
+	// сценой из Foundry (см. internal/foundry/scene.go: mapToken), тоже нет
+	// ни одного id, хотя это как раз существа. Поэтому признак
+	// положительный и ставится в единственном месте, где декорация
+	// РОЖДАЕТСЯ (web/src/pages/dm.js, drop ассета), а не выводится
+	// задним числом из отсутствия других полей.
+	//
+	// Нужен ровно для одного: решить, предлагать ли замок (см. Locked
+	// выше) — запирают обстановку и свет, а не фигурки, которые ходят.
+	Decor bool `json:"decor,omitempty"`
 }
 
 // AppliedStatus — ОДНА наложенная метка состояния на токене (Token.Statuses)
@@ -182,6 +239,8 @@ type Point struct {
 type FogArea struct {
 	ID     string  `json:"id"`
 	Points []Point `json:"points"`
+	// Locked — см. Token.Locked (общий для всех объектов карты флаг).
+	Locked bool `json:"locked,omitempty"`
 }
 
 // Building — здание: ЗАМКНУТЫЙ многоугольник (Points, как у FogArea — контур
@@ -203,6 +262,8 @@ type FogArea struct {
 type Building struct {
 	ID     string  `json:"id"`
 	Points []Point `json:"points"`
+	// Locked — см. Token.Locked (общий для всех объектов карты флаг).
+	Locked bool `json:"locked,omitempty"`
 }
 
 // GridSettings — сетка клеток поверх карты. Size — сторона клетки в мировых
@@ -221,12 +282,13 @@ type GridSettings struct {
 	LineOpacity  float64 `json:"lineOpacity,omitempty"`
 }
 
-// NoteMarker — значок-свиток на карте, ссылающийся на заметку ДМ (см.
-// Note/NoteRepository). В отличие от старого HiddenAsset, это не игровой
-// reveal-механизм — маркер целиком личный инструмент ДМ и никогда не уходит
-// игрокам/TV (см. service.Room.sceneFor: PublicScene.NoteMarkers заполняется
-// только для роли DM, для остальных — всегда пустая карта). Label — снимок
-// заголовка заметки на момент постановки значка: правка заголовка заметки
+// NoteMarker — значок-свиток на карте, ссылающийся на запись журнала стола
+// (см. JournalEntry; Library="journal"). В отличие от старого HiddenAsset,
+// это не игровой reveal-механизм — маркер целиком личный инструмент ДМ и
+// никогда не уходит игрокам/TV (см. service.Room.sceneFor:
+// PublicScene.NoteMarkers заполняется только для роли DM, для остальных —
+// всегда пустая карта). Label — снимок
+// заголовка записи на момент постановки значка: правка заголовка записи
 // НЕ обновляет уже стоящие на карте подписи (см. web/src/notes/markdown.js) —
 // сознательный компромисс, см. план. Size — размер значка в мировых px,
 // правится ДМ через ПКМ → "Изменить размер" → драг (см.
@@ -234,13 +296,23 @@ type GridSettings struct {
 // дефолт (см. layers/note-markers.js), сервер размер не валидирует, как и
 // Token.Size.
 type NoteMarker struct {
-	ID      string  `json:"id"`
-	NoteID  string  `json:"noteId"`
-	Library string  `json:"library,omitempty"`
-	Label   string  `json:"label"`
+	ID string `json:"id"`
+	// NoteID — id записи журнала стола (domain.JournalEntry). Library="journal"
+	// у всех новых значков; "" осталось у значков, что вели в удалённые
+	// заметки ДМ, — такие больше не открываются.
+	NoteID  string `json:"noteId"`
+	Library string `json:"library,omitempty"`
+	Label   string `json:"label"`
+
+	Section string  `json:"section,omitempty"`
 	X       float64 `json:"x"`
 	Y       float64 `json:"y"`
 	Size    float64 `json:"size,omitempty"`
+	// Locked — см. Token.Locked (общий для всех объектов карты флаг).
+	Locked bool `json:"locked,omitempty"`
+
+	FoundryEntry  string `json:"foundryEntry,omitempty"`
+	FoundryFolder string `json:"foundryFolder,omitempty"`
 }
 
 // SceneState — состояние ОДНОЙ сцены: имя, фон, размер холста, туман войны,

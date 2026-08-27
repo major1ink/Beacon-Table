@@ -243,6 +243,12 @@ export function createTokensLayer(ctx) {
     const artGfx = new Graphics(); // арт токена — текстурная заливка, см. drawArt()
     const hiddenOutline = new Graphics();
     const ownerRing = new Graphics();
+    // turnRing — красное кольцо на токене бойца, чей сейчас ход (см.
+    // domain.CombatState.CurrentID/HighlightActiveToken, "Настройки" в
+    // dm.html). Отдельная фигура от ownerRing/selectionRing — все три кольца
+    // могут понадобиться одновременно (свой заметный чужой токен вполне
+    // может ходить прямо сейчас), поэтому не переиспользуем чужую фигуру.
+    const turnRing = new Graphics();
     const lightRings = new Graphics();
     const lightIcon = new Text({ text: "💡", style: { fontSize: 20, fontFamily: "sans-serif", align: "center" } });
     lightIcon.anchor.set(0.5, 0.5);
@@ -255,8 +261,23 @@ export function createTokensLayer(ctx) {
     const deadIcon = new Text({ text: "💀", style: { fontSize: 20, fontFamily: "sans-serif", align: "center" } });
     deadIcon.anchor.set(0.5, 0.5);
     deadIcon.visible = false;
+    // lockIcon — замок в правом нижнем углу токена, когда объект заперт
+    // (domain.Token.Locked, общий для всех объектов карты флаг — см.
+    // web/src/vtt/map-objects.js). Виден только ДМ: игроку запертость
+    // ничего не сообщает (он и так не двигает чужое), а ДМ по нему сразу
+    // понимает, почему токен не берётся мышью. Тот же приём "готовый
+    // эмодзи вместо ассета", что у lightIcon/deadIcon выше.
+    const lockIcon = new Text({ text: "🔒", style: { fontSize: 12, fontFamily: "sans-serif", align: "center" } });
+    lockIcon.anchor.set(0.5, 0.5);
+    lockIcon.visible = false;
     const label = new Text({ text: "", style: { fill: 0xffffff, fontSize: 12, fontFamily: "sans-serif", align: "center" } });
     label.anchor.set(0.5, 0);
+    // selectionRing — рамка множественного выделения ДМ (см.
+    // interaction.js: selectedTokenIds/рамка-лассо, аналог выделения
+    // токенов в Foundry). Отдельная фигура от ownerRing — оба кольца могут
+    // быть видны одновременно (свой/чужой токен всё равно можно выделить
+    // групповой рамкой), и им не следует друг друга перекрывать/затирать.
+    const selectionRing = new Graphics();
     // statusLayer — наложенные состояния (domain.AppliedStatus): значки-
     // кружки по верхней кромке токена плюс, если состояние помечено
     // Overlay, крупный глиф поверх самого арта — прямой аналог палитры и
@@ -264,8 +285,8 @@ export function createTokensLayer(ctx) {
     // значков переменное число, они целиком пересоздаются при изменении
     // набора меток (это происходит только по dirty.tokens, не каждый кадр).
     const statusLayer = new Container();
-    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, statusLayer, label);
-    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, lightRings, lightIcon, deadIcon, statusLayer, label, artUrl: null, artSize: 0, artShape: null };
+    root.addChild(colorGfx, artGfx, lightIcon, deadIcon, lightRings, hiddenOutline, ownerRing, turnRing, selectionRing, statusLayer, lockIcon, label);
+    return { root, colorGfx, artGfx, hiddenOutline, ownerRing, turnRing, selectionRing, lightRings, lightIcon, deadIcon, statusLayer, lockIcon, label, artUrl: null, artSize: 0, artShape: null };
   }
 
   // MAX_STATUS_BADGES — сколько значков рисуем в ряд, прежде чем свернуть
@@ -361,6 +382,22 @@ export function createTokensLayer(ctx) {
     return m ? parseInt(m[1], 16) : fallback;
   }
 
+  // isCurrentTurnToken — стоит ли за этим токеном боец, чей сейчас ход (см.
+  // domain.CombatState.CurrentID). Тот же приоритет сопоставления, что и
+  // combatantForToken в vtt/interaction.js (см. подробный комментарий там):
+  // TokenID — точный и единственный однозначный признак, characterId/
+  // monsterId — фолбэк ТОЛЬКО для бойца без своего TokenID, иначе первый
+  // подвернувшийся боец с тем же шаблоном (два одинаковых монстра на карте)
+  // подсветил бы чужой токен.
+  function isCurrentTurnToken(id, t) {
+    const combat = ctx.combat;
+    if (!combat || !combat.active || !combat.currentId || !Array.isArray(combat.combatants)) return false;
+    const cur = combat.combatants.find((c) => c.id === combat.currentId);
+    if (!cur) return false;
+    if (cur.tokenId) return cur.tokenId === id;
+    return !!((t.characterId && cur.characterId === t.characterId) || (t.monsterId && cur.monsterId === t.monsterId));
+  }
+
   function updateTokenView(view, id, t) {
     view.root.position.set(t.x, t.y);
     // lightOnly — "токен света" (см. domain.Token.LightOnly): полупрозрачная
@@ -441,6 +478,29 @@ export function createTokensLayer(ctx) {
         .stroke({ width: (mine ? 3 : 1.5) / scale, color: mine ? 0x2ecc71 : 0xffffff, alpha: mine ? 1 : 0.35 });
     }
 
+    // Ход бойца: красное кольцо на токене того, чья сейчас очередь ходить в
+    // бою (см. isCurrentTurnToken выше) — видно всем ролям, отключается
+    // целиком тумблером "Настройки" → "Подсвечивать красным токен активного
+    // хода" (domain.CombatState.HighlightActiveToken). Двойная обводка
+    // (яркая тонкая линия поверх мягкого широкого свечения) — чтобы кольцо
+    // читалось и на светлом, и на тёмном фоне карты, как и то, что кольцо
+    // должно быть заметно ярче ownerRing/selectionRing, а не теряться рядом.
+    view.turnRing.clear();
+    if (ctx.combat && ctx.combat.highlightActiveToken !== false && !t.lightOnly && isCurrentTurnToken(id, t)) {
+      const scale = ctx.world.scale.x || 1;
+      view.turnRing.circle(0, 0, size + 5).stroke({ width: 6 / scale, color: 0xe74c3c, alpha: 0.35 });
+      view.turnRing.circle(0, 0, size + 5).stroke({ width: 2 / scale, color: 0xff4136, alpha: 0.95 });
+    }
+
+    // Рамка группового выделения (только ДМ, см. interaction.js:
+    // selectedTokenIds) — толще и ярче ownerRing/hiddenOutline, чтобы не
+    // теряться среди них, когда выделен уже помеченный чужой/скрытый токен.
+    view.selectionRing.clear();
+    if (ctx.isDM && ctx.selectedTokenIds && ctx.selectedTokenIds.has(id) && !t.lightOnly) {
+      const scale = ctx.world.scale.x || 1;
+      view.selectionRing.circle(0, 0, size + 6).stroke({ width: 2.5 / scale, color: 0x5dd0ff, alpha: 0.95 });
+    }
+
     // Радиусы источника света — ориентир только для ДМ (как и линии стен,
     // layers/walls.js): сам эффект освещения игроки видят через
     // layers/vision-fog.js, а этот пунктир только помогает ДМ понять, куда
@@ -466,6 +526,12 @@ export function createTokensLayer(ctx) {
     // Подпись под токеном света не нужна — она и так везде подписана как
     // "Источник света" в контекстном меню (см. dm.js), а на самой сцене её
     // роль и так однозначно читается по иконке лампочки.
+    view.lockIcon.visible = !!(ctx.isDM && t.locked);
+    if (view.lockIcon.visible) {
+      view.lockIcon.style.fontSize = Math.max(10, size * 0.55);
+      view.lockIcon.position.set(size * 0.7, size * 0.7);
+    }
+
     view.label.text = t.lightOnly ? "" : t.label || "";
     view.label.position.set(0, size + 14);
 

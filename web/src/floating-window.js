@@ -245,3 +245,19 @@ export function postToOpenWindows(keyPrefix, message) {
     }
   }
 }
+
+// openCardWindow — открыть карточку записи (статблок монстра, лист
+// персонажа) НЕЗАВИСИМО от того, где живёт зовущий код. Топ-документ стола
+// (dm.html/player.html) зовёт openFloatingWindow напрямую, а код внутри
+// iframe (трекер инициативы, вынесенный в плавающее окно, — combat-tracker.html)
+// просит об этом родителя тем же postMessage-мостом, что и список
+// компендиума (см. pages/catalog.js: openDetail, слушатель — в dm.js/player.js):
+// все плавающие окна должны быть прямыми детьми топ-документа, иначе
+// карточка откроется ВНУТРИ узкого окна трекера и будет обрезана его рамкой.
+export function openCardWindow({ key, title, url, navigate = false }) {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: "beacon:openFloatingWindow", key, title, url, navigate }, location.origin);
+    return;
+  }
+  openFloatingWindow({ key, title, url, navigate });
+}

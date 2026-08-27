@@ -2,8 +2,10 @@
 // не менялась, только глобальные вызовы app.js заменены на импорты.
 import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
+import { createRollLog } from "../roll-log.js";
 import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
 import { openSheetDock } from "../sheet-dock.js";
+import { setCardOpener } from "../combatant-card.js";
 import {
   fetchMe,
   apiLogout,
@@ -13,10 +15,13 @@ import {
   updateCharacterApi,
   deleteCharacterApi,
   uploadFile,
+  fetchPregens,
+  claimPregen,
 } from "../api.js";
 import { icon } from "../icons.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
+import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
@@ -47,6 +52,12 @@ function openCharacterSheet(c) {
     onLayoutChange: () => document.dispatchEvent(new CustomEvent("vtt:relayout")),
   });
 }
+
+// Клик по фишке в верхнем оверлее хода (vtt/combat-bar.js) открывает лист
+// там же, где его открывает чип в топбаре — в боковом доке (или поднимает
+// уже вынесенное окно). Игроку оттуда может прийти только ЕГО персонаж:
+// права решает combatant-card.js, здесь только место показа.
+setCardOpener((target, cmb) => openCharacterSheet({ id: cmb.characterId, name: cmb.name }));
 
 // renderCharDock — ряд компактных "чипов" своих персонажей в топбаре (см.
 // player.html: #charDock): аватар + имя, клик открывает лист. Раньше до
@@ -110,10 +121,19 @@ let vtt = null;
   // важен: док задаёт высоту, которая остаётся канвасу, а Pixi снимает её
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
-  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg), document.getElementById("diceLog"));
+  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg));
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   renderCharDock();
 
-  vtt = await initVTT({ canvasId: "scene", role: "player", playerId: me.id });
+  vtt = await initVTT({
+    canvasId: "scene",
+    role: "player",
+    playerId: me.id,
+    // Трекер инициативы встраивается в топбар (см. player.html), а не
+    // плавает отдельным оверлеем поверх него (см. vtt/index.js/combat-bar.js).
+    combatBarMount: document.getElementById("combatBarMount"),
+  });
   // Справочник — та же боковая колонка канваса, что и у ДМ (см. pages/dm.js —
   // тот же sticky, см. комментарий там), первая иконка тут (игрок кубы
   // бросает через #diceDock снизу, не через sideMenu — у него это основной
@@ -126,6 +146,11 @@ let vtt = null;
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
   // выезжающей плашке бокового меню.
   vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow);
+
+  // Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
+  // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
+  // управляет ДМ.
+  initShowcaseOverlay({ role: "player" });
 
   document.addEventListener("vtt:authFailed", () => {
     document.getElementById("authFailedOverlay").classList.add("open");
@@ -248,7 +273,67 @@ function resetCharForm() {
   charFormMsg.textContent = "";
 }
 
+// renderPregens — блок «Готовые персонажи приключения» над списком своих:
+// свободные предгенерированные листы из импортированного модуля (см.
+// internal/domain/pregen.go). «Взять» создаёт из шаблона обычного персонажа,
+// принадлежащего игроку, — он тут же появляется в списке ниже и в доке.
+// Пул пуст → блок скрыт целиком.
+async function renderPregens() {
+  const block = document.getElementById("pregensBlock");
+  const list = document.getElementById("pregensList");
+  let pregens = [];
+  try {
+    pregens = await fetchPregens();
+  } catch {
+    /* нет пула / сеть моргнула — просто не показываем блок */
+  }
+  list.innerHTML = "";
+  if (!pregens.length) {
+    block.style.display = "none";
+    return;
+  }
+  block.style.display = "";
+  for (const p of pregens) {
+    const row = document.createElement("div");
+    row.className = "char-row";
+    const avatar = document.createElement("div");
+    avatar.className = "char-avatar";
+    if (p.avatarUrl && !isVideoUrl(p.avatarUrl)) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+    else avatar.textContent = (p.name || "?").trim().charAt(0).toUpperCase();
+    const nameWrap = document.createElement("div");
+    nameWrap.className = "char-name";
+    nameWrap.textContent = p.name;
+    const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+    if (sub) {
+      const subEl = document.createElement("div");
+      subEl.className = "char-sub";
+      subEl.textContent = sub;
+      nameWrap.appendChild(subEl);
+    }
+    const sheetBtn = document.createElement("button");
+    sheetBtn.innerHTML = icon("scroll", { size: 13 });
+    sheetBtn.title = "Посмотреть лист (без выбора)";
+    sheetBtn.onclick = () =>
+      openFloatingWindow({ key: "pregen-" + p.id, title: p.name, url: `/character-sheet.html?pregen=${p.id}` });
+    const takeBtn = document.createElement("button");
+    takeBtn.textContent = "Взять";
+    takeBtn.onclick = async () => {
+      takeBtn.disabled = true;
+      try {
+        await claimPregen(p.id);
+        await renderChars();
+      } catch (err) {
+        takeBtn.disabled = false;
+        showAlert("Не удалось взять персонажа: " + err.message);
+      }
+    };
+    row.append(avatar, nameWrap, sheetBtn, takeBtn);
+    list.appendChild(row);
+  }
+}
+
 async function renderChars() {
+  await renderPregens();
   let chars;
   try {
     chars = await fetchCharacters();

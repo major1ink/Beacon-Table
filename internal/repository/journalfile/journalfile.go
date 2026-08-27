@@ -1,11 +1,10 @@
 // Package journalfile реализует repository.JournalRepository поверх обычных
-// .md-файлов на диске (dataDir/journal/<папка>/<id>.md) — тем же принципом,
-// что и internal/repository/notefile для заметок ДМ: атомарная запись
+// .md-файлов на диске (dataDir/journal/<папка>/<id>.md): атомарная запись
 // (tmp + rename), настоящие подпапки вместо поля в индексе, поиск файла по
 // id обходом дерева.
 //
-// Отличие от notefile — «шапка» (front matter) в начале файла: у записи
-// журнала, кроме текста, есть автор и раздача прав (см. domain.JournalEntry),
+// В начале файла — «шапка» (front matter): у записи журнала, кроме текста,
+// есть автор и раздача прав (см. domain.JournalEntry),
 // а хранить их отдельным индексом значило бы завести второй источник правды,
 // который разойдётся с файлами при первой же правке мимо приложения. Формат
 // шапки — тот же YAML-подобный блок между "---", что понимают Obsidian и
@@ -58,9 +57,8 @@ func fileName(id string) string {
 	return safe + ".md"
 }
 
-// sanitizeFolder — та же защита от выхода за пределы корня, что и в
-// notefile/localfs (дублируется осознанно: пакеты репозиториев ничего друг о
-// друге не знают).
+// sanitizeFolder — та же защита от выхода за пределы корня, что и в localfs
+// (дублируется осознанно: пакеты репозиториев ничего друг о друге не знают).
 func sanitizeFolder(folder string) (string, error) {
 	folder = strings.TrimSpace(strings.ReplaceAll(folder, "\\", "/"))
 	folder = strings.Trim(folder, "/")
@@ -121,8 +119,8 @@ func (s *Store) folderOf(path string) string {
 }
 
 // deriveTitle — заголовок записи: первая непустая строка вида "# Текст" (та
-// же логика, что и у заметок ДМ, см. notefile.deriveTitle и её двойник на
-// клиенте — web/src/notes/markdown.js:noteTitleFromContent).
+// же логика, что и у её двойника на клиенте —
+// web/src/notes/markdown.js:noteTitleFromContent).
 func deriveTitle(content string) string {
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)

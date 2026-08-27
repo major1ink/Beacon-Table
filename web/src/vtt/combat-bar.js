@@ -13,26 +13,46 @@
 // payload, здесь проверяем cmb.hpMax != null и рисуем HP-бейдж рядом с
 // именем (см. hpBadge). Редактирование HP по-прежнему живёт только в панели
 // "Инициатива" (combat-panel.js), не в самом оверлее — тут только чтение.
+// Единственное действие полосы у не-ДМ — клик по фишке бойца: открывает его
+// карточку (статблок монстра у ДМ, лист СВОЕГО персонажа у игрока, см.
+// combatant-card.js — права решаются там).
 // BAR_H — единая высота всех "фишек" полосы (раунд/кнопки/карточки бойцов).
 // Раньше кнопки хода (24px квадраты) и карточки бойцов (variable-height
 // пилюли) были разной высоты — при align-items:center это не ломало
 // раскладку по вертикали, но силуэт полосы получался неровным (кнопки ниже
 // пилюль), из-за чего весь оверлей выглядел "криво". Теперь у всех детей
 // bar одна и та же высота через явные min-height/height, а не "как влезет".
+import { combatantCardTarget, combatantCardHint, openCombatantCard } from "../combatant-card.js";
 import { icon } from "../icons.js";
 
 const BAR_H = 32;
+// MIN_FREE_W — ниже этого полосу не ужимаем: если панели съели почти всю
+// ширину, пусть лучше немного зайдёт под них, чем схлопнется в точку.
+const MIN_FREE_W = 240;
 
 export function createCombatBar(ctx) {
+  // inline — режим встраивания в чужой контейнер (топбар игрока, см.
+  // vtt/index.js: ctx.combatBarMount и player.html: #combatBarMount) вместо
+  // собственного плавающего оверлея. Раньше полоса ВСЕГДА была
+  // position:fixed по центру канваса поверх всего — у игрока это накрывало
+  // кнопки топбара (Хаб/Линейка/Настройки), потому что #topbar тоже сидит
+  // у верхнего края. Без mount (ДМ/TV) поведение не меняется — там своя
+  // компоновка (боковой рейл/чистый зритель), и центрированный оверлей
+  // конфликтов не создаёт.
+  const inline = !!ctx.combatBarMount;
   const bar = document.createElement("div");
-  bar.style.cssText =
-    "display:none;position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:40;" +
-    "align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;border-radius:" + (BAR_H / 2 + 2) + "px;" +
-    "background:var(--glass-bg-strong,rgba(22,22,29,0.88));backdrop-filter:var(--glass-blur,blur(20px));" +
-    "-webkit-backdrop-filter:var(--glass-blur,blur(20px));border:1px solid var(--glass-border,rgba(255,255,255,0.08));" +
-    "box-shadow:var(--shadow-float,0 6px 20px rgba(0,0,0,0.5));" +
-    "font:12px/1 sans-serif;color:#eee;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
-  document.body.appendChild(bar);
+  bar.style.cssText = inline
+    ? "display:none;align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;" +
+      "border-radius:" + (BAR_H / 2 + 2) + "px;flex:0 1 auto;min-width:0;max-width:100%;" +
+      "background:var(--surface,rgba(255,255,255,0.07));" +
+      "font:12px/1 sans-serif;color:var(--text,#eee);box-sizing:border-box;overflow-x:auto;overflow-y:hidden;"
+    : "display:none;position:fixed;top:10px;transform:translateX(-50%);z-index:40;" +
+      "align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;border-radius:" + (BAR_H / 2 + 2) + "px;" +
+      "background:var(--glass-bg-strong,rgba(22,22,29,0.88));backdrop-filter:var(--glass-blur,blur(20px));" +
+      "-webkit-backdrop-filter:var(--glass-blur,blur(20px));border:1px solid var(--glass-border,rgba(255,255,255,0.08));" +
+      "box-shadow:var(--shadow-float,0 6px 20px rgba(0,0,0,0.5));" +
+      "font:12px/1 sans-serif;color:#eee;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
+  (inline ? ctx.combatBarMount : document.body).appendChild(bar);
 
   const roundLabel = document.createElement("div");
   roundLabel.style.cssText =
@@ -131,6 +151,19 @@ export function createCombatBar(ctx) {
       cmb.hpCurrent <= 0 ? "#e0645a" : pct <= 0.25 ? "#e0985a" : pct <= 0.5 ? "#e0c95a" : "#5fd08a";
     badge.textContent = `${cmb.hpCurrent}/${cmb.hpMax}`;
     badge.style.cssText = `flex:0 0 auto;font-size:10px;font-weight:700;color:${color};white-space:nowrap;`;
+    // Временные хиты — отдельной голубой прибавкой ("10/10 +5"), тем же
+    // цветом, что и их хвост на полоске в трекере: это не часть текущих
+    // хитов, а буфер поверх них, и складывать их в одно число нельзя.
+    if (cmb.hpTemp > 0) {
+      const tempBadge = document.createElement("span");
+      tempBadge.textContent = "+" + cmb.hpTemp;
+      tempBadge.title = "Временные хиты";
+      tempBadge.style.cssText = "flex:0 0 auto;font-size:10px;font-weight:700;color:#5dd0ff;white-space:nowrap;";
+      const wrap = document.createElement("span");
+      wrap.style.cssText = "flex:0 0 auto;display:flex;align-items:center;gap:3px;";
+      wrap.append(badge, tempBadge);
+      return wrap;
+    }
     return badge;
   }
 
@@ -168,11 +201,61 @@ export function createCombatBar(ctx) {
       pill.append(portrait, name);
       const hp = hpBadge(cmb);
       if (hp) pill.appendChild(hp);
+
+      // Клик по фишке — карточка бойца (статблок монстра у ДМ, лист своего
+      // персонажа у игрока, см. combatant-card.js: права там же). Тот же
+      // быстрый вход, что и в панели "Инициатива", только доступный, когда
+      // панель закрыта или её вовсе нет (игрок/TV) — во время боя это
+      // единственный список бойцов, который видно всем. У бойца без
+      // карточки (или когда роль её видеть не должна) фишка остаётся
+      // некликабельной: курсор ничего не обещает.
+      const cardOpts = { isDM: ctx.isDM, playerId: ctx.playerId };
+      if (combatantCardTarget(cmb, cardOpts)) {
+        pill.style.cursor = "pointer";
+        pill.title = `${pillLabel(cmb)} — ${combatantCardHint(cmb).toLowerCase()}`;
+        // Куда именно ляжет карточка, решает страница (см. combatant-card.js:
+        // setCardOpener): у ДМ и у игрока это боковая колонка у карты, а не
+        // плавающее окно поверх неё.
+        pill.onclick = () => openCombatantCard(cmb, cardOpts);
+      }
+
       track.appendChild(pill);
     }
   }
 
   document.addEventListener("vtt:combatState", (e) => render(e.detail));
+
+  // ---- где стоит сама полоса ----
+  // Встроенную (inline) полосу в позиционировании не нуждается вовсе: она
+  // обычный flex-ребёнок топбара, ширину/сжатие ему считает сам топбар
+  // (см. player.html: #combatBarMount).
+  if (!inline) {
+    // Центр берём по СВОБОДНОЙ части карты, а не по окну. Слева от карты
+    // лежат панели: у ДМ — рейл, панель рейла и колонка со статблоком (они
+    // канвас не ужимают, а накрывают: #canvasWrap{position:absolute;inset:0}
+    // в dm.html), у игрока — боковой док листа (этот как раз ужимает канвас,
+    // и его видно по rect канваса). Поэтому слагаемых два: rect канваса плюс
+    // отступ, о котором сообщает страница событием "vtt:chromeInset" (шлёт
+    // pages/dm.js: updateChromeInset — тем же числом он двигает плашку
+    // статуса). Без этого полоса центрировалась по всему окну и наезжала на
+    // шапку колонки со статблоком.
+    let leftInset = 0;
+    const position = () => {
+      const rect = ctx.canvas.getBoundingClientRect();
+      const free = Math.max(MIN_FREE_W, rect.width - leftInset);
+      bar.style.left = Math.round(rect.left + leftInset + free / 2) + "px";
+      bar.style.maxWidth = Math.round(free - 24) + "px";
+    };
+    document.addEventListener("vtt:chromeInset", (e) => {
+      leftInset = (e.detail && e.detail.left) || 0;
+      position();
+    });
+    window.addEventListener("resize", position);
+    // Канвас меняет размер и без ресайза окна (у игрока — открытый док листа),
+    // тот же приём, что в side-menu.js.
+    new ResizeObserver(position).observe(ctx.canvas);
+    position();
+  }
 
   return { render };
 }

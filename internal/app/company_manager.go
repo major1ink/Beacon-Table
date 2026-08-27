@@ -28,7 +28,6 @@ import (
 	"beacon-table/internal/repository/journalfile"
 	"beacon-table/internal/repository/localfs"
 	"beacon-table/internal/repository/monsterfile"
-	"beacon-table/internal/repository/notefile"
 	"beacon-table/internal/repository/referencefile"
 	"beacon-table/internal/repository/scenefile"
 	"beacon-table/internal/repository/spellfile"
@@ -46,13 +45,13 @@ type ActiveWorld struct {
 	Company    *domain.Company
 	Room       service.RoomService
 	Characters service.CharacterService
+	Pregens    service.PregenService
 	Admin      service.AdminService
 	Bestiary   service.BestiaryService
 	Spells     service.SpellService
 	Items      service.ItemService
 	References service.ReferenceService
 	Conditions service.ConditionService
-	Notes      service.NoteService
 
 	Journal   service.JournalService
 	Playlists service.PlaylistService
@@ -228,7 +227,6 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	dataRoot, uploadsRoot, uploadsURL := m.rootsFor(company)
 
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
-	noteRepo := notefile.NewStore(filepath.Join(dataRoot, "notes"))
 	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
 	monsterRepo := monsterfile.NewCatalog(
 		monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")),
@@ -261,6 +259,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	}
 
 	characterRepo := sqlite.NewCharacterStore(m.db, company.ID, company.System)
+	pregenRepo := sqlite.NewPregenStore(m.db, company.ID)
 	playlistRepo := sqlite.NewPlaylistStore(m.db, company.ID)
 	foundryModuleRepo := sqlite.NewFoundryModuleStore(m.db, company.ID)
 
@@ -274,7 +273,6 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		return err
 	}
 
-	notes := service.NewNoteService(noteRepo)
 	journal := service.NewJournalService(journalRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
 	assets := service.NewAssetService(assetRepo)
@@ -287,20 +285,20 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	world := &ActiveWorld{
 		Company:    company,
 		Room:       room,
-		Characters: service.NewCharacterService(characterRepo, itemRepo),
+		Characters: service.NewCharacterService(characterRepo),
+		Pregens:    service.NewPregenService(pregenRepo, characterRepo),
 		Admin:      service.NewAdminService(m.accounts, m.sessions, characterRepo, company.ID),
 		Bestiary:   bestiary,
 		Spells:     spells,
 		Items:      items,
 		References: references,
 		Conditions: conditions,
-		Notes:      notes,
 		Journal:    journal,
 		Playlists:  playlists,
 		Assets:     assets,
 		Foundry: service.NewFoundryService(
 			filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists, foundryModuleRepo,
-			bestiary, spells, items, references, conditions,
+			bestiary, spells, items, references, conditions, pregenRepo,
 		),
 	}
 

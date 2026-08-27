@@ -16,12 +16,14 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { createRollLog } from "../roll-log.js";
 
 // ==================== state ====================
 
 let itemId = null;
 let item = null; // объект domain.Item целиком (сервер отдаёт camelCase — см. json-теги)
 let rollWS = null;
+let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js)
 let isAdminView = false; // роль текущего аккаунта (см. boot()) — определяет /ws/dm или /ws/player
 // editMode — по умолчанию карточка открывается в чистом read-режиме, как
 // domain.Spell/Monster (см. spellbook.js/bestiary.js) — тот же приём и там же обоснование.
@@ -386,11 +388,12 @@ window.addEventListener("beforeunload", () => {
 // spellbook.js: connectRollSocket.
 
 function connectRollSocket() {
+  if (!rollLog) rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") showRollResult(data);
+    if (data.type === "roll_result") rollLog.push(data);
   };
 }
 
@@ -400,16 +403,6 @@ function sendRoll(formula, label) {
   rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
 }
 
-function showRollResult(data) {
-  const wrap = document.getElementById("rollLogWrap");
-  wrap.classList.remove("hidden");
-  const log = document.getElementById("rollLog");
-  const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
-  const who = data.label ? `${data.name} — ${data.label}` : data.name;
-  const row = h("div", { class: "dice-log-row", text: `${who}: ${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}` });
-  log.prepend(row);
-  while (log.children.length > 20) log.removeChild(log.lastChild);
-}
 
 // ==================== boot ====================
 

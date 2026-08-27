@@ -8,14 +8,11 @@ import (
 	"beacon-table/internal/repository"
 )
 
-// maxInventoryNotes/maxInventoryEntries — санитарные пределы записи
-// инвентаря персонажа, тот же принцип, что и у остальных сервисов (см.
-// maxMonsterLongText в bestiary.go) — защита от случайно вставленного
-// гигантского текста, не игровое правило.
-const (
-	maxInventoryNotes   = 2000
-	maxInventoryEntries = 500
-)
+// maxInventoryNotes — санитарный предел заметки записи инвентаря персонажа,
+// тот же принцип, что и у остальных сервисов (см. maxMonsterLongText в
+// bestiary.go) — защита от случайно вставленного гигантского текста, не
+// игровое правило.
+const maxInventoryNotes = 2000
 
 // CharacterService — CRUD персонажей игрока, ограниченный владельцем
 // (accountID). Административный доступ ко ВСЕМ персонажам живёт отдельно в
@@ -38,21 +35,31 @@ type CharacterService interface {
 	// часть Sheet (см. repository.CharacterRepository и план фичи) ----
 
 	ListInventory(ctx context.Context, id, accountID string) ([]*domain.InventoryEntry, error)
-	// AddInventoryItem резолвит itemID через каталог предметов (ItemRepository)
-	// и снимает с него Name/ImageURL/WeightLb в новую запись — как и у
-	// остальных Create-подобных методов сервисов, quantity клампится до >=1.
-	AddInventoryItem(ctx context.Context, id, accountID, itemID string, quantity int) (*domain.InventoryEntry, error)
+	// Добавления "из каталога с нуля" здесь нарочно нет — игрок пополняет
+	// свой инвентарь только тем, что выдал ДМ (хаб лута) или что удалось
+	// забрать с трупа, оба пути пишут через
+	// CharacterRepository.AddInventoryEntry в обход этого сервиса (см.
+	// service.Room: handleHubTakeItem/handleLootTakeItem).
+	//
+	// UpdateInventoryItem клампит quantity сверху текущим значением записи —
+	// игроку этим методом можно только уменьшить количество (потратил,
+	// выбросил) или поправить notes, не приписать себе лишнее; дошло до
+	// нуля — запись целиком удаляется (см. RemoveInventoryItem), а не висит
+	// строкой "×0". Смена equipped — отдельная ветка (см. реализацию):
+	// расщепляет/сливает стопку по одной штуке через
+	// CharacterRepository.SetInventoryEquipped, а не флаг всей записи;
+	// quantity/notes из запроса в этом случае
+	// игнорируются.
 	UpdateInventoryItem(ctx context.Context, id, accountID, entryID string, quantity int, equipped bool, notes string) error
 	RemoveInventoryItem(ctx context.Context, id, accountID, entryID string) error
 }
 
 type characterService struct {
 	characters repository.CharacterRepository
-	items      repository.ItemRepository
 }
 
-func NewCharacterService(characters repository.CharacterRepository, items repository.ItemRepository) CharacterService {
-	return &characterService{characters: characters, items: items}
+func NewCharacterService(characters repository.CharacterRepository) CharacterService {
+	return &characterService{characters: characters}
 }
 
 func (s *characterService) List(ctx context.Context, accountID string) ([]*domain.Character, error) {
@@ -129,37 +136,62 @@ func (s *characterService) ListInventory(ctx context.Context, id, accountID stri
 	return s.characters.ListInventory(ctx, id)
 }
 
-func (s *characterService) AddInventoryItem(ctx context.Context, id, accountID, itemID string, quantity int) (*domain.InventoryEntry, error) {
-	if _, err := s.Get(ctx, id, accountID); err != nil {
-		return nil, err
-	}
-	item, err := s.items.Get(ctx, itemID)
-	if err != nil {
-		return nil, err
-	}
-	if quantity < 1 {
-		quantity = 1
-	}
-	// Потолок числа РАЗНЫХ записей инвентаря — апсерт по ItemID (см.
-	// AddInventoryEntry) не даёт заспамить одним и тем же предметом, но
-	// разных карточек каталога может быть добавлено сколько угодно без
-	// этой проверки.
-	if existing, err := s.characters.ListInventory(ctx, id); err == nil && len(existing) >= maxInventoryEntries {
-		return nil, &domain.ValidationError{Msg: "инвентарь переполнен"}
-	}
-	entry := domain.InventoryEntry{
-		ID: newID(), ItemID: item.ID, Name: item.Name, ImageURL: item.ImageURL,
-		WeightLb: item.WeightLb, Quantity: quantity,
-	}
-	return s.characters.AddInventoryEntry(ctx, id, accountID, entry)
-}
-
 func (s *characterService) UpdateInventoryItem(ctx context.Context, id, accountID, entryID string, quantity int, equipped bool, notes string) error {
 	if _, err := s.Get(ctx, id, accountID); err != nil {
 		return err
 	}
+	existing, err := s.characters.ListInventory(ctx, id)
+	if err != nil {
+		return err
+	}
+	var current *domain.InventoryEntry
+	for _, e := range existing {
+		if e.ID == entryID {
+			current = e
+			break
+		}
+	}
+	if current == nil {
+		return domain.ErrNotFound
+	}
+
+	// Надел/снял — особый путь: расщепляет или сливает стопку по одной штуке
+	// (см. CharacterRepository.SetInventoryEquipped), а не просто щёлкает
+	// флаг на всей записи. quantity из запроса тут игнорируется — клиент
+	// всегда шлёт старое суммарное количество стопки (character-sheet.js:
+	// кнопка "надето" патчит только equipped), которое после расщепления/
+	// слияния уже не имеет отношения к этой записи.
+	if equipped != current.Equipped {
+		found, err := s.characters.SetInventoryEquipped(ctx, id, accountID, entryID, newID(), equipped)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.ErrNotFound
+		}
+		return nil
+	}
+
 	if quantity < 0 {
 		quantity = 0
+	}
+	// Только уменьшение — см. комментарий у CharacterService выше. Текущее
+	// количество записи — потолок для запроса, превышение молча подрезается,
+	// а не отклоняет весь вызов (notes всё равно должны сохраниться).
+	if quantity > current.Quantity {
+		quantity = current.Quantity
+	}
+	// Дошло до нуля — предмет весь потрачен/выброшен, запись убирается из
+	// инвентаря целиком, а не висит пустой строкой "×0".
+	if quantity == 0 {
+		found, err := s.characters.RemoveInventoryEntry(ctx, id, accountID, entryID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.ErrNotFound
+		}
+		return nil
 	}
 	notes = clampRunes(strings.TrimSpace(notes), maxInventoryNotes)
 	found, err := s.characters.UpdateInventoryEntry(ctx, id, accountID, entryID, quantity, equipped, notes)

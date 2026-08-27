@@ -153,7 +153,7 @@ func TestReadLevelDB(t *testing.T) {
 		t.Fatalf("сцена не прочиталась: %v", docs)
 	}
 	_, assets := testModule(t)
-	mapped := MapScene(context.Background(), scene, assets)
+	mapped := MapScene(context.Background(), scene, assets, nil)
 	if len(mapped.Walls) != 1 {
 		t.Fatalf("стена не собралась в сцену: %+v", mapped.Walls)
 	}
@@ -197,6 +197,7 @@ func TestClassify(t *testing.T) {
 		{"предыстория", Doc{"type": "background"}, "Item", TargetReferences},
 		{"NPC", Doc{"type": "npc"}, "Actor", TargetMonsters},
 		{"транспорт едет в бестиарий как статблок", Doc{"type": "vehicle"}, "Actor", TargetMonsters},
+		{"готовый персонаж приключения — в пул, не в бестиарий", Doc{"type": "character"}, "Actor", TargetPregens},
 		{"группа актёров не статблок", Doc{"type": "group"}, "Actor", TargetSkipped},
 		{"журнал", Doc{"pages": []any{map[string]any{}}}, "JournalEntry", TargetNotes},
 		{"таблица", Doc{"results": []any{}}, "RollTable", TargetSkipped},
@@ -214,8 +215,11 @@ func TestClassify(t *testing.T) {
 // разворачиваем её в документы по разделам, а не тащим как одну запись.
 func TestExpandAdventure(t *testing.T) {
 	adventure := Doc{
-		"name":   "Шахта",
-		"actors": []any{map[string]any{"type": "npc", "name": "Гоблин"}},
+		"name": "Шахта",
+		"actors": []any{
+			map[string]any{"type": "npc", "name": "Гоблин"},
+			map[string]any{"type": "character", "name": "Шила"},
+		},
 		"items":  []any{map[string]any{"type": "spell", "name": "Свет"}},
 		"scenes": []any{map[string]any{"name": "Вход", "walls": []any{}}},
 	}
@@ -224,7 +228,7 @@ func TestExpandAdventure(t *testing.T) {
 	for _, e := range entries {
 		got[e.Target]++
 	}
-	if got[TargetMonsters] != 1 || got[TargetSpells] != 1 || got[TargetScenes] != 1 {
+	if got[TargetMonsters] != 1 || got[TargetSpells] != 1 || got[TargetScenes] != 1 || got[TargetPregens] != 1 {
 		t.Fatalf("приключение развернулось не туда: %v", got)
 	}
 }
@@ -341,11 +345,11 @@ func TestMapScene(t *testing.T) {
 			map[string]any{"x": 400, "y": 400, "config": map[string]any{"bright": 10, "dim": 20}},
 		},
 		"tokens": []any{
-			map[string]any{"x": 300, "y": 300, "width": 1, "height": 1, "name": "Бармен", "hidden": true},
+			map[string]any{"x": 300, "y": 300, "width": 1, "height": 1, "name": "Бармен", "hidden": true, "actorId": "actor-barman"},
 		},
 	}
 
-	s := MapScene(context.Background(), doc, assets)
+	s := MapScene(context.Background(), doc, assets, nil)
 	// offset = ceil(0.25*1000/100)*100 = 300 по X, ceil(0.25*800/100)*100 = 200 по Y.
 	if s.Width != 1000 || s.Height != 800 {
 		t.Fatalf("размер холста %vx%v", s.Width, s.Height)
@@ -412,6 +416,69 @@ func TestMapScene(t *testing.T) {
 	if token == nil || token.X != 50 || token.Y != 150 || !token.Hidden || token.Label != "Бармен" {
 		t.Fatalf("токен перенёсся неверно: %+v", token)
 	}
+	// Якорь для отложенного связывания со статблоком (см.
+	// domain.Token.FoundryActorID): сам MonsterID тут ещё пуст — актёры
+	// приезжают отдельным паком, и связывает их уже
+	// service.FoundryService.LinkSceneTokens.
+	if token.FoundryActorID != "actor-barman" {
+		t.Fatalf("id актёра не сохранился: %q", token.FoundryActorID)
+	}
+	if token.MonsterID != "" {
+		t.Fatalf("статблок не может быть известен на этапе разбора сцены: %q", token.MonsterID)
+	}
+}
+
+// TestMapSceneNoteMarkers — значки Foundry на карте (notes[]) переносятся в
+// domain.NoteMarker, если индекс модуля знает запись, на которую они ведут;
+// настоящий id заметки на этом этапе неизвестен (её заводит клиент), поэтому
+// кладём «якорь» — имя записи, папку и раздел.
+func TestMapSceneNoteMarkers(t *testing.T) {
+	_, assets := testModule(t)
+	ix := &LinkIndex{targets: map[string]LinkTarget{
+		"entry1": {Kind: "note", Name: "Приключение", Folder: "Модуль/Приключение"},
+		"page1":  {Kind: "note", Name: "Приключение", Folder: "Модуль/Приключение", Section: "Мёртвые пауки"},
+	}}
+	doc := Doc{
+		"name": "Пещера", "width": 1000, "height": 800,
+		"notes": []any{
+			// ведёт на конкретную страницу — открываем заметку на её разделе
+			map[string]any{"entryId": "entry1", "pageId": "page1", "x": 400, "y": 300},
+			// ведёт на запись целиком (страницы нет)
+			map[string]any{"entryId": "entry1", "x": 100, "y": 100, "text": "Своя подпись"},
+			// ведёт в никуда (документ мира/другого модуля) — пропускаем
+			map[string]any{"entryId": "zzz", "x": 0, "y": 0},
+		},
+	}
+	s := MapScene(context.Background(), doc, assets, ix)
+	if len(s.NoteMarkers) != 2 {
+		t.Fatalf("значков %d, ожидали 2", len(s.NoteMarkers))
+	}
+	var page, entry *domain.NoteMarker
+	for _, nm := range s.NoteMarkers {
+		if nm.Section != "" {
+			page = nm
+		} else {
+			entry = nm
+		}
+	}
+	if page == nil || page.Label != "Мёртвые пауки" || page.Section != "Мёртвые пауки" ||
+		page.FoundryEntry != "Приключение" || page.FoundryFolder != "Модуль/Приключение" ||
+		page.X != 400 || page.Y != 300 || page.NoteID != "" {
+		t.Fatalf("значок на страницу перенёсся неверно: %+v", page)
+	}
+	if entry == nil || entry.Label != "Своя подпись" || entry.Section != "" || entry.FoundryEntry != "Приключение" {
+		t.Fatalf("значок на запись перенёсся неверно: %+v", entry)
+	}
+}
+
+// TestMapSceneNoteMarkersNoIndex — без индекса значки просто не переносятся
+// (nil ix — легальный вызов для не-adventure сцен).
+func TestMapSceneNoteMarkersNoIndex(t *testing.T) {
+	_, assets := testModule(t)
+	doc := Doc{"name": "Пещера", "width": 100, "height": 100, "notes": []any{map[string]any{"entryId": "e", "x": 1, "y": 1}}}
+	if s := MapScene(context.Background(), doc, assets, nil); len(s.NoteMarkers) != 0 {
+		t.Fatalf("без индекса значков быть не должно: %d", len(s.NoteMarkers))
+	}
 }
 
 func TestMapJournal(t *testing.T) {
@@ -436,6 +503,27 @@ func TestMapJournal(t *testing.T) {
 	}
 	if !strings.Contains(content, "](/uploads/notes/") {
 		t.Fatalf("картинка страницы не перенеслась: %q", content)
+	}
+}
+
+// TestMapJournalCallouts — заметные врезки модуля/системы dnd5e («читать
+// вслух», советы Мастеру) получают наши классы, которые стилизует
+// .note-render (фон + полоса слева); чужой CSS системы у нас не грузится.
+func TestMapJournalCallouts(t *testing.T) {
+	_, assets := testModule(t)
+	doc := Doc{
+		"name":  "Сцена 1",
+		"pages": []any{map[string]any{"name": "Вход", "type": "text", "text": map[string]any{"content": `<section class="fvtt narrative"><p>Зачитайте это игрокам.</p></section><section class="fvtt advice ag-advice"><article><p>А это совет Мастеру.</p></article></section><aside class="notable"><p>Сбоку.</p></aside>`}}},
+	}
+	content := MapJournal(context.Background(), doc, "", assets).Content
+	if !strings.Contains(content, `<section class="beacon-readaloud"><p>Зачитайте это игрокам.</p>`) {
+		t.Fatalf("врезка «читать вслух» не переведена: %q", content)
+	}
+	if strings.Contains(content, "fvtt narrative") || strings.Contains(content, "fvtt advice") || strings.Contains(content, `"notable"`) {
+		t.Fatalf("классы системы остались в тексте: %q", content)
+	}
+	if !strings.Contains(content, `<section class="beacon-dm-note"><article>`) || !strings.Contains(content, `<aside class="beacon-dm-note"><p>Сбоку.`) {
+		t.Fatalf("врезки-советы не переведены: %q", content)
 	}
 }
 
@@ -579,6 +667,8 @@ func TestLinkIndexRewrite(t *testing.T) {
 		"pageB": {Kind: "note", Name: "Приложение D: правила", Folder: "Модуль/Правила/Приложения", Section: "Перемещение через существ"},
 		"spl1":  {Kind: "spell", Name: "Огненный шар"},
 		"itm1":  {Kind: "item", Name: `Меч "Клык"`},
+		"scn1":  {Kind: "scene", Name: "Пещера"},
+		"pl1":   {Kind: "playlist", Name: "Бой с гоблинами"},
 		"tbl1":  {Name: "Таблица случайностей"}, // переносить некуда — останется текст
 	}}
 
@@ -606,6 +696,21 @@ func TestLinkIndexRewrite(t *testing.T) {
 			"кавычки в имени экранируются",
 			`@UUID[Compendium.mod.items.Item.itm1]`,
 			`<a class="catalog-ref" data-kind="item" data-name="Меч &#34;Клык&#34;">Меч &#34;Клык&#34;</a>`,
+		},
+		{
+			"ссылка на сцену — переключатель карты стола (kind=scene)",
+			`карта: @UUID[Compendium.mod.scenes.Scene.scn1]`,
+			`карта: <a class="catalog-ref" data-kind="scene" data-name="Пещера">Пещера</a>`,
+		},
+		{
+			"ссылка на плейлист (kind=playlist)",
+			`включите @UUID[Compendium.mod.music.Playlist.pl1]{плейлистом}`,
+			`включите <a class="catalog-ref" data-kind="playlist" data-name="Бой с гоблинами">плейлистом</a>`,
+		},
+		{
+			"отдельный звук плейлиста переносить некуда — остаётся подпись",
+			`@UUID[Compendium.mod.music.Playlist.pl1.PlaylistSound.snd9]{звук камней}`,
+			`звук камней`,
 		},
 		{
 			"цель есть, но переносить некуда — остаётся подпись",
@@ -649,6 +754,28 @@ func TestRewriteDocMacros(t *testing.T) {
 	}
 }
 
+// TestRewriteDocMacrosLookupName — обогатитель [[lookup @name]] в описании
+// способности существа подставляется именем самого существа (регрессия:
+// карточка «Спрайт», способность «Проворное бегство» приносила в текст
+// буквальное «lookup @name совершает действие …»).
+func TestRewriteDocMacrosLookupName(t *testing.T) {
+	doc := Doc{
+		"name": "Спрайт",
+		"items": []any{
+			map[string]any{"name": "Проворное бегство", "system": map[string]any{"description": map[string]any{
+				"value": `<p>[[lookup @name]] совершает действие Отступление или Засада.</p>`,
+			}}},
+		},
+	}
+	RewriteDocMacros(doc, &LinkIndex{targets: map[string]LinkTarget{}})
+
+	nested := asMap(asSlice(doc["items"])[0])
+	got := digString(nested, "system", "description", "value")
+	if want := `<p>Спрайт совершает действие Отступление или Засада.</p>`; got != want {
+		t.Fatalf("lookup @name не подставлен:\n получили %q\n ожидали  %q", got, want)
+	}
+}
+
 // TestRewriteRolls — инлайн-броски Foundry. Формула должна остаться
 // формулой (её делает кликабельной клиент, см. web/src/inline-rolls.js), а
 // проверки и спасброски — стать человеческой фразой.
@@ -686,6 +813,11 @@ func TestRewriteRolls(t *testing.T) {
 		},
 		{"экранированный амперсанд у &Reference", `состояние &amp;Reference[Prone]`, `состояние Prone`},
 		{"незнакомая команда без подписи исчезает", `а[[/item Меч]]б`, `аб`},
+		// [[lookup @name]] без данных документа (RewriteRolls вызывают и на
+		// тексте журнала — там имени актёра нет): макрос сворачивается в свою
+		// подпись, а не утекает словом «lookup» в текст.
+		{"lookup без имени и подписи исчезает", `а[[lookup @name]]б`, `аб`},
+		{"lookup без имени, но с подписью — остаётся подпись", `[[lookup @name]]{Существо} бежит`, `Существо бежит`},
 		// Регрессия на реальных данных (см. data/references — "Покрытое ядом
 		// оружие"): цель /item названа "Русское [English]" — из-за одиночной
 		// пары [...] внутри макроса он раньше не матчился ВООБЩЕ (жадный
@@ -750,8 +882,26 @@ func TestRewriteHTML(t *testing.T) {
 	if !strings.Contains(got, `src="/uploads/notes/`) {
 		t.Fatalf("картинка в тексте не переписана: %q", got)
 	}
-	if !strings.Contains(got, `src='icons/svg/nope.svg'`) {
-		t.Fatalf("ссылка без файла должна остаться как была: %q", got)
+	// Картинки, которой нет в архиве (ассет самого Foundry), в тексте
+	// оставаться не должно — ни ссылкой, ни битым <img>.
+	if strings.Contains(got, "nope.svg") || strings.Contains(got, "<img src='icons") {
+		t.Fatalf("битый <img> не выкинут: %q", got)
+	}
+}
+
+// TestRewriteHTMLDropsBrokenIconWrapper — декоративная иконка advice-блока
+// ссылается на ассет самого Foundry ("icons/vtt-512.png"), которого в модуле
+// нет: выкидываем и <img>, и опустевшую обёртку <figure>, иначе в тексте
+// заметки торчит пустая рамка с крестиком.
+func TestRewriteHTMLDropsBrokenIconWrapper(t *testing.T) {
+	_, assets := testModule(t)
+	html := `<section class="advice"><figure class="icon"><img src="icons/vtt-512.png" /></figure><article><h4>Совет</h4><p>текст</p></article></section>`
+	got := assets.RewriteHTML(context.Background(), domain.AssetKindNotes, html)
+	if strings.Contains(got, "<img") || strings.Contains(got, "<figure") {
+		t.Fatalf("битая иконка и пустая обёртка не убраны: %q", got)
+	}
+	if !strings.Contains(got, "<h4>Совет</h4>") || !strings.Contains(got, "<p>текст</p>") {
+		t.Fatalf("полезное содержимое блока пропало: %q", got)
 	}
 }
 

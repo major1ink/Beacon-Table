@@ -100,6 +100,26 @@ func (a *API) handleFoundryModulesCheck(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, list)
 }
 
+// handleFoundryLinkSceneTokens — «доставить статблоки токенам импортированных
+// сцен» (см. service.FoundryService.LinkSceneTokens). Зовётся клиентом ОДИН
+// раз в конце импорта, когда карточки существ уже заведены — почему это
+// отдельный шаг, а не часть импорта пака, разобрано там же.
+func (a *API) handleFoundryLinkSceneTokens(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireAdminAccount(w, r); !ok {
+		return
+	}
+	world, ok := a.requireWorld(w)
+	if !ok {
+		return
+	}
+	linked, err := world.Foundry.LinkSceneTokens(r.Context())
+	if err != nil {
+		writeFoundryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"linked": linked})
+}
+
 // handleFoundryModuleDelete — "Удалить модуль" целиком: карточки, файлы и
 // саму запись об установке (см. service.FoundryService.Delete — там же
 // разбор, что именно сносится и почему сцены/плейлисты/заметки — нет).

@@ -53,11 +53,17 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/characters/{id}/sheet", a.handleCharacterSheetUpdate)
 	mux.HandleFunc("DELETE /api/characters/{id}", a.handleCharacterDelete)
 
+	// «Готовые персонажи» — пул предгенерированных листов мира из
+	// импортированных приключений Foundry (см. domain.Pregen). Игрок берёт
+	// свободного, ДМ управляет пулом — см. pregen_handlers.go.
+	mux.HandleFunc("GET /api/pregens", a.handlePregensList)
+	mux.HandleFunc("GET /api/pregens/{id}", a.handlePregenGet)
+	mux.HandleFunc("POST /api/pregens/{id}/claim", a.handlePregenClaim)
+
 	// Инвентарь персонажа (см. domain.InventoryEntry) — своя sub-collection,
 	// не часть /sheet выше (см. комментарий repository.CharacterRepository и
 	// план фичи про гонку с автосейвом листа).
 	mux.HandleFunc("GET /api/characters/{id}/inventory", a.handleCharacterInventoryList)
-	mux.HandleFunc("POST /api/characters/{id}/inventory", a.handleCharacterInventoryAdd)
 	mux.HandleFunc("PUT /api/characters/{id}/inventory/{entryId}", a.handleCharacterInventoryUpdate)
 	mux.HandleFunc("DELETE /api/characters/{id}/inventory/{entryId}", a.handleCharacterInventoryDelete)
 
@@ -71,6 +77,16 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/admin/characters/{id}", a.handleAdminCharacterUpdate)
 	mux.HandleFunc("PUT /api/admin/characters/{id}/sheet", a.handleAdminCharacterSheetUpdate)
 
+	// Пул «готовых персонажей» — ДМ: обзор, назначение аккаунту, возврат в
+	// пул. POST/PUT без {id}/с {id} — покарточное заведение из экрана импорта
+	// Foundry (ср. /api/bestiary). См. pregen_handlers.go.
+	mux.HandleFunc("GET /api/admin/pregens", a.handleAdminPregensList)
+	mux.HandleFunc("POST /api/admin/pregens", a.handleAdminPregenCreate)
+	mux.HandleFunc("PUT /api/admin/pregens/{id}", a.handleAdminPregenUpdate)
+	mux.HandleFunc("POST /api/admin/pregens/{id}/assign", a.handleAdminPregenAssign)
+	mux.HandleFunc("POST /api/admin/pregens/{id}/release", a.handleAdminPregenRelease)
+	mux.HandleFunc("DELETE /api/admin/pregens/{id}", a.handleAdminPregenDelete)
+
 	mux.HandleFunc("GET /api/admin/playlists", a.handleAdminPlaylistsList)
 	mux.HandleFunc("POST /api/admin/playlists", a.handleAdminPlaylistCreate)
 	mux.HandleFunc("PUT /api/admin/playlists/{id}", a.handleAdminPlaylistRename)
@@ -79,18 +95,6 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/admin/playlists/{id}/tracks/{trackId}", a.handleAdminPlaylistTrackUpdate)
 	mux.HandleFunc("DELETE /api/admin/playlists/{id}/tracks/{trackId}", a.handleAdminPlaylistTrackDelete)
 	mux.HandleFunc("POST /api/admin/playlists/{id}/tracks/{trackId}/move", a.handleAdminPlaylistTrackMove)
-
-	mux.HandleFunc("GET /api/notes", a.handleNotesList)
-	mux.HandleFunc("POST /api/notes", a.handleNoteCreate)
-	mux.HandleFunc("GET /api/notes/{id}", a.handleNoteGet)
-	mux.HandleFunc("PUT /api/notes/{id}", a.handleNoteUpdate)
-	mux.HandleFunc("PUT /api/notes/{id}/folder", a.handleNoteMove)
-	mux.HandleFunc("DELETE /api/notes/{id}", a.handleNoteDelete)
-
-	mux.HandleFunc("GET /api/note-folders", a.handleNoteFoldersList)
-	mux.HandleFunc("POST /api/note-folders", a.handleNoteFolderCreate)
-	mux.HandleFunc("PUT /api/note-folders", a.handleNoteFolderRename)
-	mux.HandleFunc("DELETE /api/note-folders", a.handleNoteFolderDelete)
 
 	mux.HandleFunc("GET /api/journal", a.handleJournalList)
 	mux.HandleFunc("POST /api/journal", a.handleJournalCreate)
@@ -138,6 +142,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/foundry/import", a.handleFoundryImport)
 	mux.HandleFunc("GET /api/foundry/modules", a.handleFoundryModules)
 	mux.HandleFunc("POST /api/foundry/modules/check", a.handleFoundryModulesCheck)
+	mux.HandleFunc("POST /api/foundry/link-scene-tokens", a.handleFoundryLinkSceneTokens)
 	mux.HandleFunc("DELETE /api/foundry/modules/{id}", a.handleFoundryModuleDelete)
 
 	mux.HandleFunc("GET /api/conditions", a.handleConditionsList)

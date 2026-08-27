@@ -89,6 +89,19 @@ func (r *Room) combatantByToken(tokenID string) *domain.Combatant {
 	return nil
 }
 
+// turnAllowsTokenMove — можно ли сейчас двигать этот токен. Вне активного
+// боя — всегда да (свободное перемещение до начала инициативы). В бою —
+// только если у токена вообще нет привязки к трекеру (декорация/фон, не
+// участвует в инициативе) или он принадлежит бойцу, чей сейчас ход;
+// остальные, включая ДМ, двигают лишь текущего бойца — см. handleTurnStep.
+func (r *Room) turnAllowsTokenMove(tokenID string) bool {
+	if !r.combat.Active {
+		return true
+	}
+	cmb := r.combatantByToken(tokenID)
+	return cmb == nil || cmb.ID == r.combat.CurrentID
+}
+
 // resolveStatusTarget — единая точка «куда прикладывать метки» для всех
 // команд состояний. Цель задаётся ОДНИМ из двух полей сообщения: TokenID
 // (ПКМ по токену на карте) или CombatantID (карточка в трекере).
@@ -496,12 +509,16 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 				continue
 			}
 			formula := normalizeDiceFormula(m.Value)
-			result, err := r.dice.Roll(formula)
-			if err != nil {
-				// Кривую формулу («1к6 огнём» с текстом внутри) молча
-				// пропускаем: карточку из-за неё ронять нечего, а ДМ увидит,
-				// что урон не идёт, и поправит значение в конструкторе.
-				continue
+			var result domain.RollResult
+
+			if v, ok := domain.ParseModifierValue(m.Value); ok {
+				result = domain.RollResult{Total: v}
+			} else {
+				var err error
+				result, err = r.dice.Roll(formula)
+				if err != nil {
+					continue
+				}
 			}
 			label := st.Name
 			if m.Note != "" {
@@ -514,8 +531,7 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 	if delta == 0 {
 		return
 	}
-	next := cmb.HPCurrent + delta
-	r.handleSetCombatantHP(cmb.ID, &next, nil)
+	r.handleSetCombatantHP(cmb.ID, nil, nil, nil, &delta)
 }
 
 // publicStatuses — версия списка меток для конкретной роли: не-ДМ не должен

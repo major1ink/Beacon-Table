@@ -76,6 +76,12 @@ export function createNet(ctx, audio) {
       // internal/service/room.go) — эфемерное «посмотрите сюда», состояние
       // мира не трогает; открывает окно журнала у игрока (pages/player.js).
       document.dispatchEvent(new CustomEvent("vtt:journalShown", { detail: data }));
+    } else if (data.type === "showcase") {
+      // «Показать игрокам»: картинка поверх всего на экранах игроков и
+      // трансляции (см. broadcastShowcase в internal/service/room.go,
+      // web/src/showcase-overlay.js). Эфемерно, состояние мира не трогает;
+      // приходит и свежеподключившемуся (Room.run). null = убрать показ.
+      document.dispatchEvent(new CustomEvent("vtt:showcase", { detail: data.showcase || null }));
     } else if (data.type === "roll_result") {
       document.dispatchEvent(new CustomEvent("vtt:rollResult", { detail: data }));
     } else if (data.type === "audio_cue") {
@@ -88,6 +94,14 @@ export function createNet(ctx, audio) {
       // combat-bar.js/pages/dm.js синхронный доступ к последнему состоянию
       // без необходимости всем самим держать подписку.
       ctx.combat = data;
+      // dirty.tokens — смена хода (currentId) или тумблер highlightActiveToken
+      // рисуются прямо НА токене (layers/tokens.js: turnRing), а токены сами
+      // по себе combat_state не диффят (это не часть snapshot.scene) — без
+      // явного dirty кольцо не перерисовалось бы до следующего изменения
+      // сцены. Дёшево — тот же объём работы, что и любой другой dirty.tokens
+      // (см. dirty.js).
+      ctx.dirty.tokens = true;
+      ctx.render();
       document.dispatchEvent(new CustomEvent("vtt:combatState", { detail: data }));
     } else if (data.type === "hub_state") {
       // Хаб лута ДМ (см. internal/service/room.go: hubPayload) — не привязан
@@ -96,6 +110,11 @@ export function createNet(ctx, audio) {
       // как ctx.combat.
       ctx.hub = data.entries || [];
       document.dispatchEvent(new CustomEvent("vtt:hubState", { detail: ctx.hub }));
+    } else if (data.type === "playlists_changed") {
+      // Плейлисты канала ДМ поменялись мимо этой вкладки (другая вкладка
+      // ДМ, импорт Foundry — см. RoomService.NotifyPlaylistsChanged): панель
+      // "Плейлисты" (pages/dm.js) сама перечитает список по этому событию.
+      document.dispatchEvent(new CustomEvent("vtt:playlistsChanged"));
     }
   };
 

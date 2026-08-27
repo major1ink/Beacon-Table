@@ -37,7 +37,21 @@ type RoomService interface {
 	Dispatch(c RoomClient, msg domain.ClientMsg)
 	Shutdown()
 	ImportScenes(ctx context.Context, scenes []*domain.SceneState) (int, error)
+	// LinkTokensToMonsters дописывает Token.MonsterID токенам, приехавшим со
+	// сценами из Foundry, по карте "id актёра Foundry -> id карточки
+	// бестиария" (см. domain.Token.FoundryActorID). Возвращает, скольким
+	// токенам связь реально проставили.
+	LinkTokensToMonsters(ctx context.Context, monsterByActor map[string]string) (int, error)
 	NotifyJournalChanged(id string)
+	// NotifyCharacterSheetChanged — лист персонажа сохранили по HTTP:
+	// комната подтягивает его хиты в бойца трекера, если тот сейчас в
+	// инициативе (см. room_character_hp.go).
+	NotifyCharacterSheetChanged(characterID string)
+	// NotifyPlaylistsChanged — плейлисты канала ДМ поменялись мимо WS (см.
+	// admin-эндпоинты /api/admin/playlists и импорт Foundry): уже открытая
+	// панель "Плейлисты" (см. web/src/pages/dm.js) должна перечитать список
+	// сама, без ручной перезагрузки страницы.
+	NotifyPlaylistsChanged()
 }
 
 type inboundMsg struct {
@@ -50,6 +64,13 @@ type inboundMsg struct {
 type importScenesReq struct {
 	scenes []*domain.SceneState
 	reply  chan int
+}
+
+// linkTokensReq — заявка на связывание токенов сцен с бестиарием, тем же
+// приёмом, что importScenesReq выше (см. LinkTokensToMonsters).
+type linkTokensReq struct {
+	monsterByActor map[string]string
+	reply          chan int
 }
 
 // Room — реализация RoomService.
@@ -89,6 +110,10 @@ type Room struct {
 	// команда клиента и авторизации по роли у неё нет — вызывающего
 	// (ДМ-only эндпоинт) проверил API-слой.
 	importScenes chan importScenesReq
+	// linkTokens — связывание токенов с бестиарием после импорта пака с
+	// актёрами (см. LinkTokensToMonsters): свой канал по той же причине, что
+	// и importScenes — это не команда клиента и роль по ней не проверяется.
+	linkTokens chan linkTokensReq
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -96,8 +121,16 @@ type Room struct {
 	// ждать занятую горутину комнаты (и уж тем более виснуть на уже
 	// остановленной).
 	journalChanged chan string
-	dirty          bool            // есть хоть одна несохранённая мутация с последнего флаша
-	dirtyScenes    map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
+	// characterSheetChanged — «лист персонажа сохранили» из HTTP-хендлера
+	// (см. NotifyCharacterSheetChanged): свой канал по той же причине и с
+	// теми же свойствами, что journalChanged выше.
+	characterSheetChanged chan string
+	// playlistsChanged — «плейлисты поменялись» из HTTP-хендлера (см.
+	// NotifyPlaylistsChanged: admin-CRUD плейлистов и импорт Foundry) — тот
+	// же принцип и те же свойства, что journalChanged выше.
+	playlistsChanged chan struct{}
+	dirty            bool            // есть хоть одна несохранённая мутация с последнего флаша
+	dirtyScenes      map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
 	// combat — трекер инициативы всего стола (см. domain.CombatState), не
 	// привязан к конкретной сцене — переживает switch_scene. combatDirty —
@@ -127,6 +160,11 @@ type Room struct {
 	// подключения. Игнорируется клиентом, если текущий фон — не видео.
 	mapStartedAtMs int64
 	cue            *domain.CueState // канал ДМ — независим от амбиента сцены, nil = ничего не играет
+	// showcase — картинка «поверх всего» на экранах игроков и трансляции
+	// (раздел «Показ» у ДМ, см. domain.ShowcaseState). Эфемерна, как cue:
+	// в state сцены не пишется, шлётся всем и досылается свежеподключившимся
+	// (см. showcasePayload/broadcastShowcase). nil = ничего не показывается.
+	showcase *domain.ShowcaseState
 }
 
 // NewRoom поднимает комнату из sceneRepo (все сцены с прошлого запуска,
@@ -164,10 +202,14 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		inbound:        make(chan inboundMsg, 32),
 		shutdown:       make(chan chan struct{}),
 		importScenes:   make(chan importScenesReq),
+		linkTokens:     make(chan linkTokensReq),
 		journalChanged: make(chan string, 32),
-		dirtyScenes:    make(map[string]bool),
-		combat:         combat,
-		hub:            hub,
+
+		characterSheetChanged: make(chan string, 32),
+		playlistsChanged:      make(chan struct{}, 4),
+		dirtyScenes:           make(map[string]bool),
+		combat:                combat,
+		hub:                   hub,
 	}
 	r.scene = r.scenes[r.currentSceneID]
 	r.ambientStartedAtMs = time.Now().UnixMilli() // амбиент активной сцены (если есть) стартует заново при запуске сервера
@@ -206,6 +248,67 @@ func (r *Room) ImportScenes(ctx context.Context, scenes []*domain.SceneState) (i
 	case <-ctx.Done():
 		return 0, ctx.Err()
 	}
+}
+
+// LinkTokensToMonsters — см. RoomService. Пустая карта — сразу 0, без
+// похода в горутину комнаты: импорт пака без единого актёра это обычное
+// дело (заклинания, предметы), и гонять из-за него комнату незачем.
+func (r *Room) LinkTokensToMonsters(ctx context.Context, monsterByActor map[string]string) (int, error) {
+	if len(monsterByActor) == 0 {
+		return 0, nil
+	}
+	reply := make(chan int, 1)
+	select {
+	case r.linkTokens <- linkTokensReq{monsterByActor: monsterByActor, reply: reply}:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	select {
+	case linked := <-reply:
+		return linked, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+// linkTokensToMonsters — тело LinkTokensToMonsters уже внутри горутины
+// run(). Идёт по ВСЕМ сценам комнаты, а не только по активной: пак с
+// актёрами импортируют один раз, а сцены модуля к этому моменту разложены
+// все сразу (см. addScenes), и ДМ вправе ожидать, что статблоки появятся на
+// каждой карте приключения, а не только на той, что открыта.
+//
+// Уже проставленный MonsterID не трогаем: ДМ мог привязать токен к своей
+// карточке руками, и повторный импорт модуля не должен это перебивать.
+func (r *Room) linkTokensToMonsters(monsterByActor map[string]string) int {
+	linked := 0
+	currentTouched := false
+	for sceneID, s := range r.scenes {
+		changed := false
+		for _, t := range s.Tokens {
+			if t.MonsterID != "" || t.FoundryActorID == "" {
+				continue
+			}
+			monsterID, ok := monsterByActor[t.FoundryActorID]
+			if !ok {
+				continue
+			}
+			t.MonsterID = monsterID
+			linked++
+			changed = true
+		}
+		if changed {
+			r.markDirty(sceneID)
+			if sceneID == r.currentSceneID {
+				currentTouched = true
+			}
+		}
+	}
+	// Рассылаем, только если поменялась ОТКРЫТАЯ сейчас сцена: клиенты видят
+	// лишь её, снапшот по правке любой другой был бы пустым шумом.
+	if currentTouched {
+		r.broadcastAll()
+	}
+	return linked
 }
 
 // addScenes — тело ImportScenes уже внутри горутины run(): кладёт сцены в
@@ -249,9 +352,10 @@ func (r *Room) run() {
 		case c := <-r.join:
 			r.clients[c] = true
 			c.Send(r.snapshotPayload(c))
-			c.Send(r.cuePayload())     // канал ДМ — что уже играет, если играет
-			c.Send(r.combatPayload(c)) // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
-			c.Send(r.hubPayload())     // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
+			c.Send(r.cuePayload())      // канал ДМ — что уже играет, если играет
+			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
+			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
+			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
 
@@ -274,6 +378,21 @@ func (r *Room) run() {
 				continue
 			case "show_journal":
 				r.relayJournalShow(im.from, im.msg) // эфемерно, как fx: state не трогает
+				continue
+			case "show_image":
+				// «Показать игрокам» из раздела «Показ» — картинка поверх
+				// всего на экранах игроков и трансляции. Эфемерно, как cue:
+				// в state сцены не пишется (см. showcasePayload).
+				if im.msg.ImageURL == "" {
+					r.showcase = nil
+				} else {
+					r.showcase = &domain.ShowcaseState{URL: im.msg.ImageURL}
+				}
+				r.broadcastShowcase()
+				continue
+			case "hide_image":
+				r.showcase = nil
+				r.broadcastShowcase()
 				continue
 			case "move_own_token":
 				r.applyOwnTokenMove(im.from, im.msg) // сам шлёт broadcastAll при успехе
@@ -323,6 +442,55 @@ func (r *Room) run() {
 					r.broadcastCue()
 				}
 				continue
+			case "set_cue_loop":
+				// живое переключение "зациклен" у уже играющего трека (см.
+				// dm.js: loopBtn/openTrackModal) — тем же приёмом, что и
+				// set_cue_volume выше. Без этого доигравший до конца трек
+				// останавливался бы/уходил на следующий по СТАРОМУ флагу —
+				// клиент применяет audioEl.loop только из broadcastCue, а
+				// изменение только в БД никак не долетало бы до уже играющего
+				// <audio>.
+				if r.cue != nil && im.msg.Cue != nil {
+					r.cue.Loop = im.msg.Cue.Loop
+					r.broadcastCue()
+				}
+				continue
+			case "pause_cue":
+				// StartedAtMs больше не годится для формулы currentTime = now -
+				// StartedAtMs (время идёт, а трек стоит) — замораживаем позицию
+				// в PositionMs, её же на резюме превратим обратно в StartedAtMs.
+				if r.cue != nil && !r.cue.Paused {
+					r.cue.PositionMs = time.Now().UnixMilli() - r.cue.StartedAtMs
+					r.cue.Paused = true
+					r.broadcastCue()
+				}
+				continue
+			case "resume_cue":
+				if r.cue != nil && r.cue.Paused {
+					r.cue.StartedAtMs = time.Now().UnixMilli() - r.cue.PositionMs
+					r.cue.Paused = false
+					r.broadcastCue()
+				}
+				continue
+			case "seek_cue":
+				// Перемотка — как play_cue, но без пересоздания CueState: имя/
+				// громкость/луп остаются теми же, меняется только позиция. На
+				// паузе сикаем "на месте" (PositionMs), на воспроизведении —
+				// сдвигаем виртуальный старт (StartedAtMs), тем же приёмом, что
+				// resume_cue выше.
+				if r.cue != nil && im.msg.Cue != nil {
+					pos := im.msg.Cue.PositionMs
+					if pos < 0 {
+						pos = 0
+					}
+					if r.cue.Paused {
+						r.cue.PositionMs = pos
+					} else {
+						r.cue.StartedAtMs = time.Now().UnixMilli() - pos
+					}
+					r.broadcastCue()
+				}
+				continue
 
 			// ---- трекер инициативы (см. domain.CombatState/Combatant) —
 			// своя ветка мутаций, а не applyMutation: он живёт вне r.scene и
@@ -344,7 +512,7 @@ func (r *Room) run() {
 				}
 				continue
 			case "set_combatant_hp":
-				r.handleSetCombatantHP(im.msg.CombatantID, im.msg.HPCurrent, im.msg.HPMax)
+				r.handleSetCombatantHP(im.msg.CombatantID, im.msg.HPCurrent, im.msg.HPMax, im.msg.HPTemp, im.msg.HPDelta)
 				continue
 			case "set_combatant_death_save":
 				if im.msg.DeathSaveValue != nil {
@@ -375,6 +543,23 @@ func (r *Room) run() {
 				if im.msg.LootingEnabled != nil {
 					r.handleSetLootingEnabled(*im.msg.LootingEnabled)
 				}
+				continue
+			case "set_highlight_active_token":
+				if im.msg.HighlightActiveToken != nil {
+					r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
+				}
+				continue
+			// revive_token — вкладка "Убитые" трекера (см. combatPayload:
+			// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
+			// тот умеет только create_scene-подобные мутации сцены, а тут
+			// нужно ещё очистить Loot/XP и т.п. специфичную для смерти логику.
+			case "revive_token":
+				r.handleReviveKilledToken(im.msg.TokenID)
+				continue
+			// clear_killed_tokens — кнопка "Очистить убитых", см.
+			// handleClearKilledTokens. Без TokenID: чистит весь список разом.
+			case "clear_killed_tokens":
+				r.handleClearKilledTokens()
 				continue
 
 			// ---- хаб лута ДМ (см. domain.LootHub) — своя ветка мутаций, тем
@@ -429,8 +614,17 @@ func (r *Room) run() {
 		case req := <-r.importScenes:
 			req.reply <- r.addScenes(req.scenes)
 
+		case req := <-r.linkTokens:
+			req.reply <- r.linkTokensToMonsters(req.monsterByActor)
+
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
+
+		case characterID := <-r.characterSheetChanged:
+			r.applyCharacterSheetHP(characterID)
+
+		case <-r.playlistsChanged:
+			r.broadcastPlaylistsChanged()
 
 		case <-ticker.C:
 			r.flushIfDirty()
@@ -599,6 +793,22 @@ func (r *Room) cuePayload() map[string]any {
 	return map[string]any{"type": "audio_cue", "cue": r.cue, "serverNow": time.Now().UnixMilli()}
 }
 
+// broadcastShowcase / showcasePayload — картинка «Показать игрокам» (см.
+// domain.ShowcaseState, web/src/showcase-overlay.js). Как и канал ДМ, шлётся
+// всем клиентам (игроки, трансляция, сам ДМ — у него это предпросмотр) и
+// досылается свежеподключившимся в Room.run. r.showcase == nil уходит как
+// JSON null — клиент трактует это как «убрать показ».
+func (r *Room) broadcastShowcase() {
+	payload := r.showcasePayload()
+	for c := range r.clients {
+		c.Send(payload)
+	}
+}
+
+func (r *Room) showcasePayload() map[string]any {
+	return map[string]any{"type": "showcase", "showcase": r.showcase}
+}
+
 // broadcastSceneList шлёт только DM-клиентам список всех сцен комнаты (для
 // переключателя сцен) — зрителям он не нужен, они и так видят ровно одну
 // активную сцену через broadcastAll. ViewerCount у сцены ненулевой только
@@ -684,6 +894,12 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	if !ok || existing.OwnerID == "" || existing.OwnerID != c.PlayerID() {
 		return // не твой токен — тихо игнорируем, а не ошибку шлём
 	}
+	if existing.Locked {
+		return // ДМ запер токен на карте (см. domain.Token.Locked) — не двигается ничем
+	}
+	if !r.turnAllowsTokenMove(existing.ID) {
+		return // бой идёт, но сейчас не его ход — двигаться нельзя, см. turnAllowsTokenMove
+	}
 	existing.X = msg.Token.X
 	existing.Y = msg.Token.Y
 	r.markDirty(r.currentSceneID)
@@ -743,11 +959,29 @@ func (r *Room) handleRollDice(c RoomClient, msg domain.ClientMsg) {
 	if err != nil {
 		return // некорректная/вне-лимитов формула — просто игнорируем
 	}
-	name := c.PlayerName()
-	if c.Role() == domain.RoleDM {
-		name = "ДМ"
+	r.relayRoll(r.rollerName(c, msg.CharacterID), msg.Formula, clampRunes(msg.Label, maxRollLabel), result)
+}
+
+// rollerName — кто указан бросающим в общем логе. Если бросок пришёл с
+// конкретного листа персонажа (msg.CharacterID, см. character-sheet.js:
+// sendRoll), в лог идёт ИМЯ ПЕРСОНАЖА, а не логин игрока — за столом важно
+// видеть, кто из партии кинул кубик, а не под каким аккаунтом это сделал.
+// Игроку id доверяем не целиком: сверяем AccountID листа с PlayerID
+// сокета — иначе можно было бы подделать WS-сообщением чужого персонажа.
+// ДМ так не ограничен: с листа любого игрока или через /ws/dm за NPC — по
+// умолчанию (CharacterID пуст) под своим именем "ДМ".
+func (r *Room) rollerName(c RoomClient, characterID string) string {
+	if characterID != "" && r.characters != nil {
+		if ch, err := r.characters.ByID(context.Background(), characterID); err == nil {
+			if c.Role() == domain.RoleDM || ch.AccountID == c.PlayerID() {
+				return ch.Name
+			}
+		}
 	}
-	r.relayRoll(name, msg.Formula, clampRunes(msg.Label, maxRollLabel), result)
+	if c.Role() == domain.RoleDM {
+		return "ДМ"
+	}
+	return c.PlayerName()
 }
 
 // maxRollLabel — потолок длины Label (см. domain.ClientMsg), чтобы кривой
@@ -825,6 +1059,29 @@ func (r *Room) broadcastJournalChanged(id string) {
 	}
 }
 
+// NotifyPlaylistsChanged — см. RoomService. Неблокирующая отправка, тот же
+// принцип, что и NotifyJournalChanged: если очередь занята или комната уже
+// остановлена, событие просто теряется — это подсказка "перечитай список", а
+// не состояние, которое нельзя потерять.
+func (r *Room) NotifyPlaylistsChanged() {
+	select {
+	case r.playlistsChanged <- struct{}{}:
+	default:
+	}
+}
+
+// broadcastPlaylistsChanged — уже внутри горутины run(). Панель "Плейлисты"
+// (см. web/src/pages/dm.js) есть только у ДМ — рассылать игрокам и TV
+// незачем, они это сообщение всё равно проигнорируют.
+func (r *Room) broadcastPlaylistsChanged() {
+	payload := map[string]any{"type": "playlists_changed"}
+	for c := range r.clients {
+		if c.Role() == domain.RoleDM {
+			c.Send(payload)
+		}
+	}
+}
+
 func (r *Room) relayFx(msg domain.ClientMsg) {
 	payload := map[string]any{"type": "fx", "fx": msg}
 	for c := range r.clients {
@@ -887,13 +1144,30 @@ func abilityMod(score int) int {
 func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	var name, image, color, ownerID, characterID, monsterID, tokenID string
 	dexScore := 10
-	ac, hpCur, hpMax := 0, 0, 0
+	ac, hpCur, hpMax, hpTemp := 0, 0, 0, 0
 
 	switch {
 	case msg.TokenID != "":
 		t, ok := r.scene.Tokens[msg.TokenID]
 		if !ok || t.LightOnly {
 			return // токена-лампочки в инициативе не бывает — у него нет "хода"
+		}
+		if t.Dead {
+			// Убитый монстр/NPC так в бой не возвращается — иначе он ожил бы
+			// с полным HP шаблона (см. ветку monsterID != "" ниже), минуя
+			// вкладку "Убитые" трекера, которая для этого и есть (см. её
+			// кнопку "Восстановить" — handleReviveKilledToken).
+			return
+		}
+		if r.combatantByToken(t.ID) != nil {
+			// Токен уже привязан к бойцу трекера (добавлен через поиск и
+			// вытащен на карту, либо повторный ПКМ → "Добавить в
+			// инициативу" по уже добавленному). Без этой проверки завёлся бы
+			// ВТОРОЙ Combatant с тем же TokenID — на карте у него нет своего
+			// токена (drag на карту заблокирован combat-panel.js: draggable
+			// ставится только при !cmb.tokenId), и вытащить его было бы
+			// некуда: единственный токен уже занят первым бойцом.
+			return
 		}
 		tokenID = t.ID
 		name = t.Label
@@ -932,6 +1206,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			ac = ch.Sheet.Combat.AC
 			hpCur = ch.Sheet.Combat.HPCurrent
 			hpMax = ch.Sheet.Combat.HPMax
+			hpTemp = ch.Sheet.Combat.HPTemp
 		}
 	} else if monsterID != "" && r.monsters != nil {
 		if m, err := r.monsters.Get(ctx, monsterID); err == nil {
@@ -977,7 +1252,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	r.combat.Combatants[id] = &domain.Combatant{
 		ID: id, TokenID: tokenID, Name: name, Image: image, Color: color,
 		OwnerID: ownerID, CharacterID: characterID, MonsterID: monsterID,
-		Initiative: initiative, AC: ac, HPCurrent: hpCur, HPMax: hpMax, Seq: r.combatSeq,
+		Initiative: initiative, AC: ac, HPCurrent: hpCur, HPMax: hpMax, HPTemp: hpTemp, Seq: r.combatSeq,
 	}
 	r.markCombatDirty()
 	r.broadcastCombat()
@@ -1042,7 +1317,7 @@ func (r *Room) handleSetCombatantAC(id string, ac int) {
 //     CharacterID (игровой персонаж) вместо этого просто ждём отметок
 //     "set_combatant_death_save" — из инициативы его уберёт только 3-й
 //     провал (см. handleSetCombatantDeathSave).
-func (r *Room) handleSetCombatantHP(id string, cur, max *int) {
+func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 	cmb, ok := r.combat.Combatants[id]
 	if !ok {
 		return
@@ -1052,6 +1327,38 @@ func (r *Room) handleSetCombatantHP(id string, cur, max *int) {
 		if cmb.HPMax < 0 {
 			cmb.HPMax = 0
 		}
+	}
+	if temp != nil {
+		cmb.HPTemp = *temp
+		if cmb.HPTemp < 0 {
+			cmb.HPTemp = 0
+		}
+	}
+	// Дельта — единственное место, где сервер сам считает новое HP, и
+	// единственное, где действует правило временных хитов: урон сначала
+	// съедает HPTemp, в HPCurrent уходит только остаток; лечение в
+	// HPTemp не идёт вовсе (5e) и не поднимает бойца выше максимума —
+	// в отличие от абсолютной правки поля, где ДМ волен поставить что
+	// угодно (см. комментарий выше). Считается ДО cur ниже: прислать
+	// одновременно и то, и другое клиент не должен, но если прислал —
+	// абсолютное значение выигрывает как более явное.
+	if delta != nil && *delta != 0 {
+		next := cmb.HPCurrent
+		if *delta < 0 {
+			damage := -*delta
+			fromTemp := damage
+			if fromTemp > cmb.HPTemp {
+				fromTemp = cmb.HPTemp
+			}
+			cmb.HPTemp -= fromTemp
+			next -= damage - fromTemp
+		} else {
+			next += *delta
+			if cmb.HPMax > 0 && next > cmb.HPMax {
+				next = cmb.HPMax
+			}
+		}
+		cur = &next
 	}
 	if cur != nil {
 		cmb.HPCurrent = *cur
@@ -1064,6 +1371,9 @@ func (r *Room) handleSetCombatantHP(id string, cur, max *int) {
 			return // combatant уже удалён и разослан внутри killMonsterCombatant
 		}
 	}
+	// Хиты игрового персонажа живут ещё и в его листе — держим их одним
+	// числом (см. room_character_hp.go).
+	r.syncCharacterHP(cmb)
 	r.markCombatDirty()
 	r.broadcastCombat()
 }
@@ -1104,14 +1414,75 @@ func (r *Room) reviveTokenIfDead(tokenID string) {
 	r.broadcastAll()
 }
 
-// snapshotTokenLoot — вызывается ровно один раз, из killMonsterCombatant, в
+// handleReviveKilledToken — "revive_token" (только ДМ): кнопка
+// "Восстановить" на вкладке "Убитые" трекера инициативы (см. combatPayload:
+// "killed") — в отличие от reviveTokenIfDead выше, это не побочный эффект
+// подлеченного бойца в инициативе (там бойца уже нет, killMonsterCombatant
+// его убрал), а прямая команда ДМ на уже мёртвом токене без комбатанта.
+// Возвращает токену обычный арт вместо костей и очищает снимки смерти
+// (Loot/XP, см. snapshotTokenSpoils) — они больше не описывают труп,
+// повторная смерть этого же токена (новое "add_combatant" + бой) снимет их
+// заново с актуальной карточки монстра.
+//
+// Рассылает ОБА канала, не только сцену: сам Token.Dead живёт в ней
+// (broadcastAll, как и markTokenDead/reviveTokenIfDead выше), но вкладка
+// "Убитые" трекера строится из combat_state (см. combatPayload/
+// killedMonsters), а его отдельно рассылает только broadcastCombat — без
+// него вкладка не увидит, что боец воскрес, до следующей несвязанной
+// мутации трекера.
+func (r *Room) handleReviveKilledToken(tokenID string) {
+	t, ok := r.scene.Tokens[tokenID]
+	if !ok || !t.Dead {
+		return
+	}
+	t.Dead = false
+	t.Loot = nil
+	t.XP = 0
+	r.markDirty(r.scene.ID)
+	r.broadcastAll()
+	r.broadcastCombat()
+}
+
+// handleClearKilledTokens — "clear_killed_tokens" (только ДМ): кнопка
+// "Очистить убитых" над вкладкой "Убитые" трекера — навсегда удаляет с
+// активной сцены ВСЕ токены, которые сейчас попадают в killedMonsters (тот
+// же фильтр: Dead и не игровой персонаж), одним действием вместо ПКМ →
+// "Удалить" по каждому трупу. В отличие от handleReviveKilledToken это не
+// "вернуть к жизни", а "выбросить труп" — Loot, если его не забрали,
+// пропадает вместе с токеном безвозвратно (клиент это подтверждает у ДМ
+// перед отправкой, см. combat-panel.js).
+func (r *Room) handleClearKilledTokens() {
+	removed := false
+	for id, t := range r.scene.Tokens {
+		if t.Dead && t.CharacterID == "" {
+			delete(r.scene.Tokens, id)
+			removed = true
+		}
+	}
+	if !removed {
+		return
+	}
+	r.markDirty(r.scene.ID)
+	r.broadcastAll()
+	// Как и у revive_token выше: список вкладки "Убитые" живёт в
+	// combat_state, его нужно разослать отдельно, иначе он не увидит, что
+	// трупы пропали, до следующей несвязанной мутации трекера.
+	r.broadcastCombat()
+}
+
+// snapshotTokenSpoils — вызывается ровно один раз, из killMonsterCombatant, в
 // момент смерти монстра: КОПИРУЕТ (не ссылается на) текущий
 // Monster.Inventory этого монстра в Token.Loot убитого токена, с новыми ID
-// на каждую запись. Копия, а не общая ссылка на шаблон — так лутание одного
-// трупа не трогает "склад" шаблона бестиария и других уже стоящих на карте
-// токенов того же монстра (см. план фичи). monsterID == "" (голый NPC-токен
-// без карточки бестиария за спиной) — тихо ничего не делает, лутить нечего.
-func (r *Room) snapshotTokenLoot(tokenID, monsterID string) {
+// на каждую запись, и снимает опыт за его CR в Token.XP (см. CRToXP). Копия
+// лута, а не общая ссылка на шаблон — так лутание одного трупа не трогает
+// "склад" шаблона бестиария и других уже стоящих на карте токенов того же
+// монстра (см. план фичи); опыт снят числом по той же причине — карточка
+// монстра может измениться или быть удалена уже после его смерти, а вкладка
+// "Убитые" трекера инициативы должна продолжать показывать то, за что его
+// реально убили. monsterID == "" (голый NPC-токен без карточки бестиария за
+// спиной) — тихо ничего не делает: лутить нечего, опыт по таблице CR не
+// посчитать.
+func (r *Room) snapshotTokenSpoils(tokenID, monsterID string) {
 	if tokenID == "" || monsterID == "" || r.monsters == nil {
 		return
 	}
@@ -1120,15 +1491,18 @@ func (r *Room) snapshotTokenLoot(tokenID, monsterID string) {
 		return
 	}
 	m, err := r.monsters.Get(context.Background(), monsterID)
-	if err != nil || len(m.Inventory) == 0 {
+	if err != nil {
 		return
 	}
-	loot := make([]domain.InventoryEntry, len(m.Inventory))
-	for i, e := range m.Inventory {
-		e.ID = "loot-" + newID()
-		loot[i] = e
+	if len(m.Inventory) > 0 {
+		loot := make([]domain.InventoryEntry, len(m.Inventory))
+		for i, e := range m.Inventory {
+			e.ID = "loot-" + newID()
+			loot[i] = e
+		}
+		t.Loot = loot
 	}
-	t.Loot = loot
+	t.XP = domain.CRToXP(m.CR)
 	r.markDirty(r.scene.ID)
 }
 
@@ -1139,10 +1513,11 @@ func (r *Room) snapshotTokenLoot(tokenID, monsterID string) {
 // требование "заменить токен на отображение костей".
 func (r *Room) killMonsterCombatant(cmb *domain.Combatant) {
 	id := cmb.ID
-	// Снимок лута ДО markTokenDead: тот сам шлёт broadcastAll (см. его
-	// комментарий) — если поставить его раньше, Loot уйдёт клиентам только
-	// следующей несвязанной мутацией сцены, а не сразу со смертью токена.
-	r.snapshotTokenLoot(cmb.TokenID, cmb.MonsterID)
+	// Снимок лута и опыта ДО markTokenDead: тот сам шлёт broadcastAll (см.
+	// его комментарий) — если поставить его раньше, Loot/XP уйдут клиентам
+	// только следующей несвязанной мутацией сцены, а не сразу со смертью
+	// токена.
+	r.snapshotTokenSpoils(cmb.TokenID, cmb.MonsterID)
 	r.markTokenDead(cmb.TokenID)
 	delete(r.combat.Combatants, id)
 	if r.combat.CurrentID == id {
@@ -1191,6 +1566,9 @@ func (r *Room) handleSetCombatantDeathSave(id, kind string, value int) {
 		cmb.HPCurrent = 1
 		cmb.DeathSaveSuccess = 0
 		cmb.DeathSaveFail = 0
+		// Стабилизация — тоже правка хитов, лист персонажа должен увидеть
+		// эту единицу (см. room_character_hp.go).
+		r.syncCharacterHP(cmb)
 		r.markCombatDirty()
 		r.broadcastCombat()
 		return
@@ -1229,6 +1607,16 @@ func (r *Room) handleSetShowHP(v bool) {
 // кнопку на клиенте.
 func (r *Room) handleSetLootingEnabled(v bool) {
 	r.combat.LootingEnabled = v
+	r.markCombatDirty()
+	r.broadcastCombat()
+}
+
+// handleSetHighlightActiveToken — "set_highlight_active_token": общий
+// переключатель стола, подсвечивать ли красным кольцом на карте токен
+// бойца, чей сейчас ход (см. domain.CombatState.HighlightActiveToken,
+// combatPayload).
+func (r *Room) handleSetHighlightActiveToken(v bool) {
+	r.combat.HighlightActiveToken = &v
 	r.markCombatDirty()
 	r.broadcastCombat()
 }
@@ -1434,6 +1822,10 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		}
 		if isDM || r.combat.ShowHP {
 			entry["hpCurrent"] = cmb.HPCurrent
+			// hpTemp едет рядом с hpCurrent и по тем же правилам видимости:
+			// это часть "сколько он ещё держит", и показывать её игрокам
+			// отдельно от текущих хитов смысла нет.
+			entry["hpTemp"] = cmb.HPTemp
 			entry["hpMax"] = cmb.HPMax
 			entry["hpMaxEffective"] = r.effectiveStat(cmb, cmb.HPMax, domain.ModifierTargetHPMax)
 			entry["deathSaveSuccess"] = cmb.DeathSaveSuccess
@@ -1441,11 +1833,45 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		}
 		combatants = append(combatants, entry)
 	}
-	return map[string]any{
+	payload := map[string]any{
 		"type": "combat_state", "active": r.combat.Active, "round": r.combat.Round,
 		"currentId": r.combat.CurrentID, "combatants": combatants, "showHp": r.combat.ShowHP,
 		"lootingEnabled": r.combat.LootingEnabled,
+		// highlightActiveToken — nil (сервер только что перезапущен со старым
+		// combat.json/новый стол) трактуем как включено, см.
+		// domain.CombatState.HighlightActiveToken.
+		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
 	}
+	if isDM {
+		payload["killed"] = r.killedMonsters()
+	}
+	return payload
+}
+
+// killedMonsters — вкладка "Убитые" трекера инициативы: все токены активной
+// сцены, помеченные Dead (см. Token.Dead), КРОМЕ игровых персонажей
+// (CharacterID != "" — тот умирает по своим правилам спасбросков, опыта за
+// него не начисляют и лутать его не заказывали, см. handleSetCombatantDeathSave).
+// Только ДМ (см. combatPayload) — то же самое место, откуда ДМ раньше лутал
+// и добавлял в инициативу через ПКМ-меню токена, просто собранное в один
+// список вместо блуждания по карте. Порядок — по имени, для стабильного
+// списка (в отличие от Combatants выше, тут нет инициативы, которая давала
+// бы естественный порядок).
+func (r *Room) killedMonsters() []map[string]any {
+	out := make([]map[string]any, 0)
+	for _, t := range r.scene.Tokens {
+		if !t.Dead || t.CharacterID != "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"tokenId": t.ID, "name": t.Label, "image": t.Image, "color": t.Color,
+			"monsterId": t.MonsterID, "xp": t.XP, "loot": t.Loot,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i]["name"].(string) < out[j]["name"].(string)
+	})
+	return out
 }
 
 // broadcastCombat шлёт каждому клиенту его версию трекера (см. combatPayload)
@@ -1614,6 +2040,7 @@ func (r *Room) handleHubTakeItem(c RoomClient, msg domain.ClientMsg) {
 	}
 	r.markHubDirty()
 	r.broadcastHub()
+	r.broadcastCharacterInventory(ch.ID, ch.AccountID)
 }
 
 // ================= лут убитого монстра прямо с токена (Token.Loot) =================
@@ -1666,6 +2093,7 @@ func (r *Room) handleLootTakeItem(c RoomClient, msg domain.ClientMsg) {
 	}
 	r.markDirty(r.currentSceneID)
 	r.broadcastAll()
+	r.broadcastCharacterInventory(ch.ID, ch.AccountID)
 }
 
 // removeString возвращает копию list без первого вхождения v — используется
@@ -1704,6 +2132,18 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 	switch msg.Type {
 	case "move_token", "add_token":
 		if msg.Token != nil {
+			// move_token несёт токен целиком (позиция + любые другие правки
+			// вроде hidden/shape/light — см. web/src/vtt/interaction.js), а не
+			// только координаты. Ограничение хода касается именно позиции:
+			// если X/Y реально меняются и сейчас чужой ход в активном бою —
+			// всё сообщение отбрасывается (turnAllowsTokenMove решает и за
+			// ДМ тоже, см. её комментарий), остальные правки токена в свой
+			// ход или вне боя проходят как раньше.
+			if existing, ok := r.scene.Tokens[msg.Token.ID]; ok && msg.Type == "move_token" &&
+				(existing.X != msg.Token.X || existing.Y != msg.Token.Y) &&
+				!r.turnAllowsTokenMove(msg.Token.ID) {
+				return
+			}
 			// У персонажа может быть только один токен "на столе"
 			// одновременно (см. web/src/pages/dm.js: drag&drop персонажа из
 			// панели "Персонажи" на карту) — повторное перетаскивание того

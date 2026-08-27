@@ -23,7 +23,8 @@ import {
   renameJournalFolder,
   deleteJournalFolder,
 } from "../api.js";
-import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
+import { renderNoteHtml, wireWikiLinks, scrollToHeading } from "../notes/markdown.js";
+import { mountHeadingNav } from "../notes/heading-nav.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
@@ -46,11 +47,13 @@ const editWrap = document.getElementById("editWrap");
 const editArea = document.getElementById("editArea");
 const msgEl = document.getElementById("msg");
 const showBtn = document.getElementById("showBtn");
+const tocBtn = document.getElementById("tocBtn");
 const pinBtn = document.getElementById("pinBtn");
 const accessBtn = document.getElementById("accessBtn");
 const editBtn = document.getElementById("editBtn");
 const deleteBtn = document.getElementById("deleteBtn");
 mountNoteToolbar(document.getElementById("toolbar"), editArea);
+const headingNav = mountHeadingNav(tocBtn, renderEl);
 
 // ACCESS_LEVELS — те же четыре уровня, что и на сервере
 // (domain.JournalAccess), в порядке возрастания прав. Подписи —
@@ -73,8 +76,8 @@ let filter = "all"; // all | shared | mine | others
 // pendingSection — раздел («## Название»), на котором надо открыть запись.
 // Страница журнала Foundry у нас становится разделом внутри записи (см.
 // internal/foundry/journal.go), и ссылка на неё должна попадать не в начало
-// длинного текста, а туда, куда вела. Приезжает хэшем адреса, тем же
-// приёмом, что в окне заметки ДМ (pages/note-window.js).
+// длинного текста, а туда, куда вела. Приезжает хэшем адреса (см.
+// catalog-links.js: openEntry).
 let pendingSection = "";
 let currentFolder = ""; // куда ляжет новая запись/папка
 const openFolders = new Set();
@@ -359,16 +362,9 @@ async function openEntry(id, { edit = false, section = "" } = {}) {
 // scrollToSection — открыть запись сразу на нужном разделе (pendingSection),
 // с короткой подсветкой: иначе непонятно, почему текст открылся с середины.
 function scrollToSection() {
-  const wanted = pendingSection.trim().toLowerCase();
+  const wanted = pendingSection;
   pendingSection = "";
-  if (!wanted) return;
-  const heading = [...renderEl.querySelectorAll("h1, h2, h3, h4")].find(
-    (h) => h.textContent.trim().toLowerCase() === wanted
-  );
-  if (!heading) return;
-  heading.scrollIntoView({ block: "start" });
-  heading.classList.add("section-target");
-  setTimeout(() => heading.classList.remove("section-target"), 2000);
+  scrollToHeading(renderEl, wanted);
 }
 
 // revealFolder — раскрыть цепочку папок до записи и сделать её папку
@@ -424,17 +420,23 @@ function renderEntry() {
   if (editing) {
     editArea.value = current.content || "";
     editArea.focus();
+    tocBtn.style.display = "none";
   } else if (current.myAccess === "limited") {
     renderEl.innerHTML = "";
     const hint = document.createElement("p");
     hint.style.opacity = ".6";
     hint.textContent = "Автор открыл тебе только название этой записи.";
     renderEl.appendChild(hint);
+    tocBtn.style.display = "none";
   } else {
     renderEl.innerHTML = renderNoteHtml(current.content || "");
     // Формулы в тексте кликабельны, как в карточках библиотек — бросок
     // уходит в общий лог стола (см. inline-rolls.js).
     enhanceRolls(renderEl, sendRoll);
+    // Картинки из текста записи — кнопка «Показать игрокам» при наведении
+    // (только ДМ), см. wireShowcaseImages ниже.
+    wireShowcaseImages();
+    headingNav.refresh(); // кнопка «перейти к разделу» — только если разделов ≥2
     scrollToSection();
   }
 }
@@ -705,6 +707,75 @@ pinBtn.onclick = () => {
   msgEl.textContent = "Кликни на карте, куда поставить значок.";
 };
 
+// ---- «Показать игрокам» для картинок из текста записи (только ДМ) ----
+//
+// В приключении картинка (портрет NPC, карта локации, раздатка) обычно лежит
+// прямо в тексте записи — и её нужно быстро вывести игрокам, не выясняя, где
+// её файл. При наведении на картинку у ДМ всплывает кнопка: она шлёт ту же
+// WS-команду show_image, что и раздел «Показ» у ДМ (см.
+// web/src/showcase-overlay.js, broadcastShowcase в internal/service/room.go).
+// Идёт через тот же сокет rollWS, что и броски из текста.
+
+let shownImageUrl = ""; // что сейчас на экране у игроков (из сообщений showcase)
+
+// imgShowUrl — что слать в show_image: для своих же файлов путь без хоста
+// (как хранит раздел «Показ»), для внешних картинок — абсолютный URL.
+function imgShowUrl(img) {
+  try {
+    const u = new URL(img.currentSrc || img.src, location.href);
+    return u.origin === location.origin ? u.pathname + u.search : u.href;
+  } catch {
+    return img.currentSrc || img.src;
+  }
+}
+
+function sendShowImage(url) {
+  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) {
+    msgEl.className = "";
+    msgEl.textContent = "Нет связи со столом — обнови страницу и попробуй снова.";
+    return;
+  }
+  rollWS.send(JSON.stringify(url ? { type: "show_image", imageUrl: url } : { type: "hide_image" }));
+}
+
+// wireShowcaseImages — оборачивает каждую <img> в тексте записи span'ом с
+// кнопкой (появляется по ховеру). Повторный запуск на уже обёрнутых
+// картинках пропускает их (renderEntry зовёт нас на каждый ре-рендер).
+function wireShowcaseImages() {
+  if (!isDM) return;
+  for (const img of renderEl.querySelectorAll("img")) {
+    if (img.parentElement && img.parentElement.classList.contains("note-img-wrap")) continue;
+    const wrap = document.createElement("span");
+    wrap.className = "note-img-wrap";
+    img.replaceWith(wrap);
+    wrap.appendChild(img);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "note-img-show";
+    btn.onclick = (e) => {
+      e.preventDefault();
+      const url = imgShowUrl(img);
+      sendShowImage(url === shownImageUrl ? "" : url); // повторный клик по показываемой — снять
+    };
+    wrap.appendChild(btn);
+  }
+  refreshShowcaseButtons();
+}
+
+// refreshShowcaseButtons — подписи/подсветка кнопок под текущее состояние
+// показа (приходит в сообщениях showcase, см. connectRollSocket).
+function refreshShowcaseButtons() {
+  for (const wrap of renderEl.querySelectorAll(".note-img-wrap")) {
+    const img = wrap.querySelector("img");
+    const btn = wrap.querySelector(".note-img-show");
+    if (!img || !btn) continue;
+    const showing = !!shownImageUrl && imgShowUrl(img) === shownImageUrl;
+    wrap.classList.toggle("showing", showing);
+    btn.innerHTML =
+      icon(showing ? "eye-off" : "eye", { size: 13 }) + (showing ? " Убрать с экрана" : " Показать игрокам");
+  }
+}
+
 // ---- броски из текста записи ----
 // Своя WS-связь, как у карточек предмета/заклинания (см. itembook.js):
 // страница живёт отдельным окном и общего сокета стола не видит. /ws/player
@@ -719,6 +790,15 @@ function connectRollSocket() {
     const data = JSON.parse(ev.data);
     if (data.type === "journal_changed") {
       onJournalChanged(data.id);
+      return;
+    }
+    if (data.type === "showcase") {
+      // Что сейчас на экране у игроков (см. broadcastShowcase) — чтобы
+      // кнопка на картинке в тексте знала, показывается ли ИМЕННО она, и
+      // переключалась на «Убрать с экрана». Приходит и при открытии окна
+      // (Room.run досылает свежеподключившемуся).
+      shownImageUrl = (data.showcase && data.showcase.url) || "";
+      refreshShowcaseButtons();
       return;
     }
     if (data.type === "journal_shown_ack") {
@@ -781,9 +861,7 @@ function sendRoll(formula, label) {
 
 // ---- ссылки внутри текста ----
 
-// prefer: "journal" — запись, на которую ведёт ссылка из журнала, ищется
-// сначала в журнале и только потом в заметках ДМ (см. catalog-links.js).
-wireCatalogLinks(renderEl, { prefer: "journal" });
+wireCatalogLinks(renderEl);
 wireWikiLinks(renderEl, () => entries, {
   getFolder: () => (current && current.folder) || "",
   onOpen: (id) => openEntry(id),
@@ -833,3 +911,11 @@ async function guard(fn) {
   const wanted = new URLSearchParams(location.search).get("id");
   if (wanted) await openEntry(wanted, { section: decodeURIComponent(location.hash.slice(1)) });
 })();
+
+// Смена только хэша (#раздел) не перезагружает iframe — а значки на карте,
+// ведущие на разные страницы одной записи журнала (см. domain.NoteMarker),
+// как раз меняют один хэш. Догоняем прокрутку руками.
+window.addEventListener("hashchange", () => {
+  pendingSection = decodeURIComponent(location.hash.slice(1));
+  scrollToSection();
+});

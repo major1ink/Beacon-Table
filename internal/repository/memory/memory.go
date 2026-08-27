@@ -188,6 +188,20 @@ func (s *CharacterStore) UpdateSheet(ctx context.Context, id, accountID string, 
 	return true, nil
 }
 
+// UpdateSheetHP implements repository.CharacterRepository.
+func (s *CharacterStore) UpdateSheetHP(ctx context.Context, id string, hpCurrent, hpTemp, hpMax int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.byID[id]
+	if !ok {
+		return false, nil
+	}
+	c.Sheet.Combat.HPCurrent = hpCurrent
+	c.Sheet.Combat.HPTemp = hpTemp
+	c.Sheet.Combat.HPMax = hpMax
+	return true, nil
+}
+
 func (s *CharacterStore) Delete(ctx context.Context, id, accountID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -224,9 +238,11 @@ func (s *CharacterStore) AddInventoryEntry(ctx context.Context, characterID, acc
 	if !s.ownsCharacter(characterID, accountID) {
 		return nil, domain.ErrNotFound
 	}
+	// Надетая запись в апсерт не участвует (см. sqlite/inventory.go) — новый
+	// предмет того же ItemID копится в отдельной незанадетой стопке
 	if entry.ItemID != "" {
 		for _, e := range s.inventory[characterID] {
-			if e.ItemID == entry.ItemID {
+			if e.ItemID == entry.ItemID && !e.Equipped {
 				e.Quantity += entry.Quantity
 				cp := *e
 				return &cp, nil
@@ -241,6 +257,78 @@ func (s *CharacterStore) AddInventoryEntry(ctx context.Context, characterID, acc
 	s.inventory[characterID] = append(s.inventory[characterID], &cp)
 	out := cp
 	return &out, nil
+}
+
+// SetInventoryEquipped implements repository.CharacterRepository — то же
+// расщепление/слияние по одной штуке, что и в sqlite/inventory.go.
+func (s *CharacterStore) SetInventoryEquipped(ctx context.Context, characterID, accountID, entryID, newEntryID string, equipped bool) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.ownsCharacter(characterID, accountID) {
+		return false, nil
+	}
+	list := s.inventory[characterID]
+	var target *domain.InventoryEntry
+	for _, e := range list {
+		if e.ID == entryID {
+			target = e
+			break
+		}
+	}
+	if target == nil {
+		return false, nil
+	}
+	if target.Equipped == equipped {
+		return true, nil
+	}
+
+	var sibling *domain.InventoryEntry
+	if target.ItemID != "" {
+		for _, e := range list {
+			if e != target && e.ItemID == target.ItemID && e.Equipped == equipped {
+				sibling = e
+				break
+			}
+		}
+	}
+
+	if target.ItemID == "" || target.Quantity <= 1 {
+		if sibling != nil {
+			sibling.Quantity += target.Quantity
+			s.inventory[characterID] = removeInventoryEntryPtr(list, target)
+		} else {
+			target.Equipped = equipped
+		}
+		return true, nil
+	}
+
+	target.Quantity--
+	if sibling != nil {
+		sibling.Quantity++
+	} else {
+		s.invSeq++
+		id := newEntryID
+		if id == "" {
+			id = "inv-" + strconv.Itoa(s.invSeq)
+		}
+		cp := *target
+		cp.ID = id
+		cp.Quantity = 1
+		cp.Equipped = equipped
+		cp.Notes = ""
+		s.inventory[characterID] = append(s.inventory[characterID], &cp)
+	}
+	return true, nil
+}
+
+func removeInventoryEntryPtr(list []*domain.InventoryEntry, target *domain.InventoryEntry) []*domain.InventoryEntry {
+	out := make([]*domain.InventoryEntry, 0, len(list)-1)
+	for _, e := range list {
+		if e != target {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func (s *CharacterStore) UpdateInventoryEntry(ctx context.Context, characterID, accountID, entryID string, quantity int, equipped bool, notes string) (bool, error) {
@@ -274,6 +362,127 @@ func (s *CharacterStore) RemoveInventoryEntry(ctx context.Context, characterID, 
 		}
 	}
 	return false, nil
+}
+
+// PregenStore — in-memory repository.PregenRepository.
+type PregenStore struct {
+	mu   sync.Mutex
+	byID map[string]*domain.Pregen
+}
+
+func NewPregenStore() *PregenStore {
+	return &PregenStore{byID: map[string]*domain.Pregen{}}
+}
+
+func clonePregen(p *domain.Pregen) *domain.Pregen {
+	cp := *p
+	return &cp
+}
+
+func (s *PregenStore) List(ctx context.Context) ([]*domain.Pregen, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*domain.Pregen, 0, len(s.byID))
+	for _, p := range s.byID {
+		out = append(out, clonePregen(p))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (s *PregenStore) Available(ctx context.Context) ([]*domain.Pregen, error) {
+	all, _ := s.List(ctx)
+	out := all[:0]
+	for _, p := range all {
+		if p.ClaimedBy == "" {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (s *PregenStore) ByID(ctx context.Context, id string) (*domain.Pregen, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return clonePregen(p), nil
+}
+
+func (s *PregenStore) Create(ctx context.Context, p *domain.Pregen) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byID[p.ID] = clonePregen(p)
+	return nil
+}
+
+func (s *PregenStore) Update(ctx context.Context, id, name, avatarURL, source string, sheet domain.CharacterSheet) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok {
+		return false, nil
+	}
+	p.Name, p.AvatarURL, p.Source, p.Sheet = name, avatarURL, source, sheet
+	return true, nil
+}
+
+func (s *PregenStore) SetClaim(ctx context.Context, id, accountID, characterID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok || (p.ClaimedBy != "" && p.ClaimedBy != accountID) {
+		return false, nil
+	}
+	p.ClaimedBy, p.ClaimedCharacterID = accountID, characterID
+	return true, nil
+}
+
+func (s *PregenStore) ClearClaim(ctx context.Context, id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.byID[id]
+	if !ok {
+		return false, nil
+	}
+	p.ClaimedBy, p.ClaimedCharacterID = "", ""
+	return true, nil
+}
+
+func (s *PregenStore) Delete(ctx context.Context, id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.byID[id]; !ok {
+		return false, nil
+	}
+	delete(s.byID, id)
+	return true, nil
+}
+
+func (s *PregenStore) FreeByAccount(ctx context.Context, accountID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, p := range s.byID {
+		if p.ClaimedBy == accountID {
+			p.ClaimedBy, p.ClaimedCharacterID = "", ""
+		}
+	}
+	return nil
+}
+
+func (s *PregenStore) DeleteBySource(ctx context.Context, moduleID string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, p := range s.byID {
+		if p.Source == moduleID {
+			delete(s.byID, id)
+			n++
+		}
+	}
+	return n, nil
 }
 
 // SessionStore — in-memory repository.SessionRepository.

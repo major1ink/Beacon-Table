@@ -1,6 +1,7 @@
 // combat-panel.js — вся логика панели "Трекер инициативы": список бойцов
 // (портрет/имя/Иниц./КД/HP, правка вручную, удаление), поиск по бестиарию
-// для "+", кнопки старта/раундов/хода. Общий модуль для встроенной панели
+// для "+", кнопки старта/раундов/хода, быстрый переход в карточку бойца по
+// клику на портрет/имя (см. combatant-card.js). Общий модуль для встроенной панели
 // ДМ-стола (pages/dm.js, раздел рейла "🎯") и вынесенного плавающего окна
 // (combat-tracker.html/pages/combat-tracker.js, см. floating-window.js) —
 // обе страницы держат одинаковую разметку/CSS (секция "Трекер инициативы" в
@@ -17,8 +18,38 @@
 // мини-WS-клиента плавающего окна (см. pages/combat-tracker.js) — оба
 // диспатчат его в одном и том же формате, откуда взято неважно.
 import { fetchBestiary, fetchAdminCharacters } from "./api.js";
+import { openActionsPeek, closeActionsPeek } from "./combat-actions-peek.js";
+import { combatantCardTarget, combatantCardHint, openCombatantCard } from "./combatant-card.js";
+import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "./hp-bar.js";
 import { icon } from "./icons.js";
+import { showLootTakeModal } from "./loot-take-modal.js";
+import { showAlert, showConfirm } from "./modal.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
+
+// FOLLOW_KEY — режим "статблок следует за ходом" переживает перезагрузку
+// страницы: это настройка привычки ДМ, а не состояние конкретного боя.
+const FOLLOW_KEY = "beacon:combatFollowTurn";
+
+// focusCombatantToken — навести камеру карты на токен бойца (кнопка 🎯 в
+// строке трекера, см. renderPanel ниже). Сам жест — "vtt:focusMapObject"
+// (см. vtt/interaction.js и pages/dm.js: renderLightList — та же кнопка у
+// источников света), но эта панель может жить в ДВУХ разных местах:
+//   - встроенная колонка ДМ-стола (dm.html) — прямой сосед канваса, тот же
+//     document, событие можно диспатчить прямо здесь;
+//   - вынесенное плавающее окно трекера (combat-tracker.html) — свой iframe,
+//     чужой document, событие туда не долетит. Мост тот же, что и у
+//     openCombatantCard в combatant-card.js: просим родителя сделать это за
+//     нас через postMessage (dm.html слушает "beacon:focusMapObject", см.
+//     pages/dm.js). Popped-out в отдельное окно браузера (🗗) трекер сюда не
+//     попадает: у него нет своего канваса вообще, наводить камеру некуда —
+//     window.parent === window, и кнопка молча ничего не сделает.
+function focusCombatantToken(tokenId) {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: "beacon:focusMapObject", kind: "token", id: tokenId }, location.origin);
+  } else {
+    document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: "token", id: tokenId } }));
+  }
+}
 
 export function initCombatPanel({ send, els }) {
   let latestCombat = { active: false, round: 0, currentId: "", combatants: [] };
@@ -28,6 +59,12 @@ export function initCombatPanel({ send, els }) {
   // monsterId или characterId (см. domain.ClientMsg/room.go: handleAddCombatant,
   // третий источник — карточка игрока напрямую, без токена на карте).
   let searchList = [];
+  // latestKilled — вкладка "Убитые": снимок combat_state.killed (см.
+  // internal/service/room.go: killedMonsters) — все Dead-токены активной
+  // сцены, кроме игровых персонажей. Отдельный от latestCombat список,
+  // потому что это НЕ бойцы трекера — killMonsterCombatant удаляет их из
+  // Combatants в момент смерти, а эти данные читаются прямо со сцены.
+  let latestKilled = [];
 
   function renderPanel() {
     els.startBtn.style.display = latestCombat.active ? "none" : "flex";
@@ -79,6 +116,60 @@ export function initCombatPanel({ send, els }) {
       name.textContent = cmb.name;
       name.title = cmb.name;
 
+      // Быстрый вход в карточку бойца прямо из инициативы — то, ради чего
+      // в Foundry делают двойной клик по строке трекера: во время боя
+      // статблок нужен постоянно ("а что у него за реакция?"), и идти за
+      // ним через отдельный поиск по бестиарию слишком долго. Кликается
+      // портрет и имя, двойной клик по всей карточке — для привычки тех,
+      // кто пришёл из Foundry. Панель трекера открыта только ДМ (встроенная
+      // — раздел рейла dm.html, вынесенная — combat-tracker.js проверяет
+      // роль на входе), поэтому isDM: true.
+      const card = combatantCardTarget(cmb, { isDM: true });
+      if (card) {
+        const hint = `${combatantCardHint(cmb)} — «${cmb.name}»`;
+        for (const el of [avatar, name]) {
+          el.classList.add("combat-card-link");
+          el.title = hint;
+          el.onclick = () => openCombatantCard(cmb, { isDM: true });
+        }
+        row.addEventListener("dblclick", (e) => {
+          // Инпуты/кнопки исключаем: двойной клик по числу выделяет его —
+          // открывать при этом ещё и окно человек точно не просил.
+          if (e.target.closest("input, button")) return;
+          openCombatantCard(cmb, { isDM: true });
+        });
+      }
+
+      // "Действия" — компактный попап с боевыми блоками статблока прямо у
+      // строки (см. combat-actions-peek.js): посреди чужого хода нужно
+      // "чем он бьёт", а не весь статблок. Только у монстра: у игрового
+      // персонажа боевые блоки живут не в статблоке, а на его бланке —
+      // туда ведёт клик по имени.
+      let peekBtn = null;
+      if (cmb.monsterId) {
+        peekBtn = document.createElement("button");
+        peekBtn.className = "combat-peek";
+        peekBtn.innerHTML = icon("sword", { size: 12 });
+        peekBtn.title = "Действия и реакции — быстрый взгляд";
+        peekBtn.onclick = (e) => openActionsPeek({ x: e.clientX, y: e.clientY, combatant: cmb, send });
+      }
+
+      // "Показать на карте" — навести камеру на токен этого бойца, тот же
+      // жест и то же событие "vtt:focusMapObject", что и у кнопки 🎯 в
+      // списке источников света (см. pages/dm.js: renderLightList). Только
+      // когда у бойца УЖЕ есть токен на сцене — без него показывать нечего
+      // (см. draggable выше: !cmb.tokenId — карточку тогда только тянут на
+      // карту, а не наводят камеру на неё).
+      let focusBtn = null;
+      if (cmb.tokenId) {
+        focusBtn = document.createElement("button");
+        focusBtn.type = "button";
+        focusBtn.className = "combat-focus";
+        focusBtn.innerHTML = icon("target", { size: 12 });
+        focusBtn.title = "Показать на карте — камера наведётся на токен";
+        focusBtn.onclick = () => focusCombatantToken(cmb.tokenId);
+      }
+
       const removeBtn = document.createElement("button");
       removeBtn.className = "combat-remove";
       removeBtn.innerHTML = icon("close", { size: 11 });
@@ -91,7 +182,10 @@ export function initCombatPanel({ send, els }) {
         handle.innerHTML = icon("grip-vertical", { size: 14 });
         top.appendChild(handle);
       }
-      top.append(avatar, name, removeBtn);
+      top.append(avatar, name);
+      if (peekBtn) top.appendChild(peekBtn);
+      if (focusBtn) top.appendChild(focusBtn);
+      top.appendChild(removeBtn);
 
       // ---- ряд подписанных характеристик: Иниц. / КД / HP ----
       // stat(label, content) — подписанное поле: маленькая подпись сверху,
@@ -152,21 +246,39 @@ export function initCombatPanel({ send, els }) {
       hpMaxInput.type = "number";
       hpMaxInput.title = "Максимум HP";
       hpMaxInput.value = cmb.hpMax ?? 0;
+      // Временные хиты (domain.Combatant.HPTemp) — отдельный буфер поверх
+      // текущих: у персонажа приезжают с его бланка в момент добавления в
+      // инициативу, монстру ДМ ставит руками, когда тот получил их от
+      // заклинания или способности. Показываем всегда, даже когда их нет:
+      // пустое место в ряду сбивало бы вёрстку соседних карточек, а "+0"
+      // читается как "буфера нет".
+      const hpTempInput = document.createElement("input");
+      hpTempInput.type = "number";
+      hpTempInput.min = "0";
+      hpTempInput.className = "combat-hp-temp";
+      hpTempInput.title = "Временные хиты — урон списывается с них первым";
+      hpTempInput.value = cmb.hpTemp ?? 0;
+      const tempSep = document.createElement("span");
+      tempSep.className = "combat-hp-sep";
+      tempSep.textContent = "+";
       const sendHp = () => {
         const cur = parseInt(hpCurInput.value, 10);
         const max = parseInt(hpMaxInput.value, 10);
+        const temp = parseInt(hpTempInput.value, 10);
         send({
           type: "set_combatant_hp",
           combatantId: cmb.id,
           hpCurrent: Number.isNaN(cur) ? undefined : cur,
           hpMax: Number.isNaN(max) ? undefined : max,
+          hpTemp: Number.isNaN(temp) ? undefined : temp,
         });
       };
       hpCurInput.onchange = sendHp;
       hpMaxInput.onchange = sendHp;
+      hpTempInput.onchange = sendHp;
       const hpGroup = document.createElement("div");
       hpGroup.className = "combat-hp-group";
-      hpGroup.append(hpCurInput, hpSep, hpMaxInput);
+      hpGroup.append(hpCurInput, hpSep, hpMaxInput, tempSep, hpTempInput);
 
       // acWrap — поле КД плюс, если состояния его меняют, стрелка с
       // эффективным значением («14 → 12»).
@@ -185,7 +297,7 @@ export function initCombatPanel({ send, els }) {
       stats.className = "combat-row-stats";
       stats.append(stat("Иниц.", initInput), stat("КД", acWrap), stat("HP", hpGroup));
 
-      row.append(top, stats);
+      row.append(top, stats, hpBarRow(cmb, send));
 
       // ---- наложенные состояния (см. domain.AppliedStatus) ----
       // Метки приходят в combat_state уже разрешёнными: если за бойцом стоит
@@ -235,9 +347,204 @@ export function initCombatPanel({ send, els }) {
     }
   }
 
+  // ---- вкладка "Убитые" ----
+  // Отдельная от основного трекера вкладка (см. requirement: "запретить
+  // добавлять убитых монстров в инициативу, завести для них отдельную
+  // вкладку"): труп сюда попадает сам, как только сервер помечает его токен
+  // Dead (killMonsterCombatant/handleSetCombatantDeathSave), без действий
+  // ДМ. Отсюда же — опыт за убийство (Token.XP, снятый сервером с CR
+  // монстра в момент смерти, см. domain.CRToXP), восстановление
+  // (revive_token) и раздача добычи (loot_take_item — тот же WS-путь и та
+  // же модалка, что и у "Лутить" в ПКМ-меню токена на карте).
+  //
+  // Элементы вкладок (tabTrackerBtn/tabKilledBtn/trackerTab/killedTab) есть
+  // и у встроенной панели, и у вынесенного окна (см. dm.html/
+  // combat-tracker.html) — разметка идентична, поведение тут одно на обоих.
+  function switchCombatTab(name) {
+    const killed = name === "killed";
+    els.tabTrackerBtn.classList.toggle("active", !killed);
+    els.tabKilledBtn.classList.toggle("active", killed);
+    els.trackerTab.style.display = killed ? "none" : "";
+    els.killedTab.style.display = killed ? "" : "none";
+  }
+  els.tabTrackerBtn.onclick = () => switchCombatTab("tracker");
+  els.tabKilledBtn.onclick = () => switchCombatTab("killed");
+
+  // "Очистить убитых" — навсегда удаляет с карты ВСЕ трупы разом (см.
+  // internal/service/room.go: handleClearKilledTokens), одной командой без
+  // TokenID — сервер сам решает, кто сейчас попадает под список "Убитые".
+  // Необратимо и уносит с собой ещё не разобранную добычу, поэтому —
+  // подтверждение с явным предупреждением, danger как у остальных кнопок
+  // удаления в приложении.
+  els.killedClearBtn.onclick = async () => {
+    const hasLoot = latestKilled.some((k) => Array.isArray(k.loot) && k.loot.length > 0);
+    const ok = await showConfirm(`Очистить всех убитых (${latestKilled.length})?`, {
+      title: "Очистить убитых",
+      danger: true,
+      hint: hasLoot
+        ? "Их токены будут удалены с карты навсегда — вместе с ещё не разобранной добычей."
+        : "Их токены будут удалены с карты навсегда.",
+    });
+    if (ok) send({ type: "clear_killed_tokens" });
+  };
+
+  function renderKilledPanel() {
+    els.tabKilledBtn.textContent = latestKilled.length ? `Убитые (${latestKilled.length})` : "Убитые";
+    els.killedClearBtn.style.display = latestKilled.length ? "flex" : "none";
+    els.killedList.innerHTML = "";
+    if (latestKilled.length === 0) {
+      els.killedSummary.textContent = "";
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = "Убитых монстров пока нет — они попадают сюда сами, как только HP дойдёт до нуля.";
+      els.killedList.appendChild(empty);
+      return;
+    }
+    const totalXp = latestKilled.reduce((sum, k) => sum + (k.xp || 0), 0);
+    els.killedSummary.textContent = totalXp > 0 ? `Опыт партии за убитых: ${totalXp}` : "";
+
+    for (const k of latestKilled) {
+      const row = document.createElement("div");
+      row.className = "combat-row killed-row";
+
+      const top = document.createElement("div");
+      top.className = "combat-row-top";
+      const avatar = document.createElement("div");
+      avatar.className = "combat-avatar";
+      if (k.image) avatar.style.backgroundImage = `url("${k.image}")`;
+      else avatar.style.background = k.color || "#555";
+      const name = document.createElement("div");
+      name.className = "combat-name";
+      name.textContent = k.name;
+      name.title = k.name;
+      top.append(avatar, name);
+      row.appendChild(top);
+
+      const meta = document.createElement("p");
+      meta.className = "hint killed-meta";
+      meta.textContent = k.xp ? `${k.xp} XP` : "Опыт неизвестен — нет карточки монстра в бестиарии";
+      row.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "killed-actions";
+
+      const reviveBtn = document.createElement("button");
+      reviveBtn.type = "button";
+      reviveBtn.className = "tool-btn";
+      reviveBtn.textContent = "Восстановить";
+      reviveBtn.title = "Снять метку смерти — монстр снова живой (в бой возвращается через «+ Добавить»/ПКМ на токене, с полным HP)";
+      reviveBtn.onclick = async () => {
+        const ok = await showConfirm(`Восстановить «${k.name}»?`, {
+          title: "Восстановить монстра",
+          hint: "Метка «мёртв» и оставшаяся добыча будут сброшены. В инициативу его нужно будет добавить заново.",
+        });
+        if (ok) send({ type: "revive_token", tokenId: k.tokenId });
+      };
+      actions.appendChild(reviveBtn);
+
+      if (Array.isArray(k.loot) && k.loot.length > 0) {
+        const lootBtn = document.createElement("button");
+        lootBtn.type = "button";
+        lootBtn.className = "tool-btn";
+        lootBtn.textContent = "Забрать лут";
+        lootBtn.onclick = async () => {
+          let chars = [];
+          try {
+            chars = await fetchAdminCharacters();
+          } catch (err) {
+            showAlert("Не удалось загрузить список персонажей: " + err.message);
+            return;
+          }
+          const characters = chars.map((c) => ({
+            id: c.id,
+            name: c.accountUsername ? `${c.name} (${c.accountUsername})` : c.name,
+          }));
+          const tokenId = k.tokenId;
+          showLootTakeModal({
+            title: "Труп: " + (k.name || "монстр"),
+            entries: k.loot,
+            characters,
+            onTake: (entryId, quantity, characterId) => {
+              send({ type: "loot_take_item", tokenId, entryId, characterId, quantity });
+              return Promise.resolve();
+            },
+          });
+        };
+        actions.appendChild(lootBtn);
+      }
+
+      row.appendChild(actions);
+      els.killedList.appendChild(row);
+    }
+  }
+
+  // ---- "Следовать за ходом" ----
+  // Держать перед глазами действия того, чей сейчас ход: тот же компактный
+  // попап, что открывает кнопка ⚔ в строке (см. combat-actions-peek.js), но
+  // закреплённый в углу карты — он сам переезжает на следующего бойца и не
+  // закрывается кликом мимо. В Foundry это делают руками, открывая и
+  // закрывая лист очередного монстра.
+  //
+  // Полная карточка отсюда не открывается специально: она заметно больше и
+  // лезет на карту, а посреди боя нужны три строки про атаки. Нужен весь
+  // статблок — кнопка ⤢ в шапке попапа.
+  //
+  // Кнопка есть только у встроенной панели ДМ-стола (её узел передаёт
+  // dm.html), в вынесенном окне трекера её нет: попап открывался бы внутри
+  // этого окна, а не поверх карты.
+  let followTurn = !!els.followBtn && localStorage.getItem(FOLLOW_KEY) === "1";
+  let followedId = ""; // чей статблок уже показан — чтобы не дёргать док на каждый combat_state
+
+  function renderFollowBtn() {
+    if (!els.followBtn) return;
+    els.followBtn.classList.toggle("active", followTurn);
+    els.followBtn.title = followTurn
+      ? "Действия следуют за ходом — выключить"
+      : "Показывать действия того, чей сейчас ход";
+  }
+
+  function syncFollow() {
+    if (!followTurn) return;
+    if (!latestCombat.active) {
+      followedId = ""; // бой кончился — следующий начнём с чистого листа
+      closeActionsPeek();
+      return;
+    }
+    const current = latestCombat.combatants.find((c) => c.id === latestCombat.currentId);
+    if (!current || current.id === followedId) return;
+    // Ход отмечаем пройденным в любом случае, даже если показывать нечего:
+    // иначе на каждый следующий combat_state этого же хода мы пытались бы
+    // открыть попап заново.
+    followedId = current.id;
+    // Ход игрока — статблока нет и быть не может (его действия у него на
+    // бланке): гасим попап, а не оставляем висеть чужого монстра.
+    if (current.monsterId) openActionsPeek({ combatant: current, send, pinned: true });
+    else closeActionsPeek();
+  }
+
+  if (els.followBtn) {
+    els.followBtn.onclick = () => {
+      followTurn = !followTurn;
+      localStorage.setItem(FOLLOW_KEY, followTurn ? "1" : "0");
+      renderFollowBtn();
+      followedId = ""; // включили посреди боя — показать текущего сразу, не дожидаясь следующего хода
+      if (followTurn) syncFollow();
+      else closeActionsPeek();
+    };
+    renderFollowBtn();
+  }
+
   document.addEventListener("vtt:combatState", (e) => {
     latestCombat = e.detail;
+    // killed — только у ДМ (см. combatPayload в room.go): игрок/TV это
+    // сообщение тоже получают, но без этого поля — latestKilled у них
+    // просто останется пустым, и вкладка "Убитые" будет пустой (сама
+    // вкладка всё равно есть только во встроенной ДМ-панели/её плавающем
+    // окне, но модуль общий, лишняя проверка тут не помешает).
+    latestKilled = Array.isArray(e.detail.killed) ? e.detail.killed : [];
     renderPanel();
+    renderKilledPanel();
+    syncFollow();
     // Палитра состояний, если она сейчас открыта, живёт вне этой панели
     // (document.body) — её надо перерисовать отдельно, иначе после наложения
     // метки ячейка не подсветится до следующего открытия.
@@ -337,6 +644,108 @@ export function initCombatPanel({ send, els }) {
   els.search.oninput = renderSearchResults;
 
   renderPanel(); // начальный (пустой) рендер — до первого "combat_state" с сервера
+  renderKilledPanel();
+}
+
+// hpBarRow — полоска хитов под характеристиками бойца плюс узкое поле
+// быстрой правки. Два способа делать одно и то же, потому что и нужд две:
+//
+//   - полоску ТЯНУТ мышью, когда надо «поставить примерно столько» (см.
+//     hp-bar.js: attachHpDrag). Тянутся текущие хиты, временные жест не
+//     трогает — их хвост полоска показывает отдельным цветом за концом
+//     заливки;
+//   - в поле рядом ВБИВАЮТ точное изменение: «-7» от удара, «+4» от
+//     лечения, «17» — поставить ровно. Кнопок ±1/±5 тут намеренно нет:
+//     в бою урон почти всегда «неудобное» число, и попытка набрать его
+//     кнопками — это пять кликов вместо двух нажатий.
+//
+// Дельта уходит на сервер именно дельтой ("hpDelta", см. domain.ClientMsg) —
+// и из поля быстрого ввода, и из перетаскивания полоски: правило «урон
+// сначала съедает временные хиты» живёт там, клиент его не считает и не
+// может ошибиться на устаревшем снимке.
+function hpBarRow(cmb, send) {
+  const max = cmb.hpMax ?? 0;
+  const bar = document.createElement("div");
+  bar.className = "combat-bar";
+  bar.title = max > 0 ? "Потяни, чтобы выставить хиты" : "Сначала задай максимум HP";
+  const fill = document.createElement("i");
+  fill.className = "combat-bar-fill";
+  const tempFill = document.createElement("i");
+  tempFill.className = "combat-bar-temp";
+  const label = document.createElement("span");
+  label.className = "combat-bar-label";
+  bar.append(fill, tempFill, label);
+
+  // preview — значение, которое сейчас "показывает палец" во время
+  // перетаскивания: на сервер оно ещё не ушло, но полоска обязана идти за
+  // курсором, иначе жест не читается как перетаскивание.
+  let preview = null;
+  function paint() {
+    const current = preview === null ? cmb.hpCurrent ?? 0 : preview;
+    const ratios = hpFillRatios({ current, temp: cmb.hpTemp ?? 0, max });
+    fill.style.width = (ratios.hp * 100).toFixed(1) + "%";
+    fill.style.background = hpColor(ratios.hp);
+    tempFill.style.left = (ratios.hp * 100).toFixed(1) + "%";
+    tempFill.style.width = (ratios.temp * 100).toFixed(1) + "%";
+    if (preview === null) {
+      label.textContent = "";
+      return;
+    }
+    const delta = current - (cmb.hpCurrent ?? 0);
+    label.textContent = delta === 0 ? String(current) : `${current} (${delta > 0 ? "+" : ""}${delta})`;
+  }
+  paint();
+
+  attachHpDrag(bar, {
+    getState: () => ({ current: cmb.hpCurrent ?? 0, max }),
+    onPreview: (value) => {
+      preview = value;
+      paint();
+    },
+    onCommit: (value) => {
+      // Дельтой, а не абсолютным значением: урон, потянутый вниз, обязан
+      // сначала съедать временные хиты — так же, как ввод "-N" в поле рядом
+      // (правило считает сервер, см. handleSetCombatantHP).
+      send({ type: "set_combatant_hp", combatantId: cmb.id, hpDelta: value - (cmb.hpCurrent ?? 0) });
+    },
+  });
+
+  const quick = document.createElement("input");
+  quick.type = "text";
+  quick.inputMode = "numeric";
+  quick.autocomplete = "off";
+  quick.className = "combat-hp-quick";
+  quick.placeholder = "+5";
+  quick.title = "«-7» — урон (сначала съедает временные), «+4» — лечение, «17» — поставить ровно";
+  function commitQuick() {
+    const parsed = parseQuickValue(quick.value, cmb.hpCurrent ?? 0);
+    quick.value = "";
+    if (!parsed) return;
+    send(
+      parsed.delta === null
+        ? { type: "set_combatant_hp", combatantId: cmb.id, hpCurrent: parsed.value }
+        : { type: "set_combatant_hp", combatantId: cmb.id, hpDelta: parsed.delta }
+    );
+  }
+  quick.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitQuick();
+      quick.blur();
+    } else if (e.key === "Escape") {
+      quick.value = "";
+      quick.blur();
+    }
+  });
+  // Enter выше уже применил и снял фокус — сюда долетит второй раз, но поле
+  // к этому моменту пустое и parseQuickValue вернёт null (тот же приём, что
+  // в quickInput на бланке персонажа).
+  quick.addEventListener("blur", commitQuick);
+
+  const wrap = document.createElement("div");
+  wrap.className = "combat-hp-row";
+  wrap.append(bar, quick);
+  return wrap;
 }
 
 // deathSaveRow — блок "Спасброски от смерти" под карточкой бойца: общий

@@ -6,10 +6,13 @@ import (
 	"net/http"
 	"time"
 
+	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
 )
 
-// ---- ДМ: плейлисты канала ДМ ----
+func notifyPlaylists(world *app.ActiveWorld) {
+	world.Room.NotifyPlaylistsChanged()
+}
 
 func trackJSON(t *domain.PlaylistTrack) map[string]any {
 	return map[string]any{
@@ -66,6 +69,7 @@ func (a *API) handleAdminPlaylistCreate(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	notifyPlaylists(world)
 	writeJSON(w, http.StatusCreated, map[string]any{"id": p.ID, "name": p.Name, "tracks": []any{}})
 }
 
@@ -94,6 +98,7 @@ func (a *API) handleAdminPlaylistRename(w http.ResponseWriter, r *http.Request) 
 		}
 		return
 	}
+	notifyPlaylists(world)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -109,6 +114,7 @@ func (a *API) handleAdminPlaylistDelete(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	notifyPlaylists(world)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -145,6 +151,7 @@ func (a *API) handleAdminPlaylistTrackAdd(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	notifyPlaylists(world)
 	writeJSON(w, http.StatusCreated, map[string]any{"id": t.ID, "url": t.URL, "name": t.Name, "volume": t.Volume, "loop": t.Loop})
 }
 
@@ -173,6 +180,7 @@ func (a *API) handleAdminPlaylistTrackUpdate(w http.ResponseWriter, r *http.Requ
 		}
 		return
 	}
+	notifyPlaylists(world)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -192,11 +200,10 @@ func (a *API) handleAdminPlaylistTrackDelete(w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	notifyPlaylists(world)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleAdminPlaylistTrackMove — простые кнопки ↑/↓ вместо drag-and-drop.
-// body: {"direction":"up"|"down"}.
 func (a *API) handleAdminPlaylistTrackMove(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireAdminAccount(w, r); !ok {
 		return
@@ -214,5 +221,6 @@ func (a *API) handleAdminPlaylistTrackMove(w http.ResponseWriter, r *http.Reques
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	notifyPlaylists(world)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

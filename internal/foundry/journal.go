@@ -4,34 +4,36 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"regexp"
 	"strings"
 
 	"beacon-table/internal/domain"
 )
 
-// MapJournal — документ JournalEntry в текст заметки ДМ (domain.Note).
-// Заметки у нас markdown, а страницы журнала — готовый HTML; смешивать их
-// можно: тот же marked, что рендерит заметки, пропускает HTML как есть (см.
-// web/src/notes/markdown.js). Поэтому заголовок записи и заголовки страниц
-// пишем markdown-ом (первый "# " ещё и становится названием заметки, см.
-// notefile.deriveTitle), а содержимое страниц вставляем как пришло.
+// MapJournal — документ JournalEntry в текст записи журнала стола
+// (domain.JournalEntry). Записи у нас markdown, а страницы журнала Foundry —
+// готовый HTML; смешивать их можно: тот же marked, что рендерит записи,
+// пропускает HTML как есть (см. web/src/notes/markdown.js). Поэтому заголовок
+// записи и заголовки страниц пишем markdown-ом (первый "# " ещё и становится
+// названием записи, см. journalfile.deriveTitle), а содержимое страниц
+// вставляем как пришло.
 //
-// Одна запись журнала = одна заметка, страницы идут подряд разделами: делить
-// на заметку-на-страницу означало бы потерять их порядок и принадлежность —
-// папка у заметки одна на всю запись (см. Journal.Folder).
+// Одна запись журнала Foundry = одна запись у нас, страницы идут подряд
+// разделами: делить на запись-на-страницу означало бы потерять их порядок и
+// принадлежность — папка одна на всю запись (см. Journal.Folder).
 type Journal struct {
-	// Folder — папка библиотеки заметок (см. domain.Note.Folder): модуль,
-	// компендиум и дерево папок самого модуля, см. NoteFolder.
+	// Folder — папка журнала стола: модуль, компендиум и дерево папок самого
+	// модуля, см. NoteFolder.
 	Folder string
 	// Title — заголовок записи. Он же первой строкой в Content ("# …", см.
-	// notefile.deriveTitle) — отдельным полем, потому что по нему клиент
-	// ищет, не лежит ли такая заметка в этой папке уже.
+	// journalfile.deriveTitle) — отдельным полем, потому что по нему клиент
+	// ищет, не лежит ли такая запись в этой папке уже.
 	Title   string
 	Content string
 }
 
-// MapJournal переводит документ JournalEntry в заметку. folder — куда её
-// класть (см. NoteFolder), пусто — в корень библиотеки.
+// MapJournal переводит документ JournalEntry в запись журнала. folder — куда
+// её класть (см. NoteFolder), пусто — в корень.
 func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journal {
 	title := strings.TrimSpace(asString(d["name"]))
 	if title == "" {
@@ -45,7 +47,7 @@ func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journ
 		// v9 и раньше: у записи не было страниц, текст лежал одним полем.
 		if content := asString(d["content"]); content != "" {
 			b.WriteString("\n")
-			b.WriteString(assets.RewriteHTML(ctx, domain.AssetKindNotes, content))
+			b.WriteString(rewriteCallouts(assets.RewriteHTML(ctx, domain.AssetKindNotes, content)))
 			b.WriteString("\n")
 		}
 		return Journal{Folder: folder, Title: title, Content: b.String()}
@@ -64,6 +66,33 @@ func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journ
 		b.WriteString("\n")
 	}
 	return Journal{Folder: folder, Title: title, Content: b.String()}
+}
+
+// calloutRe — заметная врезка в тексте страницы: <section>/<aside> со
+// своим классом. В модулях и системе dnd5e это «читать вслух» игрокам
+// (fvtt narrative), советы Мастеру (fvtt advice) и боковые вставки
+// (notable) — их рисует CSS системы, которого в Beacon Table нет.
+var calloutRe = regexp.MustCompile(`(?i)<(section|aside)\s+class="([^"]*)"`)
+
+// rewriteCallouts переводит классы врезок Foundry в наши, которые стилизует
+// .note-render (см. web/journal.html, note-window.html, dm.html): фон +
+// полоса слева, как в книгах-приключениях. Незнакомый класс не трогаем.
+func rewriteCallouts(htmlText string) string {
+	if !strings.Contains(htmlText, "class=") {
+		return htmlText
+	}
+	return calloutRe.ReplaceAllStringFunc(htmlText, func(m string) string {
+		sub := calloutRe.FindStringSubmatch(m)
+		tag, cls := sub[1], strings.ToLower(sub[2])
+		switch {
+		case strings.Contains(cls, "narrative"):
+			return "<" + tag + ` class="beacon-readaloud"`
+		case strings.Contains(cls, "advice"), strings.Contains(cls, "notable"):
+			return "<" + tag + ` class="beacon-dm-note"`
+		default:
+			return m
+		}
+	})
 }
 
 // pageBody — содержимое одной страницы по её типу. Видео/PDF проигрываются прямо в заметке .
@@ -104,7 +133,7 @@ func pageBody(ctx context.Context, page map[string]any, assets *Assets) string {
 			esc, src,
 		)
 	default:
-		return assets.RewriteHTML(ctx, domain.AssetKindNotes, digString(page, "text", "content"))
+		return rewriteCallouts(assets.RewriteHTML(ctx, domain.AssetKindNotes, digString(page, "text", "content")))
 	}
 }
 

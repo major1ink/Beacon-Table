@@ -61,6 +61,19 @@ type FoundryService interface {
 	// заметка/сцена — не «карточка каталога», а контент мира, который ДМ мог
 	// уже отредактировать) — их удаляет ДМ вручную, как и любые другие.
 	Delete(ctx context.Context, account *domain.Account, id string) (*FoundryModuleDelete, error)
+	// LinkSceneTokens сводит токены, приехавшие со сценами модуля, с
+	// карточками бестиария по id актёра Foundry (см.
+	// domain.Token.FoundryActorID) и возвращает, скольким токенам связь
+	// проставили.
+	//
+	// Отдельный шаг, а не часть ImportPack, потому что порядок импорта
+	// заранее неизвестен: карточки существ заводит КЛИЕНТ и уже после того,
+	// как ImportPack вернул документы (см. package doc выше), а пак со
+	// сценами и пак с актёрами — вообще разные запросы, и приехать они могут
+	// в любом порядке. Поэтому клиент зовёт это один раз, когда весь импорт
+	// закончен (см. web/src/pages/foundry-import.js). Вызов идемпотентен:
+	// уже связанные токены пропускаются, так что повторить его безвредно.
+	LinkSceneTokens(ctx context.Context) (int, error)
 }
 
 // FoundryModuleDelete — что снесла "Удалить модуль" (см. FoundryService.Delete).
@@ -148,10 +161,11 @@ type FoundryImport struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// FoundryNote — одна заметка, подготовленная импортом к заведению клиентом.
+// FoundryNote — одна запись журнала, подготовленная импортом к заведению
+// клиентом (см. web/src/pages/foundry-import.js: importNotes → журнал стола).
 type FoundryNote struct {
-	// Folder — папка библиотеки заметок: «модуль / компендиум / папки
-	// модуля» (см. foundry.NoteFolder и domain.Note.Folder).
+	// Folder — папка журнала: «модуль / компендиум / папки модуля» (см.
+	// foundry.NoteFolder).
 	Folder  string `json:"folder"`
 	Title   string `json:"title"`
 	Content string `json:"content"`
@@ -167,15 +181,21 @@ type foundryService struct {
 	// Installed/CheckUpdates ниже).
 	modules repository.FoundryModuleRepository
 
-	// bestiary/spells/items/references/conditions — только для Delete: найти
-	// и снести карточки, помеченные FoundryModuleID удаляемого пакета (см.
+	// bestiary/spells/items/references/conditions — для Delete: найти и
+	// снести карточки, помеченные FoundryModuleID удаляемого пакета (см.
 	// package doc Delete). Импорту они не нужны — тот создаёт карточки не
-	// здесь, а через клиента (см. package-doc FoundryService).
+	// здесь, а через клиента (см. package-doc FoundryService); исключение —
+	// bestiary, его читает ещё и LinkSceneTokens.
 	bestiary   BestiaryService
 	spells     SpellService
 	items      ItemService
 	references ReferenceService
 	conditions ConditionService
+	// pregens — только для Delete: снести пул-записи «готовых персонажей»
+	// этого модуля (созданных из них персонажей игроков это не касается,
+	// см. sqlite.PregenStore.DeleteBySource). Импорт складывает пре-генов
+	// через клиента, как и остальные карточки.
+	pregens repository.PregenRepository
 
 	// links — индекс перекрёстных ссылок модуля (см. foundry.LinkIndex),
 	// ключ — папка распакованного модуля. Строится обходом ВСЕХ паков, а
@@ -203,6 +223,7 @@ func NewFoundryService(
 	cacheDir string,
 	assets AssetService, room RoomService, playlists PlaylistService, modules repository.FoundryModuleRepository,
 	bestiary BestiaryService, spells SpellService, items ItemService, references ReferenceService, conditions ConditionService,
+	pregens repository.PregenRepository,
 ) FoundryService {
 	client := &http.Client{Timeout: foundryHTTPTimeout}
 	return &foundryService{
@@ -216,6 +237,7 @@ func NewFoundryService(
 		items:      items,
 		references: references,
 		conditions: conditions,
+		pregens:    pregens,
 		links:      map[string]*foundry.LinkIndex{},
 	}
 }
@@ -324,7 +346,7 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 		}
 		switch e.Target {
 		case foundry.TargetScenes:
-			scenes = append(scenes, foundry.MapScene(ctx, e.Doc, assets))
+			scenes = append(scenes, foundry.MapScene(ctx, e.Doc, assets, links))
 		case foundry.TargetPlaylists:
 			if err := s.applyPlaylist(ctx, foundry.MapPlaylist(ctx, e.Doc, assets)); err != nil {
 				result.Warnings = appendWarning(result.Warnings, err.Error())
@@ -359,6 +381,12 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 			result.Warnings = appendWarning(result.Warnings, "сцены не добавились: "+err.Error())
 		}
 		result.Applied[foundry.TargetScenes] = added
+	}
+	if result.Applied[foundry.TargetPlaylists] > 0 {
+		// Панель "Плейлисты" (см. web/src/pages/dm.js), если уже открыта в
+		// другой вкладке ДМ, сама перечитает список — без этого новые
+		// плейлисты появлялись бы только после ручной перезагрузки страницы.
+		s.room.NotifyPlaylistsChanged()
 	}
 	result.Assets = assets.Count()
 	result.AssetsMissing = assets.Missing
@@ -470,6 +498,16 @@ func (s *foundryService) Delete(ctx context.Context, account *domain.Account, id
 		}
 	}
 
+	// Пул «готовых персонажей» этого модуля — одним запросом (в отличие от
+	// карточек выше, у пре-генов нет отдельного сервиса с List/Delete).
+	// Персонажей игроков, уже созданных захватом пре-генов, это не касается —
+	// они живут отдельными строками characters (см. domain.Pregen).
+	if n, err := s.pregens.DeleteBySource(ctx, id); err != nil {
+		result.Warnings = appendWarning(result.Warnings, fmt.Sprintf("%s: %s", foundry.TargetPregens, err.Error()))
+	} else if n > 0 {
+		result.Cards[foundry.TargetPregens] = n
+	}
+
 	// Файлы — вся папка "foundry/<id>" во всех разделах, куда импорт вообще
 	// пишет (см. deletableAssetKinds); DeleteFolder молча ничего не делает,
 	// если в этом разделе для модуля папки не было (os.RemoveAll на
@@ -486,6 +524,40 @@ func (s *foundryService) Delete(ctx context.Context, account *domain.Account, id
 		result.Warnings = appendWarning(result.Warnings, "запись об установке не удалилась: "+err.Error())
 	}
 	return result, nil
+}
+
+// LinkSceneTokens — см. FoundryService. Ключ карты — Monster.FoundryActorID;
+// карточки без него (заведённые руками или импортом одиночного файла)
+// просто не участвуют, и ни один токен на них не сошлётся.
+//
+// Дубликат id актёра в бестиарии (одного и того же монстра импортировали
+// дважды — например, ДМ переустановил модуль поверх, выбрав "создать новую"
+// вместо "перезаписать") разрешается в пользу ПЕРВОЙ карточки: выбор всё
+// равно произволен, а стабильность важнее — повторный запуск связывания не
+// должен раз за разом перекидывать токены между копиями.
+func (s *foundryService) LinkSceneTokens(ctx context.Context) (int, error) {
+	monsters, err := s.bestiary.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	byActor := make(map[string]string, len(monsters))
+	for _, m := range monsters {
+		if m == nil || m.FoundryActorID == "" {
+			continue
+		}
+		if _, exists := byActor[m.FoundryActorID]; exists {
+			continue
+		}
+		byActor[m.FoundryActorID] = m.ID
+	}
+	if len(byActor) == 0 {
+		return 0, nil
+	}
+	// Тот же таймаут и по той же причине, что у ImportScenes выше: комнату
+	// могло погасить переключение мира, её горутина тогда не читает канал.
+	roomCtx, cancel := context.WithTimeout(ctx, roomImportTimeout)
+	defer cancel()
+	return s.room.LinkTokensToMonsters(roomCtx, byActor)
 }
 
 // matchingMonsters/matchingSpells/matchingItems/matchingReferences/

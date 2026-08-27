@@ -13,11 +13,25 @@ import (
 // файла — признак не журнала, а мусора со стороны клиента.
 const maxJournalAccessEntries = 64
 
+// maxJournalContentBytes — санитарный предел размера записи: не ограничение по
+// смыслу (текст журнала реалистично на порядки меньше), а защита от случайно
+// вставленного бинарника/огромного текста.
+const maxJournalContentBytes = 1 << 20 // 1 МБ
+
+// maxJournalFolderDepth/maxJournalFolderSegment — санитарные пределы дерева
+// папок. Не правило, а защита от бесконечной вложенности из чужого импорта и
+// от имён, которые не переживёт файловая система (папки — настоящие каталоги
+// на диске, см. journalfile).
+const (
+	maxJournalFolderDepth   = 8
+	maxJournalFolderSegment = 80
+)
+
 // JournalService — журнал стола: общая на весь стол библиотека записей, в
 // которой каждый пишет своё и сам решает, кому это видно и кому это можно
-// править (см. domain.JournalEntry — модель прав фаундривская). В отличие от
-// NoteService (личная вики ДМ, доступна только ему), сюда ходят и игроки —
-// поэтому КАЖДЫЙ метод принимает domain.JournalViewer и сам проверяет права:
+// править (см. domain.JournalEntry — модель прав фаундривская). Сюда ходят и
+// игроки, и ДМ (запись, видимая только автору, — это личная вики) — поэтому
+// КАЖДЫЙ метод принимает domain.JournalViewer и сам проверяет права:
 // authorization журнала живёт здесь, а не в HTTP-слое, где есть только
 // «admin/не admin», и не в репозитории, который про права ничего не решает.
 //
@@ -75,10 +89,41 @@ func NewJournalService(entries repository.JournalRepository) JournalService {
 }
 
 func validateJournalContent(content string) error {
-	if len(content) > maxNoteContentBytes {
+	if len(content) > maxJournalContentBytes {
 		return &domain.ValidationError{Msg: "запись журнала слишком большая (максимум 1 МБ)"}
 	}
 	return nil
+}
+
+// validateJournalFolder — нормализация пути папки: лишние слэши/пробелы долой,
+// "." и ".." запрещены (репозиторий отклонил бы их и сам, но человеку нужно
+// понятное сообщение). Возвращает канонический posix-путь; "" — корень
+// журнала, это валидно.
+func validateJournalFolder(folder string) (string, error) {
+	folder = strings.TrimSpace(strings.ReplaceAll(folder, "\\", "/"))
+	folder = strings.Trim(folder, "/")
+	if folder == "" {
+		return "", nil
+	}
+	parts := strings.Split(folder, "/")
+	clean := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue // "Глава 1//NPC" — просто лишний слэш, не ошибка
+		}
+		if p == "." || p == ".." || strings.ContainsAny(p, `:*?"<>|`) {
+			return "", &domain.ValidationError{Msg: "в имени папки нельзя использовать . .. : * ? \" < > |"}
+		}
+		if len([]rune(p)) > maxJournalFolderSegment {
+			return "", &domain.ValidationError{Msg: "слишком длинное имя папки (максимум 80 символов)"}
+		}
+		clean = append(clean, p)
+	}
+	if len(clean) > maxJournalFolderDepth {
+		return "", &domain.ValidationError{Msg: "слишком глубокая вложенность папок (максимум 8 уровней)"}
+	}
+	return strings.Join(clean, "/"), nil
 }
 
 // normalizeAccess — приводит присланную клиентом раздачу прав к тому, что
@@ -146,7 +191,7 @@ func (s *journalService) Create(ctx context.Context, v domain.JournalViewer, dra
 	if err := validateJournalContent(draft.Content); err != nil {
 		return nil, err
 	}
-	folder, err := validateNoteFolder(draft.Folder)
+	folder, err := validateJournalFolder(draft.Folder)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +276,7 @@ func (s *journalService) Move(ctx context.Context, v domain.JournalViewer, id, f
 	if err := s.manageable(ctx, v, id); err != nil {
 		return nil, err
 	}
-	folder, err := validateNoteFolder(folder)
+	folder, err := validateJournalFolder(folder)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +302,7 @@ func (s *journalService) Folders(ctx context.Context) ([]string, error) {
 }
 
 func (s *journalService) CreateFolder(ctx context.Context, v domain.JournalViewer, folder string) error {
-	folder, err := validateNoteFolder(folder)
+	folder, err := validateJournalFolder(folder)
 	if err != nil {
 		return err
 	}
@@ -268,7 +313,7 @@ func (s *journalService) CreateFolder(ctx context.Context, v domain.JournalViewe
 }
 
 func (s *journalService) DeleteFolder(ctx context.Context, v domain.JournalViewer, folder string) error {
-	folder, err := validateNoteFolder(folder)
+	folder, err := validateJournalFolder(folder)
 	if err != nil {
 		return err
 	}
@@ -301,11 +346,11 @@ func (s *journalService) RenameFolder(ctx context.Context, v domain.JournalViewe
 		// перекраивает только ДМ (создать свою папку игрок по-прежнему может).
 		return domain.ErrForbidden
 	}
-	from, err := validateNoteFolder(from)
+	from, err := validateJournalFolder(from)
 	if err != nil {
 		return err
 	}
-	to, err = validateNoteFolder(to)
+	to, err = validateJournalFolder(to)
 	if err != nil {
 		return err
 	}

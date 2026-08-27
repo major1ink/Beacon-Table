@@ -69,12 +69,19 @@ type ClientMsg struct {
 	// показываемый текст со стороны недоверенного клиента — сервер не
 	// проверяет его смысл, только ограничивает длину (см. Room.handleRollDice)
 	// и ретранслирует как есть. Личность бросающего (name в roll_result)
-	// по-прежнему берётся с сервера (c.PlayerName()), Label её не подменяет.
+	// по-прежнему решает сервер (см. Room.rollerName): CharacterID ниже, если
+	// передан и подтверждён владением/ролью, иначе — c.PlayerName()/"ДМ".
+	// Label её не подменяет.
 	Label string `json:"label,omitempty"`
 
-	// Cue — только для "play_cue"/"set_cue_volume" (канал ДМ). "stop_cue" его
-	// не использует.
 	Cue *CueState `json:"cue,omitempty"`
+
+	// ImageURL — только для "show_image": какую картинку ДМ выводит «поверх
+	// всего» на экраны игроков и трансляции (раздел «Показ», см.
+	// web/src/showcase-overlay.js). Пустая строка / "hide_image" — убрать
+	// показ. Эфемерно, как Cue: в snapshot сцены не пишется (см.
+	// Room.showcase / broadcastShowcase).
+	ImageURL string `json:"imageUrl,omitempty"`
 
 	// поля трекера инициативы (см. domain.CombatState/Combatant,
 	// service.Room: handleAddCombatant и соседи). "start_combat"/"end_combat"/
@@ -92,6 +99,11 @@ type ClientMsg struct {
 	CharacterID string `json:"characterId,omitempty"`
 	MonsterID   string `json:"monsterId,omitempty"`
 
+	// CharacterID выше также переиспользуется "roll_dice" (см.
+	// character-sheet.js: sendRoll) — какой лист персонажа кинул кубик, чтобы
+	// в общем логе (roll_result.name) стояло имя персонажа, а не логин
+	// игрока/роль сокета (см. Room.rollerName).
+
 	// CombatantID — цель "remove_combatant"/"set_combatant_initiative"/
 	// "set_combatant_hp".
 	CombatantID string `json:"combatantId,omitempty"`
@@ -100,10 +112,22 @@ type ClientMsg struct {
 	Initiative *float64 `json:"initiative,omitempty"`
 	// AC — только для "set_combatant_ac".
 	AC *int `json:"ac,omitempty"`
-	// HPCurrent/HPMax — только для "set_combatant_hp", каждое поле
-	// независимо необязательно (правка одного не трогает другое).
+	// HPCurrent/HPMax/HPTemp/HPDelta — только для "set_combatant_hp", каждое
+	// поле независимо необязательно (правка одного не трогает другое).
+	//
+	// HPCurrent/HPMax/HPTemp — АБСОЛЮТНЫЕ значения: "поставить ровно
+	// столько" (поля в карточке бойца, перетаскивание полоски хитов).
+	// HPDelta — ИЗМЕНЕНИЕ: "-7" от удара, "+4" от лечения. Отдельным полем,
+	// а не посчитанным на клиенте новым числом, ровно из-за временных хитов:
+	// урон дельтой сначала съедает HPTemp и только остатком идёт в
+	// HPCurrent, и это правило должно жить в одном месте на сервере — им
+	// пользуется и ручной ввод ДМ, и периодический урон от меток (см.
+	// service.Room.applyPeriodicModifiers), и никакой клиент не может
+	// посчитать его по устаревшему снимку неправильно.
 	HPCurrent *int `json:"hpCurrent,omitempty"`
 	HPMax     *int `json:"hpMax,omitempty"`
+	HPTemp    *int `json:"hpTemp,omitempty"`
+	HPDelta   *int `json:"hpDelta,omitempty"`
 
 	// DeathSaveKind/DeathSaveValue — только для "set_combatant_death_save":
 	// Kind "success"|"fail", Value — итоговое число отмеченных чекбоксов
@@ -117,6 +141,11 @@ type ClientMsg struct {
 	// "Настройки"), видят ли HP в верхнем оверлее хода игроки/TV (см.
 	// domain.CombatState.ShowHP).
 	ShowHP *bool `json:"showHp,omitempty"`
+
+	// HighlightActiveToken — только для "set_highlight_active_token": общий
+	// переключатель стола (раздел "Настройки"), подсвечивать ли на карте
+	// токен бойца, чей сейчас ход (см. domain.CombatState.HighlightActiveToken).
+	HighlightActiveToken *bool `json:"highlightActiveToken,omitempty"`
 
 	// ---- инвентарь/лут (см. domain.InventoryEntry, LootHub, CombatState.LootingEnabled) ----
 
@@ -202,10 +231,32 @@ type WallPointRef struct {
 // Unix-миллисекундах, от него каждый клиент сам считает currentTime — так
 // подключившийся позже клиент слышит трек с той же позиции, а не с нуля,
 // без стриминга позиции по WS. nil *CueState = ничего не играет.
+//
+// Paused/PositionMs — пауза и перемотка (см. Room: pause_cue/resume_cue/
+// seek_cue). Пока Paused==false, StartedAtMs — обычный "виртуальный старт":
+// currentTime = now - StartedAtMs (с учётом Loop по модулю). На паузе
+// StartedAtMs больше не годится (время идёт, а трек стоит), поэтому позиция
+// замораживается в PositionMs; возобновление пересчитывает StartedAtMs =
+// now - PositionMs и снимает Paused, чтобы формула снова заработала как ни в
+// чём не бывало. Тот же PositionMs клиент присылает при перемотке (see
+// seek_cue) — сервер сам решает, во что его превратить (в новый StartedAtMs,
+// если играет, или в саму заморозку, если на паузе).
 type CueState struct {
 	URL         string  `json:"url"`
 	Name        string  `json:"name"`
 	Volume      float64 `json:"volume"`
 	Loop        bool    `json:"loop"`
 	StartedAtMs int64   `json:"startedAtMs"`
+	Paused      bool    `json:"paused"`
+	PositionMs  int64   `json:"positionMs"`
+}
+
+// ShowcaseState — картинка, которую ДМ вывел «поверх всего» на экраны
+// игроков и трансляции (кнопка показа в разделе «Показ», см. web/dm.html и
+// web/src/showcase-overlay.js). Эфемерно, как CueState: в snapshot сцены не
+// пишется, живёт в памяти комнаты и досылается свежеподключившимся в
+// Room.run (см. Room.showcase / showcasePayload). nil = сейчас ничего не
+// показывается.
+type ShowcaseState struct {
+	URL string `json:"url"`
 }

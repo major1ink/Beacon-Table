@@ -21,8 +21,9 @@ import {
   clampMoveByWalls,
 } from "../geometry.js";
 import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
+import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
-import { fetchCharacter } from "../api.js";
+import { fetchCharacter, fetchMonster } from "../api.js";
 
 // EDGE_HIT_PX — порог (в экранных px) для попадания в край "ручки"
 // редактора сетки (см. tool "grid-edit" ниже): ближе к краю квадрата — это
@@ -77,6 +78,18 @@ export function createInteraction(ctx) {
     markCameraDirty();
     ctx.render();
   }
+
+  // ---- универсальная механика объектов карты (см. map-objects.js) ----
+  // Фокусировка ("покажи, где он") заведена для ВСЕХ ролей, а не только для
+  // ДМ: сам жест ничего в мире не меняет — он двигает локальную камеру, — и
+  // ровно та же кнопка "найти на карте" понадобится в любом списке объектов
+  // на экране игрока.
+  const mapObjectFocus = createMapObjectFocus(ctx, applyCameraAndRender);
+  document.addEventListener("vtt:focusMapObject", (e) => {
+    const { kind, id, minZoom } = e.detail || {};
+    const obj = mapObjectsOf(ctx.scene, kind)[id];
+    if (obj) mapObjectFocus.focus(obj, { minZoom });
+  });
 
   // ---- зум колесом, пан средней кнопкой — работают у всех трёх ролей ----
   canvas.addEventListener(
@@ -147,9 +160,101 @@ export function createInteraction(ctx) {
   const rulerLine = createRulerLine(ctx);
   const distanceLabel = createDistanceLabel(ctx);
 
+  // ---- лимит скорости в бою — общий и для ДМ, и для игрока ----
+  // Раньше это было заведено только в ветке ctx.isPlayer (свой токен, свой
+  // ход), а ДМ двигал ЛЮБОЙ токен без ограничений вовсе — включая токен
+  // текущего бойца в его же ход. По ТЗ максимум перемещения токена = его
+  // скорость из карточки, и это должно работать независимо от того, кто
+  // именно тащит токен (ДМ чаще всего двигает и монстров, и — с общего
+  // экрана — токены игроков). Поэтому механизм один на оба сценария: кэш
+  // speedCache (ключ — characterId ИЛИ monsterId) и currentCombatantFor,
+  // определяющий, что сейчас именно ход этого токена в активном бою.
+  //
+  // speedCache подтягивается заново на каждый mousedown (не кешируется
+  // намертво) — правка скорости на листе персонажа/карточке бестиария
+  // подхватывается к следующему же перетаскиванию, без перезагрузки
+  // страницы.
+  const speedCache = new Map();
+  function parseMonsterWalkSpeed(speedText) {
+    // Monster.Speed — свободный текст вида "30 фт., полёт 60 фт. (парит)"
+    // (см. web/src/monster-import.js:buildSpeed) — для лимита берём только
+    // пешую скорость, первое число в строке.
+    if (!speedText) return 0;
+    const m = /(\d+)/.exec(speedText);
+    return m ? Number(m[1]) : 0;
+  }
+  function ensureSpeedLoaded(token) {
+    if (token.characterId) {
+      fetchCharacter(token.characterId)
+        .then((c) => speedCache.set(token.characterId, (c.sheet && c.sheet.combat && c.sheet.combat.speed) || 0))
+        .catch(() => {});
+    } else if (token.monsterId) {
+      fetchMonster(token.monsterId)
+        .then((m) => speedCache.set(token.monsterId, parseMonsterWalkSpeed(m.speed)))
+        .catch(() => {});
+    }
+  }
+  // combatantForToken — боец из трекера инициативы, стоящий за этим токеном,
+  // вне зависимости от того, чей сейчас ход (null, если токен в бою не
+  // участвует — декорация/фон). Точный TokenID — приоритет и единственный
+  // однозначный признак: если на карте два одинаковых монстра ("Гоблин-
+  // воитель" и "Гоблин-воитель 2"), у них общий monsterId, и сопоставление
+  // по нему различить бойцов не может. characterId/monsterId — фолбэк ТОЛЬКО
+  // для бойца, у которого своего TokenID ещё нет (в инициативу добавили, на
+  // карту ещё не поставили, см. handlePlaceCombatantToken) — иначе первый
+  // подвернувшийся боец с тем же шаблоном перехватывал бы чужой токен (был
+  // баг: движение одного гоблина то разрешало двигать обоих, то не
+  // разрешало двигать никого).
+  function combatantForToken(token) {
+    const combat = ctx.combat;
+    if (!combat || !Array.isArray(combat.combatants)) return null;
+    const exact = combat.combatants.find((c) => c.tokenId === token.id);
+    if (exact) return exact;
+    return (
+      combat.combatants.find(
+        (c) =>
+          !c.tokenId &&
+          ((token.characterId && c.characterId === token.characterId) ||
+            (token.monsterId && c.monsterId === token.monsterId))
+      ) || null
+    );
+  }
+  // currentCombatantFor — то же самое, но только если сейчас именно его ход
+  // (лимит скорости — только в свой ход, см. speedLimitFor).
+  function currentCombatantFor(token) {
+    if (!ctx.combat || !ctx.combat.active) return null;
+    const cmb = combatantForToken(token);
+    return cmb && cmb.id === ctx.combat.currentId ? cmb : null;
+  }
+  // turnBlocksMove — бой идёт, у токена есть боец в трекере инициативы, но
+  // сейчас не его ход: двигать нельзя никому, включая ДМ (см.
+  // room.go: turnAllowsTokenMove — сервер отбрасывает такую правку молча,
+  // тут та же проверка нужна ДО отправки, чтобы токен не дёргался туда-обратно).
+  // Токены вне инициативы (декорация/фон) не блокируются — они не участвуют
+  // в порядке ходов вовсе.
+  function turnBlocksMove(token) {
+    if (!ctx.combat || !ctx.combat.active) return false;
+    const cmb = combatantForToken(token);
+    return !!cmb && cmb.id !== ctx.combat.currentId;
+  }
+  // speedLimitFor — потолок драга ДЛЯ ЭТОГО mousemove: mировые px
+  // (maxAllowed, для trackMovementStep) и тот же потолок в единицах линейки
+  // (limitUnits, для подписи "15/30 фт"). speed===0 (лист/карточка не
+  // заполнены — 0 нулевое значение по умолчанию, а не осознанно
+  // проставленная неподвижность) тоже не ограничивает — иначе
+  // свежесозданный персонаж/незаполненный монстр не мог бы сдвинуться в
+  // первом же бою.
+  function speedLimitFor(token) {
+    if (!currentCombatantFor(token)) return { maxAllowed: Infinity, limitUnits: null };
+    const key = token.characterId || token.monsterId;
+    const speed = key ? speedCache.get(key) : null;
+    if (!speed) return { maxAllowed: Infinity, limitUnits: null };
+    return { maxAllowed: unitsToWorldDistance(speed, ctx.scene.grid), limitUnits: speed };
+  }
+
   if (ctx.isDM) {
     // Единый активный инструмент вместо трёх независимых булевых флагов.
-    let tool = "select"; // 'select' | 'attack' | 'wall' | 'building' | 'fog' | 'grid-edit' | 'ruler'
+    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'grid-edit' | 'ruler'
     // ctx.tool — зеркало локальной `tool` наружу: layers/walls.js,
     // layers/manual-fog.js и layers/buildings.js читают его, чтобы решить,
     // рисовать ли кружки-ручки на вершинах (см. setTool ниже — точки
@@ -158,7 +263,6 @@ export function createInteraction(ctx) {
     // инструмента — гейтится только возможность их редактировать и сами
     // точки-ручки.
     ctx.tool = tool;
-    let attackFromId = null;
     // wallChainLast — последняя ЗАКОММИЧЕННАЯ точка текущей цепочки стен (см.
     // ниже); wallDragFrom — точка mousedown, пока цепочка ещё не начата (одно
     // "было" на двоих: либо цепочка уже идёт, либо мы ждём mouseup первого
@@ -205,10 +309,72 @@ export function createInteraction(ctx) {
     let dragLastPos = null;
     let dragTraveled = 0;
 
+    // selectedTokenIds — множественное выделение токенов инструментом
+    // "Выбор" (см. mousedown/mousemove/mouseup ниже, аналог рамки-лассо и
+    // shift-клика в Foundry). ctx.selectedTokenIds — то же зеркало наружу,
+    // что и ctx.tool выше: layers/tokens.js читает его на каждой перерисовке
+    // токена, чтобы решить, рисовать ли рамку выделения (selectionRing).
+    // marquee — резиновая рамка, которую тянет ДМ по пустому месту карты
+    // (не по токену/значку заметки): {x0,y0} — точка mousedown, {x,y} —
+    // текущая точка курсора, additive — зажат ли был Shift в момент старта
+    // (тогда рамка ДОБАВЛЯЕТ токены к уже выделенным, а не заменяет их).
+    // groupDragOrigins — снимок стартовых позиций ВСЕХ выделенных токенов на
+    // mousedown (Map<id,{x,y}>): пока "анкорный" токен под курсором
+    // (dragTokenId) едет со снаппингом к сетке через обычный
+    // trackMovementStep, остальные из группы просто получают ту же дельту
+    // от своей исходной позиции — иначе выделение расползалось бы, если бы
+    // каждый токен снаппился независимо.
+    let selectedTokenIds = new Set();
+    ctx.selectedTokenIds = selectedTokenIds;
+    let marquee = null;
+    let groupDragOrigins = null;
+
+    function setSelection(ids) {
+      selectedTokenIds = new Set(ids);
+      ctx.selectedTokenIds = selectedTokenIds;
+      ctx.dirty.tokens = true;
+      ctx.render();
+    }
+
+    // lightEditActive — открыта ли ПРЯМО СЕЙЧАС панель "Освещение" (см.
+    // pages/dm.js: setSidePanelSection шлёт "vtt:lightEditMode"). Токены
+    // света (domain.Token.LightOnly) — это разметка карты, а не фигурки на
+    // ней: они стоят там же, где ходят существа, ничем не подписаны и
+    // ловятся мышью ровно так же, как монстр. Пока панель освещения
+    // закрыта, они полностью выпадают из хит-теста — ни драга, ни ПКМ-меню,
+    // ни двойного клика; открыл панель — они, наоборот, получают
+    // ПРИОРИТЕТ в стопке (см. prefer в dmTokenAt), чтобы фонарь можно было
+    // достать из-под вставшего на него монстра, не убирая монстра.
+    let lightEditActive = false;
+    document.addEventListener("vtt:lightEditMode", (e) => {
+      const next = !!(e.detail && e.detail.active);
+      if (next === lightEditActive) return;
+      lightEditActive = next;
+      // Выход из режима посреди жеста не должен оставить токен света
+      // "прилипшим" к курсору.
+      if (!lightEditActive && dragTokenId && (ctx.scene.tokens[dragTokenId] || {}).lightOnly) {
+        dragTokenId = null;
+        distanceLabel.hide();
+      }
+    });
+
+    // dmTokenAt — единственный хит-тест токенов у ДМ (см. geometry.tokenAt):
+    // тут собраны оба правила разом — что вообще видно мыши (токены света
+    // только в режиме освещения) и что нельзя трогать (opts.skipLocked —
+    // запертые объекты, см. domain.Token.Locked). skipLocked НЕ ставится на
+    // ПКМ: контекстное меню запертого токена обязано открываться, иначе
+    // замок было бы нечем снять.
+    function dmTokenAt(x, y, opts) {
+      const skipLocked = !!(opts && opts.skipLocked);
+      return tokenAt(x, y, ctx.scene.tokens, {
+        filter: (t) => (lightEditActive || !t.lightOnly) && !(skipLocked && isLocked(t)),
+        prefer: lightEditActive ? (t) => !!t.lightOnly : null,
+      });
+    }
+
     function setTool(name) {
       tool = name || "select";
       ctx.tool = tool;
-      attackFromId = null;
       wallChainLast = null;
       wallDragFrom = null;
       draggingWallPoint = null;
@@ -218,6 +384,7 @@ export function createInteraction(ctx) {
       buildingChain = null;
       fogPath = null;
       gridDragStart = null;
+      marquee = null;
       rulerFrom = null;
       rulerLine.clear();
       distanceLabel.hide();
@@ -404,7 +571,7 @@ export function createInteraction(ctx) {
           return;
         }
         const vertex = buildingVertexNear(x, y, ctx.scene.buildings, ctx.world.scale.x || 1);
-        if (vertex) draggingBuildingPoint = vertex;
+        if (vertex && !isLocked(ctx.scene.buildings[vertex.buildingId])) draggingBuildingPoint = vertex;
         return;
       }
       if (tool === "fog") {
@@ -414,12 +581,12 @@ export function createInteraction(ctx) {
         }
         const scale = ctx.world.scale.x || 1;
         const fogVertex = fogVertexNear(x, y, ctx.scene.fogAreas, scale);
-        if (fogVertex) {
+        if (fogVertex && !isLocked(ctx.scene.fogAreas[fogVertex.areaId])) {
           draggingFogVertex = fogVertex;
           return;
         }
         const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
-        if (fogId) {
+        if (fogId && !isLocked(ctx.scene.fogAreas[fogId])) {
           draggingFogArea = { id: fogId, startX: x, startY: y, original: ctx.scene.fogAreas[fogId].points.map((p) => ({ x: p.x, y: p.y })) };
         }
         return;
@@ -467,32 +634,45 @@ export function createInteraction(ctx) {
         }
       }
 
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
-      if (tool === "attack") {
-        if (!attackFromId) {
-          attackFromId = hitId;
-        } else if (hitId) {
-          const from = ctx.scene.tokens[attackFromId];
-          const to = ctx.scene.tokens[hitId];
-          if (from && to) {
-            ctx.send({ type: "animate_attack", fromX: from.x, fromY: from.y, toX: to.x, toY: to.y, color: "#ff5555" });
-          }
-          setTool("select");
-        }
-        return;
-      }
+      // skipLocked — запертый токен (domain.Token.Locked) для ЛКМ просто не
+      // существует: ни утащить, ни выбрать.
+      const hitId = dmTokenAt(x, y, { skipLocked: true });
       if (hitId) {
+        // Shift+клик по токену — только переключить его в/из текущего
+        // выделения (как в Foundry), само перетаскивание НЕ начинается: это
+        // жест "поправить состав группы", не "подвинуть".
+        if (e.shiftKey) {
+          const next = new Set(selectedTokenIds);
+          if (next.has(hitId)) next.delete(hitId);
+          else next.add(hitId);
+          setSelection(next);
+          return;
+        }
+        // Клик без Shift по токену, который УЖЕ входит в групповое
+        // выделение, — тащим всю группу, состав не трогаем. По токену вне
+        // выделения — обычный клик заменяет выделение им одним (ровно как
+        // одиночный драг работал раньше).
+        if (!selectedTokenIds.has(hitId)) setSelection([hitId]);
         dragTokenId = hitId;
         const t0 = ctx.scene.tokens[hitId];
         dragStart = { x: t0.x, y: t0.y };
         dragLastPos = dragStart;
         dragTraveled = 0;
+        ensureSpeedLoaded(t0);
+        // Снимок стартовых позиций остальных выделенных токенов — двигать
+        // их на mousemove той же дельтой, что и анкорный hitId (см.
+        // rationale у groupDragOrigins выше).
+        groupDragOrigins = new Map();
+        for (const id of selectedTokenIds) {
+          const tok = ctx.scene.tokens[id];
+          if (tok) groupDragOrigins.set(id, { x: tok.x, y: tok.y });
+        }
         return;
       }
       // Значок заметки перетаскивается только инструментом "выбор" — как и
       // токен выше, чтобы не мешать рисованию стен/тумана/здания.
       if (tool === "select") {
-        const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers);
+        const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers, 16, (m) => !isLocked(m));
         if (markerId && markerId === resizeArmedNoteMarkerId) {
           // Резайз армирован ИМЕННО для этого значка (см. vtt:armNoteMarkerResize
           // ниже) и mousedown попал по нему — начинаем драг размера, а не
@@ -501,6 +681,13 @@ export function createInteraction(ctx) {
           resizeArmedNoteMarkerId = null;
         } else if (markerId) {
           dragNoteMarkerId = markerId;
+        } else {
+          // Пусто под курсором — начинаем резиновую рамку множественного
+          // выделения (см. mousemove/mouseup ниже). additive — зажат ли
+          // Shift: тогда по mouseup рамка ДОБАВЛЯЕТ токены к уже выделенным
+          // вместо замены — тот же приём, что и shift-клик по одному токену
+          // выше.
+          marquee = { x0: x, y0: y, x, y, additive: e.shiftKey };
         }
       }
     });
@@ -508,6 +695,18 @@ export function createInteraction(ctx) {
     canvas.addEventListener("mousemove", (e) => {
       const { x, y } = mousePos(e);
       const scale = ctx.world.scale.x || 1;
+
+      if (marquee) {
+        marquee.x = x;
+        marquee.y = y;
+        const rx = Math.min(marquee.x0, marquee.x);
+        const ry = Math.min(marquee.y0, marquee.y);
+        const rw = Math.abs(marquee.x - marquee.x0);
+        const rh = Math.abs(marquee.y - marquee.y0);
+        preview.clear();
+        preview.rect(rx, ry, rw, rh).fill({ color: 0x5dd0ff, alpha: 0.12 }).stroke({ width: 1.5 / scale, color: 0x5dd0ff, alpha: 0.9 });
+        return;
+      }
 
       if (tool === "wall" && (wallChainLast || wallDragFrom)) {
         const from = wallChainLast || wallDragFrom;
@@ -725,14 +924,28 @@ export function createInteraction(ctx) {
       if (!dragTokenId) return;
       const snapped = snapToGrid(x, y, ctx.scene.grid);
       const t = ctx.scene.tokens[dragTokenId];
-      if (!t) return;
-      // У ДМ перемещение ничем не ограничено (maxAllowed=Infinity — полная
-      // авторская власть над картой), в отличие от драга игроком СВОЕГО
-      // токена в его ход (см. ветку ctx.isPlayer ниже) — но "одометр" для
-      // подсказки дистанции считается тем же способом (см.
-      // geometry.trackMovementStep): накопленный путь, обнуляется только
-      // при точном возврате в точку начала жеста.
-      const step = trackMovementStep(dragLastPos, snapped, dragStart, dragTraveled, Infinity, ctx.scene.grid);
+      // Токен мог быть заперт (или удалён) уже ПОСЛЕ начала жеста — с
+      // другого экрана ДМ или из списка источников света; тогда жест просто
+      // прекращается, а не продолжает двигать запертое. Тем же способом
+      // обрывается жест, если за это время начался бой (или наступил чужой
+      // ход) — ДМ двигает только текущего бойца, как и все остальные, см.
+      // turnBlocksMove выше и room.go: turnAllowsTokenMove (сервер такую
+      // правку и так отбросит — тут та же проверка ДО отправки, чтобы токен
+      // не дёргался туда-обратно).
+      if (!t || isLocked(t) || turnBlocksMove(t)) {
+        dragTokenId = null;
+        distanceLabel.hide();
+        groupDragOrigins = null;
+        return;
+      }
+      // Лимит скорости — та же логика, что и у драга игроком своего токена
+      // (см. speedLimitFor выше): работает, только пока идёт бой И сейчас
+      // ход именно этого токена. Вне боя или не в чужой ход ограничения нет,
+      // "Одометр" для подсказки дистанции считается тем же способом
+      // (см. geometry.trackMovementStep): накопленный путь, обнуляется
+      // только при точном возврате в точку начала жеста.
+      const { maxAllowed, limitUnits } = speedLimitFor(t);
+      const step = trackMovementStep(dragLastPos, snapped, dragStart, dragTraveled, maxAllowed, ctx.scene.grid);
       t.x = step.pos.x;
       t.y = step.pos.y;
       dragLastPos = step.pos;
@@ -741,11 +954,59 @@ export function createInteraction(ctx) {
       ctx.dirty.vision = true;
       ctx.dirty.buildings = true; // мог войти/выйти из контура здания — occupied() пересчитать
       ctx.render();
-      distanceLabel.show(t.x, t.y, formatDistanceValue(dragTraveled, ctx.scene.grid));
+      distanceLabel.show(t.x, t.y, formatDistanceValue(dragTraveled, ctx.scene.grid, limitUnits));
       ctx.send({ type: "move_token", token: t });
+
+      // Остальные токены группового выделения едут ТОЙ ЖЕ дельтой от своей
+      // исходной позиции (groupDragOrigins, снятой на mousedown) — без
+      // собственного снаппинга: иначе фигура выделения "разъезжалась" бы по
+      // сетке, если бы каждый токен подгонялся к ближайшей клетке отдельно.
+      if (groupDragOrigins && groupDragOrigins.size > 1) {
+        const anchorOrigin = groupDragOrigins.get(dragTokenId) || dragStart;
+        const dx = t.x - anchorOrigin.x;
+        const dy = t.y - anchorOrigin.y;
+        for (const [id, origin] of groupDragOrigins) {
+          if (id === dragTokenId) continue;
+          const other = ctx.scene.tokens[id];
+          if (!other || isLocked(other) || turnBlocksMove(other)) continue;
+          other.x = origin.x + dx;
+          other.y = origin.y + dy;
+          ctx.send({ type: "move_token", token: other });
+        }
+      }
     });
 
     canvas.addEventListener("mouseup", (e) => {
+      if (marquee) {
+        const rx0 = Math.min(marquee.x0, marquee.x);
+        const ry0 = Math.min(marquee.y0, marquee.y);
+        const rx1 = Math.max(marquee.x0, marquee.x);
+        const ry1 = Math.max(marquee.y0, marquee.y);
+        // Порог в мировых пикселях — отличить реальную рамку от дрожания
+        // руки на обычном клике по пустому месту (тот просто снимает
+        // выделение, см. ветку ниже).
+        const dragged = Math.hypot(marquee.x - marquee.x0, marquee.y - marquee.y0) > 4;
+        preview.clear();
+        if (dragged) {
+          const hitIds = Object.entries(ctx.scene.tokens)
+            .filter(([, tok]) => !tok.lightOnly && !isLocked(tok) && tok.x >= rx0 && tok.x <= rx1 && tok.y >= ry0 && tok.y <= ry1)
+            .map(([id]) => id);
+          if (marquee.additive) {
+            const next = new Set(selectedTokenIds);
+            for (const id of hitIds) next.add(id);
+            setSelection(next);
+          } else {
+            setSelection(hitIds);
+          }
+        } else if (!marquee.additive) {
+          // Просто клик по пустому месту карты — снять выделение (как клик
+          // по пустоте в Foundry).
+          setSelection([]);
+        }
+        marquee = null;
+        return;
+      }
+
       // wallChainLast/wallDragFrom/buildingChain ставятся ТОЛЬКО при
       // зажатом Ctrl на mousedown (см. выше) — значит их наличие тут само
       // по себе означает "идёт рисование нового", и перепроверять Ctrl на
@@ -842,6 +1103,7 @@ export function createInteraction(ctx) {
       dragStart = null;
       dragLastPos = null;
       dragTraveled = 0;
+      groupDragOrigins = null;
       distanceLabel.hide();
       dragNoteMarkerId = null;
       resizingNoteMarkerId = null; // одноразовый резайз — один драг и всё, армировать заново через меню
@@ -865,6 +1127,36 @@ export function createInteraction(ctx) {
         rulerLine.clear();
         distanceLabel.hide();
       }
+      if (marquee) {
+        marquee = null;
+        preview.clear();
+      }
+      if (selectedTokenIds.size) setSelection([]);
+    });
+
+    // isTypingTarget — активный элемент прямо сейчас принимает текстовый
+    // ввод (поле имени токена, чат, любая форма панели). Delete/Backspace в
+    // такой момент — это правка текста, а НЕ команда "удалить выделенные
+    // токены" (см. keydown ниже), иначе стирание последнего символа в поле
+    // сносило бы выделенных монстров со сцены.
+    function isTypingTarget() {
+      const el = document.activeElement;
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+
+    // Delete/Backspace — удалить со сцены всё групповое выделение разом
+    // (аналог того же действия в Foundry). Тот же remove_token, что шлёт
+    // ПКМ-меню одного токена (см. vtt:removeToken ниже) — просто по одному
+    // сообщению на каждый выделенный id.
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (!selectedTokenIds.size || isTypingTarget()) return;
+      e.preventDefault();
+      for (const id of selectedTokenIds) ctx.send({ type: "remove_token", id });
+      setSelection([]);
     });
 
     // двойной клик — во время рисования цепочки стен просто заканчивает её
@@ -889,7 +1181,7 @@ export function createInteraction(ctx) {
         return;
       }
       const { x, y } = mousePos(e);
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
+      const hitId = dmTokenAt(x, y, { skipLocked: true });
       if (hitId) {
         const t = ctx.scene.tokens[hitId];
         if (t.lightOnly) {
@@ -901,15 +1193,25 @@ export function createInteraction(ctx) {
           return;
         }
       }
-      // Значок заметки — не мутация сцены, а чисто клиентская навигация:
-      // открыть его в панели "Заметки" (см. pages/dm.js: vtt:openNoteMarker).
+      // Значок-свиток — не мутация сцены, а чисто клиентская навигация:
+      // открыть запись журнала (см. pages/dm.js: vtt:openNoteMarker).
       const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers);
       if (markerId) {
         const marker = ctx.scene.noteMarkers[markerId];
-        // library — из какой библиотеки запись (см. domain.NoteMarker):
-        // пусто у значков, поставленных до появления журнала, — это заметки ДМ.
+        // library — из какой библиотеки запись (см. domain.NoteMarker): сейчас
+        // всегда "journal" (пустое — у значков, что вели в удалённые заметки ДМ).
+        // foundryEntry/foundryFolder — значок из импорта модуля: настоящей
+        // записи ещё нет, pages/dm.js резолвит её по имени на этом клике.
         document.dispatchEvent(
-          new CustomEvent("vtt:openNoteMarker", { detail: { noteId: marker.noteId, library: marker.library || "" } })
+          new CustomEvent("vtt:openNoteMarker", {
+            detail: {
+              noteId: marker.noteId,
+              library: marker.library || "",
+              section: marker.section || "",
+              foundryEntry: marker.foundryEntry || "",
+              foundryFolder: marker.foundryFolder || "",
+            },
+          })
         );
         return;
       }
@@ -969,11 +1271,17 @@ export function createInteraction(ctx) {
         }
       }
 
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
+      const hitId = dmTokenAt(x, y);
       if (hitId) {
+        // ids — весь состав группового выделения, если ПКМ пришёлся по
+        // токену, который в него входит (и выделено больше одного) — тогда
+        // pages/dm.js открывает урезанное "пачечное" меню и применяет
+        // действия (инициатива/состояния/свет/удаление) сразу ко всем.
+        // Промах мимо выделения или одиночный токен — как раньше, id один.
+        const ids = selectedTokenIds.size > 1 && selectedTokenIds.has(hitId) ? [...selectedTokenIds] : [hitId];
         document.dispatchEvent(
           new CustomEvent("vtt:tokenContextMenu", {
-            detail: { id: hitId, token: ctx.scene.tokens[hitId], pageX: e.clientX, pageY: e.clientY },
+            detail: { id: hitId, token: ctx.scene.tokens[hitId], ids, pageX: e.clientX, pageY: e.clientY },
           })
         );
         return;
@@ -1015,8 +1323,20 @@ export function createInteraction(ctx) {
           document.dispatchEvent(
             new CustomEvent("vtt:buildingContextMenu", { detail: { id: buildingId, pageX: e.clientX, pageY: e.clientY } })
           );
+          return;
         }
       }
+
+      // Ни во что не попали — это ПКМ по ПУСТОМУ месту карты. Раньше он
+      // просто ничего не делал; теперь это точка вставки скопированного
+      // объекта (см. pages/dm.js: #canvasMenu / "Вставить"). Мировые
+      // координаты идут в detail рядом с экранными: меню рисуется по
+      // экранным, а вставлять объект надо ровно туда, куда ткнули на карте,
+      // и пересчитывать это заново в dm.js было бы вторым источником правды
+      // о камере.
+      document.dispatchEvent(
+        new CustomEvent("vtt:canvasContextMenu", { detail: { x, y, pageX: e.clientX, pageY: e.clientY } })
+      );
     });
 
     // команда из меню точки стены (см. web/dm.html #wallPointMenu) — удаляет
@@ -1098,6 +1418,27 @@ export function createInteraction(ctx) {
     // из панели "Персонажи" на канвас (см. pages/dm.js: обработчик "drop").
     document.addEventListener("vtt:removeToken", (e) => {
       ctx.send({ type: "remove_token", id: e.detail.id });
+      // Убитый через ПКМ-меню токен мог быть частью группового выделения —
+      // не оставляем в selectedTokenIds ссылку на уже несуществующий id.
+      if (selectedTokenIds.has(e.detail.id)) {
+        const next = new Set(selectedTokenIds);
+        next.delete(e.detail.id);
+        setSelection(next);
+      }
+    });
+
+    // vtt:setMapObjectLocked — универсальный замок (см. map-objects.js и
+    // domain.Token.Locked): один обработчик на все виды объектов карты
+    // вместо своего "vtt:setTokenLocked"/"vtt:setBuildingLocked"/… на
+    // каждый. Сервер во всех четырёх случаях делает апсерт целого объекта
+    // по id (см. service.Room.applyMutation), поэтому шлём его копию с
+    // изменённым флагом — тем же приёмом, что и vtt:setTokenHidden выше.
+    document.addEventListener("vtt:setMapObjectLocked", (e) => {
+      const { kind, id, locked } = e.detail || {};
+      const meta = MAP_OBJECT_KINDS[kind];
+      const obj = meta && mapObjectsOf(ctx.scene, kind)[id];
+      if (!meta || !obj) return;
+      ctx.send({ type: meta.saveType, [meta.payload]: { ...obj, locked: !!locked } });
     });
 
     // команды из меню значка заметки (см. web/dm.html #noteMarkerMenu, pages/dm.js)
@@ -1154,35 +1495,12 @@ export function createInteraction(ctx) {
     let dragLastPos = null;
     let dragTraveled = 0;
 
-    // speedCache — характеристика "Скорость" (domain.CombatStats.Speed, в
-    // единицах линейки сцены, обычно футы) персонажей игрока, подтянутая с
-    // сервера отдельным запросом (токен/сцена её не несут — это поле листа
-    // персонажа, см. internal/domain/character_sheet.go). Ключ —
-    // characterId. Перезапрашивается на каждый mousedown по токену (не
-    // кешируется намертво), чтобы правка скорости на листе персонажа
-    // подхватывалась к следующему же перетаскиванию, а не требовала
-    // перезагрузки страницы.
-    const speedCache = new Map();
-    function ensureSpeedLoaded(characterId) {
-      if (!characterId) return;
-      fetchCharacter(characterId)
-        .then((c) => speedCache.set(characterId, (c.sheet && c.sheet.combat && c.sheet.combat.speed) || 0))
-        .catch(() => {});
-    }
-
-    // currentCombatantFor — боец из трекера инициативы, чей СЕЙЧАС ход,
-    // если это именно данный токен (лимит скорости — только в свой ход, см.
-    // README/уточнение задачи). TokenID у бойца проставляется, когда его
-    // добавили в инициативу через ПКМ-меню токена (обычный путь для
-    // игровых персонажей, см. room.go:handleAddCombatant) — characterId
-    // подстраховывает случай, когда TokenID почему-то не сохранился.
-    function currentCombatantFor(token) {
-      const combat = ctx.combat;
-      if (!combat || !combat.active || !Array.isArray(combat.combatants)) return null;
-      return combat.combatants.find(
-        (c) => c.id === combat.currentId && (c.tokenId === token.id || (token.characterId && c.characterId === token.characterId))
-      );
-    }
+    // speedCache/ensureSpeedLoaded/currentCombatantFor — общие с ДМ-веткой
+    // выше (см. их определение и обоснование там): характеристика
+    // "Скорость" персонажа, подтянутая с сервера отдельным запросом (токен/
+    // сцена её не несут — это поле листа персонажа, см.
+    // internal/domain/character_sheet.go), и лимит применяется только в свой
+    // ход активного боя.
 
     // Единственный ДМ-инструмент, доступный игроку, — линейка; событие то
     // же самое ("vtt:setTool"), что дёргает кнопка в топбаре player.html.
@@ -1212,14 +1530,23 @@ export function createInteraction(ctx) {
         ctx.send({ type: "toggle_door", id: doorId });
         return;
       }
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
-      if (hitId && ctx.scene.tokens[hitId].ownerId === ctx.playerId) {
+      // Хит-тест сразу сужен до того, что игрок вообще МОЖЕТ потащить —
+      // свой и незапертый токен. Раньше тут был хит-тест "любой токен", и
+      // проверка владельца шла уже после него: стоило собственному токену
+      // встать на клетку с монстром, токеном света или ассетом карты, как
+      // клик попадал в чужой объект, драг не начинался, и персонаж
+      // "залипал" на месте — сойти он не мог, пока ДМ не убирал то, на что
+      // он наступил (см. geometry.tokenAt о порядке выбора из стопки).
+      const hitId = tokenAt(x, y, ctx.scene.tokens, {
+        filter: (t) => t.ownerId === ctx.playerId && !isLocked(t) && !turnBlocksMove(t),
+      });
+      if (hitId) {
         dragTokenId = hitId;
         const t0 = ctx.scene.tokens[hitId];
         dragStart = { x: t0.x, y: t0.y };
         dragLastPos = dragStart;
         dragTraveled = 0;
-        ensureSpeedLoaded(t0.characterId);
+        ensureSpeedLoaded(t0);
       }
     });
 
@@ -1236,28 +1563,20 @@ export function createInteraction(ctx) {
 
       if (!dragTokenId) return;
       const t = ctx.scene.tokens[dragTokenId];
-      if (!t || t.ownerId !== ctx.playerId) {
+      // Бой мог начаться (или дойти до чужого хода) уже ПОСЛЕ начала жеста —
+      // тем же способом, что и isLocked ниже: жест просто обрывается, см.
+      // turnBlocksMove выше и room.go: turnAllowsTokenMove.
+      if (!t || t.ownerId !== ctx.playerId || isLocked(t) || turnBlocksMove(t)) {
         dragTokenId = null;
         distanceLabel.hide();
         return;
       }
       const snapped = snapToGrid(x, y, ctx.scene.grid);
 
-      // Лимит скорости — только пока идёт бой И сейчас ход именно этого
-      // персонажа (currentCombatantFor). Вне боя или не в его ход — только
-      // подсказка ниже, без ограничения (см. уточнение задачи). speed===0
-      // (лист персонажа не заполнен — 0 нулевое значение по умолчанию, а не
-      // осознанно проставленная неподвижность) тоже не ограничивает —
-      // иначе свежесозданный персонаж не мог бы сдвинуться в первом же бою.
-      let maxAllowed = Infinity;
-      let limitUnits = null; // потолок В ЕДИНИЦАХ ЛИНЕЙКИ (не px) — для подписи "15/30 фт"
-      if (currentCombatantFor(t)) {
-        const speed = speedCache.get(t.characterId);
-        if (speed) {
-          maxAllowed = unitsToWorldDistance(speed, ctx.scene.grid);
-          limitUnits = speed;
-        }
-      }
+      // Лимит скорости (см. speedLimitFor выше) — только пока идёт бой И
+      // сейчас ход именно этого персонажа (вне своего хода в бою движение уже
+      // отсечено проверкой turnBlocksMove выше). Вне боя — без ограничения.
+      const { maxAllowed, limitUnits } = speedLimitFor(t);
 
       // Расстояние — накопленный путь этого жеста (см.
       // geometry.trackMovementStep), а не прямая от точки старта: шаг
@@ -1270,7 +1589,8 @@ export function createInteraction(ctx) {
       // токена игроком (см. clampMoveByWalls в geometry.js) — путь до
       // снапнутой клетки останавливается чуть НЕ доходя до преграды, если
       // пересекает её. У ДМ (ветка выше) такого ограничения нет — полная
-      // авторская власть над картой, как и у лимита скорости не бывает.
+      // авторская власть над картой в смысле стен, лимит скорости в свой
+      // ход при этом всё равно применяется (см. speedLimitFor выше).
       const wallClamped = clampMoveByWalls(dragLastPos.x, dragLastPos.y, snapped.x, snapped.y, ctx.scene.walls);
 
       const step = trackMovementStep(dragLastPos, wallClamped, dragStart, dragTraveled, maxAllowed, ctx.scene.grid);
@@ -1318,11 +1638,17 @@ export function createInteraction(ctx) {
     // ничего не делаем на любом другом ПКМ, вместо полноценного меню.
     canvas.addEventListener("contextmenu", (e) => {
       const { x, y } = mousePos(e);
-      const hitId = tokenAt(x, y, ctx.scene.tokens);
+      // Ищем сразу ТРУП С ДОБЫЧЕЙ, а не "любой токен, а потом посмотрим":
+      // мародёрствуют обычно стоя прямо на теле, и хит-тест "первый
+      // попавшийся" отдавал бы токен того, кто на нём стоит (см. тот же
+      // разбор у mousedown выше).
+      const hitId = tokenAt(x, y, ctx.scene.tokens, {
+        filter: (t) => t.dead && Array.isArray(t.loot) && t.loot.length > 0,
+      });
       if (!hitId) return;
       const t = ctx.scene.tokens[hitId];
-      const loot = Array.isArray(t.loot) ? t.loot : [];
-      if (!t.dead || loot.length === 0 || !(ctx.combat && ctx.combat.lootingEnabled)) return;
+      const loot = t.loot;
+      if (!(ctx.combat && ctx.combat.lootingEnabled)) return;
       e.preventDefault();
       document.dispatchEvent(new CustomEvent("vtt:tokenLootRequest", { detail: { tokenId: hitId, loot, name: t.label } }));
     });

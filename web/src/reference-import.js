@@ -55,11 +55,11 @@ function mapOne(raw, classNameByIdentifier) {
   const imageUrl = raw.img || "";
 
   if (raw.type === "class") {
-    return { name, kind: "класс", parentName: "", source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value) };
+    return { name, kind: "класс", parentName: "", source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value, name) };
   }
   if (raw.type === "subclass") {
     const parentName = classNameByIdentifier[sys.classIdentifier] || sys.classIdentifier || "";
-    return { name, kind: "архетип", parentName, source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value) };
+    return { name, kind: "архетип", parentName, source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value, name) };
   }
   // Вид и предыстория — те же узлы дерева компендиума, что «Виды» и
   // «Предыстории» (см. compendium-taxonomy.js: REFERENCE_GROUPS), и такие же
@@ -69,13 +69,13 @@ function mapOne(raw, classNameByIdentifier) {
   // одиночном экспорте с ttg.club их не бывает, поэтому появились позже
   // остальных.
   if (raw.type === "race" || raw.type === "species") {
-    return { name, kind: "вид", parentName: "", source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value) };
+    return { name, kind: "вид", parentName: "", source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value, name) };
   }
   if (raw.type === "background") {
-    return { name, kind: "происхождение", parentName: "", source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value) };
+    return { name, kind: "происхождение", parentName: "", source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value, name) };
   }
   if (raw.type === "feat") {
-    let description = cleanFoundryText(sys.description && sys.description.value);
+    let description = cleanFoundryText(sys.description && sys.description.value, name);
     // requirements — свободный текст вроде "Жрец 7" (класс+уровень, с
     // которого доступна черта) — у Reference нет отдельного поля под это,
     // дописываем строкой перед основным описанием, как ДМ и увидел бы её в
@@ -97,7 +97,7 @@ function mapOne(raw, classNameByIdentifier) {
     if (facType.value) meta.push(`Тип: ${ru(FACILITY_TYPE_RU, facType.value)}`);
     if (sys.size) meta.push(`Размер: ${ru(FACILITY_SIZE_RU, sys.size)}`);
     if (sys.level) meta.push(`Требуемый уровень: ${sys.level}`);
-    let description = cleanFoundryText(sys.description && sys.description.value);
+    let description = cleanFoundryText(sys.description && sys.description.value, name);
     if (meta.length) description = `<p><em>${meta.join(" · ")}</em></p>` + description;
     return { name, kind: "помещение бастиона", parentName: "", source, imageUrl, description };
   }

@@ -31,7 +31,7 @@ import { installVideoUploaderFix } from "./gl-video-uploader.js";
 // role: "dm" — полный контроль. role: "tv" — чистый зритель без авторизации.
 // role: "player" — авторизован сессией аккаунта, может тащить СВОИ токены
 // (Token.ownerId === playerId) и бросать кубы.
-export async function initVTT({ canvasId, role, playerId }) {
+export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   const isDM = role === "dm";
   const isPlayer = role === "player";
   const canvas = document.getElementById(canvasId);
@@ -78,6 +78,7 @@ export async function initVTT({ canvasId, role, playerId }) {
     camera: createCamera(),
     dirty: createDirtyFlags(),
     mapStartedAt: 0,
+    combatBarMount: combatBarMount || null,
   };
 
   ctx.applyCameraTransform = () => applyCameraTransform(world, app.screen.width, app.screen.height, ctx.scene, ctx.camera);
@@ -100,9 +101,12 @@ export async function initVTT({ canvasId, role, playerId }) {
   // pages/dm.js, отдельной соседней иконкой (не внутри панели громкости).
   const sideMenu = createSideMenu(ctx);
   const audio = createAudio(ctx, sideMenu);
-  // combatBar — верхний оверлей "чей сейчас ход" (см. combat-bar.js),
-  // общий для всех трёх ролей; сам решает, показываться ли (только когда
-  // трекер инициативы реально в бою).
+  // combatBar — "чей сейчас ход" (см. combat-bar.js), общий для всех трёх
+  // ролей; сам решает, показываться ли (только когда трекер инициативы
+  // реально в бою). У игрока встраивается прямо в топбар (ctx.combatBarMount,
+  // см. player.html/#combatBarMount) вместо плавающего оверлея — иначе полоса
+  // накрывала собой кнопки топбара; у ДМ/TV mount не передают, и полоса
+  // остаётся отдельным центрированным оверлеем над канвасом, как раньше.
   createCombatBar(ctx);
 
   // ---- слои, в порядке отрисовки (снизу вверх) — тот же Z-order, что был

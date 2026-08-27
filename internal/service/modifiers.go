@@ -23,11 +23,6 @@ const (
 	maxModifierNoteLen  = 120
 )
 
-// sanitizeModifiers выбрасывает записи с незнакомой целью/режимом (см.
-// domain.ValidModifierTarget) и приводит остальные к каноничному виду.
-// Молча, без ошибки — как и остальные клампы карточек: обычный клиент таких
-// записей не присылает, а импорт из чужого формата вполне может принести
-// цель, которой у нас нет.
 func sanitizeModifiers(mods []domain.Modifier) []domain.Modifier {
 	if len(mods) > maxModifiers {
 		mods = mods[:maxModifiers]
@@ -49,9 +44,6 @@ func sanitizeModifiers(mods []domain.Modifier) []domain.Modifier {
 			m.Period = domain.ModifierPeriodNone
 		}
 		m.Value = clampRunes(strings.TrimSpace(m.Value), maxModifierValueLen)
-		if m.Value == "" {
-			continue // нечего применять
-		}
 		m.Note = clampRunes(strings.TrimSpace(m.Note), maxModifierNoteLen)
 		out = append(out, m)
 	}

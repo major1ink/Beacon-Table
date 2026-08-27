@@ -280,7 +280,7 @@ export function mapFoundrySpellJson(raw) {
     concentration: components.concentration,
     savingThrow: buildSavingThrow(sys),
     damage: buildDamage(sys),
-    description: cleanFoundryText(sys.description && sys.description.value),
+    description: cleanFoundryText(sys.description && sys.description.value, name),
     statuses: mapFoundrySpellStatuses(raw),
   };
 }

@@ -7,7 +7,6 @@
 // Реализации лежат в подпакетах:
 //   - sqlite    — Account/Character/Session/Playlist поверх database/sql (SQLite)
 //   - scenefile — Scene поверх файлов JSON, по одному на сцену
-//   - notefile  — Note поверх файлов .md, по одному на заметку
 //   - journalfile — JournalEntry поверх файлов .md с шапкой прав, по одному на запись
 //   - monsterfile — Monster поверх файлов .json, по одному на монстра
 //   - spellfile — Spell поверх файлов .json, по одному на заклинание
@@ -72,6 +71,16 @@ type CharacterRepository interface {
 	// UpdateSheet перезаписывает структурированный лист персонажа (см.
 	// domain.CharacterSheet), не трогая имя/аватар.
 	UpdateSheet(ctx context.Context, id, accountID string, sheet domain.CharacterSheet) (bool, error)
+	// UpdateSheetHP правит ТОЛЬКО хиты в листе (текущие/временные/максимум),
+	// не трогая остальной sheet_json, и без accountID: хиты персонажа правит
+	// не только его владелец, но и ДМ из трекера инициативы (см.
+	// service.Room.syncCharacterHP) — у него своей сессии игрока нет.
+	//
+	// Отдельным точечным методом, а не UpdateSheet целиком, ровно по той же
+	// причине, по которой инвентарь живёт отдельной таблицей (см. ниже):
+	// полная перезапись листа устаревшей копией затирала бы чужую правку —
+	// а во время боя хиты меняются с двух сторон одновременно.
+	UpdateSheetHP(ctx context.Context, id string, hpCurrent, hpTemp, hpMax int) (bool, error)
 	Delete(ctx context.Context, id, accountID string) (bool, error)
 
 	// ---- инвентарь персонажа (domain.InventoryEntry) — СВОЯ таблица, не
@@ -84,18 +93,60 @@ type CharacterRepository interface {
 
 	ListInventory(ctx context.Context, characterID string) ([]*domain.InventoryEntry, error)
 	// AddInventoryEntry добавляет запись инвентаря. Если entry.ItemID != ""
-	// и у персонажа уже есть запись с таким же ItemID — количество
+	// и у персонажа уже есть НЕнадетая запись с таким же ItemID — количество
 	// СУММИРУЕТСЯ в существующую запись (апсерт), а не плодит вторую строку;
-	// записи без ItemID (ручные/осиротевшие) всегда добавляются новой
-	// строкой. accountID — тот же принцип защиты, что и у Update/UpdateSheet/
-	// Delete: запись видна только если character действительно принадлежит
-	// этому accountID (и этой компании).
+	// надетая запись того же ItemID в это сопоставление не участвует —
+	// новая партия копится отдельной стопкой, что надето — отображается
+	// отдельно от общей кучи. Записи без ItemID (ручные/осиротевшие) всегда
+	// добавляются новой строкой. accountID — тот же принцип защиты, что и у
+	// Update/UpdateSheet/Delete: запись видна только если character
+	// действительно принадлежит этому accountID (и этой компании).
 	AddInventoryEntry(ctx context.Context, characterID, accountID string, entry domain.InventoryEntry) (*domain.InventoryEntry, error)
 	// UpdateInventoryEntry возвращает false, если записи с таким entryID нет
 	// у ЭТОГО персонажа/аккаунта.
 	UpdateInventoryEntry(ctx context.Context, characterID, accountID, entryID string, quantity int, equipped bool, notes string) (bool, error)
+	// SetInventoryEquipped переключает надето/снято для одной ШТУКИ записи
+	// entryID (та же гранулярность, что у "потратить одну штуку" в
+	// quantity) — не весь флаг строки целиком:
+	//   - quantity записи <= 1 (или ItemID == "", слить не с кем) — строка
+	//     переключается целиком, либо (если рядом уже есть запись того же
+	//     ItemID в целевом equipped-состоянии) сливается в неё квантити,
+	//     а сама удаляется;
+	//   - quantity > 1 — от строки отделяется одна единица: quantity строки
+	//     уменьшается на 1, единица уходит в соседнюю запись того же ItemID
+	//     в целевом состоянии (если есть) или заводит новую (см. newEntryID)
+	//     — так надетое всегда видно отдельной записью от общей стопки.
+	// newEntryID используется, только если пришлось завести новую строку —
+	// тот же приём, что и entry.ID у AddInventoryEntry (ID генерирует
+	// вызывающий service-слой). Возвращает false, если entryID не найден у
+	// этого персонажа/аккаунта.
+	SetInventoryEquipped(ctx context.Context, characterID, accountID, entryID, newEntryID string, equipped bool) (bool, error)
 	// RemoveInventoryEntry возвращает false, если записи с таким entryID нет.
 	RemoveInventoryEntry(ctx context.Context, characterID, accountID, entryID string) (bool, error)
+}
+
+// PregenRepository — пул «готовых персонажей» мира (см. domain.Pregen):
+// предгенерированные листы из импортированных приключений Foundry. Company-
+// scoped, как CharacterRepository.
+type PregenRepository interface {
+	List(ctx context.Context) ([]*domain.Pregen, error)
+	// Available — только свободные (claimed_by пуст).
+	Available(ctx context.Context) ([]*domain.Pregen, error)
+	ByID(ctx context.Context, id string) (*domain.Pregen, error)
+	Create(ctx context.Context, p *domain.Pregen) error
+	// Update правит имя/аватар/лист/метку модуля (импорт), занятость не трогает.
+	Update(ctx context.Context, id, name, avatarURL, source string, sheet domain.CharacterSheet) (bool, error)
+	// SetClaim помечает занятым — только если свободен или уже занят этим же
+	// аккаунтом (идемпотентно). false — занят кем-то другим / не найден.
+	SetClaim(ctx context.Context, id, accountID, characterID string) (bool, error)
+	// ClearClaim снимает пометку (пре-ген снова в пуле); созданную запись
+	// characters не трогает.
+	ClearClaim(ctx context.Context, id string) (bool, error)
+	Delete(ctx context.Context, id string) (bool, error)
+	// FreeByAccount освобождает всё, занятое удаляемым аккаунтом.
+	FreeByAccount(ctx context.Context, accountID string) error
+	// DeleteBySource сносит записи импорта модуля (см. FoundryService.Delete).
+	DeleteBySource(ctx context.Context, moduleID string) (int, error)
 }
 
 // SessionRepository — сессии логина (cookie-токен → аккаунт).
@@ -139,43 +190,13 @@ type SceneRepository interface {
 	SaveHub(ctx context.Context, hub *domain.LootHub) error
 }
 
-// NoteRepository — библиотека заметок ДМ, файл-на-заметку (см.
-// internal/repository/notefile) — реальные .md на диске, а не строки в БД.
-type NoteRepository interface {
-	// List — метаданные всех заметок (без Content — как AssetRepository.List,
-	// не тащим содержимое ради списка).
-	List(ctx context.Context) ([]*domain.Note, error)
-	Get(ctx context.Context, id string) (*domain.Note, error)
-	// Create кладёт заметку в папку folder ("" — корень, см.
-	// domain.Note.Folder); папка создаётся, если её ещё нет.
-	Create(ctx context.Context, id, folder, content string) error
-	// Update возвращает false, если заметки с таким id нет. Папку не трогает
-	// — правка текста не переносит файл (см. Move).
-	Update(ctx context.Context, id, content string) (bool, error)
-	// Move переносит заметку в другую папку; false, если такой заметки нет.
-	Move(ctx context.Context, id, folder string) (bool, error)
-	Delete(ctx context.Context, id string) error
-
-	// Folders — все папки библиотеки, включая ПУСТЫЕ (тем же соображением,
-	// что и AssetRepository.Folders: только что созданная папка не должна
-	// пропадать из панели до того, как в неё что-то положили).
-	Folders(ctx context.Context) ([]string, error)
-	CreateFolder(ctx context.Context, folder string) error
-	// DeleteFolder удаляет папку СО ВСЕМ содержимым (вложенные папки и
-	// заметки), как AssetRepository.DeleteFolder — предупредить ДМ обязан
-	// вызывающий.
-	DeleteFolder(ctx context.Context, folder string) error
-	// RenameFolder переименовывает/переносит папку вместе с содержимым.
-	RenameFolder(ctx context.Context, from, to string) error
-}
-
 // JournalRepository — журнал стола, файл-на-запись (см.
-// internal/repository/journalfile) — те же .md на диске, что и у
-// NoteRepository, но с шапкой: автор и раздача прав (domain.JournalEntry).
-// Права репозиторий только ХРАНИТ — решает по ним service.JournalService,
-// репозиторий отдаёт все записи подряд, кто бы ни спрашивал.
+// internal/repository/journalfile) — .md на диске с шапкой: автор и раздача
+// прав (domain.JournalEntry). Права репозиторий только ХРАНИТ — решает по ним
+// service.JournalService, репозиторий отдаёт все записи подряд, кто бы ни
+// спрашивал.
 type JournalRepository interface {
-	// List — метаданные всех записей (без Content, как NoteRepository.List).
+	// List — метаданные всех записей (без Content — не тащим содержимое ради списка).
 	List(ctx context.Context) ([]*domain.JournalEntry, error)
 	Get(ctx context.Context, id string) (*domain.JournalEntry, error)
 	// Create кладёт запись целиком (id/папка/текст/автор/права уже
@@ -193,7 +214,8 @@ type JournalRepository interface {
 	Move(ctx context.Context, id, folder string) (bool, error)
 	Delete(ctx context.Context, id string) error
 
-	// Folders — все папки журнала, включая пустые (см. NoteRepository.Folders).
+	// Folders — все папки журнала, включая ПУСТЫЕ (только что созданная папка
+	// не должна пропадать из панели до того, как в неё что-то положили).
 	Folders(ctx context.Context) ([]string, error)
 	CreateFolder(ctx context.Context, folder string) error
 	// DeleteFolder удаляет папку СО ВСЕМ содержимым — проверить, что
@@ -204,7 +226,7 @@ type JournalRepository interface {
 }
 
 // MonsterRepository — библиотека карточек бестиария ДМ, файл-на-монстра (см.
-// internal/repository/monsterfile) — тот же принцип, что и NoteRepository,
+// internal/repository/monsterfile) — тот же принцип, что и JournalRepository,
 // но контент структурированный JSON (domain.Monster), а не markdown.
 type MonsterRepository interface {
 	// List — все монстры библиотеки целиком (карточки маленькие, в отличие

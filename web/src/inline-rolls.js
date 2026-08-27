@@ -13,6 +13,11 @@
 //     (см. плейсхолдер WeaponRow.Damage — "1к8 рубящий"), поддерживаем обе;
 //   - "+4" / "-1" — голый модификатор без кубика (спасброски/навыки в тексте
 //     статблока, "к попаданию" и т.п.) — трактуется как проверка/атака 1d20+N.
+//
+// Подпись броска в общем логе (см. sendRoll у бестиария/пика действий) берётся
+// из текста вокруг формулы: "+4 к попаданию" уходит в лог как "попадание",
+// блок урона из "Попадание: 5 (1к6 + 2)" — как "урон" (см. rollContextLabel).
+// Если по тексту не понять — подписью, как и раньше, остаётся сама формула.
 
 // diceOrModRe — группа 1: символ перед совпадением (или начало строки), не
 // часть замены, нужен только чтобы не проверять вручную границу слова без
@@ -35,6 +40,29 @@ const diceOrModRe = /(^|[^\w])(\d{0,3}[dк]\d{1,4}(?:\s*[+-]\s*\d{1,3})?|[+-]\d{
 function normalizeFormula(raw) {
   const compact = raw.replace(/к/g, "d").replace(/\s+/g, "");
   return /^[+-]/.test(compact) ? "1d20" + compact : compact;
+}
+
+// rollContextLabel — по тексту вокруг формулы понимает, ЧТО это за бросок,
+// чтобы в общем логе не было двух безымянных строк «+4» и «1к6 + 2», по
+// которым не разобрать, где попадание, а где урон (см. sendRoll в
+// combat-actions-peek.js/bestiary.js — подпись уходит в лог как есть).
+// before/after — текст того же узла до и после совпадения. Возвращает
+// короткую подпись или "" (тогда подписью остаётся сама формула, как раньше).
+export function rollContextLabel(before, after) {
+  // Текущее предложение до/после формулы (по «.», «!», «?» — но НЕ по «;»:
+  // блоки урона одного удара разделены «; », это всё ещё одна фраза).
+  const phrase = String(before).split(/(?<=[.!?])\s+/).pop() || "";
+  const rest = String(after);
+  const leadSentence = rest.split(/[.!?]/)[0] || "";
+  // «+4 к попаданию» / «+4 на попадание» — бросок атаки. Проверяем первым:
+  // в ручном тексте ДМ за «к попаданию» дальше в той же фразе бывает и
+  // «... колющего урона», и это всё равно бросок на попадание, а не на урон.
+  if (/^[\s,]*(?:к|на)\s+попадани/i.test(rest)) return "попадание";
+  // «Попадание: 5 (1к6 + 2), рубящий; 7 (2к6), яд» — блок(и) урона удара.
+  if (/попадани[ея]?\s*:/i.test(phrase)) return "урон";
+  // Проза вроде «получает 8к6 урона огнём» / «2к6 некротического урона».
+  if (/урон/i.test(phrase) || /урон/i.test(leadSentence)) return "урон";
+  return "";
 }
 
 // enhanceRolls — обходит текстовые узлы containerEl (уже вставленного в DOM
@@ -72,9 +100,10 @@ export function enhanceRolls(containerEl, sendRoll) {
       a.title = "Бросить " + matched;
       a.textContent = matched;
       const formula = normalizeFormula(matched);
+      const label = rollContextLabel(text.slice(0, start), text.slice(start + matched.length)) || matched;
       a.addEventListener("click", (e) => {
         e.preventDefault();
-        sendRoll(formula, matched);
+        sendRoll(formula, label);
       });
       frag.appendChild(a);
       last = start + matched.length;

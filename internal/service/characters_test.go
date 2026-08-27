@@ -12,7 +12,7 @@ import (
 
 func TestCharacterService_CreateListUpdateDelete(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
+	svc := service.NewCharacterService(memory.NewCharacterStore())
 
 	c, err := svc.Create(ctx, "acc-1", "  Elminster  ", "http://example.com/a.png")
 	if err != nil {
@@ -51,7 +51,7 @@ func TestCharacterService_CreateListUpdateDelete(t *testing.T) {
 // злоумышленнику, что id вообще существует.
 func TestCharacterService_OwnershipEnforced(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
+	svc := service.NewCharacterService(memory.NewCharacterStore())
 
 	c, err := svc.Create(ctx, "acc-1", "Drizzt", "")
 	if err != nil {
@@ -68,7 +68,7 @@ func TestCharacterService_OwnershipEnforced(t *testing.T) {
 
 func TestCharacterService_Create_EmptyName(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
+	svc := service.NewCharacterService(memory.NewCharacterStore())
 
 	_, err := svc.Create(ctx, "acc-1", "   ", "")
 	var verr *domain.ValidationError
@@ -83,7 +83,7 @@ func TestCharacterService_Create_EmptyName(t *testing.T) {
 // от несуществующей характеристики.
 func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
+	svc := service.NewCharacterService(memory.NewCharacterStore())
 
 	c, err := svc.Create(ctx, "acc-1", "Bruenor", "")
 	if err != nil {
@@ -106,7 +106,7 @@ func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 // а владение проверяется так же, как и у Update/Delete.
 func TestCharacterService_UpdateSheet(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
+	svc := service.NewCharacterService(memory.NewCharacterStore())
 
 	c, err := svc.Create(ctx, "acc-1", "Drizzt", "")
 	if err != nil {
@@ -134,5 +134,95 @@ func TestCharacterService_UpdateSheet(t *testing.T) {
 	}
 	if _, err := svc.Get(ctx, c.ID, "acc-2"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("ожидали ErrNotFound на чужом Get, получили %v", err)
+	}
+}
+
+// TestCharacterService_UpdateInventoryItem_EquipSplitsAndMerges — надеть одну
+// вещь из стопки в три одинаковых отделяет её в свою запись (1 надета, 2
+// остаются обычной стопкой); снять её обратно — сливает всё обратно в одну
+// запись на три (см. CharacterRepository.SetInventoryEquipped). Инвентарь
+// заполняется через store.AddInventoryEntry напрямую — тем же путём, что и
+// лут (service.Room), а не через сервис: у игрока нет способа добавить
+// предмет из каталога себе самостоятельно (см. комментарий CharacterService).
+func TestCharacterService_UpdateInventoryItem_EquipSplitsAndMerges(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewCharacterStore()
+	svc := service.NewCharacterService(store)
+
+	c, err := svc.Create(ctx, "acc-1", "Дриззт", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	entry, err := store.AddInventoryEntry(ctx, c.ID, "acc-1", domain.InventoryEntry{ID: "seed-1", ItemID: "sword", Name: "Скимитар", Quantity: 3})
+	if err != nil {
+		t.Fatalf("AddInventoryEntry: %v", err)
+	}
+
+	if err := svc.UpdateInventoryItem(ctx, c.ID, "acc-1", entry.ID, entry.Quantity, true, ""); err != nil {
+		t.Fatalf("UpdateInventoryItem (надеть): %v", err)
+	}
+	list, err := svc.ListInventory(ctx, c.ID, "acc-1")
+	if err != nil {
+		t.Fatalf("ListInventory: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("ожидали 2 записи после расщепления, получили %d: %+v", len(list), list)
+	}
+	var equipped, rest *domain.InventoryEntry
+	for _, e := range list {
+		if e.Equipped {
+			equipped = e
+		} else {
+			rest = e
+		}
+	}
+	if equipped == nil || rest == nil {
+		t.Fatalf("ожидали одну надетую и одну обычную запись: %+v", list)
+	}
+	if equipped.Quantity != 1 || rest.Quantity != 2 {
+		t.Fatalf("ожидали 1 надетую и 2 в стопке, получили equipped=%d rest=%d", equipped.Quantity, rest.Quantity)
+	}
+
+	if err := svc.UpdateInventoryItem(ctx, c.ID, "acc-1", equipped.ID, equipped.Quantity, false, ""); err != nil {
+		t.Fatalf("UpdateInventoryItem (снять): %v", err)
+	}
+	list, err = svc.ListInventory(ctx, c.ID, "acc-1")
+	if err != nil {
+		t.Fatalf("ListInventory: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ожидали слияние обратно в одну запись, получили %d: %+v", len(list), list)
+	}
+	if list[0].Quantity != 3 || list[0].Equipped {
+		t.Fatalf("ожидали 3 штуки, не надето, получили %+v", list[0])
+	}
+}
+
+// TestCharacterService_UpdateInventoryItem_ZeroQuantityRemovesEntry —
+// количество, дошедшее до нуля, убирает запись из инвентаря целиком, а не
+// оставляет пустую строку "×0".
+func TestCharacterService_UpdateInventoryItem_ZeroQuantityRemovesEntry(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewCharacterStore()
+	svc := service.NewCharacterService(store)
+
+	c, err := svc.Create(ctx, "acc-1", "Дриззт", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	entry, err := store.AddInventoryEntry(ctx, c.ID, "acc-1", domain.InventoryEntry{ID: "seed-1", ItemID: "torch", Name: "Факел", Quantity: 2})
+	if err != nil {
+		t.Fatalf("AddInventoryEntry: %v", err)
+	}
+
+	if err := svc.UpdateInventoryItem(ctx, c.ID, "acc-1", entry.ID, 0, false, ""); err != nil {
+		t.Fatalf("UpdateInventoryItem (до нуля): %v", err)
+	}
+	list, err := svc.ListInventory(ctx, c.ID, "acc-1")
+	if err != nil {
+		t.Fatalf("ListInventory: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("ожидали, что запись с нулевым количеством удалится, получили %+v", list)
 	}
 }

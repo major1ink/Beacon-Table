@@ -17,18 +17,21 @@ import {
   fetchAdminCharacter,
   updateAdminCharacterSheet,
   fetchCharacterInventory,
-  addCharacterInventoryItem,
   updateCharacterInventoryItem,
   deleteCharacterInventoryItem,
   fetchReferences,
+  fetchPregen,
 } from "../api.js";
 import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
-import { initItemPicker } from "../item-picker.js";
 import { enhanceRolls } from "../inline-rolls.js";
+import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "../hp-bar.js";
 import { renderStatusChips } from "../status-palette.js";
 import { applyModifiers, explainModifiers, collectModifiers, ABILITY_TARGETS, TARGET_AC, TARGET_SPEED, TARGET_HP_MAX } from "../modifiers.js";
-import { showAlert } from "../modal.js";
+import { showAlert, openModal } from "../modal.js";
+import { renderNoteHtml } from "../notes/markdown.js";
+import { wireCatalogLinks } from "../catalog-links.js";
+import { createRollLog } from "../roll-log.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -177,6 +180,8 @@ let readOnly = false;
 // (свой/админский) дёргать при автосохранении, см. doSave().
 let isAdminView = false;
 let rollWS = null;
+let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js); null во встроенном листе — там лог показывает стол
+
 // liveStatuses/liveStatusesEl — наложенные состояния этого персонажа (см.
 // domain.AppliedStatus): приходят с сервера в combat_state тем же сокетом,
 // что и броски (см. connectRollSocket), лист их только показывает.
@@ -222,6 +227,7 @@ function normalizeSheet(raw) {
       : ["", "", "", "", "", "", "", "", ""];
   s.preparedSpells = Array.isArray(s.preparedSpells) ? s.preparedSpells : [];
   s.coins = s.coins || {};
+  for (const k of ["cp", "sp", "gp", "ep", "pp"]) s.coins[k] = Math.max(0, parseInt(s.coins[k], 10) || 0);
   // personalityTraits/ideals/bonds/flaws — показываются на обеих системах
   // (см. renderTab1/renderTab4 ниже), просто в разных местах листа;
   // race/species — только 2014/2024 соответственно, у "чужой" системы
@@ -1093,6 +1099,12 @@ function renderTab4() {
 // только что выданный лут устаревшей копией). Доступна только владельцу
 // (см. isAdminView ниже — у ДМ, открывшего ЧУЖОЙ лист, эндпоинты инвентаря
 // вернут 404: они авторизуются по сессии текущего аккаунта, а не персонажа).
+//
+// Игрок НЕ может сам добавить себе предмет из каталога — только то, что
+// выдал ДМ (хаб лута) или что удалось забрать с трупа (см. loot-take-modal.js,
+// оба пути пишут через AddInventoryEntry в обход этого сервиса). Отсюда же
+// правки количества в этой вкладке — только уменьшение (потратил/выбросил),
+// см. qtyInput ниже.
 let inventory = [];
 
 function totalWeight() {
@@ -1121,10 +1133,19 @@ async function loadInventory() {
 }
 
 function saveInventoryEntry(e, patch) {
+  if ("equipped" in patch && patch.equipped !== e.equipped) {
+    // Надеть/снять может расщепить стопку (надел одну штуку из трёх — в
+    // инвентаре появляется отдельная надетая запись на 1 и обычная на 2) или
+    // слить её обратно с такой же соседней записью (см.
+    // internal/service/characters.go: UpdateInventoryItem), поэтому id и
+    // количества строк после запроса могут не совпадать с тем, что было в
+    // памяти — правим не локально, а перечитываем инвентарь целиком.
+    updateCharacterInventoryItem(charId, e.id, e.quantity, patch.equipped, e.notes)
+      .then(loadInventory)
+      .catch((err) => showAlert("Не удалось сохранить: " + err.message));
+    return;
+  }
   Object.assign(e, patch);
-  // Снять/надеть — это смена КЗ и прочих производных чисел (см.
-  // activeModifiers), а не только галочка в таблице.
-  if ("equipped" in patch && mode === "view") refreshView();
   updateCharacterInventoryItem(charId, e.id, e.quantity, e.equipped, e.notes).catch((err) => showAlert("Не удалось сохранить: " + err.message));
 }
 
@@ -1133,6 +1154,7 @@ function removeInventoryEntry(id) {
     .then(() => {
       inventory = inventory.filter((e) => e.id !== id);
       renderTab5();
+      if (mode === "view") renderView();
     })
     .catch((err) => showAlert("Не удалось удалить: " + err.message));
 }
@@ -1164,10 +1186,19 @@ function renderTab5() {
     const avatar = h("div", { class: "inv-avatar" });
     if (e.imageUrl) avatar.style.backgroundImage = `url("${e.imageUrl}")`;
 
-    const qtyInput = h("input", { type: "number", min: "0", value: String(e.quantity) });
+    // max = текущее количество — игрок может только потратить/выбросить
+    // часть стопки, не приписать себе лишнее (см. комментарий у `let inventory`).
+    const qtyInput = h("input", { type: "number", min: "0", max: String(e.quantity), value: String(e.quantity) });
     qtyInput.addEventListener("change", () => {
       const q = parseInt(qtyInput.value, 10);
-      saveInventoryEntry(e, { quantity: Number.isFinite(q) && q >= 0 ? q : e.quantity });
+      const clamped = Number.isFinite(q) ? Math.min(Math.max(q, 0), e.quantity) : e.quantity;
+      // 0 — предмет потрачен весь, запись удаляется целиком (см. сервер:
+      // UpdateInventoryItem), а не остаётся строкой "×0".
+      if (clamped === 0) {
+        removeInventoryEntry(e.id);
+        return;
+      }
+      saveInventoryEntry(e, { quantity: clamped });
       renderTab5();
     });
 
@@ -1185,10 +1216,18 @@ function renderTab5() {
       onclick: () => removeInventoryEntry(e.id),
     });
 
+    const nameBtn = h("button", {
+      type: "button",
+      class: "inv-name-btn",
+      title: "Открыть карточку предмета",
+      text: e.name,
+      onclick: (ev) => openItemPeek(e, ev.currentTarget),
+    });
+
     tbody.appendChild(
       h("tr", {}, [
         h("td", {}, [avatar]),
-        h("td", { text: e.name }),
+        h("td", {}, [nameBtn]),
         h("td", { text: (e.weightLb || 0) + " фнт" }),
         h("td", {}, [qtyInput]),
         h("td", {}, [equippedInput]),
@@ -1200,18 +1239,7 @@ function renderTab5() {
   table.appendChild(tbody);
   listSection.appendChild(table);
 
-  const addSection = h("div", { class: "section" }, [h("h3", { text: "Добавить из каталога" })]);
-  const pickerWrap = h("div", {});
-  addSection.appendChild(pickerWrap);
-  initItemPicker(pickerWrap, {
-    onPick: (item, qty) => {
-      addCharacterInventoryItem(charId, item.id, qty)
-        .then(loadInventory)
-        .catch((err) => showAlert("Не удалось добавить: " + err.message));
-    },
-  });
-
-  root.append(listSection, addSection);
+  root.append(listSection);
 }
 
 // ==================== режим чтения ====================
@@ -1247,28 +1275,10 @@ function refreshView() {
   for (const fn of vRefresh) fn();
 }
 
-// parseQuickValue — разбор "быстрого ввода" числовых полей режима чтения:
-// "+5"/"-5" — прибавить/отнять от текущего значения, "17" — поставить ровно
-// 17. Возвращает { delta, value }, где delta === null означает "введено
-// абсолютное значение" (важно для ХП: урон дельтой сначала съедает временные
-// ХП, а прямая установка числа — нет, см. applyHp). null — введено что-то
-// другое, вызывающий откатывает поле.
-function parseQuickValue(raw, current) {
-  // Минус из русской раскладки/типографики ("−", "–", "—") приводим к
-  // обычному дефису: на телефоне и при копипасте из чата прилетает и такое.
-  const t = String(raw || "")
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/[‒–—―−]/g, "-");
-  if (!t) return null;
-  if (/^[+-]\d+$/.test(t)) {
-    const delta = parseInt(t, 10);
-    return { delta, value: current + delta };
-  }
-  if (/^\d+$/.test(t)) return { delta: null, value: parseInt(t, 10) };
-  return null;
-}
-
+// Разбор "быстрого ввода" ("+5"/"-5"/"17") переехал в общий hp-bar.js —
+// тем же полем и с теми же правилами правит хиты ДМ в трекере инициативы
+// (combat-panel.js), и расходиться они не должны.
+//
 // quickInput — узкое поле быстрого ввода (см. parseQuickValue). Значение
 // применяется по Enter или потере фокуса и поле сразу очищается: это не
 // "поле со значением", а команда — текущее число всегда видно рядом крупно.
@@ -1499,21 +1509,44 @@ function vHpCard() {
   const max = h("span", { class: "v-hp-max" });
   const temp = h("span", { class: "v-hp-temp" });
   const fill = h("i", {});
+  // preview — значение, за которым полоска идёт ПОКА ЕЁ ТЯНУТ: в бланк оно
+  // ещё не записано (и не сохранено), но полоска и число обязаны идти за
+  // пальцем, иначе жест не читается.
+  let preview = null;
   const update = () => {
-    const c = sheet.combat.hpCurrent || 0;
+    const c = preview === null ? sheet.combat.hpCurrent || 0 : preview;
     const m = effectiveHPMax(sheet);
     const t = sheet.combat.hpTemp || 0;
     cur.textContent = String(c);
     max.textContent = "/ " + (m || "—");
     temp.textContent = t ? "+" + t + " врем." : "";
     temp.style.display = t ? "" : "none";
-    const ratio = m > 0 ? Math.max(0, Math.min(1, c / m)) : 0;
-    fill.style.width = (m > 0 ? ratio * 100 : 0).toFixed(1) + "%";
-    fill.style.background = ratio > 0.5 ? "var(--green-bright)" : ratio > 0.25 ? "var(--gold)" : "#d9534f";
+    const ratios = hpFillRatios({ current: c, temp: t, max: m });
+    fill.style.width = (ratios.hp * 100).toFixed(1) + "%";
+    fill.style.background = hpColor(ratios.hp);
     cur.style.color = m > 0 && c === 0 ? "#d9534f" : "";
   };
   vRefresh.push(update);
   update();
+
+  // Полоску можно потянуть — тот же жест, что у ДМ в трекере инициативы
+  // (см. hp-bar.js): "поставить примерно столько". Вниз это урон дельтой,
+  // так что временные хиты съедаются первыми — как при вводе "-N" в поле
+  // ниже (см. applyHp).
+  const bar = h("div", { class: "v-bar", title: "Потяни, чтобы выставить хиты" }, [fill]);
+  attachHpDrag(bar, {
+    getState: () => ({ current: sheet.combat.hpCurrent || 0, max: effectiveHPMax(sheet) }),
+    onPreview: (value) => {
+      preview = value;
+      update();
+    },
+    onCommit: (value) => {
+      preview = null;
+      applyHp({ delta: value - (sheet.combat.hpCurrent || 0), value });
+      scheduleSave();
+      refreshView();
+    },
+  });
 
   const hitDice = String(sheet.combat.hitDiceCurrent || sheet.combat.hitDiceTotal || "").trim();
   const hitDiceEl = hitDice
@@ -1525,7 +1558,7 @@ function vHpCard() {
 
   return h("div", { class: "v-card" }, [
     h("div", { class: "v-hp-row" }, [cur, max, temp]),
-    h("div", { class: "v-bar" }, [fill]),
+    bar,
     h("div", { class: "v-quick", title: "Урон сначала списывается с временных ХП" }, [
       stepBtn("−5", "minus", () => bumpHp(-5)),
       stepBtn("−1", "minus", () => bumpHp(-1)),
@@ -1853,9 +1886,7 @@ const COIN_FIELDS = [
 
 function vMoneyCard() {
   const grid = h("div", { class: "v-money" });
-  let any = false;
   for (const c of COIN_FIELDS) {
-    if (sheet.coins[c.key]) any = true;
     const value = h("b", { text: String(sheet.coins[c.key] || 0) });
     vRefresh.push(() => (value.textContent = String(sheet.coins[c.key] || 0)));
     const cell = h("div", { class: "v-money-cell" }, [value, h("span", { text: c.label })]);
@@ -1868,10 +1899,9 @@ function vMoneyCard() {
     );
     grid.appendChild(cell);
   }
-  // Пустой кошелёк на листе 1-го уровня — обычное дело, но карточку из пяти
-  // нулей в самом верху колонки видеть незачем; появится, как только деньги
-  // будут (или их впишут в правке).
-  return any ? vCard("Монеты", grid) : null;
+  // Кошелёк показываем всегда, даже из пяти нулей: игроку нужно место, куда
+  // вписать первую добычу, не переключаясь в режим правки.
+  return vCard("Монеты", grid);
 }
 
 function vAttunementCard() {
@@ -1886,6 +1916,198 @@ function vAttunementCard() {
   return vCard("Настройка на предметы", rows);
 }
 
+// ==================== карточка предмета из инвентаря ====================
+//
+// Инвентарь хранит только id/имя/вес/кол-во (см. domain.InventoryEntry) —
+// сами характеристики предмета лежат в общей библиотеке (domain.Item) и уже
+// подтянуты целиком в itemCatalog (см. loadInventory, ради модификаторов
+// надетых вещей). Здесь та же карточка используется ещё раз, чтобы её можно
+// было посмотреть из инвентаря — в двух видах:
+//   - openItemPeek  — мини-окно рядом с предметом, только самое важное;
+//   - showItemCard  — полноценное модальное окно с описанием целиком, тот же
+//     "read-режим", что и в pages/itembook.js (readHeader/readInfoGrid/
+//     renderReadView), скопирован сюда по той же схеме, что используют
+//     spellbook.js/bestiary.js — свой набор функций на страницу, без общего
+//     модуля.
+function itemLineIf(label, value) {
+  const v = (value ?? "").toString().trim();
+  if (!v) return null;
+  return h("div", { class: "ib-line" }, [h("strong", { text: label + " " }), v]);
+}
+
+function itemAttunementText(it) {
+  if (!it.requiresAttunement) return "";
+  return it.attunementNote ? `требуется настройка (${it.attunementNote})` : "требуется настройка";
+}
+
+function itemReadInfoGrid(it) {
+  const wrap = h("div", { class: "ib-info" });
+  const add = (label, value) => {
+    const line = itemLineIf(label, value);
+    if (line) wrap.appendChild(line);
+  };
+  add("Настройка:", itemAttunementText(it));
+  add("Стоимость:", it.cost);
+  add("Вес:", it.weight || (it.weightLb ? it.weightLb + " фнт" : ""));
+  add("Активация:", it.activation);
+  add("Урон:", it.damage);
+  add("Класс доспеха:", it.armorClass);
+  add("Свойства:", it.properties);
+  add("Заряды:", it.charges);
+  return wrap;
+}
+
+function itemReadHeader(it) {
+  const portrait = it.imageUrl ? h("img", { class: "ib-portrait", src: it.imageUrl }) : null;
+  const subtitleBits = [it.type, it.rarity].filter(Boolean).join(", ");
+  const pills = [...(it.source ? [it.source] : []), ...(it.tags || [])].map((t) => h("span", { class: "ib-tag-pill", text: t }));
+  const text = h("div", { class: "ib-header-text" }, [
+    h("h2", { class: "ib-name", text: it.name || "Без имени" }),
+    h("div", { class: "ib-subtitle", text: subtitleBits }),
+    pills.length ? h("div", { class: "ib-tags" }, pills) : null,
+  ]);
+  return portrait ? h("div", { class: "ib-header" }, [portrait, text]) : text;
+}
+
+// showItemCard — вариант 2, "полноценное модальное окно": тот же bt-modal,
+// что и у showAlert/showConfirm (см. modal.js), с телом целиком под карточку
+// предмета вместо строки текста. cancelLabel: "" — как у showAlert, кнопка
+// в подвале только закрывает, а не подтверждает что-либо.
+function showItemCard(it) {
+  openModal({
+    title: it.name || "Предмет",
+    okLabel: "Закрыть",
+    cancelLabel: "",
+    buildBody: (body) => {
+      body.appendChild(itemReadHeader(it));
+      body.appendChild(h("div", { class: "ib-hr" }));
+      const info = itemReadInfoGrid(it);
+      body.appendChild(info);
+      enhanceRolls(info, sendRoll);
+      const desc = (it.description || "").trim();
+      if (desc) {
+        body.appendChild(h("div", { class: "ib-hr" }));
+        const prose = h("div", { class: "ib-prose" });
+        prose.innerHTML = renderNoteHtml(it.description);
+        enhanceRolls(prose, sendRoll);
+        wireCatalogLinks(prose);
+        body.appendChild(h("div", { class: "ib-block" }, [h("h3", { class: "ib-section-title", text: "Описание" }), prose]));
+      }
+      return null;
+    },
+    onOk: () => undefined,
+    onCancel: () => undefined,
+  });
+}
+
+// stripMarkup — грубая чистка markdown/HTML для превью в мини-окне: там нет
+// места (и смысла) рендерить разметку целиком, только пара строк текста
+// (обрезаются визуально, см. .item-peek-desc line-clamp в character-sheet.html).
+function stripMarkup(text) {
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`#>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+let itemPeekEl = null;
+let itemPeekEntryId = null;
+
+function closeItemPeek() {
+  if (!itemPeekEl) return;
+  itemPeekEl.remove();
+  itemPeekEl = null;
+  itemPeekEntryId = null;
+  document.removeEventListener("mousedown", onItemPeekOutside, true);
+  document.removeEventListener("keydown", onItemPeekKey, true);
+  window.removeEventListener("scroll", closeItemPeek, true);
+  window.removeEventListener("resize", closeItemPeek);
+}
+
+function onItemPeekOutside(ev) {
+  if (itemPeekEl && !itemPeekEl.contains(ev.target)) closeItemPeek();
+}
+
+function onItemPeekKey(ev) {
+  if (ev.key === "Escape") closeItemPeek();
+}
+
+function positionItemPeek(el, anchorEl) {
+  const margin = 8;
+  const r = anchorEl.getBoundingClientRect();
+  const width = Math.min(300, window.innerWidth - margin * 2);
+  el.style.width = width + "px";
+  el.style.left = Math.min(Math.max(r.left, margin), window.innerWidth - width - margin) + "px";
+  el.style.top = r.bottom + 6 + "px";
+  // Высоту знаем только после вставки в DOM — если снизу не влезает, окно
+  // переносится над предметом вместо того, чтобы вылезти за край экрана.
+  const boxHeight = el.getBoundingClientRect().height;
+  if (r.bottom + 6 + boxHeight > window.innerHeight - margin) {
+    el.style.top = Math.max(margin, r.top - 6 - boxHeight) + "px";
+  }
+}
+
+// openItemPeek — вариант 1, "мини-окно рядом с предметом": повторный клик по
+// уже открытому предмету закрывает его же (тоггл), клик по другому —
+// перерисовывает на новом месте. Нет карточки в библиотеке (itemId пуст —
+// запись добавлена вручную, либо предмет с тех пор удалён из каталога, см.
+// domain.InventoryEntry.ItemID) — показываем то, что есть в самой записи
+// инвентаря, без кнопки "Открыть карточку" (открывать нечего).
+function openItemPeek(entry, anchorEl) {
+  if (itemPeekEl && itemPeekEntryId === entry.id) {
+    closeItemPeek();
+    return;
+  }
+  closeItemPeek();
+
+  const it = entry.itemId ? itemCatalog.get(entry.itemId) : null;
+  const children = [
+    h("div", { class: "item-peek-head" }, [
+      h("b", { text: entry.name }),
+      h("button", { type: "button", class: "item-peek-close", html: icon("close", { size: 11 }), title: "Закрыть", onclick: closeItemPeek }),
+    ]),
+  ];
+  if (it) {
+    const sub = [it.type, it.rarity].filter(Boolean).join(", ");
+    if (sub) children.push(h("div", { class: "item-peek-sub", text: sub }));
+    children.push(itemReadInfoGrid(it));
+    const desc = (it.description || "").trim();
+    if (desc) children.push(h("p", { class: "item-peek-desc", text: stripMarkup(desc) }));
+    children.push(
+      h("div", { class: "item-peek-foot" }, [
+        h("button", {
+          type: "button",
+          text: "Открыть карточку",
+          onclick: () => {
+            closeItemPeek();
+            showItemCard(it);
+          },
+        }),
+      ])
+    );
+  } else {
+    children.push(h("div", { class: "item-peek-sub", text: "Предмета нет в библиотеке — правлен вручную" }));
+    if (entry.notes) children.push(h("p", { class: "item-peek-desc", text: entry.notes }));
+  }
+
+  itemPeekEl = h("div", { class: "item-peek" }, children);
+  document.body.appendChild(itemPeekEl);
+  itemPeekEntryId = entry.id;
+  positionItemPeek(itemPeekEl, anchorEl);
+
+  // Подписка отложена на следующий тик — иначе тот же клик, что открыл окно
+  // (mousedown на кнопке-триггере), тут же поймает себя как "клик мимо" и
+  // закроет только что созданное окно.
+  setTimeout(() => {
+    document.addEventListener("mousedown", onItemPeekOutside, true);
+    document.addEventListener("keydown", onItemPeekKey, true);
+    window.addEventListener("scroll", closeItemPeek, true);
+    window.addEventListener("resize", closeItemPeek);
+  }, 0);
+}
+
 function vInventoryCard() {
   // У ДМ, открывшего ЧУЖОЙ лист, эндпоинты инвентаря отдают 404 (см.
   // renderTab5) — секции просто нет, как и вкладки.
@@ -1897,31 +2119,31 @@ function vInventoryCard() {
       class: "v-inv-eq" + (e.equipped ? " on" : ""),
       title: e.equipped ? "Надето — снять" : "Надеть",
       html: icon("check", { size: 12 }),
-      onclick: () => {
-        saveInventoryEntry(e, { equipped: !e.equipped });
-        renderView();
-      },
+      onclick: () => saveInventoryEntry(e, { equipped: !e.equipped }),
     });
     return h("div", { class: "v-inv" }, [
-      h("span", { class: "v-inv-name" }, [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + e.weightLb + " фнт" }) : null]),
+      h(
+        "button",
+        { type: "button", class: "v-inv-name", title: "Открыть карточку предмета", onclick: (ev) => openItemPeek(e, ev.currentTarget) },
+        [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + e.weightLb + " фнт" }) : null]
+      ),
       qty,
+      // Только "потратить" — набрать себе лишнего игрок не может (см.
+      // комментарий у `let inventory`), пополнение только через лут/ДМ.
       h("button", {
         type: "button",
         class: "v-inv-eq",
         title: "Потратить одну штуку",
         html: icon("minus", { size: 12 }),
         onclick: () => {
-          saveInventoryEntry(e, { quantity: Math.max(0, (e.quantity || 0) - 1) });
-          renderView();
-        },
-      }),
-      h("button", {
-        type: "button",
-        class: "v-inv-eq",
-        title: "Добавить одну штуку",
-        html: icon("plus", { size: 12 }),
-        onclick: () => {
-          saveInventoryEntry(e, { quantity: (e.quantity || 0) + 1 });
+          const next = Math.max(0, (e.quantity || 0) - 1);
+          // 0 — предмет потрачен весь, запись удаляется целиком (см.
+          // removeInventoryEntry), а не остаётся строкой "×0".
+          if (next === 0) {
+            removeInventoryEntry(e.id);
+            return;
+          }
+          saveInventoryEntry(e, { quantity: next });
           renderView();
         },
       }),
@@ -2046,14 +2268,24 @@ function connectRollSocket() {
   // /ws/player требует роль "player" (см. internal/api/ws/routes.go) — ДМ
   // туда просто не пустят, поэтому в режиме ДМ бросок идёт через /ws/dm
   // (авторизован ролью admin из той же cookie сессии). Сервер разрешает DM
-  // отправлять roll_dice как и все остальные типы сообщений (authorize),
-  // и подписывает бросок именем "ДМ" (room.go: handleRollDice) — здесь
-  // важен только сам roll_result, остальной трафик DM-сокета (снапшот
-  // сцены и т.п.) молча игнорируется.
+  // отправлять roll_dice как и все остальные типы сообщений (authorize) и
+  // подписывает бросок именем ПЕРСОНАЖА этого листа, раз sendRoll шлёт его
+  // characterId (room.go: handleRollDice/rollerName) — здесь важен только
+  // сам roll_result, остальной трафик DM-сокета (снапшот сцены и т.п.)
+  // молча игнорируется.
+  // Своя подвальная лента лога — только у листа, вынесенного в настоящее
+  // отдельное окно/вкладку. Внутри стола (боковой док sheet-dock.js или
+  // плавающее окно floating-window.js — то есть iframe) приходит ТОТ ЖЕ
+  // roll_result, что и в плашку стола (бросок ретранслируется всей комнате,
+  // см. internal/service/room.go: relayRoll), и два лога в паре сантиметров
+  // друг от друга дублировали бы строку — поэтому там rollLog остаётся null.
+  if (!rollLog && !isEmbedded()) {
+    rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
+  }
   rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") showRollResult(data);
+    if (data.type === "roll_result") rollLog?.push(data);
     // Наложенные состояния этого персонажа (см. domain.AppliedStatus)
     // приезжают тем же сокетом в combat_state — сервер уже свёл их с токена
     // бойца (см. room_statuses.go: statusesOf) и вырезал скрытые от игрока.
@@ -2070,18 +2302,39 @@ function connectRollSocket() {
       // пересчитываем числа режима чтения, а не только строку чипов.
       if (mode === "view") refreshView();
     }
+    // Хиты, изменённые ДМ в трекере инициативы: сервер пишет их в лист сам
+    // (см. internal/service/room_character_hp.go) и присылает сюда, чтобы
+    // цифра на экране игрока поменялась в момент удара, а не после
+    // перезагрузки страницы. Кладём их в СВОЮ копию листа — иначе
+    // ближайший автосейв бланка (debounce 700мс, см. scheduleSave) увёз бы
+    // на сервер старые хиты и откатил правку ДМ.
+    // Инвентарь пополняется не только с этого окна (хаб ДМа/труп на
+    // player.html, см. service.Room: handleHubTakeItem/handleLootTakeItem) —
+    // без этого сигнала новый лут появлялся бы только после перезагрузки
+    // страницы с открытым бланком.
+    if (data.type === "character_inventory" && data.characterId === charId) {
+      loadInventory();
+    }
+    if (data.type === "character_hp" && data.characterId === charId && sheet) {
+      sheet.combat.hpCurrent = data.hpCurrent;
+      sheet.combat.hpTemp = data.hpTemp;
+      sheet.combat.hpMax = data.hpMax;
+      // В режиме правки перерисовывать нельзя: под курсором живые поля
+      // ввода, и подмена разметки съела бы недописанное. Данные уже
+      // обновлены, а увидит их бланк при следующем переключении режима.
+      if (mode === "view") refreshView();
+    }
   };
 }
 
 function sendRoll(formula, label) {
   if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
-  // Бросок с чужого листа уходит по /ws/dm и в общем логе подписывается
-  // просто "ДМ" (см. connectRollSocket, room.go: handleRollDice — имя там
-  // берётся из роли сокета, персонажа сервер не знает) — без имени
-  // персонажа в самом label непонятно, за кого именно бросал ДМ, если
-  // открыто несколько листов подряд.
-  const fullLabel = isAdminView && character ? `${character.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
-  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
+  // characterId — сервер сам подставит имя ПЕРСОНАЖА в общий лог вместо
+  // логина игрока/роли "ДМ" сокета (см. room.go: handleRollDice/rollerName),
+  // раз бросок сделан именно с его листа. Так лог всегда называет того, кто
+  // за столом реально кидал кубик — даже когда открыто несколько листов
+  // подряд или ДМ бросает за чужого персонажа.
+  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label, characterId: charId }));
 }
 
 // isEmbedded — лист открыт ВНУТРИ страницы стола: боковым доком
@@ -2089,26 +2342,6 @@ function sendRoll(formula, label) {
 // iframe, а не отдельной вкладкой/окном браузера.
 function isEmbedded() {
   return window.parent !== window;
-}
-
-function showRollResult(data) {
-  // У страницы стола свой лог бросков поверх карты (см. player.html:
-  // #diceLog, dm.html — то же самое), и приходит в него ТОТ ЖЕ самый
-  // roll_result: бросок ретранслируется всей комнате (см.
-  // internal/service/room.go: relayRoll), а сокетов у вкладки теперь два —
-  // страницы и листа. Пока лист жил отдельной вкладкой, это были два разных
-  // экрана; в доке оба лога оказались в паре сантиметров друг от друга и
-  // дублировали строку. Своя подвальная лента остаётся только у листа,
-  // вынесенного в настоящее отдельное окно, — там она единственная.
-  if (isEmbedded()) return;
-  const wrap = document.getElementById("rollLogWrap");
-  wrap.classList.remove("hidden");
-  const log = document.getElementById("rollLog");
-  const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
-  const who = data.label ? `${data.name} — ${data.label}` : data.name;
-  const row = h("div", { class: "dice-log-row", text: `${who}: ${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}` });
-  log.prepend(row);
-  while (log.children.length > 20) log.removeChild(log.lastChild);
 }
 
 // ==================== boot ====================
@@ -2138,12 +2371,51 @@ function currentId() {
   return new URLSearchParams(location.search).get("id");
 }
 
+// pregenId — режим предпросмотра «готового персонажа» из пула мира БЕЗ
+// захвата (character-sheet.html?pregen=<id>, см. internal/domain/pregen.go).
+// Лист открывается только на чтение: у пре-гена ещё нет записи characters,
+// сохранять и бросать кубы не за кого.
+function currentPregenId() {
+  return new URLSearchParams(location.search).get("pregen");
+}
+
 (async function boot() {
   me = await fetchMe();
   if (!me || (me.role !== "player" && me.role !== "admin")) {
     location.href = "/";
     return;
   }
+
+  const pregenId = currentPregenId();
+  if (pregenId) {
+    readOnly = true;
+    try {
+      character = await fetchPregen(pregenId);
+    } catch (err) {
+      document.getElementById("loadingHint").textContent = "Не удалось загрузить готового персонажа: " + err.message;
+      return;
+    }
+    sheet = normalizeSheet(character.sheet);
+    references = await fetchReferences().catch(() => []);
+
+    document.getElementById("charTitle").textContent = character.name;
+    document.getElementById("charSub").textContent = "готовый персонаж приключения";
+    const banner = document.getElementById("readonlyBanner");
+    banner.textContent = "Предпросмотр — этого персонажа ещё никто не взял. Полноценно откроется после «Взять» / назначения ДМ.";
+    banner.classList.add("shown");
+    // Правка и инвентарь пре-гену недоступны — прячем переключатель режима,
+    // статус автосохранения и вкладку инвентаря.
+    document.getElementById("modeBtn").style.display = "none";
+    saveStatusEl.style.display = "none";
+    const tab5Btn = document.querySelector('.tab-btn[data-tab="5"]');
+    if (tab5Btn) tab5Btn.style.display = "none";
+
+    setMode("view");
+    document.getElementById("loadingHint").style.display = "none";
+    document.getElementById("app").classList.add("ready");
+    return;
+  }
+
   charId = currentId();
   if (!charId) {
     document.getElementById("loadingHint").textContent = "Не указан id персонажа (?id=...).";

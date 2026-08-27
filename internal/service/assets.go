@@ -39,7 +39,8 @@ func NewAssetService(assets repository.AssetRepository) AssetService {
 // dmOnlyKind — kind, доступный только ДМ (в отличие от tokens — тот же
 // аккаунт может грузить туда собственный аватар персонажа).
 func dmOnlyKind(kind string) bool {
-	return kind == domain.AssetKindMaps || kind == domain.AssetKindAudio || kind == domain.AssetKindProps
+	return kind == domain.AssetKindMaps || kind == domain.AssetKindAudio ||
+		kind == domain.AssetKindProps || kind == domain.AssetKindHandouts
 }
 
 func (s *assetService) Upload(ctx context.Context, account *domain.Account, kind, folder, filename string, r io.Reader) (string, error) {

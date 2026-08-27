@@ -1,10 +1,9 @@
-// Панель форматирования над textarea редактора заметки. Сознательно НЕ
-// полноценный WYSIWYG (contenteditable + HTML-документ) — заметки остаются
-// обычными .md-файлами на диске (см. план системы заметок), поэтому кнопки
-// просто вставляют/оборачивают markdown-синтаксис вокруг текущего выделения
-// в textarea, как редактор markdown на GitHub/Obsidian. Общий модуль —
-// используется и в боковой панели ДМ (pages/dm.js), и в отдельном окне
-// заметки (pages/note-window.js).
+// Панель форматирования над textarea редактора записи. Сознательно НЕ
+// полноценный WYSIWYG (contenteditable + HTML-документ) — записи остаются
+// обычными .md-файлами на диске, поэтому кнопки просто вставляют/оборачивают
+// markdown-синтаксис вокруг текущего выделения в textarea, как редактор
+// markdown на GitHub/Obsidian. Общий модуль — используется редактором
+// журнала стола (pages/journal.js).
 import { uploadFile } from "../api.js";
 import { showAlert, showPrompt } from "../modal.js";
 
@@ -113,6 +112,26 @@ function insertTable(ta) {
   insertBlock(ta, "| Заголовок 1 | Заголовок 2 | Заголовок 3 |\n| --- | --- | --- |\n| ячейка | ячейка | ячейка |");
 }
 
+// insertReadAloud — врезка «зачитать вслух»: выделенный текст (или заглушку)
+// в <aside class="beacon-readaloud"> с пустыми строками внутри — так marked
+// разбирает содержимое как markdown, а не как сырой HTML (см.
+// web/src/notes/markdown.js), а .note-render рисует ей фон и полосу слева
+// (см. web/src/styles/theme.css). Тот же класс эмитит импорт Foundry для
+// «read aloud»-блоков модуля (см. internal/foundry/journal.go).
+function insertReadAloud(ta) {
+  const { selectionStart: start, selectionEnd: end, value } = ta;
+  const selected = (value.slice(start, end) || "Текст, который зачитывают игрокам.").trim();
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const nlB = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+  const nlA = after === "" || after.startsWith("\n") ? "" : "\n\n";
+  const open = `<aside class="beacon-readaloud">\n\n`;
+  const block = open + selected + "\n\n</aside>";
+  const newValue = before + nlB + block + nlA + after;
+  const innerStart = before.length + nlB.length + open.length;
+  setValue(ta, newValue, innerStart, innerStart + selected.length);
+}
+
 async function insertFile(ta, file) {
   const { url } = await uploadFile(file, "notes");
   const name = file.name.replace(/\.[^./\\]+$/, "");
@@ -153,6 +172,7 @@ export function mountNoteToolbar(toolbarEl, textarea) {
       { label: "☰", title: "Маркированный список", action: () => toggleLinePrefix(textarea, "- ") },
       { label: "①", title: "Нумерованный список", action: () => toggleLinePrefix(textarea, "", true) },
       { label: "❝", title: "Цитата", action: () => toggleLinePrefix(textarea, "> ") },
+      { label: "📢", title: "Врезка «зачитать вслух» игрокам", action: () => insertReadAloud(textarea) },
     ],
     [
       { label: "🔗", title: "Вставить ссылку", action: () => insertLink(textarea) },

@@ -106,10 +106,6 @@
     .sb-prose p:first-child { margin-top: 0; }
     .sb-prose p:last-child { margin-bottom: 0; }
     .sb-prose strong { color: #fff; }
-
-    #rollLogWrap { border-top: 1px solid var(--border); background: var(--panel-bg); padding: 6px 12px; max-height: 22vh; overflow-y: auto; flex: 0 0 auto; }
-    #rollLogWrap.hidden { display: none; }
-    .dice-log-row { font-size: 11px; padding: 1px 0; }
   </style>
 </head>
 <body>
@@ -123,7 +119,7 @@
   </div>
   <div id="loadingHint">Загрузка…</div>
   <div id="app"></div>
-  <div id="rollLogWrap" class="hidden"><div id="rollLog"></div></div>
+  <div id="rollLogWrap"></div>
 
   <script type="module" src="/src/pages/spellbook.js"></script>
 </body>

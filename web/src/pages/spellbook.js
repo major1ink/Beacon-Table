@@ -15,6 +15,7 @@ import { mapFoundrySpellJson } from "../spell-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { createRollLog } from "../roll-log.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -34,6 +35,7 @@ const LEVEL_OPTIONS = [
 let spellId = null;
 let spell = null; // объект domain.Spell целиком (сервер отдаёт camelCase — см. json-теги)
 let rollWS = null;
+let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js)
 let allConditions = []; // справочник состояний мира — только для выпадашки «Накладывает» (см. statusesField)
 let isAdminView = false; // роль текущего аккаунта (см. boot()) — определяет /ws/dm или /ws/player
 // editMode — по умолчанию карточка открывается в чистом read-режиме, как
@@ -519,11 +521,12 @@ window.addEventListener("beforeunload", () => {
 // character-sheet.js: connectRollSocket.
 
 function connectRollSocket() {
+  if (!rollLog) rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
   rollWS.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") showRollResult(data);
+    if (data.type === "roll_result") rollLog.push(data);
   };
 }
 
@@ -531,17 +534,6 @@ function sendRoll(formula, label) {
   if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
   const fullLabel = spell && spell.name ? `${spell.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
   rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
-}
-
-function showRollResult(data) {
-  const wrap = document.getElementById("rollLogWrap");
-  wrap.classList.remove("hidden");
-  const log = document.getElementById("rollLog");
-  const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
-  const who = data.label ? `${data.name} — ${data.label}` : data.name;
-  const row = h("div", { class: "dice-log-row", text: `${who}: ${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}` });
-  log.prepend(row);
-  while (log.children.length > 20) log.removeChild(log.lastChild);
 }
 
 // ==================== boot ====================

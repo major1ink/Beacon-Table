@@ -38,6 +38,15 @@ type Combatant struct {
 	AC          int     `json:"ac"`
 	HPCurrent   int     `json:"hpCurrent"`
 	HPMax       int     `json:"hpMax"`
+	// HPTemp — временные хиты (5e: отдельный буфер поверх текущих, урон
+	// съедает его первым, лечение в него НЕ идёт и он не суммируется сам с
+	// собой). Своё поле, а не производное от меток: временные хиты — это
+	// расходуемый ресурс, а domain.Modifier описывает постоянную прибавку,
+	// которую нельзя "потратить". У бойца из карточки игрока приезжает из
+	// CharacterSheet.Combat.HPTemp в момент добавления в инициативу (как и
+	// HPCurrent — снимок, не живая связь), монстру ДМ ставит руками, когда
+	// тот получил их от заклинания/способности.
+	HPTemp int `json:"hpTemp,omitempty"`
 	// Seq — порядковый номер добавления, используется ТОЛЬКО как
 	// детерминированный тай-брейк сортировки при равной инициативе (см.
 	// service.sortedCombatantIDs) — иначе порядок "кто вперёд" плавал бы от
@@ -81,13 +90,22 @@ type Combatant struct {
 // всё равно перепроверяет флаг сам при обработке "loot_take_item" (см.
 // service.Room) — тумблер на клиенте только прячет кнопку, не единственная
 // защита.
+//
+// HighlightActiveToken — общий тумблер стола ("Настройки"): подсвечивать ли
+// красным кольцом на карте токен бойца, чей сейчас ход (см. combatPayload,
+// web/src/vtt/layers/tokens.js). *bool, а не bool — как FogOfWar у сцены:
+// nil (в т.ч. у всех столов, заведённых до этой настройки) трактуется как
+// "включено", явный false — ДМ выключил подсветку в "Настройках". Видна
+// всем ролям — подсказывает не только ДМ, но и игрокам/TV, чей ход прямо
+// сейчас на самой карте, а не только в верхнем оверлее.
 type CombatState struct {
-	Active         bool                  `json:"active"`
-	Round          int                   `json:"round"`
-	CurrentID      string                `json:"currentId,omitempty"`
-	Combatants     map[string]*Combatant `json:"combatants"`
-	ShowHP         bool                  `json:"showHp,omitempty"`
-	LootingEnabled bool                  `json:"lootingEnabled,omitempty"`
+	Active               bool                  `json:"active"`
+	Round                int                   `json:"round"`
+	CurrentID            string                `json:"currentId,omitempty"`
+	Combatants           map[string]*Combatant `json:"combatants"`
+	ShowHP               bool                  `json:"showHp,omitempty"`
+	LootingEnabled       bool                  `json:"lootingEnabled,omitempty"`
+	HighlightActiveToken *bool                 `json:"highlightActiveToken,omitempty"`
 }
 
 // NewCombatState — пустой трекер "из коробки" (первый запуск/нет

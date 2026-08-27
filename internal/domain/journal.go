@@ -2,9 +2,9 @@ package domain
 
 import "time"
 
-// JournalEntry — запись журнала стола: тот же markdown, что и у заметок ДМ
-// (domain.Note, см. internal/repository/notefile), но с автором и правами
-// доступа — журнал общий на весь стол, а заметки ДМ его личные.
+// JournalEntry — запись журнала стола: markdown-файл (см.
+// internal/repository/journalfile) с автором и правами доступа. Журнал общий
+// на весь стол; запись, видимая только автору, — это его личная вика.
 //
 // Модель прав — фаундривская (JournalEntry.ownership в Foundry VTT): у
 // записи есть уровень «по умолчанию» (Default — для всех, кому персонально

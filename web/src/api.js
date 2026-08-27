@@ -93,9 +93,9 @@ export async function updateCharacterSheet(id, sheet) {
 export async function fetchCharacterInventory(id) {
   return apiFetch(`/api/characters/${id}/inventory`);
 }
-export async function addCharacterInventoryItem(id, itemId, quantity) {
-  return apiFetch(`/api/characters/${id}/inventory`, { method: "POST", body: JSON.stringify({ itemId, quantity }) });
-}
+// Добавить предмет из каталога напрямую в свой инвентарь игрок не может (см.
+// internal/service/characters.go) — только уменьшать/снимать/надевать то, что
+// уже выдал ДМ или удалось забрать через loot-take-modal.js.
 export async function updateCharacterInventoryItem(id, entryId, quantity, equipped, notes) {
   return apiFetch(`/api/characters/${id}/inventory/${entryId}`, {
     method: "PUT",
@@ -137,6 +137,54 @@ export async function fetchAdminCharacters() {
   return apiFetch("/api/admin/characters");
 }
 
+// ---- «готовые персонажи» (пул предгенерированных листов мира, см.
+// internal/domain/pregen.go) — импорт приключения Foundry складывает сюда
+// актёров type "character"; игрок берёт свободного (fetchPregens/claimPregen),
+// ДМ управляет пулом (fetch/assign/release/delete) ----
+
+// fetchPregens — свободные пре-гены, которых игрок может взять (краткая
+// карточка: id/name/avatarUrl/class/level/species).
+export async function fetchPregens() {
+  return apiFetch("/api/pregens");
+}
+// fetchPregen — полный лист одного пре-гена для предпросмотра без захвата
+// (character-sheet.html?pregen=<id>, только чтение). Доступен и игроку, и ДМ.
+export async function fetchPregen(id) {
+  return apiFetch(`/api/pregens/${id}`);
+}
+// claimPregen — игрок берёт готового персонажа: создаётся обычная запись
+// персонажа, принадлежащая ему (возвращается она же, с полным листом).
+export async function claimPregen(id) {
+  return apiFetch(`/api/pregens/${id}/claim`, { method: "POST" });
+}
+
+// fetchAdminPregens — весь пул + статус занятости (claimedBy/claimedByUsername/
+// claimedCharacterId) и полный лист. Используется и панелью ДМ, и экраном
+// импорта Foundry (createAdminPregen/updateAdminPregen — покарточное
+// заведение, тот же контракт, что createMonster/updateMonster).
+export async function fetchAdminPregens() {
+  return apiFetch("/api/admin/pregens");
+}
+export async function createAdminPregen(name) {
+  return apiFetch("/api/admin/pregens", { method: "POST", body: JSON.stringify({ name }) });
+}
+export async function updateAdminPregen(id, pregen) {
+  return apiFetch(`/api/admin/pregens/${id}`, { method: "PUT", body: JSON.stringify(pregen) });
+}
+// assignPregen — ДМ назначает пре-гена аккаунту игрока (тот же захват, что и
+// claimPregen, но с явным accountId).
+export async function assignPregen(id, accountId) {
+  return apiFetch(`/api/admin/pregens/${id}/assign`, { method: "POST", body: JSON.stringify({ accountId }) });
+}
+// releasePregen — вернуть пре-гена в пул (пометка занятости снимается,
+// персонаж игрока не трогается).
+export async function releasePregen(id) {
+  return apiFetch(`/api/admin/pregens/${id}/release`, { method: "POST" });
+}
+export async function deleteAdminPregen(id) {
+  return apiFetch(`/api/admin/pregens/${id}`, { method: "DELETE" });
+}
+
 // ---- плейлисты канала ДМ (только ДМ) — web/dm.html: модалка "Плейлисты" ----
 export async function fetchAdminPlaylists() {
   return apiFetch("/api/admin/playlists");
@@ -161,49 +209,6 @@ export async function deletePlaylistTrack(playlistId, trackId) {
 }
 export async function movePlaylistTrack(playlistId, trackId, direction) {
   return apiFetch(`/api/admin/playlists/${playlistId}/tracks/${trackId}/move`, { method: "POST", body: JSON.stringify({ direction }) });
-}
-
-// ---- заметки ДМ (только ДМ) — web/dm.html: раздел "Заметки", web/note-window.html ----
-export async function fetchNotes() {
-  return apiFetch("/api/notes");
-}
-export async function fetchNote(id) {
-  return apiFetch(`/api/notes/${id}`);
-}
-// createNote — folder необязателен ("" / не передан = корень библиотеки, см.
-// domain.Note.Folder).
-export async function createNote(content, folder) {
-  return apiFetch("/api/notes", { method: "POST", body: JSON.stringify({ content, folder: folder || "" }) });
-}
-export async function updateNote(id, content) {
-  return apiFetch(`/api/notes/${id}`, { method: "PUT", body: JSON.stringify({ content }) });
-}
-// moveNote — перенос заметки в другую папку. Отдельно от updateNote:
-// содержимое автосейвится по таймеру при наборе текста, папка меняется
-// осознанным действием (см. internal/api/http: handleNoteMove).
-export async function moveNote(id, folder) {
-  return apiFetch(`/api/notes/${id}/folder`, { method: "PUT", body: JSON.stringify({ folder: folder || "" }) });
-}
-export async function deleteNote(id) {
-  return apiFetch(`/api/notes/${id}`, { method: "DELETE" });
-}
-
-// ---- папки библиотеки заметок: отдельный список, потому что папка может
-// быть пустой (только что созданная или освободившаяся) и в /api/notes её
-// тогда не видно ----
-export async function fetchNoteFolders() {
-  return apiFetch("/api/note-folders");
-}
-export async function createNoteFolder(folder) {
-  return apiFetch("/api/note-folders", { method: "POST", body: JSON.stringify({ folder }) });
-}
-export async function renameNoteFolder(from, to) {
-  return apiFetch("/api/note-folders", { method: "PUT", body: JSON.stringify({ from, to }) });
-}
-// deleteNoteFolder удаляет папку ВМЕСТЕ с заметками внутри — спрашивать ДМ
-// обязан вызывающий.
-export async function deleteNoteFolder(folder) {
-  return apiFetch(`/api/note-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
 }
 
 // ---- журнал стола (ДМ и игроки) — web/journal.html ----
@@ -398,6 +403,14 @@ export async function importFoundryPack(url, pack, targets) {
 // сети — сама проверка новых версий отдельным запросом (см.
 // checkFoundryModuleUpdates), чтобы открытие настроек не ждало по манифесту
 // на каждый установленный пакет.
+// linkFoundrySceneTokens — «доставить статблоки токенам импортированных
+// сцен»: сводит токены сцен с карточками бестиария по id актёра Foundry (см.
+// internal/service/foundry.go: LinkSceneTokens — там же о том, почему это
+// отдельный шаг, а не часть импорта пака). Возвращает {linked: N}.
+export async function linkFoundrySceneTokens() {
+  return apiFetch("/api/foundry/link-scene-tokens", { method: "POST" });
+}
+
 export async function fetchFoundryModules() {
   return apiFetch("/api/foundry/modules");
 }

@@ -13,18 +13,19 @@
 // Импорт идёт пак за паком, а не одним запросом: так виден прогресс и ответ
 // не разрастается до сотен мегабайт на большом модуле.
 import {
-  fetchMe, inspectFoundryPackage, importFoundryPack,
+  fetchMe, inspectFoundryPackage, importFoundryPack, linkFoundrySceneTokens,
   fetchItems, createItem, updateItem,
   fetchSpells, createSpell, updateSpell,
   fetchBestiary, createMonster, updateMonster,
   fetchReferences, createReference, updateReference,
   fetchConditions, createCondition, updateCondition,
-  fetchNotes, fetchNote, createNote, updateNote,
   fetchJournal, fetchJournalEntry, createJournalEntry, updateJournalEntry,
+  fetchAdminPregens, createAdminPregen, updateAdminPregen,
 } from "../api.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
+import { mapFoundryCharacterJson } from "../character-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 
@@ -47,16 +48,29 @@ function itemArt(doc) {
 // fetchAll у карточек — не только для галочки в отчёте: по этому списку
 // импорт проверяет, нет ли такой карточки в библиотеке уже (см. importCards).
 const TARGETS = [
-  { id: "monsters", label: "Существа", fetchAll: fetchBestiary, createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt },
+  // linkField — куда положить id исходного документа Foundry. Только у
+  // существ: по нему потом сойдутся карточка бестиария и токены, уже
+  // стоящие на импортированных сценах (см. domain.Token.FoundryActorID и
+  // вызов linkFoundrySceneTokens в конце импорта).
+  // Готовые персонажи (актёры type "character") — пул предгенерированных
+  // листов мира (см. internal/domain/pregen.go). Тот же покарточный контракт,
+  // что и у остальных: mapOne → {name, avatarUrl, sheet}, createOne(name),
+  // updateOne(id, карточка). Повторный импорт без правок может показать диалог
+  // «карточка изменилась» — sheet после round-trip через сервер обрастает
+  // дефолтными полями и JSON-сравнение в sameCard уже не совпадает точь-в-точь;
+  // это не ошибка, ДМ выбирает «пропустить».
+  { id: "pregens", label: "Готовые персонажи", fetchAll: fetchAdminPregens, createOne: createAdminPregen, updateOne: updateAdminPregen, mapOne: mapFoundryCharacterJson, art: (doc) => (doc && doc.img) || tokenArt(doc) },
+  { id: "monsters", label: "Существа", fetchAll: fetchBestiary, createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt, linkField: "foundryActorId" },
   { id: "spells", label: "Заклинания", fetchAll: fetchSpells, createOne: createSpell, updateOne: updateSpell, mapOne: mapFoundrySpellJson },
   { id: "items", label: "Снаряжение", fetchAll: fetchItems, createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },
   { id: "references", label: "Справочник", fetchAll: fetchReferences, createOne: createReference, updateOne: updateReference, mapBatch: mapFoundryReferenceBatch },
   { id: "conditions", label: "Состояния", fetchAll: fetchConditions, createOne: createCondition, updateOne: updateCondition, mapBatch: mapFoundryConditionBatch },
-  // Заметки: текст и папку готовит сервер (см. service.FoundryImport.Notes),
-  // но заводит их эта страница — потому что заметка с тем же названием в той
-  // же папке может уже существовать, и что с ней делать, решает ДМ (см.
-  // importNotes).
-  { id: "notes", label: "Заметки ДМ", notes: true },
+  // Журналы модуля: текст и папку готовит сервер (см.
+  // service.FoundryImport.Notes), но заводит записи эта страница — потому что
+  // запись с тем же названием в той же папке может уже существовать, и что с
+  // ней делать, решает ДМ (см. importNotes). id остаётся "notes" — под этим
+  // ключом сервер отдаёт готовый набор (result.notes).
+  { id: "notes", label: "Журнал стола", notes: true },
   // Ниже — то, что раскладывает сам сервер (см. foundry.ServerSideTargets):
   // здесь у них нет ни маппера, ни создания — только галочка и счётчик.
   { id: "scenes", label: "Сцены", server: true },
@@ -64,35 +78,19 @@ const TARGETS = [
 ];
 const TARGET_BY_ID = Object.fromEntries(TARGETS.map((t) => [t.id, t]));
 
-// NOTE_DESTINATIONS — куда класть журналы модуля. В Foundry весь сюжет
-// приключения лежит в JournalEntry, и у него два разумных адреса на столе:
-//   notes   — личная вики ДМ (как было всегда): текст приключения, врезки
-//             для Мастера, то, что игрокам видеть рано;
-//   journal — журнал стола (см. web/journal.html): то, чем ДМ будет
-//             делиться — раздаточные материалы, карты для игроков, хроника.
-// Различаются только четырьмя операциями над хранилищем, поэтому сам импорт
-// (importNotes) их не различает вовсе — получает готовый набор.
-//
-// Записи журнала заводятся ЗАКРЫТЫМИ (default: "none"): импорт приключения
-// не должен разом выложить игрокам всё, включая ответы. Открыть нужное — уже
-// осознанное действие ДМ в диалоге прав.
-const NOTE_DESTINATIONS = {
-  notes: {
-    id: "notes",
-    label: "Заметки ДМ",
-    fetchAll: fetchNotes,
-    fetchOne: fetchNote,
-    create: (note) => createNote(note.content, note.folder),
-    update: (id, content) => updateNote(id, content),
-  },
-  journal: {
-    id: "journal",
-    label: "Журнал стола",
-    fetchAll: fetchJournal,
-    fetchOne: fetchJournalEntry,
-    create: (note) => createJournalEntry({ content: note.content, folder: note.folder, def: "none" }),
-    update: (id, content) => updateJournalEntry(id, content),
-  },
+// JOURNAL_DEST — куда класть журналы модуля. В Foundry весь сюжет приключения
+// лежит в JournalEntry; на столе ему место в журнале (см. web/journal.html).
+// Записи заводятся ЗАКРЫТЫМИ (def: "none"): импорт приключения не должен
+// разом выложить игрокам всё, включая ответы. Открыть нужное — уже осознанное
+// действие ДМ в диалоге прав. Форма объекта — то, что нужно importNotes:
+// прочитать библиотеку, прочитать одну запись, создать, перезаписать.
+const JOURNAL_DEST = {
+  id: "notes",
+  label: "Журнал стола",
+  fetchAll: fetchJournal,
+  fetchOne: fetchJournalEntry,
+  create: (note) => createJournalEntry({ content: note.content, folder: note.folder, def: "none" }),
+  update: (id, content) => updateJournalEntry(id, content),
 };
 
 // ==================== состояние ====================
@@ -101,19 +99,10 @@ let pkg = null; // ответ /api/foundry/inspect
 let manifestUrl = "";
 const selectedPacks = new Set();
 const selectedTargets = new Set(TARGETS.map((t) => t.id));
-// notesToJournal — галочка «журналы → журнал стола» (см. NOTE_DESTINATIONS).
-// По умолчанию выключена: прежнее поведение — сюжет в заметки ДМ.
-let notesToJournal = false;
 
-function noteDestination() {
-  return notesToJournal ? NOTE_DESTINATIONS.journal : NOTE_DESTINATIONS.notes;
-}
-
-// targetLabel — подпись раздела в чипах пака и в отчёте. У журналов она
-// зависит от галочки: «Заметки ДМ: 4» или «Журнал стола: 4» — иначе отчёт
-// говорил бы не туда, куда всё поехало.
+// targetLabel — подпись раздела в чипах пака и в отчёте.
 function targetLabel(id) {
-  return id === "notes" ? noteDestination().label : TARGET_BY_ID[id].label;
+  return (TARGET_BY_ID[id] || {}).label || id;
 }
 let running = false;
 let cancelled = false;
@@ -240,45 +229,15 @@ function renderPackage() {
 
 function renderTargets() {
   targetsEl.innerHTML = "";
-  // toJournalBox — подчинённая галочка «журналы → в журнал стола»; её
-  // доступность зависит от галочки самих журналов, поэтому держим ссылку и
-  // правим точечно. Перерисовывать весь список на каждое переключение
-  // нельзя: клик по одной галочке подменял бы DOM-узлы всех остальных.
-  let toJournalBox = null;
   for (const t of TARGETS) {
     const box = h("input", { type: "checkbox" });
     box.checked = selectedTargets.has(t.id);
     box.addEventListener("change", () => {
       if (box.checked) selectedTargets.add(t.id);
       else selectedTargets.delete(t.id);
-      if (t.id === "notes" && toJournalBox) toJournalBox.disabled = !box.checked;
       renderPacks(); // счётчики пака показывают только выбранные разделы
     });
-    targetsEl.appendChild(h("label", {}, [box, t.id === "notes" ? "Журналы" : t.label]));
-
-    // Куда именно кладём журналы — подчинённая галочка сразу под своим
-    // разделом, а не отдельная настройка где-то в стороне: она осмысленна
-    // только когда журналы вообще импортируются.
-    if (t.id === "notes") {
-      toJournalBox = h("input", { type: "checkbox" });
-      toJournalBox.checked = notesToJournal;
-      toJournalBox.disabled = !selectedTargets.has("notes");
-      toJournalBox.addEventListener("change", () => {
-        notesToJournal = toJournalBox.checked;
-        renderPacks();
-      });
-      targetsEl.appendChild(
-        h(
-          "label",
-          {
-            class: "sub-target",
-            title:
-              "Иначе журналы модуля едут в личные заметки ДМ. В журнал они лягут закрытыми — откроешь игрокам те, что нужно",
-          },
-          [toJournalBox, "→ в журнал стола"]
-        )
-      );
-    }
+    targetsEl.appendChild(h("label", {}, [box, t.label]));
   }
 }
 
@@ -397,6 +356,23 @@ importBtn.addEventListener("click", async () => {
     for (const warning of result.warnings || []) log(`  ! ${warning}`);
   }
 
+  // Токены на импортированных сценах — это фигурки существ, но статблок им
+  // на этапе разбора сцены взять было неоткуда: карточки существ приезжают
+  // ДРУГИМ паком и заводятся уже здесь, в браузере (см.
+  // internal/foundry/scene.go: mapToken сохраняет только id актёра). Теперь,
+  // когда весь импорт позади, просим сервер свести одно с другим.
+  //
+  // Зовём даже после остановки на полпути (cancelled): часть карточек уже
+  // заведена, и статблоки для них — уже польза. Промах здесь не должен
+  // выглядеть провалом импорта — всё остальное уже на месте, а шаг можно
+  // повторить следующим импортом, он идемпотентен.
+  try {
+    const { linked } = await linkFoundrySceneTokens();
+    if (linked) log(`Статблоки подставлены токенам на импортированных сценах: ${linked}`);
+  } catch (err) {
+    log(`  ! статблоки токенам сцен подставить не удалось: ${err.message}`);
+  }
+
   running = false;
   importBtn.disabled = false;
   urlInput.disabled = false;
@@ -454,12 +430,19 @@ function sameCard(existing, mapped) {
 // такая же карточка пропускается молча, отличающаяся — как решит ДМ.
 async function importCards(target, docs, pack) {
   const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
+  // sourceIds — карточка -> _id документа Foundry, из которого она собрана.
+  // Отдельная карта, а не поле карточки: якорь проставляется ПОСЛЕ сравнения
+  // "не изменилась ли карточка" (см. ниже, там же и про foundryModuleId),
+  // а до тех пор он не должен попасть ни в sameCard, ни в глаза ДМ в
+  // диалоге конфликта.
+  const sourceIds = new Map();
   const mapped = target.mapBatch
     ? target.mapBatch(docs)
     : docs.map((doc) => {
         try {
           const card = target.mapOne(doc);
           if (target.art && !card.imageUrl) card.imageUrl = target.art(doc);
+          if (target.linkField && doc && doc._id) sourceIds.set(card, String(doc._id));
           return card;
         } catch (err) {
           console.warn(`[${pack.name}] ${doc && doc.name}: ${err.message}`);
@@ -524,6 +507,10 @@ async function importCards(target, docs, pack) {
     // пустом месте. Перезаписывается при каждом импорте/обновлении карточки —
     // если её потом перезаписал другой модуль, "своей" она считается уже у него.
     card.foundryModuleId = pkg.id;
+    // Тот же момент и та же причина — якорь на исходный документ Foundry
+    // (см. sourceIds выше): служебная метка не должна сама превращать
+    // совпадающую карточку в «конфликт».
+    if (target.linkField && sourceIds.has(card)) card[target.linkField] = sourceIds.get(card);
 
     try {
       if (action === "overwrite") {
@@ -591,7 +578,7 @@ function sameNoteText(a, b) {
 // importNotes заводит подготовленные сервером заметки, разбираясь с
 // совпадениями: одинаковую пропускаем молча, различающуюся — как скажет ДМ.
 async function importNotes(notes, pack) {
-  const dest = noteDestination();
+  const dest = JOURNAL_DEST;
   const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
   let index;
   try {

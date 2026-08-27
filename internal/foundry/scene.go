@@ -25,12 +25,21 @@ import (
 //   - источники света Foundry — «токенами света» (domain.Token.LightOnly):
 //     отдельной сущности под ambient light у нас нет, а лампочка-токен даёт
 //     ровно то же самое на карте;
-//   - расставленные токены — арт, имя, размер, скрытость. Связь с актёром
-//     (и, значит, статблок) не переносится: карточки бестиария импортируются
-//     отдельным паком и своими id, угадывать соответствие мы не беремся;
+//   - расставленные токены — арт, имя, размер, скрытость и id актёра, которого
+//     токен изображал (domain.Token.FoundryActorID). Сам статблок в этот
+//     момент подставить нельзя: карточки бестиария приезжают ОТДЕЛЬНЫМ паком,
+//     возможно уже после сцены, — поэтому id сохраняется как якорь, а связь
+//     (Token.MonsterID) дописывается потом проходом
+//     service.FoundryService.LinkSceneTokens. Ничего не угадывается по имени:
+//     сводятся ровно одинаковые id;
 //   - гексагональная сетка ложится квадратной (гексов у нас нет), плитки
-//     (tiles), рисунки (drawings) и шаблоны эффектов не переносятся вовсе.
-func MapScene(ctx context.Context, d Doc, assets *Assets) *domain.SceneState {
+//     (tiles), рисунки (drawings) и шаблоны эффектов не переносятся вовсе;
+//   - значки на карте (notes) — в domain.NoteMarker, если ix знает, куда
+//     приехала запись, на которую значок ссылается (см. mapNoteMarker).
+//
+// ix — индекс перекрёстных ссылок модуля (см. LinkIndex): нужен только для
+// значков, для остального можно передать nil.
+func MapScene(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex) *domain.SceneState {
 	name := strings.TrimSpace(asString(d["name"]))
 	if name == "" {
 		name = "Сцена из Foundry"
@@ -100,7 +109,50 @@ func MapScene(ctx context.Context, d Doc, assets *Assets) *domain.SceneState {
 			s.Tokens[t.ID] = t
 		}
 	}
+	for _, raw := range asSlice(d["notes"]) {
+		if nm := mapNoteMarker(asMap(raw), offsetX, offsetY, ix); nm != nil {
+			s.NoteMarkers[nm.ID] = nm
+		}
+	}
 	return s
+}
+
+// mapNoteMarker — значок на карте Foundry (Note) в domain.NoteMarker. Note
+// ссылается на запись журнала (entryId) и, необязательно, на её страницу
+// (pageId). У нас запись журнала — это заметка, а страница — раздел внутри
+// неё (см. MapJournal), поэтому значок ведём на заметку и запоминаем раздел.
+//
+// Резолв — по индексу модуля: если записи, на которую ссылается значок, в
+// импорте нет (значок вёл на документ мира или другого модуля), значок
+// пропускаем — «свиток в никуда» на карте бесполезен. Настоящий id заметки
+// на этом этапе неизвестен (её заводит клиент, и в заметки ДМ либо в журнал
+// стола — по галочке ДМ), поэтому кладём имя записи и папку «якорем», а
+// связывание с реальной заметкой оставляем клиенту на первый клик (см.
+// domain.NoteMarker.FoundryEntry).
+func mapNoteMarker(n map[string]any, offsetX, offsetY float64, ix *LinkIndex) *domain.NoteMarker {
+	if n == nil || ix == nil {
+		return nil
+	}
+	target, ok := ix.Lookup(asString(n["pageId"]))
+	if !ok {
+		target, ok = ix.Lookup(asString(n["entryId"]))
+	}
+	if !ok || target.Kind != "note" {
+		return nil
+	}
+	label := strings.TrimSpace(asString(n["text"]))
+	if label == "" {
+		label = firstNonEmpty(target.Section, target.Name)
+	}
+	return &domain.NoteMarker{
+		ID:            newID(),
+		Label:         label,
+		Section:       target.Section,
+		X:             num(n["x"], 0) - offsetX,
+		Y:             num(n["y"], 0) - offsetY,
+		FoundryEntry:  target.Name,
+		FoundryFolder: target.Folder,
+	}
 }
 
 // sceneGrid — размер клетки и тип сетки с учётом переезда полей в v10:
@@ -215,14 +267,21 @@ func mapToken(ctx context.Context, t map[string]any, offsetX, offsetY, gridSize 
 	}
 	art := firstNonEmpty(digString(t, "texture", "src"), asString(t["img"]))
 	return &domain.Token{
-		ID:     newID(),
-		X:      num(t["x"], 0) - offsetX + cells*gridSize/2,
-		Y:      num(t["y"], 0) - offsetY + num(t["height"], cells)*gridSize/2,
-		Size:   cells * gridSize / 2,
-		Color:  "#888888",
-		Label:  asString(t["name"]),
-		Image:  assets.URL(ctx, domain.AssetKindTokens, art),
-		Hidden: asBool(t["hidden"]),
+		ID:    newID(),
+		X:     num(t["x"], 0) - offsetX + cells*gridSize/2,
+		Y:     num(t["y"], 0) - offsetY + num(t["height"], cells)*gridSize/2,
+		Size:  cells * gridSize / 2,
+		Color: "#888888",
+		Label: asString(t["name"]),
+		Image: assets.URL(ctx, domain.AssetKindTokens, art),
+		// В Foundry токен на сцене — это ВСЕГДА размещение актёра (декорации
+		// там отдельная сущность, tiles, которую мы не импортируем вовсе).
+		// Значит, всё, что сюда приезжает, — существа, и статблок им положен.
+		// Прямо сейчас его взять неоткуда (актёры лежат в другом паке, см.
+		// domain.Token.FoundryActorID), поэтому сохраняем якорь и оставляем
+		// связывание на потом.
+		FoundryActorID: firstNonEmpty(asString(t["actorId"]), digString(t, "delta", "_id")),
+		Hidden:         asBool(t["hidden"]),
 	}
 }
 

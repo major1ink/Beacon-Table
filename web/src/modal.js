@@ -77,7 +77,11 @@ function injectStyle() {
 // openModal — общий каркас: оверлей, шапка, тело (наполняет вызывающий) и
 // кнопки. resolve зовётся ровно один раз — что бы окно ни закрыло (кнопка,
 // ✕, Esc, клик мимо), поэтому вызывающему не нужно ничего доубирать.
-function openModal({ title, danger, okLabel, cancelLabel, buildBody, onOk, onCancel }) {
+//
+// Экспортирована (помимо show*) — карточкам сущностей (см.
+// pages/character-sheet.js: showItemCard) нужен тот же каркас с произвольным
+// телом, а не только текст/поле ввода, как у show*.
+export function openModal({ title, danger, okLabel, cancelLabel, buildBody, onOk, onCancel }) {
   injectStyle();
   return new Promise((resolve) => {
     const previouslyFocused = document.activeElement;

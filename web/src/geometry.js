@@ -443,23 +443,70 @@ export function buildingVertexNear(x, y, buildings, scale, screenPx = 10) {
 }
 
 // tokenAt — id токена под точкой (x,y), либо null. tokens: { [id]: {x,y,size} }.
-export function tokenAt(x, y, tokens) {
+//
+// Раньше эта функция возвращала ПЕРВЫЙ попавшийся токен в порядке обхода
+// объекта — то есть САМЫЙ НИЖНИЙ из стопки (layers/tokens.js добавляет
+// вьюхи в том же порядке, значит первый в обходе рисуется под всеми
+// остальными). Из-за этого токен, вставший на клетку с монстром/токеном
+// света/ассетом карты, "залипал": клик по нему попадал в объект, лежащий
+// под ним, драг не начинался вовсе (у игрока — потому что чужой токен ему
+// не принадлежит), и персонаж не мог сойти с места, пока ДМ не убирал то,
+// на что он наступил. Теперь выбор осознанный:
+//
+//   opts.filter — что вообще может быть выбрано (например, у игрока —
+//     только его собственные токены; у ДМ вне режима настройки освещения —
+//     всё, кроме токенов света);
+//   opts.prefer — что при равных условиях важнее (свой токен выигрывает у
+//     чужого, даже если чужой нарисован сверху);
+//   дальше — кто НАРИСОВАН ВЫШЕ (последний в обходе), а при попадании в
+//   несколько сразу — чей центр ближе к курсору.
+//
+// Такой порядок даёт естественное "кликаю по тому, что вижу", и при этом
+// гарантирует, что своё из-под чужого всегда достаётся.
+export function tokenAt(x, y, tokens, opts) {
+  const filter = opts && opts.filter;
+  const prefer = opts && opts.prefer;
+  let bestId = null;
+  let bestRank = -1;
+  let bestDist = Infinity;
+  let order = 0;
+  let bestOrder = -1;
   for (const id in tokens) {
     const t = tokens[id];
-    if (Math.hypot(t.x - x, t.y - y) < (t.size || 20)) return id;
+    order++;
+    if (Math.hypot(t.x - x, t.y - y) >= (t.size || 20)) continue;
+    if (filter && !filter(t, id)) continue;
+    const rank = prefer && prefer(t, id) ? 1 : 0;
+    const dist = Math.hypot(t.x - x, t.y - y);
+    // Ранг важнее всего; внутри одного ранга — верхний по отрисовке; при
+    // равенстве (такого не бывает, но пусть будет детерминировано) — ближний.
+    if (rank > bestRank || (rank === bestRank && (order > bestOrder || (order === bestOrder && dist < bestDist)))) {
+      bestId = id;
+      bestRank = rank;
+      bestDist = dist;
+      bestOrder = order;
+    }
   }
-  return null;
+  return bestId;
 }
 
 // noteMarkerAt — id значка заметки (domain.NoteMarker) под точкой (x,y), либо
 // null. Радиус хит-теста следует размеру САМОГО значка (marker.size — см.
 // layers/note-markers.js), чтобы увеличенный ДМ-ом значок было так же легко
 // подцепить мышью, как и уменьшенный — не подцепить меньше видимой иконки.
-export function noteMarkerAt(x, y, noteMarkers, minRadius = 16) {
-  for (const id in noteMarkers) {
+// filter — необязательный предикат "этот значок вообще можно выбрать"
+// (см. tokenAt выше: тем же способом драг пропускает заблокированные, см.
+// domain.NoteMarker.Locked). Перебор идёт с конца — верхний по отрисовке
+// значок выигрывает у лежащего под ним, как и у токенов.
+export function noteMarkerAt(x, y, noteMarkers, minRadius = 16, filter) {
+  const ids = Object.keys(noteMarkers || {});
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const id = ids[i];
     const m = noteMarkers[id];
     const r = Math.max(minRadius, (m.size || 0) / 2);
-    if (Math.abs(m.x - x) < r && Math.abs(m.y - y) < r) return id;
+    if (Math.abs(m.x - x) >= r || Math.abs(m.y - y) >= r) continue;
+    if (filter && !filter(m, id)) continue;
+    return id;
   }
   return null;
 }
