@@ -17,42 +17,25 @@
 // (pages/catalog.js: openDetail) — сама эта страница тоже всегда живёт в
 // плавающем окне-iframe, второй уровень вложенности не нужен (см.
 // floating-window.js: все окна — прямые дети топ-документа).
-import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchNotes, fetchJournal } from "./api.js";
+import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchJournal } from "./api.js";
 
 const KIND_CONFIG = {
   item: { fetchAll: fetchItems, urlFor: (id) => `/itembook.html?id=${id}`, keyPrefix: "item" },
   spell: { fetchAll: fetchSpells, urlFor: (id) => `/spellbook.html?id=${id}`, keyPrefix: "spell" },
   reference: { fetchAll: fetchReferences, urlFor: (id) => `/referencebook.html?id=${id}`, keyPrefix: "reference" },
   monster: { fetchAll: fetchBestiary, urlFor: (id) => `/bestiary.html?id=${id}`, keyPrefix: "monster" },
-  // note — заметки ДМ: у них есть папки, и одноимённые записи в разных
-  // ветках дерева — норма, поэтому такая ссылка несёт ещё и data-folder
-  // (см. matchByName ниже). Появляется при импорте модуля Foundry:
-  // правила ссылаются на другие правила (@UUID[...JournalEntry...]), см.
-  // internal/foundry/links.go.
-  note: { fetchAll: fetchNotes, urlFor: (id) => `/note-window.html?id=${id}`, keyPrefix: "note" },
-  // journal — журнал стола (domain.JournalEntry). Отдельного data-kind у
-  // ссылок нет и быть не может: в Foundry и то, и другое — один и тот же
-  // JournalEntry, а куда он приехал у нас, решает галочка при импорте (см.
-  // NOTE_DESTINATIONS в pages/foundry-import.js). Поэтому kind="note" ищется
-  // в обеих библиотеках — см. NOTE_LOOKUP_ORDER.
+  // journal — журнал стола (domain.JournalEntry). Сюда же ведёт data-kind="note":
+  // в Foundry сюжет приключения лежит в JournalEntry, ссылки на него
+  // (@UUID[...JournalEntry...], см. internal/foundry/links.go) размечаются
+  // как kind="note" и несут ещё data-folder — одноимённые записи в разных
+  // ветках дерева нормальны (см. matchByName). Раньше журналы модуля могли
+  // поехать и в личные заметки ДМ, теперь только в журнал стола.
   journal: { fetchAll: fetchJournal, urlFor: (id) => `/journal.html?id=${id}`, keyPrefix: "journal", single: true },
   // scene / playlist — не карточки в окне: сцену делают активной на столе,
   // плейлист открывают в разделе «Плейлисты». Записи в KIND_CONFIG нет, клик
   // обрабатывается отдельно — см. "kind === scene" / "kind === playlist" в
   // wireCatalogLinks.
 };
-
-// NOTE_LOOKUP_ORDER — где искать цель ссылки kind="note" и в каком порядке.
-// prefer задаёт страница, внутри которой висит текст: ссылка из журнала
-// сначала ищет в журнале, ссылка из заметки — в заметках. Это важно, когда
-// один и тот же модуль импортировали дважды, в обе библиотеки: открыться
-// должна та копия, по которой человек сейчас читает.
-//
-// Игроку /api/notes отвечает 403 (заметки ДМ — только его), список молча
-// становится пустым (см. listFor) и поиск идёт дальше, в журнал.
-function noteLookupOrder(prefer) {
-  return prefer === "journal" ? ["journal", "note"] : ["note", "journal"];
-}
 
 // listCache — один запрос списка на kind на всё время жизни страницы: одно
 // описание нередко ссылается на десяток заклинаний/черт, гонять сеть за
@@ -95,10 +78,10 @@ function hostWindow() {
   return window.parent;
 }
 
-// openEntry — section (только у заметок) — раздел внутри целевой заметки:
-// страница журнала Foundry у нас становится разделом «## Название» (см.
-// internal/foundry/journal.go), и ссылка на неё должна открывать заметку
-// сразу на нужном месте. Передаётся хэшем в URL — его читает note-window.js.
+// openEntry — section — раздел внутри целевой записи: страница журнала
+// Foundry у нас становится разделом «## Название» (см.
+// internal/foundry/journal.go), и ссылка на неё должна открывать запись
+// сразу на нужном месте. Передаётся хэшем в URL — его читает pages/journal.js.
 function openEntry(kind, id, name, section) {
   const cfg = KIND_CONFIG[kind];
   if (!cfg) return;
@@ -122,7 +105,7 @@ function openEntry(kind, id, name, section) {
 // wireCatalogLinks — делегированный клик по containerEl, как и у
 // enhanceRolls/wireWikiLinks — не нужно перевешивать обработчик при каждой
 // перерисовке блока, один вызов после вставки HTML достаточно.
-export function wireCatalogLinks(containerEl, { prefer = "note" } = {}) {
+export function wireCatalogLinks(containerEl, _opts = {}) {
   if (!containerEl) return;
   containerEl.addEventListener("click", async (e) => {
     const a = e.target.closest("a.catalog-ref");
@@ -147,17 +130,16 @@ export function wireCatalogLinks(containerEl, { prefer = "note" } = {}) {
       return;
     }
 
-    // Журналы модуля могли поехать и в заметки ДМ, и в журнал стола —
-    // перебираем обе библиотеки, а не одну (см. noteLookupOrder).
-    const kinds = kind === "note" ? noteLookupOrder(prefer) : [kind];
-    for (const k of kinds) {
-      const found = matchByName(await listFor(k), name, a.dataset.folder);
-      if (found) {
-        openEntry(k, found.id, found.name || found.title, a.dataset.section);
-        return;
-      }
+    // kind="note" — историческая разметка ссылок на JournalEntry из Foundry
+    // (см. internal/foundry/links.go); журналы модуля теперь всегда в журнале
+    // стола, поэтому ищем там же, где и kind="journal".
+    const k = kind === "note" ? "journal" : kind;
+    const found = matchByName(await listFor(k), name, a.dataset.folder);
+    if (found) {
+      openEntry(k, found.id, found.name || found.title, a.dataset.section);
+      return;
     }
-    // Записи с таким именем нет ни там, ни там — ссылка просто ничего не
-    // делает: цель могли не импортировать или удалить, это не ошибка.
+    // Записи с таким именем нет — ссылка просто ничего не делает: цель могли
+    // не импортировать или удалить, это не ошибка.
   });
 }

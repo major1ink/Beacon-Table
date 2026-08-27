@@ -28,7 +28,6 @@ import (
 	"beacon-table/internal/repository/journalfile"
 	"beacon-table/internal/repository/localfs"
 	"beacon-table/internal/repository/monsterfile"
-	"beacon-table/internal/repository/notefile"
 	"beacon-table/internal/repository/referencefile"
 	"beacon-table/internal/repository/scenefile"
 	"beacon-table/internal/repository/spellfile"
@@ -53,7 +52,6 @@ type ActiveWorld struct {
 	Items      service.ItemService
 	References service.ReferenceService
 	Conditions service.ConditionService
-	Notes      service.NoteService
 
 	Journal   service.JournalService
 	Playlists service.PlaylistService
@@ -229,7 +227,6 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	dataRoot, uploadsRoot, uploadsURL := m.rootsFor(company)
 
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
-	noteRepo := notefile.NewStore(filepath.Join(dataRoot, "notes"))
 	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
 	monsterRepo := monsterfile.NewCatalog(
 		monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")),
@@ -276,7 +273,6 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		return err
 	}
 
-	notes := service.NewNoteService(noteRepo)
 	journal := service.NewJournalService(journalRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
 	assets := service.NewAssetService(assetRepo)
@@ -297,7 +293,6 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Items:      items,
 		References: references,
 		Conditions: conditions,
-		Notes:      notes,
 		Journal:    journal,
 		Playlists:  playlists,
 		Assets:     assets,

@@ -1,6 +1,6 @@
-// Рендер заметок ДМ: обычный markdown (через marked) + вики-ссылки [[...]] —
-// общий модуль для боковой панели (pages/dm.js) и отдельного окна заметки
-// (pages/note-window.js), чтобы обе поверхности вели себя одинаково.
+// Рендер markdown-записей: обычный markdown (через marked) + вики-ссылки
+// [[...]] — общий модуль для журнала стола (pages/journal.js) и текста
+// карточек библиотек, чтобы все поверхности вели себя одинаково.
 import { marked } from "marked";
 
 // wikiLinkRe — [[Заголовок]] или [[Заголовок|Текст ссылки]]. Не жадный (.+?),
@@ -17,7 +17,7 @@ const wikiLinkRe = /\[\[(?!\/)([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
 
 // noteTitleFromContent — первая непустая строка вида "# Заголовок" (без "# "),
 // иначе "Без названия". Та же логика, что и на сервере
-// (internal/repository/notefile/notefile.go:deriveTitle) — здесь нужна для
+// (internal/repository/journalfile/journalfile.go:deriveTitle) — здесь нужна для
 // мгновенного локального предпросмотра заголовка при вводе, до сохранения.
 export function noteTitleFromContent(content) {
   for (const raw of (content || "").split("\n")) {

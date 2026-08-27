@@ -282,12 +282,13 @@ type GridSettings struct {
 	LineOpacity  float64 `json:"lineOpacity,omitempty"`
 }
 
-// NoteMarker — значок-свиток на карте, ссылающийся на заметку ДМ (см.
-// Note/NoteRepository). В отличие от старого HiddenAsset, это не игровой
-// reveal-механизм — маркер целиком личный инструмент ДМ и никогда не уходит
-// игрокам/TV (см. service.Room.sceneFor: PublicScene.NoteMarkers заполняется
-// только для роли DM, для остальных — всегда пустая карта). Label — снимок
-// заголовка заметки на момент постановки значка: правка заголовка заметки
+// NoteMarker — значок-свиток на карте, ссылающийся на запись журнала стола
+// (см. JournalEntry; Library="journal"). В отличие от старого HiddenAsset,
+// это не игровой reveal-механизм — маркер целиком личный инструмент ДМ и
+// никогда не уходит игрокам/TV (см. service.Room.sceneFor:
+// PublicScene.NoteMarkers заполняется только для роли DM, для остальных —
+// всегда пустая карта). Label — снимок
+// заголовка записи на момент постановки значка: правка заголовка записи
 // НЕ обновляет уже стоящие на карте подписи (см. web/src/notes/markdown.js) —
 // сознательный компромисс, см. план. Size — размер значка в мировых px,
 // правится ДМ через ПКМ → "Изменить размер" → драг (см.
@@ -295,10 +296,13 @@ type GridSettings struct {
 // дефолт (см. layers/note-markers.js), сервер размер не валидирует, как и
 // Token.Size.
 type NoteMarker struct {
-	ID      string  `json:"id"`
-	NoteID  string  `json:"noteId"`
-	Library string  `json:"library,omitempty"`
-	Label   string  `json:"label"`
+	ID string `json:"id"`
+	// NoteID — id записи журнала стола (domain.JournalEntry). Library="journal"
+	// у всех новых значков; "" осталось у значков, что вели в удалённые
+	// заметки ДМ, — такие больше не открываются.
+	NoteID  string `json:"noteId"`
+	Library string `json:"library,omitempty"`
+	Label   string `json:"label"`
 
 	Section string  `json:"section,omitempty"`
 	X       float64 `json:"x"`

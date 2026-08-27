@@ -7,7 +7,6 @@
 // Реализации лежат в подпакетах:
 //   - sqlite    — Account/Character/Session/Playlist поверх database/sql (SQLite)
 //   - scenefile — Scene поверх файлов JSON, по одному на сцену
-//   - notefile  — Note поверх файлов .md, по одному на заметку
 //   - journalfile — JournalEntry поверх файлов .md с шапкой прав, по одному на запись
 //   - monsterfile — Monster поверх файлов .json, по одному на монстра
 //   - spellfile — Spell поверх файлов .json, по одному на заклинание
@@ -191,43 +190,13 @@ type SceneRepository interface {
 	SaveHub(ctx context.Context, hub *domain.LootHub) error
 }
 
-// NoteRepository — библиотека заметок ДМ, файл-на-заметку (см.
-// internal/repository/notefile) — реальные .md на диске, а не строки в БД.
-type NoteRepository interface {
-	// List — метаданные всех заметок (без Content — как AssetRepository.List,
-	// не тащим содержимое ради списка).
-	List(ctx context.Context) ([]*domain.Note, error)
-	Get(ctx context.Context, id string) (*domain.Note, error)
-	// Create кладёт заметку в папку folder ("" — корень, см.
-	// domain.Note.Folder); папка создаётся, если её ещё нет.
-	Create(ctx context.Context, id, folder, content string) error
-	// Update возвращает false, если заметки с таким id нет. Папку не трогает
-	// — правка текста не переносит файл (см. Move).
-	Update(ctx context.Context, id, content string) (bool, error)
-	// Move переносит заметку в другую папку; false, если такой заметки нет.
-	Move(ctx context.Context, id, folder string) (bool, error)
-	Delete(ctx context.Context, id string) error
-
-	// Folders — все папки библиотеки, включая ПУСТЫЕ (тем же соображением,
-	// что и AssetRepository.Folders: только что созданная папка не должна
-	// пропадать из панели до того, как в неё что-то положили).
-	Folders(ctx context.Context) ([]string, error)
-	CreateFolder(ctx context.Context, folder string) error
-	// DeleteFolder удаляет папку СО ВСЕМ содержимым (вложенные папки и
-	// заметки), как AssetRepository.DeleteFolder — предупредить ДМ обязан
-	// вызывающий.
-	DeleteFolder(ctx context.Context, folder string) error
-	// RenameFolder переименовывает/переносит папку вместе с содержимым.
-	RenameFolder(ctx context.Context, from, to string) error
-}
-
 // JournalRepository — журнал стола, файл-на-запись (см.
-// internal/repository/journalfile) — те же .md на диске, что и у
-// NoteRepository, но с шапкой: автор и раздача прав (domain.JournalEntry).
-// Права репозиторий только ХРАНИТ — решает по ним service.JournalService,
-// репозиторий отдаёт все записи подряд, кто бы ни спрашивал.
+// internal/repository/journalfile) — .md на диске с шапкой: автор и раздача
+// прав (domain.JournalEntry). Права репозиторий только ХРАНИТ — решает по ним
+// service.JournalService, репозиторий отдаёт все записи подряд, кто бы ни
+// спрашивал.
 type JournalRepository interface {
-	// List — метаданные всех записей (без Content, как NoteRepository.List).
+	// List — метаданные всех записей (без Content — не тащим содержимое ради списка).
 	List(ctx context.Context) ([]*domain.JournalEntry, error)
 	Get(ctx context.Context, id string) (*domain.JournalEntry, error)
 	// Create кладёт запись целиком (id/папка/текст/автор/права уже
@@ -245,7 +214,8 @@ type JournalRepository interface {
 	Move(ctx context.Context, id, folder string) (bool, error)
 	Delete(ctx context.Context, id string) error
 
-	// Folders — все папки журнала, включая пустые (см. NoteRepository.Folders).
+	// Folders — все папки журнала, включая ПУСТЫЕ (только что созданная папка
+	// не должна пропадать из панели до того, как в неё что-то положили).
 	Folders(ctx context.Context) ([]string, error)
 	CreateFolder(ctx context.Context, folder string) error
 	// DeleteFolder удаляет папку СО ВСЕМ содержимым — проверить, что
@@ -256,7 +226,7 @@ type JournalRepository interface {
 }
 
 // MonsterRepository — библиотека карточек бестиария ДМ, файл-на-монстра (см.
-// internal/repository/monsterfile) — тот же принцип, что и NoteRepository,
+// internal/repository/monsterfile) — тот же принцип, что и JournalRepository,
 // но контент структурированный JSON (domain.Monster), а не markdown.
 type MonsterRepository interface {
 	// List — все монстры библиотеки целиком (карточки маленькие, в отличие

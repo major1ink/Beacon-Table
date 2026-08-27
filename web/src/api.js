@@ -211,49 +211,6 @@ export async function movePlaylistTrack(playlistId, trackId, direction) {
   return apiFetch(`/api/admin/playlists/${playlistId}/tracks/${trackId}/move`, { method: "POST", body: JSON.stringify({ direction }) });
 }
 
-// ---- заметки ДМ (только ДМ) — web/dm.html: раздел "Заметки", web/note-window.html ----
-export async function fetchNotes() {
-  return apiFetch("/api/notes");
-}
-export async function fetchNote(id) {
-  return apiFetch(`/api/notes/${id}`);
-}
-// createNote — folder необязателен ("" / не передан = корень библиотеки, см.
-// domain.Note.Folder).
-export async function createNote(content, folder) {
-  return apiFetch("/api/notes", { method: "POST", body: JSON.stringify({ content, folder: folder || "" }) });
-}
-export async function updateNote(id, content) {
-  return apiFetch(`/api/notes/${id}`, { method: "PUT", body: JSON.stringify({ content }) });
-}
-// moveNote — перенос заметки в другую папку. Отдельно от updateNote:
-// содержимое автосейвится по таймеру при наборе текста, папка меняется
-// осознанным действием (см. internal/api/http: handleNoteMove).
-export async function moveNote(id, folder) {
-  return apiFetch(`/api/notes/${id}/folder`, { method: "PUT", body: JSON.stringify({ folder: folder || "" }) });
-}
-export async function deleteNote(id) {
-  return apiFetch(`/api/notes/${id}`, { method: "DELETE" });
-}
-
-// ---- папки библиотеки заметок: отдельный список, потому что папка может
-// быть пустой (только что созданная или освободившаяся) и в /api/notes её
-// тогда не видно ----
-export async function fetchNoteFolders() {
-  return apiFetch("/api/note-folders");
-}
-export async function createNoteFolder(folder) {
-  return apiFetch("/api/note-folders", { method: "POST", body: JSON.stringify({ folder }) });
-}
-export async function renameNoteFolder(from, to) {
-  return apiFetch("/api/note-folders", { method: "PUT", body: JSON.stringify({ from, to }) });
-}
-// deleteNoteFolder удаляет папку ВМЕСТЕ с заметками внутри — спрашивать ДМ
-// обязан вызывающий.
-export async function deleteNoteFolder(folder) {
-  return apiFetch(`/api/note-folders?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
-}
-
 // ---- журнал стола (ДМ и игроки) — web/journal.html ----
 // В отличие от заметок ДМ выше, у каждой записи есть автор и права:
 // "default" — что достаётся всем за столом ("none" | "limited" | "observer" |

@@ -41,29 +41,14 @@ import {
   updatePlaylistTrack,
   deletePlaylistTrack,
   movePlaylistTrack,
-  fetchNotes,
   fetchJournal,
-  fetchNote,
-  createNote,
-  updateNote,
-  moveNote,
-  deleteNote,
-  fetchNoteFolders,
-  createNoteFolder,
-  renameNoteFolder,
-  deleteNoteFolder,
   fetchMonster,
   fetchFoundryModules,
   checkFoundryModuleUpdates,
   deleteFoundryModule,
 } from "../api.js";
-import { renderNoteHtml, wireWikiLinks, scrollToHeading } from "../notes/markdown.js";
-import { mountHeadingNav } from "../notes/heading-nav.js";
-import { mountNoteToolbar } from "../notes/toolbar.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
-import { wireCatalogLinks } from "../catalog-links.js";
-import { enhanceRolls } from "../inline-rolls.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
@@ -2664,599 +2649,31 @@ function handleCueEnded() {
 // верхнем уровне — ей нужен vtt.sideMenu, который появляется только после
 // initVTT().
 
-// ================= заметки ДМ =================
-// Мастер-детейл в стиле "Плейлистов" (noteListView ⇄ noteDetailView), плюс
-// рендер markdown + вики-ссылки [[...]] (см. notes/markdown.js — общий модуль
-// с web/src/pages/note-window.js, отдельным окном заметки).
-const noteListView = document.getElementById("noteListView");
-const noteDetailView = document.getElementById("noteDetailView");
-const noteRows = document.getElementById("noteRows");
-const noteSearch = document.getElementById("noteSearch");
-const noteCurrentFolderEl = document.getElementById("noteCurrentFolder");
-const noteFolderSelect = document.getElementById("noteFolderSelect");
-const noteDetailTitle = document.getElementById("noteDetailTitle");
-const noteRenderView = document.getElementById("noteRenderView");
-const noteEditView = document.getElementById("noteEditView");
-const noteEditArea = document.getElementById("noteEditArea");
-const noteEditToggleBtn = document.getElementById("noteEditToggleBtn");
-const noteTocBtn = document.getElementById("noteTocBtn");
-const noteMsg = document.getElementById("noteMsg");
-mountNoteToolbar(document.getElementById("noteToolbar"), noteEditArea);
-const noteHeadingNav = mountHeadingNav(noteTocBtn, noteRenderView);
-
-let notesList = []; // [{id,title,folder,updatedAt}] — метаданные, для дерева и резолва вики-ссылок
-let noteFolders = []; // ["Приключение", "Приключение/Глава 1", ...] — включая пустые
-let notesView = "list"; // "list" | "detail"
-let selectedNote = null; // {id,title,folder,content,updatedAt} заметки, открытой в детейле
-let noteEditing = false;
-// openNoteFolders — какие ветки дерева раскрыты; currentNoteFolder — в какую
-// папку попадёт следующая созданная заметка/подпапка ("" — корень).
-const openNoteFolders = new Set();
-let currentNoteFolder = "";
-// lastOpenedNoteId — подсветка «вот где ты был» в дереве после возврата из
-// открытой заметки: в библиотеке на сотни записей найти её глазами заново
-// иначе не проще, чем в первый раз.
-let lastOpenedNoteId = "";
-
-async function refreshNotesList() {
-  try {
-    [notesList, noteFolders] = await Promise.all([fetchNotes(), fetchNoteFolders()]);
-  } catch (err) {
-    console.error("не удалось загрузить список заметок:", err);
-    notesList = [];
-    noteFolders = [];
-  }
-  renderNoteRows();
-}
-
-// noteFolderTree — дерево из плоских путей заметок и папок. Узел:
-// {path, name, children: Map, notes: []}. Пустые папки приезжают отдельным
-// списком (см. fetchNoteFolders) — иначе только что созданная папка
-// пропадала бы до первой заметки в ней.
-function noteFolderTree() {
-  const root = { path: "", name: "", children: new Map(), notes: [] };
-  const nodeFor = (path) => {
-    let node = root;
-    if (!path) return node;
-    let acc = "";
-    for (const segment of path.split("/")) {
-      acc = acc ? acc + "/" + segment : segment;
-      if (!node.children.has(segment)) {
-        node.children.set(segment, { path: acc, name: segment, children: new Map(), notes: [] });
-      }
-      node = node.children.get(segment);
-    }
-    return node;
-  };
-  for (const folder of noteFolders) nodeFor(folder);
-  for (const n of notesList) nodeFor(n.folder || "").notes.push(n);
-  return root;
-}
-
-// noteRowEl — лист дерева: та же плоская строка-узел, что .compendium-node
-// у Справочника (иконка + название), а не карточка в две строки, как было.
-// Дата правки ушла в подсказку — в дереве из сотен импортированных заметок
-// (см. импорт Foundry) она только шумит, а место под неё съедает название.
-function noteRowEl(n, { showFolder = false, depth = 0 } = {}) {
-  const row = document.createElement("div");
-  row.className = "note-row" + (lastOpenedNoteId === n.id ? " current" : "");
-  row.style.setProperty("--depth", String(depth));
-  const iconEl = document.createElement("span");
-  iconEl.className = "note-row-icon";
-  iconEl.innerHTML = icon("file-text", { size: 13 });
-  const title = document.createElement("span");
-  title.className = "note-title";
-  title.textContent = n.title;
-  row.append(iconEl, title);
-  // В плоском списке поиска папка — единственный способ понять, какая из
-  // двух одноимённых заметок перед тобой, поэтому там она в строке.
-  if (showFolder && n.folder) {
-    const meta = document.createElement("span");
-    meta.className = "note-meta";
-    meta.textContent = n.folder;
-    row.appendChild(meta);
-  }
-  row.title = (n.folder ? n.folder + "/" : "") + n.title + " — правка " + formatDate(n.updatedAt);
-  row.onclick = () => openNote(n.id);
-  return row;
-}
-
-function noteFolderRowEl(node, depth) {
-  const open = openNoteFolders.has(node.path);
-  const row = document.createElement("div");
-  row.className = "note-folder-row" + (open ? " open" : "") + (currentNoteFolder === node.path ? " current" : "");
-  row.style.setProperty("--depth", String(depth));
-
-  // Шеврон всегда один и тот же (chevron-right), раскрытие показывает
-  // поворотом через CSS-класс .open — при подмене иконки строка заметно
-  // дёргалась на каждый клик.
-  const chevron = document.createElement("span");
-  chevron.className = "note-folder-chevron";
-  chevron.innerHTML = icon("chevron-right", { size: 12 });
-  const folderIcon = document.createElement("span");
-  folderIcon.className = "note-folder-icon";
-  folderIcon.innerHTML = icon("folder", { size: 13 });
-  const name = document.createElement("span");
-  name.className = "note-folder-name";
-  name.textContent = node.name;
-  const count = document.createElement("span");
-  count.className = "note-folder-count";
-  count.textContent = String(countNotesIn(node));
-
-  // Клик по папке делает две вещи сразу — раскрывает её и делает "текущей"
-  // (новая заметка/подпапка создаётся именно в ней): это то же поведение,
-  // что у файловых менеджеров, и избавляет от отдельного «выбрать папку».
-  const select = () => {
-    currentNoteFolder = node.path;
-    if (open) openNoteFolders.delete(node.path);
-    else openNoteFolders.add(node.path);
-    renderNoteRows();
-  };
-
-  const actions = document.createElement("span");
-  actions.className = "note-folder-actions";
-  actions.append(
-    folderActionBtn("folder-plus", "Создать подпапку", () => createNoteFolderPrompt(node.path)),
-    folderActionBtn("pencil", "Переименовать папку", () => renameNoteFolderPrompt(node)),
-    folderActionBtn("trash", "Удалить папку вместе с заметками", () => deleteNoteFolderPrompt(node))
-  );
-  row.append(chevron, folderIcon, name, count, actions);
-  row.title = node.path;
-  row.onclick = select;
-  return row;
-}
-
-// noteRootRowEl — «корень библиотеки»: и заголовок дерева, и цель создания
-// (клик возвращает currentNoteFolder в ""), вместо отдельной кнопки-крестика
-// рядом с формой, которая раньше делала то же самое неочевидным способом.
-function noteRootRowEl(root) {
-  const row = document.createElement("div");
-  row.className = "note-root-row" + (currentNoteFolder === "" ? " current" : "");
-  row.title = "Создавать в корне библиотеки";
-  const name = document.createElement("span");
-  name.className = "note-folder-name";
-  name.textContent = "Библиотека заметок";
-  const count = document.createElement("span");
-  count.className = "note-folder-count";
-  count.textContent = String(countNotesIn(root));
-  row.append(name, count);
-  row.onclick = () => {
-    currentNoteFolder = "";
-    renderNoteRows();
-  };
-  return row;
-}
-
-function folderActionBtn(iconName, title, onClick) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "note-icon-btn";
-  btn.title = title;
-  btn.innerHTML = icon(iconName, { size: 12 });
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    onClick();
-  };
-  return btn;
-}
-
-function countNotesIn(node) {
-  let total = node.notes.length;
-  for (const child of node.children.values()) total += countNotesIn(child);
-  return total;
-}
-
-// renderNoteTree — вложенность выражается ЛЕВЫМ ОТСТУПОМ строки (--depth,
-// см. .note-folder-row/.note-row в dm.html), а не вложенными контейнерами и
-// не marginLeft: строка остаётся во всю ширину панели, поэтому её фон при
-// наведении не «съезжает» уступами вправо с глубиной.
-function renderNoteTree(node, container, depth) {
-  const folders = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  for (const child of folders) {
-    container.appendChild(noteFolderRowEl(child, depth));
-    if (openNoteFolders.has(child.path)) renderNoteTree(child, container, depth + 1);
-  }
-  const notes = [...node.notes].sort((a, b) => a.title.localeCompare(b.title, "ru"));
-  for (const n of notes) container.appendChild(noteRowEl(n, { depth }));
-}
-
-let noteRowsKey = null;
-
-function noteRowsStateKey(filter) {
-  return JSON.stringify([
-    filter,
-    currentNoteFolder,
-    lastOpenedNoteId,
-    [...openNoteFolders].sort(),
-    notesList.map((n) => [n.id, n.title, n.folder || "", n.updatedAt]),
-    noteFolders,
-  ]);
-}
-
-function renderNoteRows() {
-  const filter = noteSearch.value.trim().toLowerCase();
-
-  noteCurrentFolderEl.textContent = currentNoteFolder || "корень библиотеки";
-
-  const key = noteRowsStateKey(filter);
-  if (key === noteRowsKey) return;
-  noteRowsKey = key;
-
-  // Позицию прокрутки дерева сохраняем через перерисовку: без этого любой
-  // клик по папке в глубине длинного списка отбрасывал бы список наверх.
-  const scrollTop = noteRows.scrollTop;
-  const rows = document.createDocumentFragment();
-
-  // Поиск показывает плоский список по всей библиотеке: искать заметку,
-  // раскрывая ветки руками, — ровно то, от чего поиск и избавляет. Папка
-  // при этом видна в строке справа.
-  if (filter) {
-    const found = notesList.filter(
-      (n) => n.title.toLowerCase().includes(filter) || (n.folder || "").toLowerCase().includes(filter)
-    );
-    if (!found.length) rows.appendChild(hintEl("Ничего не найдено."));
-    else for (const n of found) rows.appendChild(noteRowEl(n, { showFolder: true }));
-    noteRows.replaceChildren(rows);
-    noteRows.scrollTop = 0; // новый список — новая система координат, старая прокрутка бессмысленна
-    return;
-  }
-
-  const tree = noteFolderTree();
-  rows.appendChild(noteRootRowEl(tree));
-  renderNoteTree(tree, rows, 0);
-  if (!notesList.length && !noteFolders.length) {
-    rows.appendChild(hintEl("Заметок пока нет. Создай первую ниже — или целую папку кнопкой «Папка» в шапке."));
-  }
-  noteRows.replaceChildren(rows);
-  noteRows.scrollTop = scrollTop;
-}
-
-function hintEl(text) {
-  const p = document.createElement("p");
-  p.className = "hint";
-  p.textContent = text;
-  return p;
-}
-noteSearch.oninput = renderNoteRows;
-
-// ---- папки: создание/переименование/удаление ----
-
-async function createNoteFolderPrompt(parent) {
-  const name = await showPrompt("Название папки:", {
-    title: "Новая папка",
-    okLabel: "Создать",
-    hint: parent ? `Внутри «${parent}».` : "В корне библиотеки.",
-  });
-  if (!name || !name.trim()) return;
-  const path = parent ? parent + "/" + name.trim() : name.trim();
-  try {
-    await createNoteFolder(path);
-    openNoteFolders.add(parent);
-    currentNoteFolder = path;
-    await refreshNotesList();
-  } catch (err) {
-    showAlert("Не удалось создать папку: " + err.message);
-  }
-}
-
-async function renameNoteFolderPrompt(node) {
-  const name = await showPrompt("Новое название:", { title: "Переименовать папку", value: node.name, okLabel: "Переименовать" });
-  if (!name || !name.trim() || name.trim() === node.name) return;
-  const parent = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
-  const target = parent ? parent + "/" + name.trim() : name.trim();
-  try {
-    await renameNoteFolder(node.path, target);
-    // Раскрытые ветки и «текущая папка» ссылались на старый путь — переносим
-    // их на новый, иначе дерево схлопнется прямо под руками.
-    for (const open of [...openNoteFolders]) {
-      if (open === node.path || open.startsWith(node.path + "/")) {
-        openNoteFolders.delete(open);
-        openNoteFolders.add(target + open.slice(node.path.length));
-      }
-    }
-    if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) {
-      currentNoteFolder = target + currentNoteFolder.slice(node.path.length);
-    }
-    await refreshNotesList();
-  } catch (err) {
-    showAlert("Не удалось переименовать: " + err.message);
-  }
-}
-
-async function deleteNoteFolderPrompt(node) {
-  const total = countNotesIn(node);
-  const what = total ? `папку «${node.path}» и ${total} заметок внутри` : `пустую папку «${node.path}»`;
-  if (!(await showConfirm(`Удалить ${what}?`, { title: "Удалить папку", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
-  try {
-    await deleteNoteFolder(node.path);
-    if (currentNoteFolder === node.path || currentNoteFolder.startsWith(node.path + "/")) currentNoteFolder = "";
-    await refreshNotesList();
-  } catch (err) {
-    showAlert("Не удалось удалить папку: " + err.message);
-  }
-}
-
-document.getElementById("newNoteFolderBtn").onclick = () => createNoteFolderPrompt(currentNoteFolder);
-
-function renderNotesPanel() {
-  const showDetail = notesView === "detail" && selectedNote;
-  // flex, а не block: обе половины — колонки со своей полосой прокрутки
-  // внутри (дерево / текст), см. .note-list-view и #noteDetailView в dm.html.
-  noteListView.style.display = showDetail ? "none" : "flex";
-  noteDetailView.style.display = showDetail ? "flex" : "none";
-  if (showDetail) renderNoteDetail();
-  else renderNoteRows();
-}
-
-// renderNoteFolderSelect — «в какой папке лежит эта заметка» в карточке.
-// Список — все существующие папки плюс корень; выбор сразу переносит файл
-// (см. moveNote), отдельной кнопки «сохранить» тут не нужно.
-function renderNoteFolderSelect() {
-  noteFolderSelect.innerHTML = "";
-  const options = ["", ...noteFolders];
-  if (selectedNote.folder && !options.includes(selectedNote.folder)) options.push(selectedNote.folder);
-  for (const folder of options) {
-    const opt = document.createElement("option");
-    opt.value = folder;
-    opt.textContent = folder || "— корень библиотеки —";
-    opt.selected = folder === (selectedNote.folder || "");
-    noteFolderSelect.appendChild(opt);
-  }
-}
-
-noteFolderSelect.onchange = async () => {
-  if (!selectedNote) return;
-  const target = noteFolderSelect.value;
-  try {
-    selectedNote = await moveNote(selectedNote.id, target);
-    noteMsg.textContent = target ? `Перенесено в «${target}».` : "Перенесено в корень библиотеки.";
-    refreshNotesList();
-  } catch (err) {
-    noteMsg.textContent = err.message;
-    renderNoteFolderSelect(); // вернуть селект к реальному состоянию
-  }
-};
-
-function renderNoteDetail() {
-  noteMsg.textContent = "";
-  noteDetailTitle.textContent = selectedNote.title;
-  renderNoteFolderSelect();
-  noteEditView.style.display = noteEditing ? "block" : "none";
-  noteRenderView.style.display = noteEditing ? "none" : "block";
-  noteEditToggleBtn.innerHTML = icon(noteEditing ? "eye" : "pencil", { size: 14 });
-  noteEditToggleBtn.title = noteEditing ? "Просмотр" : "Редактировать";
-  noteEditToggleBtn.classList.toggle("active", noteEditing);
-  if (noteEditing) {
-    noteEditArea.value = selectedNote.content;
-    noteEditArea.focus();
-    noteTocBtn.style.display = "none";
-  } else {
-    noteRenderView.innerHTML = renderNoteHtml(selectedNote.content);
-    enhanceRolls(noteRenderView, sendNoteRoll);
-    noteHeadingNav.refresh();
-    scrollToNoteSection();
-  }
-}
-
-// pendingNoteSection — раздел («## …»), на котором надо открыть заметку:
-// значок на карте, ведущий на конкретную страницу журнала Foundry (см.
-// domain.NoteMarker.Section). Одноразовый — гасится сразу после прокрутки,
-// чтобы переключение «правка/просмотр» не таскало обратно.
-let pendingNoteSection = "";
-function scrollToNoteSection() {
-  const wanted = pendingNoteSection;
-  pendingNoteSection = "";
-  scrollToHeading(noteRenderView, wanted);
-}
-
-// sendNoteRoll — бросок из текста заметки уходит в общий лог стола тем же
-// сообщением, что и кнопки панели кубов (см. dice.js).
-function sendNoteRoll(formula, label) {
-  if (!vtt) return;
-  const title = selectedNote && selectedNote.title;
-  vtt.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
-}
-
-let noteOpenSeq = 0;
-
-async function openNote(id, { edit = false, section = "" } = {}) {
-  const seq = ++noteOpenSeq;
-  pendingNoteSection = section;
-  notesView = "detail";
-  let note;
-  try {
-    note = await fetchNote(id);
-  } catch (err) {
-    if (seq !== noteOpenSeq) return;
-    showAlert("Не удалось открыть заметку: " + err.message);
-    notesView = "list";
-    renderNotesPanel();
-    return;
-  }
-  if (seq !== noteOpenSeq) return;
-  selectedNote = note;
-  noteEditing = edit;
-  lastOpenedNoteId = note.id;
-  revealNoteFolder(note.folder || "");
-  renderNotesPanel();
-}
-
-// revealNoteFolder — раскрыть всю цепочку папок до заметки и сделать её
-// папку текущей. Заметку открывают не только кликом по дереву (значок на
-// карте, вики-ссылка, поиск) — без этого возврат в список показывал бы
-// свёрнутое дерево без всякого следа того, что только что читали.
-function revealNoteFolder(folder) {
-  currentNoteFolder = folder;
-  let acc = "";
-  for (const segment of folder ? folder.split("/") : []) {
-    acc = acc ? acc + "/" + segment : segment;
-    openNoteFolders.add(acc);
-  }
-}
-
-function backToNoteList() {
-  notesView = "list";
-  selectedNote = null;
-  renderNotesPanel();
-  refreshNotesList(); // заголовок мог поменяться после правки
-}
-document.getElementById("noteBackBtn").onclick = backToNoteList;
-
-// Ссылки .catalog-ref внутри текста заметки — на карточки библиотек и на
-// другие заметки; их эмитит импорт модуля Foundry вместо своих @UUID[…]
-// (см. internal/foundry/links.go). Открываются плавающим окном, как и из
-// описаний карточек.
-wireCatalogLinks(noteRenderView);
-
-// клик по вики-ссылке [[...]] внутри рендера — существующая заметка
-// открывается тут же; для несуществующей предлагаем создать с этим заголовком.
-wireWikiLinks(noteRenderView, () => notesList, {
-  // Папка открытой заметки — точка отсчёта для ссылок вида [[NPC/Марго]] и
-  // для [[Заголовок]] без пути (см. resolveWikiTarget).
-  getFolder: () => (selectedNote && selectedNote.folder) || "",
-  onOpen: (id) => openNote(id),
-  onCreateMissing: async (title, folder) => {
-    const where = folder ? ` в папке «${folder}»` : " в корне библиотеки";
-    if (!(await showConfirm(`Заметки «${title}» не существует. Создать её${where}?`, { title: "Новая заметка", okLabel: "Создать" }))) return;
-    try {
-      const n = await createNote(`# ${title}\n\n`, folder);
-      await refreshNotesList();
-      await openNote(n.id, { edit: true });
-    } catch (err) {
-      showAlert("Не удалось создать заметку: " + err.message);
-    }
-  },
-});
-
-noteEditToggleBtn.onclick = () => {
-  noteEditing = !noteEditing;
-  renderNoteDetail();
-};
-
-document.getElementById("noteSaveBtn").onclick = async () => {
-  noteMsg.textContent = "";
-  try {
-    selectedNote = await updateNote(selectedNote.id, noteEditArea.value);
-    noteEditing = false;
-    renderNoteDetail();
-    refreshNotesList();
-  } catch (err) {
-    noteMsg.textContent = err.message;
-  }
-};
-
-document.getElementById("noteDeleteBtn").onclick = async () => {
-  if (!selectedNote) return;
-  const okDelete = await showConfirm(`Удалить заметку «${selectedNote.title}»?`, {
-    title: "Удалить заметку",
-    okLabel: "Удалить",
-    danger: true,
-    hint: "Это необратимо. Значки на карте, ссылающиеся на неё, останутся, но перестанут открываться.",
-  });
-  if (!okDelete) return;
-  try {
-    await deleteNote(selectedNote.id);
-    backToNoteList();
-  } catch (err) {
-    showAlert("Не удалось удалить: " + err.message);
-  }
-};
-
-document.getElementById("notePlaceBtn").onclick = () => {
-  if (!selectedNote) return;
-  closeSidePanel();
-  document.dispatchEvent(
-    new CustomEvent("vtt:placeNoteMarker", { detail: { noteId: selectedNote.id, label: selectedNote.title, library: "" } })
-  );
-  showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок заметки" });
-};
-
-document.getElementById("noteWindowBtn").onclick = () => {
-  if (!selectedNote) return;
-  // Как и лист персонажа: сначала плавающее окно поверх канваса (тот же
-  // приём, см. floating-window.js), настоящее отдельное окно браузера —
-  // уже кнопкой 🗗 В ШАПКЕ этого плавающего окна, не отсюда напрямую.
-  openFloatingWindow({
-    key: "note-" + selectedNote.id,
-    title: selectedNote.title,
-    url: `/note-window.html?id=${selectedNote.id}`,
-    width: 560,
-    height: 760,
-    popoutFeatures: "width=560,height=760",
-  });
-};
-
-document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const titleInput = document.getElementById("newNoteTitle");
-  const title = titleInput.value.trim();
-  if (!title) return;
-  try {
-    // Новая заметка ложится в выбранную сейчас папку дерева (см.
-    // currentNoteFolder) — то же, чего ждёшь от «создать» в файловом
-    // менеджере.
-    const n = await createNote(`# ${title}\n\n`, currentNoteFolder);
-    titleInput.value = "";
-    await refreshNotesList();
-    await openNote(n.id, { edit: true });
-  } catch (err) {
-    showAlert("Не удалось создать заметку: " + err.message);
-  }
-});
-
-// значок на карте (двойной клик, см. interaction.js) — открыть панель прямо
-// на нужной заметке, а не просто раскрыть раздел.
+// ================= значки журнала на карте =================
+// Значок-свиток на карте (двойной клик, см. vtt/interaction.js) ведёт на
+// запись журнала стола (domain.NoteMarker с library:"journal"). Раскладка
+// значков и меню по ПКМ — выше (noteMarkerMenu) и в vtt/interaction.js; сам
+// журнал открывается плавающим окном (openJournalWindow).
 document.addEventListener("vtt:openNoteMarker", async (e) => {
-  const { library, section, foundryEntry, foundryFolder } = e.detail;
-  let noteId = e.detail.noteId;
-  let lib = library;
+  const { section, foundryEntry, foundryFolder } = e.detail;
+  let entryId = e.detail.noteId;
 
   // Значок из импорта модуля (см. domain.NoteMarker.FoundryEntry): настоящей
-  // записи на момент разбора сцены ещё не было, резолвим её сейчас по имени —
-  // и в заметках ДМ, и в журнале стола (журнал модуля мог поехать в любую из
-  // библиотек, см. NOTE_DESTINATIONS в pages/foundry-import.js). Нашлась —
-  // дальше как с обычным значком.
-  if (!noteId && foundryEntry) {
+  // записи на момент разбора сцены ещё не было — резолвим её сейчас по имени
+  // в журнале стола.
+  if (!entryId && foundryEntry) {
     const norm = (s) => (s || "").trim().toLowerCase();
-    const pick = (list) => {
-      const named = list.filter((x) => norm(x.name || x.title) === norm(foundryEntry));
-      return named.find((x) => norm(x.folder) === norm(foundryFolder)) || named[0] || null;
-    };
-    const [notes, journal] = await Promise.all([
-      fetchNotes().catch(() => []),
-      fetchJournal().catch(() => []),
-    ]);
-    const inNotes = pick(notes);
-    const inJournal = pick(journal);
-    if (inNotes) {
-      noteId = inNotes.id;
-      lib = "";
-    } else if (inJournal) {
-      noteId = inJournal.id;
-      lib = "journal";
-    } else {
+    const journal = await fetchJournal().catch(() => []);
+    const named = journal.filter((x) => norm(x.title) === norm(foundryEntry));
+    const hit = named.find((x) => norm(x.folder) === norm(foundryFolder)) || named[0];
+    if (!hit) {
       showAlert("Запись, на которую ведёт этот значок, не найдена — её могли не импортировать.");
       return;
     }
+    entryId = hit.id;
   }
-  if (!noteId) return;
-
-  // Значок может вести и в заметки ДМ, и в журнал стола (см.
-  // domain.NoteMarker.Library) — открываем то, на что он реально ссылается,
-  // а не всегда панель заметок.
-  if (lib === "journal") {
-    openJournalWindow(noteId, section);
-    return;
-  }
-  showSidePanelSection("notes");
-  openNote(noteId, { section });
-});
-
-onPanelOpen("notes", () => {
-  notesView = "list";
-  selectedNote = null;
-  renderNotesPanel();
-  refreshNotesList();
+  if (!entryId) return;
+  openJournalWindow(entryId, section);
 });
 
 // ================= Компендиум (см. compendium-menu.js/catalog.js) =================
@@ -3344,24 +2761,13 @@ window.addEventListener("message", async (e) => {
     if (e.data.type === "beacon:monsterSaved") invalidateActionsPeek(e.data.id);
     postToOpenWindows("catalog-", e.data);
   } else if (e.data.type === "beacon:foundryImported") {
-    // Импорт пакета Foundry (foundry-import.js) заводит заметки, сцены и сам
-    // пакет в списке установленных. Сцены приезжают сокетом сами (см.
-    // room.go: broadcastSceneList), а вот список заметок и раздел
-    // "Настройки" читаются только HTTP-ом при открытии панели — освежаем их
-    // здесь, иначе до F5 висел бы старый список.
+    // Импорт пакета Foundry (foundry-import.js) заводит сцены и сам пакет в
+    // списке установленных. Сцены приезжают сокетом сами (см.
+    // room.go: broadcastSceneList), а раздел "Настройки" читается только
+    // HTTP-ом при открытии панели — освежаем его здесь, иначе до F5 висел бы
+    // старый список.
     foundryModulesUpdates = null; // версии, проверенные ДО импорта, теперь врут
     refreshOpenPanel("settings");
-    refreshNotesList();
-  } else if (e.data.type === "beacon:noteSaved" || e.data.type === "beacon:noteDeleted") {
-    // Заметка, открытая отдельным окном (note-window.js): в дереве панели
-    // могло смениться название, а удалённую надо убрать и закрыть её карточку.
-    const isOpenHere = !!(selectedNote && selectedNote.id === e.data.id);
-    if (e.data.type === "beacon:noteDeleted" && isOpenHere) {
-      backToNoteList(); // сам перечитает список
-    } else {
-      if (isOpenHere) openNote(e.data.id); // тот же текст, что сохранили в окне
-      refreshNotesList();
-    }
   } else if (e.data.type === "beacon:applySpellStatus") {
     // Клик по чипу «Накладывает: …» в карточке заклинания (см.
     // pages/spellbook.js: readStatuses). Сама карточка живёт в iframe и цели
@@ -3607,7 +3013,7 @@ combatHighlightActiveToggle.onchange = () => {
   vtt.send({ type: "set_highlight_active_token", highlightActiveToken: combatHighlightActiveToggle.checked });
 };
 
-// "🗗 Открыть в окне" — тот же приём, что у заметок (#noteWindowBtn): вся
+// "🗗 Открыть в окне" — тот же приём, что у журнала (openJournalWindow): вся
 // панель целиком, тем же кодом (combat-panel.js), в плавающем окне поверх
 // канваса — удобно держать трекер открытым постоянно, не занимая рейл-панель.
 document.getElementById("combatPopoutBtn").onclick = () => {

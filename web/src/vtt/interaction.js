@@ -1193,15 +1193,15 @@ export function createInteraction(ctx) {
           return;
         }
       }
-      // Значок заметки — не мутация сцены, а чисто клиентская навигация:
-      // открыть его в панели "Заметки" (см. pages/dm.js: vtt:openNoteMarker).
+      // Значок-свиток — не мутация сцены, а чисто клиентская навигация:
+      // открыть запись журнала (см. pages/dm.js: vtt:openNoteMarker).
       const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers);
       if (markerId) {
         const marker = ctx.scene.noteMarkers[markerId];
-        // library — из какой библиотеки запись (см. domain.NoteMarker):
-        // пусто у значков, поставленных до появления журнала, — это заметки ДМ.
+        // library — из какой библиотеки запись (см. domain.NoteMarker): сейчас
+        // всегда "journal" (пустое — у значков, что вели в удалённые заметки ДМ).
         // foundryEntry/foundryFolder — значок из импорта модуля: настоящей
-        // заметки ещё нет, pages/dm.js резолвит её по имени на этом клике.
+        // записи ещё нет, pages/dm.js резолвит её по имени на этом клике.
         document.dispatchEvent(
           new CustomEvent("vtt:openNoteMarker", {
             detail: {

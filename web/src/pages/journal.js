@@ -76,8 +76,8 @@ let filter = "all"; // all | shared | mine | others
 // pendingSection — раздел («## Название»), на котором надо открыть запись.
 // Страница журнала Foundry у нас становится разделом внутри записи (см.
 // internal/foundry/journal.go), и ссылка на неё должна попадать не в начало
-// длинного текста, а туда, куда вела. Приезжает хэшем адреса, тем же
-// приёмом, что в окне заметки ДМ (pages/note-window.js).
+// длинного текста, а туда, куда вела. Приезжает хэшем адреса (см.
+// catalog-links.js: openEntry).
 let pendingSection = "";
 let currentFolder = ""; // куда ляжет новая запись/папка
 const openFolders = new Set();
@@ -861,9 +861,7 @@ function sendRoll(formula, label) {
 
 // ---- ссылки внутри текста ----
 
-// prefer: "journal" — запись, на которую ведёт ссылка из журнала, ищется
-// сначала в журнале и только потом в заметках ДМ (см. catalog-links.js).
-wireCatalogLinks(renderEl, { prefer: "journal" });
+wireCatalogLinks(renderEl);
 wireWikiLinks(renderEl, () => entries, {
   getFolder: () => (current && current.folder) || "",
   onOpen: (id) => openEntry(id),

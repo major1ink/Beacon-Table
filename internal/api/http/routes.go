@@ -96,18 +96,6 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/admin/playlists/{id}/tracks/{trackId}", a.handleAdminPlaylistTrackDelete)
 	mux.HandleFunc("POST /api/admin/playlists/{id}/tracks/{trackId}/move", a.handleAdminPlaylistTrackMove)
 
-	mux.HandleFunc("GET /api/notes", a.handleNotesList)
-	mux.HandleFunc("POST /api/notes", a.handleNoteCreate)
-	mux.HandleFunc("GET /api/notes/{id}", a.handleNoteGet)
-	mux.HandleFunc("PUT /api/notes/{id}", a.handleNoteUpdate)
-	mux.HandleFunc("PUT /api/notes/{id}/folder", a.handleNoteMove)
-	mux.HandleFunc("DELETE /api/notes/{id}", a.handleNoteDelete)
-
-	mux.HandleFunc("GET /api/note-folders", a.handleNoteFoldersList)
-	mux.HandleFunc("POST /api/note-folders", a.handleNoteFolderCreate)
-	mux.HandleFunc("PUT /api/note-folders", a.handleNoteFolderRename)
-	mux.HandleFunc("DELETE /api/note-folders", a.handleNoteFolderDelete)
-
 	mux.HandleFunc("GET /api/journal", a.handleJournalList)
 	mux.HandleFunc("POST /api/journal", a.handleJournalCreate)
 	mux.HandleFunc("GET /api/journal/members", a.handleJournalMembers)

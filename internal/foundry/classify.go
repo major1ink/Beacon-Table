@@ -13,7 +13,7 @@ const (
 	TargetPregens    = "pregens"    // domain.Pregen — актёры типа "character" (предгенерированные персонажи приключения)
 	TargetReferences = "references" // domain.Reference — классы/архетипы/виды/предыстории/черты
 	TargetConditions = "conditions" // domain.Condition — документы ActiveEffect
-	TargetNotes      = "notes"      // domain.Note — журналы
+	TargetNotes      = "notes"      // журналы Foundry → журнал стола (domain.JournalEntry)
 	TargetScenes     = "scenes"     // domain.SceneState
 	TargetPlaylists  = "playlists"  // domain.Playlist
 	// TargetSkipped — распознали, но переносить некуда: таблицы случайных

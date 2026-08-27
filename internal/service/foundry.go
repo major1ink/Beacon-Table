@@ -161,10 +161,11 @@ type FoundryImport struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// FoundryNote — одна заметка, подготовленная импортом к заведению клиентом.
+// FoundryNote — одна запись журнала, подготовленная импортом к заведению
+// клиентом (см. web/src/pages/foundry-import.js: importNotes → журнал стола).
 type FoundryNote struct {
-	// Folder — папка библиотеки заметок: «модуль / компендиум / папки
-	// модуля» (см. foundry.NoteFolder и domain.Note.Folder).
+	// Folder — папка журнала: «модуль / компендиум / папки модуля» (см.
+	// foundry.NoteFolder).
 	Folder  string `json:"folder"`
 	Title   string `json:"title"`
 	Content string `json:"content"`
