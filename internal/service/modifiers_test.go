@@ -225,6 +225,42 @@ func TestPeriodicModifierIgnoredOutsideCombatAndBackwards(t *testing.T) {
 	}
 }
 
+// TestPeriodicModifierPlainNumberWithRealRoller — регрессия на баг, который
+// не ловили остальные тесты периодики: они все подставляют fixedRoller, а
+// тот отдаёт Total для ЛЮБОЙ строки формулы, не заглядывая внутрь. Настоящий
+// cryptoDiceRoller.Roll (см. dice.go) осознанно отказывает формуле без
+// кубика («в формуле нет ни одного кубика») — это верно для панели кубов
+// игрока, но чистое число вроде «-1» («кровотечение −1 без броска») ровно
+// такая формула и есть. С этим roller'ом баг был в проде: карточка состояния
+// выглядела настроенной верно (снимок нёс правильный модификатор), ход
+// доходил, счётчик раундов тикал, а хиты не двигались и в лог ничего не
+// падало — applyPeriodicModifiers тихо съедал ошибку Roll() и переходил к
+// следующему модификатору. Фикс — считать чистое число сам, не через
+// roller (см. applyPeriodicModifiers).
+func TestPeriodicModifierPlainNumberWithRealRoller(t *testing.T) {
+	r := testRoom()
+	r.dice = NewDiceRoller() // настоящий roller, не тестовая заглушка
+	r.conditions = &fakeConditions{list: []*domain.Condition{{
+		ID: "user-bleed", Name: "Рана", Slug: "blood",
+		Modifiers: []domain.Modifier{{
+			Target: domain.ModifierTargetHPCurrent, Mode: domain.ModifierAdd,
+			Value: "-1", Period: domain.ModifierPeriodTurnStart, Note: "кровотечение",
+		}},
+	}}}
+	r.combat.Active = true
+	r.combat.Combatants["c1"] = &domain.Combatant{
+		ID: "c1", Name: "Арчи", TokenID: "tok-1", Initiative: 12, Seq: 1,
+		HPCurrent: 68, HPMax: 68, CharacterID: "char-1",
+	}
+	r.combat.CurrentID = "c1"
+	r.handleApplyStatus(domain.ClientMsg{TokenID: "tok-1", StatusSlug: "blood"})
+
+	r.handleTurnStep(1)
+	if got := r.combat.Combatants["c1"].HPCurrent; got != 67 {
+		t.Errorf("HP = %d, ожидалось 67 (68 - 1); чистое число без кубика должно применяться и с настоящим roller'ом", got)
+	}
+}
+
 func TestEffectiveACFromStatuses(t *testing.T) {
 	r := testRoom()
 	r.conditions = &fakeConditions{list: []*domain.Condition{{

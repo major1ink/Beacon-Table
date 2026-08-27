@@ -509,12 +509,16 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 				continue
 			}
 			formula := normalizeDiceFormula(m.Value)
-			result, err := r.dice.Roll(formula)
-			if err != nil {
-				// Кривую формулу («1к6 огнём» с текстом внутри) молча
-				// пропускаем: карточку из-за неё ронять нечего, а ДМ увидит,
-				// что урон не идёт, и поправит значение в конструкторе.
-				continue
+			var result domain.RollResult
+			
+			if v, ok := domain.ParseModifierValue(m.Value); ok {
+				result = domain.RollResult{Total: v}
+			} else {
+				var err error
+				result, err = r.dice.Roll(formula)
+				if err != nil {
+					continue
+				}
 			}
 			label := st.Name
 			if m.Note != "" {
@@ -527,9 +531,6 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 	if delta == 0 {
 		return
 	}
-	// Дельтой, а не готовым числом: правило временных хитов (урон съедает
-	// их первыми) живёт внутри handleSetCombatantHP, и горение на метке
-	// обязано подчиняться ему так же, как удар, который ДМ вбил руками.
 	r.handleSetCombatantHP(cmb.ID, nil, nil, nil, &delta)
 }
 

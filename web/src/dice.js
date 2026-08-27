@@ -181,7 +181,12 @@ export function initDiceRoller(controlsContainer, send, logContainer) {
     // label — необязательная подпись броска с листа персонажа ("Атлетика",
     // "Спасбросок Ловкости"...), см. internal/domain/message.go: ClientMsg.Label.
     const who = label ? `${name} — ${label}` : name;
-    row.textContent = `${who}: ${formula} → ${formatRolls(formula, rolls)}${mod} = ${total}`;
+    // Периодический модификатор без кубика («-1» от кровотечения — см.
+    // service.Room.applyPeriodicModifiers) шлёт пустой rolls: кидать
+    // нечего, число уже готово. Без кубиков стрелка на formatRolls([])
+    // печатала бы бессмысленное «→ []» — просто показываем итог.
+    const rolled = rolls && rolls.length ? ` → ${formatRolls(formula, rolls)}${mod}` : "";
+    row.textContent = `${who}: ${formula}${rolled} = ${total}`;
     log.prepend(row);
     while (log.children.length > 30) log.removeChild(log.lastChild);
   });
