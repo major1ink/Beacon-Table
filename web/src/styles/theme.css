@@ -324,6 +324,35 @@
 }
 .dice-tray .dice-custom [data-roll-custom]:hover { background: var(--accent-hover); }
 
+/* ---- врезки в тексте заметки/журнала (.note-render): «зачитать вслух»
+   игрокам и советы Мастеру. Появляются при импорте модуля Foundry
+   (internal/foundry/journal.go: rewriteCallouts переводит классы системы
+   dnd5e в эти) и от кнопки в редакторе (web/src/notes/toolbar.js). Базовые
+   .note-render-стили (заголовки, абзацы, ссылки) — по-прежнему в <style>
+   каждой страницы; здесь только общий для всех них новый компонент. ---- */
+.note-render .beacon-readaloud,
+.note-render .beacon-dm-note {
+  margin: .9em 0; padding: 10px 16px; border-radius: 5px; border-left: 3px solid;
+}
+.note-render .beacon-readaloud {
+  background: color-mix(in srgb, var(--gold) 13%, transparent);
+  border-left-color: var(--gold);
+}
+.note-render .beacon-dm-note {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-left-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+/* содержимое врезки Foundry обёрнуто в <article>; уравниваем внешние отступы
+   и для прямых детей, и для детей этого article, чтобы фон не «протекал» */
+.note-render .beacon-readaloud > :first-child,
+.note-render .beacon-dm-note > :first-child,
+.note-render .beacon-readaloud article > :first-child,
+.note-render .beacon-dm-note article > :first-child { margin-top: 0; }
+.note-render .beacon-readaloud > :last-child,
+.note-render .beacon-dm-note > :last-child,
+.note-render .beacon-readaloud article > :last-child,
+.note-render .beacon-dm-note article > :last-child { margin-bottom: 0; }
+
 /* ---- .roll-log — единственный лог бросков кубов (см. web/src/roll-log.js).
    Одна вёрстка карточки на все места; хост-страница выбирает раскладку
    контейнера классом-модификатором:

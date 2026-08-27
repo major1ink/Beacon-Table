@@ -315,14 +315,15 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 		{"packs/_source/places/town.json", `{"_id":"s1","name":"Городок","width":1000,"height":800,"padding":0,` +
 			`"grid":{"type":1,"size":100,"distance":5,"units":"фт"},` +
 			`"background":{"src":"modules/my-module/maps/town.webp"},` +
-			`"walls":[{"c":[0,0,100,0]}]}`},
+			`"walls":[{"c":[0,0,100,0]}],` +
+			`"notes":[{"entryId":"j1","x":150,"y":150}]}`},
 		{"packs/_source/music/tavern.json", `{"_id":"p1","name":"Таверна","playing":false,` +
 			`"sounds":[{"name":"Лютня","path":"modules/my-module/audio/tavern.ogg","volume":0.4,"repeat":true}]}`},
 		// Журнал лежит во вложенной папке компендиума — в библиотеке заметок
 		// должна получиться такая же (плюс два верхних уровня: модуль и пак).
 		{"packs/_source/lore/folder-chapter.json", `{"_key":"!folders!f1","_id":"f1","name":"Глава 1","type":"JournalEntry","sorting":"a"}`},
 		{"packs/_source/lore/folder-npc.json", `{"_key":"!folders!f2","_id":"f2","name":"NPC","type":"JournalEntry","sorting":"a","folder":"f1"}`},
-		{"packs/_source/lore/legends.json", `{"_key":"!journal!j1","_id":"j1","name":"Легенды","folder":"f2","pages":[{"name":"Пролог","type":"text","text":{"content":"<p>Текст</p>"}}]}`},
+		{"packs/_source/lore/legends.json", `{"_key":"!journal!j1","_id":"j1","name":"Легенды","folder":"f2","pages":[{"name":"Пролог","type":"text","text":{"content":"<p>Карта: @UUID[Compendium.my-module.places.Scene.s1], музыка: @UUID[Compendium.my-module.music.Playlist.p1]{включить}</p>"}}]}`},
 	}
 
 	var archive []byte
@@ -408,6 +409,18 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	if !strings.HasPrefix(room.scenes[0].MapURL, "/uploads/maps/") {
 		t.Fatalf("фон карты не перенесён: %q", room.scenes[0].MapURL)
 	}
+	// Значок Foundry на карте (notes[]) → domain.NoteMarker с «якорем» на
+	// запись журнала (её id ещё неизвестен — заводит клиент).
+	if len(room.scenes[0].NoteMarkers) != 1 {
+		t.Fatalf("значков на карте %d, ожидали 1", len(room.scenes[0].NoteMarkers))
+	}
+	var marker *domain.NoteMarker
+	for _, nm := range room.scenes[0].NoteMarkers {
+		marker = nm
+	}
+	if marker.FoundryEntry != "Легенды" || marker.FoundryFolder != "Мой модуль/Лор/Глава 1/NPC" || marker.NoteID != "" {
+		t.Fatalf("значок связался неверно: %+v", marker)
+	}
 	if _, err := svc.ImportPack(ctx, account, srv.URL+"/module.json", "music", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -433,6 +446,14 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	}
 	if note.Folder != "Мой модуль/Лор/Глава 1/NPC" {
 		t.Fatalf("папка заметки: %q", note.Folder)
+	}
+	// Ссылка на сцену внутри текста → кликабельный <a data-kind="scene">
+	// (клиент по имени переключит карту стола, см. web/src/catalog-links.js).
+	if !strings.Contains(note.Content, `data-kind="scene" data-name="Городок"`) {
+		t.Fatalf("ссылка на сцену не стала кликабельной: %q", note.Content)
+	}
+	if !strings.Contains(note.Content, `data-kind="playlist" data-name="Таверна"`) {
+		t.Fatalf("ссылка на плейлист не стала кликабельной: %q", note.Content)
 	}
 }
 

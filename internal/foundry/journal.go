@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"regexp"
 	"strings"
 
 	"beacon-table/internal/domain"
@@ -45,7 +46,7 @@ func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journ
 		// v9 и раньше: у записи не было страниц, текст лежал одним полем.
 		if content := asString(d["content"]); content != "" {
 			b.WriteString("\n")
-			b.WriteString(assets.RewriteHTML(ctx, domain.AssetKindNotes, content))
+			b.WriteString(rewriteCallouts(assets.RewriteHTML(ctx, domain.AssetKindNotes, content)))
 			b.WriteString("\n")
 		}
 		return Journal{Folder: folder, Title: title, Content: b.String()}
@@ -64,6 +65,33 @@ func MapJournal(ctx context.Context, d Doc, folder string, assets *Assets) Journ
 		b.WriteString("\n")
 	}
 	return Journal{Folder: folder, Title: title, Content: b.String()}
+}
+
+// calloutRe — заметная врезка в тексте страницы: <section>/<aside> со
+// своим классом. В модулях и системе dnd5e это «читать вслух» игрокам
+// (fvtt narrative), советы Мастеру (fvtt advice) и боковые вставки
+// (notable) — их рисует CSS системы, которого в Beacon Table нет.
+var calloutRe = regexp.MustCompile(`(?i)<(section|aside)\s+class="([^"]*)"`)
+
+// rewriteCallouts переводит классы врезок Foundry в наши, которые стилизует
+// .note-render (см. web/journal.html, note-window.html, dm.html): фон +
+// полоса слева, как в книгах-приключениях. Незнакомый класс не трогаем.
+func rewriteCallouts(htmlText string) string {
+	if !strings.Contains(htmlText, "class=") {
+		return htmlText
+	}
+	return calloutRe.ReplaceAllStringFunc(htmlText, func(m string) string {
+		sub := calloutRe.FindStringSubmatch(m)
+		tag, cls := sub[1], strings.ToLower(sub[2])
+		switch {
+		case strings.Contains(cls, "narrative"):
+			return "<" + tag + ` class="beacon-readaloud"`
+		case strings.Contains(cls, "advice"), strings.Contains(cls, "notable"):
+			return "<" + tag + ` class="beacon-dm-note"`
+		default:
+			return m
+		}
+	})
 }
 
 // pageBody — содержимое одной страницы по её типу. Видео/PDF проигрываются прямо в заметке .
@@ -104,7 +132,7 @@ func pageBody(ctx context.Context, page map[string]any, assets *Assets) string {
 			esc, src,
 		)
 	default:
-		return assets.RewriteHTML(ctx, domain.AssetKindNotes, digString(page, "text", "content"))
+		return rewriteCallouts(assets.RewriteHTML(ctx, domain.AssetKindNotes, digString(page, "text", "content")))
 	}
 }
 

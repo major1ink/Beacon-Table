@@ -36,6 +36,10 @@ const KIND_CONFIG = {
   // NOTE_DESTINATIONS в pages/foundry-import.js). Поэтому kind="note" ищется
   // в обеих библиотеках — см. NOTE_LOOKUP_ORDER.
   journal: { fetchAll: fetchJournal, urlFor: (id) => `/journal.html?id=${id}`, keyPrefix: "journal", single: true },
+  // scene / playlist — не карточки в окне: сцену делают активной на столе,
+  // плейлист открывают в разделе «Плейлисты». Записи в KIND_CONFIG нет, клик
+  // обрабатывается отдельно — см. "kind === scene" / "kind === playlist" в
+  // wireCatalogLinks.
 };
 
 // NOTE_LOOKUP_ORDER — где искать цель ссылки kind="note" и в каком порядке.
@@ -79,6 +83,18 @@ function matchByName(list, name, folder) {
   return sameName[0];
 }
 
+// hostWindow — окно топ-документа стола (dm.html/player.html), которому шлём
+// запрос открыть карточку/переключить сцену. Текст с ссылкой .catalog-ref
+// живёт в одном из трёх мест: боковая панель самого топ-документа
+// (window.parent === window), плавающее окно-iframe (window.parent — топ),
+// либо ВЫНЕСЕННОЕ кнопкой 🗗 отдельное окно браузера (window.parent — оно
+// само, а топ-документ — это window.opener, см. floating-window.js). Без
+// разбора этого случая ссылки в вынесенном окне журнала молча не работали.
+function hostWindow() {
+  if (window.opener && window.opener !== window) return window.opener;
+  return window.parent;
+}
+
 // openEntry — section (только у заметок) — раздел внутри целевой заметки:
 // страница журнала Foundry у нас становится разделом «## Название» (см.
 // internal/foundry/journal.go), и ссылка на неё должна открывать заметку
@@ -91,7 +107,7 @@ function openEntry(kind, id, name, section) {
   // pages/player.js: openJournalWindow) — ссылка должна ПЕРЕВЕСТИ его на
   // нужную запись, а не открыть второй журнал рядом. Отсюда navigate (см.
   // floating-window.js).
-  window.parent.postMessage(
+  hostWindow().postMessage(
     {
       type: "beacon:openFloatingWindow",
       key: cfg.single ? cfg.keyPrefix : cfg.keyPrefix + "-" + id,
@@ -115,6 +131,21 @@ export function wireCatalogLinks(containerEl, { prefer = "note" } = {}) {
     const kind = a.dataset.kind;
     const name = a.dataset.name;
     if (!kind || !name) return;
+
+    // Сцена — не карточка в плавающем окне, а карта стола: ссылка просит
+    // страницу-хозяина (pages/dm.js) переключить активную сцену по имени.
+    // У игрока сценами управлять нельзя — pages/player.js это сообщение
+    // просто не слушает, ссылка молча ничего не делает.
+    if (kind === "scene") {
+      hostWindow().postMessage({ type: "beacon:switchScene", name }, location.origin);
+      return;
+    }
+    // Плейлист — тоже не карточка в окне: просим хозяина открыть раздел
+    // «Плейлисты» на нужном (см. pages/dm.js: beacon:openPlaylist).
+    if (kind === "playlist") {
+      hostWindow().postMessage({ type: "beacon:openPlaylist", name }, location.origin);
+      return;
+    }
 
     // Журналы модуля могли поехать и в заметки ДМ, и в журнал стола —
     // перебираем обе библиотеки, а не одну (см. noteLookupOrder).

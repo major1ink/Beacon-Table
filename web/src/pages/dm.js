@@ -37,6 +37,7 @@ import {
   deletePlaylistTrack,
   movePlaylistTrack,
   fetchNotes,
+  fetchJournal,
   fetchNote,
   createNote,
   updateNote,
@@ -51,7 +52,8 @@ import {
   checkFoundryModuleUpdates,
   deleteFoundryModule,
 } from "../api.js";
-import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
+import { renderNoteHtml, wireWikiLinks, scrollToHeading } from "../notes/markdown.js";
+import { mountHeadingNav } from "../notes/heading-nav.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
@@ -121,11 +123,14 @@ document.getElementById("logoutBtn").onclick = async () => {
 // openJournalWindow — окно журнала одно на весь стол (key "journal", как и
 // у игрока, см. pages/player.js): entryId открывает его сразу на нужной
 // записи — так работают и значок журнала на карте, и ссылки внутри текстов.
-function openJournalWindow(entryId) {
+function openJournalWindow(entryId, section) {
   openFloatingWindow({
     key: "journal",
     title: "Журнал стола",
-    url: "/journal.html" + (entryId ? "?id=" + encodeURIComponent(entryId) : ""),
+    url:
+      "/journal.html" +
+      (entryId ? "?id=" + encodeURIComponent(entryId) : "") +
+      (entryId && section ? "#" + encodeURIComponent(section) : ""),
     navigate: !!entryId,
     width: 900,
     height: 640,
@@ -2409,8 +2414,10 @@ const noteRenderView = document.getElementById("noteRenderView");
 const noteEditView = document.getElementById("noteEditView");
 const noteEditArea = document.getElementById("noteEditArea");
 const noteEditToggleBtn = document.getElementById("noteEditToggleBtn");
+const noteTocBtn = document.getElementById("noteTocBtn");
 const noteMsg = document.getElementById("noteMsg");
 mountNoteToolbar(document.getElementById("noteToolbar"), noteEditArea);
+const noteHeadingNav = mountHeadingNav(noteTocBtn, noteRenderView);
 
 let notesList = []; // [{id,title,folder,updatedAt}] — метаданные, для дерева и резолва вики-ссылок
 let noteFolders = []; // ["Приключение", "Приключение/Глава 1", ...] — включая пустые
@@ -2757,10 +2764,24 @@ function renderNoteDetail() {
   if (noteEditing) {
     noteEditArea.value = selectedNote.content;
     noteEditArea.focus();
+    noteTocBtn.style.display = "none";
   } else {
     noteRenderView.innerHTML = renderNoteHtml(selectedNote.content);
     enhanceRolls(noteRenderView, sendNoteRoll);
+    noteHeadingNav.refresh();
+    scrollToNoteSection();
   }
+}
+
+// pendingNoteSection — раздел («## …»), на котором надо открыть заметку:
+// значок на карте, ведущий на конкретную страницу журнала Foundry (см.
+// domain.NoteMarker.Section). Одноразовый — гасится сразу после прокрутки,
+// чтобы переключение «правка/просмотр» не таскало обратно.
+let pendingNoteSection = "";
+function scrollToNoteSection() {
+  const wanted = pendingNoteSection;
+  pendingNoteSection = "";
+  scrollToHeading(noteRenderView, wanted);
 }
 
 // sendNoteRoll — бросок из текста заметки уходит в общий лог стола тем же
@@ -2773,8 +2794,9 @@ function sendNoteRoll(formula, label) {
 
 let noteOpenSeq = 0;
 
-async function openNote(id, { edit = false } = {}) {
+async function openNote(id, { edit = false, section = "" } = {}) {
   const seq = ++noteOpenSeq;
+  pendingNoteSection = section;
   notesView = "detail";
   let note;
   try {
@@ -2919,16 +2941,50 @@ document.getElementById("newNoteForm").addEventListener("submit", async (e) => {
 
 // значок на карте (двойной клик, см. interaction.js) — открыть панель прямо
 // на нужной заметке, а не просто раскрыть раздел.
-document.addEventListener("vtt:openNoteMarker", (e) => {
+document.addEventListener("vtt:openNoteMarker", async (e) => {
+  const { library, section, foundryEntry, foundryFolder } = e.detail;
+  let noteId = e.detail.noteId;
+  let lib = library;
+
+  // Значок из импорта модуля (см. domain.NoteMarker.FoundryEntry): настоящей
+  // записи на момент разбора сцены ещё не было, резолвим её сейчас по имени —
+  // и в заметках ДМ, и в журнале стола (журнал модуля мог поехать в любую из
+  // библиотек, см. NOTE_DESTINATIONS в pages/foundry-import.js). Нашлась —
+  // дальше как с обычным значком.
+  if (!noteId && foundryEntry) {
+    const norm = (s) => (s || "").trim().toLowerCase();
+    const pick = (list) => {
+      const named = list.filter((x) => norm(x.name || x.title) === norm(foundryEntry));
+      return named.find((x) => norm(x.folder) === norm(foundryFolder)) || named[0] || null;
+    };
+    const [notes, journal] = await Promise.all([
+      fetchNotes().catch(() => []),
+      fetchJournal().catch(() => []),
+    ]);
+    const inNotes = pick(notes);
+    const inJournal = pick(journal);
+    if (inNotes) {
+      noteId = inNotes.id;
+      lib = "";
+    } else if (inJournal) {
+      noteId = inJournal.id;
+      lib = "journal";
+    } else {
+      showAlert("Запись, на которую ведёт этот значок, не найдена — её могли не импортировать.");
+      return;
+    }
+  }
+  if (!noteId) return;
+
   // Значок может вести и в заметки ДМ, и в журнал стола (см.
   // domain.NoteMarker.Library) — открываем то, на что он реально ссылается,
   // а не всегда панель заметок.
-  if (e.detail.library === "journal") {
-    openJournalWindow(e.detail.noteId);
+  if (lib === "journal") {
+    openJournalWindow(noteId, section);
     return;
   }
   showSidePanelSection("notes");
-  openNote(e.detail.noteId);
+  openNote(noteId, { section });
 });
 
 onPanelOpen("notes", () => {
@@ -2952,7 +3008,7 @@ onPanelOpen("notes", () => {
 //   которое её открыло) — форвардим в открытые catalog-* окна через
 //   floating-window.js:postToOpenWindows, чтобы их список сам обновился без
 //   ручного закрытия/открытия.
-window.addEventListener("message", (e) => {
+window.addEventListener("message", async (e) => {
   if (e.origin !== location.origin || !e.data) return;
   if (e.data.type === "beacon:openFloatingWindow") {
     openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
@@ -2977,6 +3033,39 @@ window.addEventListener("message", (e) => {
       })
     );
     showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок журнала" });
+  } else if (e.data.type === "beacon:switchScene") {
+    // Ссылка на сцену внутри текста заметки/журнала (см. catalog-links.js,
+    // internal/foundry/links.go). Имя ищем в списке сцен стола без учёта
+    // регистра — ссылка родом из чужого модуля. Нашлась и не активна —
+    // переключаемся; нет — тихо ничего не делаем (сцену могли не
+    // импортировать или переименовать).
+    const norm = (s) => (s || "").trim().toLowerCase();
+    const scene = sceneList.find((s) => norm(s.name) === norm(e.data.name));
+    if (!scene) {
+      showAlert(`Сцены «${e.data.name}» нет за столом — импортируй карту из модуля или проверь её название.`);
+    } else if (vtt && scene.id !== currentSceneId) {
+      vtt.send({ type: "switch_scene", sceneId: scene.id });
+      closeSidePanel(); // убрать панель с карты, чтобы новую сцену было видно
+    }
+  } else if (e.data.type === "beacon:openPlaylist") {
+    // Ссылка на плейлист внутри текста заметки/журнала (@UUID[Playlist.…],
+    // см. internal/foundry/links.go). Открываем раздел «Плейлисты» и
+    // разворачиваем нужный — не запускаем сам: включать музыку по клику
+    // на слове посреди чтения было бы слишком.
+    showSidePanelSection("playlists");
+    await refreshPlaylists();
+    const norm = (s) => (s || "").trim().toLowerCase();
+    const p = playlists.find((x) => norm(x.name) === norm(e.data.name));
+    if (!p) {
+      showAlert(`Плейлиста «${e.data.name}» нет — импортируй музыку из модуля или проверь название.`);
+    } else {
+      openPlaylistIds.add(p.id);
+      renderPlaylistAccordion();
+      const row = [...playlistAccordion.querySelectorAll(".bt-playlist-name")].find(
+        (n) => norm(n.textContent) === norm(p.name)
+      );
+      if (row) row.scrollIntoView({ block: "center" });
+    }
   } else if (
     e.data.type === "beacon:monsterSaved" ||
     e.data.type === "beacon:spellSaved" ||

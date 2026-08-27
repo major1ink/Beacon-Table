@@ -5,7 +5,8 @@
 // другую заметку в этом же окне (не открывает третье окно), с обновлением
 // ?id= в адресной строке через history.replaceState.
 import { fetchMe, fetchNotes, fetchNote, createNote, updateNote, deleteNote } from "../api.js";
-import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
+import { renderNoteHtml, wireWikiLinks, scrollToHeading } from "../notes/markdown.js";
+import { mountHeadingNav } from "../notes/heading-nav.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
@@ -22,7 +23,9 @@ const contentArea = document.getElementById("contentArea");
 const body = document.getElementById("body");
 const editWrap = document.getElementById("editWrap");
 const editArea = document.getElementById("editArea");
+const tocBtn = document.getElementById("tocBtn");
 mountNoteToolbar(document.getElementById("editToolbar"), editArea);
+const headingNav = mountHeadingNav(tocBtn, body);
 
 let notesList = [];
 // pendingSection — раздел, на котором надо открыть заметку (см. scrollToSection).
@@ -45,12 +48,14 @@ function render() {
   if (editing) {
     editArea.value = note.content;
     editArea.focus();
+    tocBtn.style.display = "none";
   } else {
     body.innerHTML = renderNoteHtml(note.content);
     // Формулы в тексте — кликабельные, как в карточках библиотек (см.
     // inline-rolls.js). Обход текста, а не делегированный обработчик, —
     // поэтому на каждую перерисовку.
     enhanceRolls(body, sendRoll);
+    headingNav.refresh();
     scrollToSection();
   }
 }
@@ -61,16 +66,9 @@ function render() {
 // попадает не в начало длинного текста, а куда вела (см.
 // web/src/catalog-links.js: openEntry).
 function scrollToSection() {
-  const wanted = pendingSection.trim().toLowerCase();
-  if (!wanted) return;
-  const heading = [...body.querySelectorAll("h1, h2, h3, h4")].find(
-    (h) => h.textContent.trim().toLowerCase() === wanted
-  );
-  if (!heading) return;
-  heading.scrollIntoView({ block: "start" });
-  // Короткая подсветка: без неё непонятно, почему текст открылся с середины.
-  heading.classList.add("section-target");
-  setTimeout(() => heading.classList.remove("section-target"), 2000);
+  const wanted = pendingSection;
+  pendingSection = "";
+  scrollToHeading(body, wanted);
 }
 
 // ---- броски из текста заметки ----
@@ -204,3 +202,10 @@ deleteBtn.onclick = async () => {
   connectRollSocket();
   await loadNote(id, { section: decodeURIComponent(location.hash.slice(1)) });
 })();
+
+// Смена только хэша (#раздел) окно не перезагружает — догоняем прокрутку
+// руками (та же причина, что и в pages/journal.js).
+window.addEventListener("hashchange", () => {
+  pendingSection = decodeURIComponent(location.hash.slice(1));
+  scrollToSection();
+});

@@ -1215,8 +1215,18 @@ export function createInteraction(ctx) {
         const marker = ctx.scene.noteMarkers[markerId];
         // library — из какой библиотеки запись (см. domain.NoteMarker):
         // пусто у значков, поставленных до появления журнала, — это заметки ДМ.
+        // foundryEntry/foundryFolder — значок из импорта модуля: настоящей
+        // заметки ещё нет, pages/dm.js резолвит её по имени на этом клике.
         document.dispatchEvent(
-          new CustomEvent("vtt:openNoteMarker", { detail: { noteId: marker.noteId, library: marker.library || "" } })
+          new CustomEvent("vtt:openNoteMarker", {
+            detail: {
+              noteId: marker.noteId,
+              library: marker.library || "",
+              section: marker.section || "",
+              foundryEntry: marker.foundryEntry || "",
+              foundryFolder: marker.foundryFolder || "",
+            },
+          })
         );
         return;
       }

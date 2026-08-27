@@ -217,12 +217,43 @@ type moduleFiles struct {
 // документы, переносить там нечего.
 var htmlSrc = regexp.MustCompile(`(?i)(src\s*=\s*)("[^"]*"|'[^']*')`)
 
+var (
+	htmlImgTag  = regexp.MustCompile(`(?is)<img\b[^>]*>`)
+	htmlSrcAttr = regexp.MustCompile(`(?i)\bsrc\s*=\s*("[^"]*"|'[^']*')`)
+	// Обёртки, которые остаются пустыми после выкинутого <img> (декоративная
+	// иконка шаблона advice-блока). Пустой <figure> рисуется как заметная
+	// пустая рамка — убираем и её.
+	emptyWrapper = regexp.MustCompile(`(?is)<(figure|picture)\b[^>]*>\s*</(figure|picture)>`)
+)
+
 // RewriteHTML переносит картинки, вставленные прямо в текст (страницы
 // журнала), и правит ссылки на них.
+//
+// Картинка, которой нет в архиве модуля (ссылка на ассет самого Foundry —
+// "icons/vtt-512.png" в шаблоне advice-блока, битый путь), НЕ остаётся
+// битым <img>: тег выкидывается целиком, а следом — опустевшая обёртка
+// <figure>. Битая картинка в тексте заметки хуже, чем её отсутствие, а это
+// почти всегда декоративная иконка, а не иллюстрация по смыслу.
 func (a *Assets) RewriteHTML(ctx context.Context, kind, html string) string {
 	if html == "" {
 		return html
 	}
+	html = htmlImgTag.ReplaceAllStringFunc(html, func(tag string) string {
+		m := htmlSrcAttr.FindStringSubmatch(tag)
+		if m == nil {
+			return tag // <img> без src — не наша забота
+		}
+		quote := m[1][:1]
+		ref := strings.Trim(m[1], "\"'")
+		saved := a.URL(ctx, kind, ref)
+		if saved == "" {
+			return "" // файла нет — выкидываем весь тег
+		}
+		return strings.Replace(tag, m[0], "src="+quote+saved+quote, 1)
+	})
+	html = emptyWrapper.ReplaceAllString(html, "")
+	// Прочие ссылки на файлы (src у <source>/<audio>/<video> внутри текста) —
+	// правим, если файл есть; не нашёлся — оставляем как было.
 	return htmlSrc.ReplaceAllStringFunc(html, func(match string) string {
 		parts := htmlSrc.FindStringSubmatch(match)
 		if len(parts) != 3 {

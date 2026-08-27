@@ -33,8 +33,13 @@ import (
 //     service.FoundryService.LinkSceneTokens. Ничего не угадывается по имени:
 //     сводятся ровно одинаковые id;
 //   - гексагональная сетка ложится квадратной (гексов у нас нет), плитки
-//     (tiles), рисунки (drawings) и шаблоны эффектов не переносятся вовсе.
-func MapScene(ctx context.Context, d Doc, assets *Assets) *domain.SceneState {
+//     (tiles), рисунки (drawings) и шаблоны эффектов не переносятся вовсе;
+//   - значки на карте (notes) — в domain.NoteMarker, если ix знает, куда
+//     приехала запись, на которую значок ссылается (см. mapNoteMarker).
+//
+// ix — индекс перекрёстных ссылок модуля (см. LinkIndex): нужен только для
+// значков, для остального можно передать nil.
+func MapScene(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex) *domain.SceneState {
 	name := strings.TrimSpace(asString(d["name"]))
 	if name == "" {
 		name = "Сцена из Foundry"
@@ -104,7 +109,50 @@ func MapScene(ctx context.Context, d Doc, assets *Assets) *domain.SceneState {
 			s.Tokens[t.ID] = t
 		}
 	}
+	for _, raw := range asSlice(d["notes"]) {
+		if nm := mapNoteMarker(asMap(raw), offsetX, offsetY, ix); nm != nil {
+			s.NoteMarkers[nm.ID] = nm
+		}
+	}
 	return s
+}
+
+// mapNoteMarker — значок на карте Foundry (Note) в domain.NoteMarker. Note
+// ссылается на запись журнала (entryId) и, необязательно, на её страницу
+// (pageId). У нас запись журнала — это заметка, а страница — раздел внутри
+// неё (см. MapJournal), поэтому значок ведём на заметку и запоминаем раздел.
+//
+// Резолв — по индексу модуля: если записи, на которую ссылается значок, в
+// импорте нет (значок вёл на документ мира или другого модуля), значок
+// пропускаем — «свиток в никуда» на карте бесполезен. Настоящий id заметки
+// на этом этапе неизвестен (её заводит клиент, и в заметки ДМ либо в журнал
+// стола — по галочке ДМ), поэтому кладём имя записи и папку «якорем», а
+// связывание с реальной заметкой оставляем клиенту на первый клик (см.
+// domain.NoteMarker.FoundryEntry).
+func mapNoteMarker(n map[string]any, offsetX, offsetY float64, ix *LinkIndex) *domain.NoteMarker {
+	if n == nil || ix == nil {
+		return nil
+	}
+	target, ok := ix.Lookup(asString(n["pageId"]))
+	if !ok {
+		target, ok = ix.Lookup(asString(n["entryId"]))
+	}
+	if !ok || target.Kind != "note" {
+		return nil
+	}
+	label := strings.TrimSpace(asString(n["text"]))
+	if label == "" {
+		label = firstNonEmpty(target.Section, target.Name)
+	}
+	return &domain.NoteMarker{
+		ID:            newID(),
+		Label:         label,
+		Section:       target.Section,
+		X:             num(n["x"], 0) - offsetX,
+		Y:             num(n["y"], 0) - offsetY,
+		FoundryEntry:  target.Name,
+		FoundryFolder: target.Folder,
+	}
 }
 
 // sceneGrid — размер клетки и тип сетки с учётом переезда полей в v10:

@@ -7,6 +7,12 @@
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
     html, body { height: 100%; }
+    /* Подсветка раздела, на который открыли заметку по значку с карты (см. pages/dm.js: scrollToNoteSection). */
+    .section-target {
+      background: color-mix(in srgb, var(--accent) 22%, transparent);
+      border-radius: 6px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent);
+      transition: background .4s ease, box-shadow .4s ease;
+    }
     body {
       margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       display: flex; flex-direction: column; overflow: hidden; font-size: 13px;
@@ -1233,6 +1239,7 @@
               <button id="noteBackBtn" class="note-icon-btn" title="Все заметки"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg></button>
               <span id="noteDetailTitle" class="note-detail-title">—</span>
               <div class="note-detail-icons">
+                <button id="noteTocBtn" class="note-icon-btn" title="Перейти к разделу" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></button>
                 <button id="noteEditToggleBtn" class="note-icon-btn" title="Редактировать"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/></svg></button>
                 <button id="notePlaceBtn" class="note-icon-btn" title="Поставить значок этой заметки на карту"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.9-6.5-10.5a6.5 6.5 0 0113 0C18.5 15.1 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg></button>
                 <button id="noteWindowBtn" class="note-icon-btn" title="Открыть в окне поверх карты"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v16h16v-5"/><path d="M13 4h7v7"/><line x1="10" y1="14" x2="20" y2="4"/></svg></button>

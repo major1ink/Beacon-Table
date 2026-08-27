@@ -299,11 +299,16 @@ type NoteMarker struct {
 	NoteID  string  `json:"noteId"`
 	Library string  `json:"library,omitempty"`
 	Label   string  `json:"label"`
+
+	Section string  `json:"section,omitempty"`
 	X       float64 `json:"x"`
 	Y       float64 `json:"y"`
 	Size    float64 `json:"size,omitempty"`
 	// Locked — см. Token.Locked (общий для всех объектов карты флаг).
 	Locked bool `json:"locked,omitempty"`
+	
+	FoundryEntry  string `json:"foundryEntry,omitempty"`
+	FoundryFolder string `json:"foundryFolder,omitempty"`
 }
 
 // SceneState — состояние ОДНОЙ сцены: имя, фон, размер холста, туман войны,

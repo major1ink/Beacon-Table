@@ -38,8 +38,9 @@ var enricherRe = regexp.MustCompile(`@(UUID|Embed|Compendium|Item|Actor|JournalE
 // LinkTarget — на что указывает ссылка после резолва по индексу модуля.
 type LinkTarget struct {
 	// Kind — раздел стола: "note" | "item" | "spell" | "reference" |
-	// "monster". Пусто — цель есть в модуле, но переносить её некуда
-	// (таблица, макрос, состояние), от ссылки останется только подпись.
+	// "monster" | "scene" | "playlist". Пусто — цель есть в модуле, но
+	// переносить её некуда (таблица, макрос, отдельный звук плейлиста), от
+	// ссылки останется только подпись.
 	Kind string
 	Name string
 	// Folder — папка библиотеки заметок (только для Kind == "note").
@@ -104,7 +105,7 @@ func (ix *LinkIndex) add(e Entry, folders *Folders, moduleTitle, packLabel strin
 			withSection.Section = strings.TrimSpace(asString(page["name"]))
 			ix.targets[pageID] = withSection
 		}
-	case TargetItems, TargetSpells, TargetReferences, TargetMonsters:
+	case TargetItems, TargetSpells, TargetReferences, TargetMonsters, TargetScenes, TargetPlaylists:
 		ix.targets[id] = LinkTarget{Kind: cardKind(e.Target), Name: name}
 	default:
 		ix.targets[id] = LinkTarget{Name: name} // цель известна, но переносить её некуда
@@ -122,6 +123,10 @@ func cardKind(target string) string {
 		return "reference"
 	case TargetMonsters:
 		return "monster"
+	case TargetScenes:
+		return "scene"
+	case TargetPlaylists:
+		return "playlist"
 	default:
 		return ""
 	}

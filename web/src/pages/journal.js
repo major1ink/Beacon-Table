@@ -23,7 +23,8 @@ import {
   renameJournalFolder,
   deleteJournalFolder,
 } from "../api.js";
-import { renderNoteHtml, wireWikiLinks } from "../notes/markdown.js";
+import { renderNoteHtml, wireWikiLinks, scrollToHeading } from "../notes/markdown.js";
+import { mountHeadingNav } from "../notes/heading-nav.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
@@ -46,11 +47,13 @@ const editWrap = document.getElementById("editWrap");
 const editArea = document.getElementById("editArea");
 const msgEl = document.getElementById("msg");
 const showBtn = document.getElementById("showBtn");
+const tocBtn = document.getElementById("tocBtn");
 const pinBtn = document.getElementById("pinBtn");
 const accessBtn = document.getElementById("accessBtn");
 const editBtn = document.getElementById("editBtn");
 const deleteBtn = document.getElementById("deleteBtn");
 mountNoteToolbar(document.getElementById("toolbar"), editArea);
+const headingNav = mountHeadingNav(tocBtn, renderEl);
 
 // ACCESS_LEVELS — те же четыре уровня, что и на сервере
 // (domain.JournalAccess), в порядке возрастания прав. Подписи —
@@ -359,16 +362,9 @@ async function openEntry(id, { edit = false, section = "" } = {}) {
 // scrollToSection — открыть запись сразу на нужном разделе (pendingSection),
 // с короткой подсветкой: иначе непонятно, почему текст открылся с середины.
 function scrollToSection() {
-  const wanted = pendingSection.trim().toLowerCase();
+  const wanted = pendingSection;
   pendingSection = "";
-  if (!wanted) return;
-  const heading = [...renderEl.querySelectorAll("h1, h2, h3, h4")].find(
-    (h) => h.textContent.trim().toLowerCase() === wanted
-  );
-  if (!heading) return;
-  heading.scrollIntoView({ block: "start" });
-  heading.classList.add("section-target");
-  setTimeout(() => heading.classList.remove("section-target"), 2000);
+  scrollToHeading(renderEl, wanted);
 }
 
 // revealFolder — раскрыть цепочку папок до записи и сделать её папку
@@ -424,17 +420,20 @@ function renderEntry() {
   if (editing) {
     editArea.value = current.content || "";
     editArea.focus();
+    tocBtn.style.display = "none";
   } else if (current.myAccess === "limited") {
     renderEl.innerHTML = "";
     const hint = document.createElement("p");
     hint.style.opacity = ".6";
     hint.textContent = "Автор открыл тебе только название этой записи.";
     renderEl.appendChild(hint);
+    tocBtn.style.display = "none";
   } else {
     renderEl.innerHTML = renderNoteHtml(current.content || "");
     // Формулы в тексте кликабельны, как в карточках библиотек — бросок
     // уходит в общий лог стола (см. inline-rolls.js).
     enhanceRolls(renderEl, sendRoll);
+    headingNav.refresh(); // кнопка «перейти к разделу» — только если разделов ≥2
     scrollToSection();
   }
 }
@@ -833,3 +832,11 @@ async function guard(fn) {
   const wanted = new URLSearchParams(location.search).get("id");
   if (wanted) await openEntry(wanted, { section: decodeURIComponent(location.hash.slice(1)) });
 })();
+
+// Смена только хэша (#раздел) не перезагружает iframe — а значки на карте,
+// ведущие на разные страницы одной записи журнала (см. domain.NoteMarker),
+// как раз меняют один хэш. Догоняем прокрутку руками.
+window.addEventListener("hashchange", () => {
+  pendingSection = decodeURIComponent(location.hash.slice(1));
+  scrollToSection();
+});
