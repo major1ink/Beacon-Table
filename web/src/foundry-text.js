@@ -16,6 +16,11 @@
 // т.п.) в одиночном экспорте карточки — редкость: от них остаётся подпись,
 // если она есть, иначе макрос просто убирается — не так информативно, как
 // полный разбор на сервере, но не оставляет в тексте битых квадратных скобок.
+//
+// Отдельно — обогатитель [[lookup @name]] (без слэша): Foundry подставляет им
+// имя документа, а без разбора он утекал бы в текст словами «lookup @name»
+// (частый случай — способности вида «[[lookup @name]] совершает действие …»).
+// Разрешаем его именем карточки, которое вызывающий передаёт вторым аргументом.
 const compendiumRefRe = /@(?:Compendium|UUID)\[[^\]]*\]\{([^}]*)\}/g;
 const inlineRollRe = /\[\[([^\]]+)\]\](?:\{([^}]*)\})?/g;
 
@@ -30,10 +35,38 @@ function withLabel(formula, label) {
   return `${label} (${formula})`;
 }
 
-function cleanRoll(inner, rawLabel) {
+// applyLookupFormat — модификатор регистра из [[lookup @path FORMAT]]
+// (capitalize/lowercase/uppercase — Foundry core). Прочее не трогаем.
+function applyLookupFormat(value, fmt) {
+  switch ((fmt || "").toLowerCase()) {
+    case "lowercase":
+      return value.toLowerCase();
+    case "uppercase":
+      return value.toUpperCase();
+    case "capitalize":
+      return value ? value[0].toUpperCase() + value.slice(1) : value;
+    default:
+      return value;
+  }
+}
+
+// resolveLookup — обогатитель [[lookup @path]] подставляет значение поля из
+// данных документа. Здесь мы можем разрешить только @name (имя импортируемой
+// карточки); прочие пути (@abilities.str.mod и т.п.) без данных актёра
+// подставить нечем — оставляем подпись, если она есть.
+function resolveLookup(inner, label, name) {
+  const parts = inner.trim().split(/\s+/); // ["lookup", "@name", "capitalize"?]
+  if (/^@name$/i.test(parts[1] || "") && name) {
+    return applyLookupFormat(String(name).trim(), parts[2]);
+  }
+  return label;
+}
+
+function cleanRoll(inner, rawLabel, name) {
   inner = (inner || "").trim();
   const label = (rawLabel || "").trim();
   if (!inner) return label;
+  if (/^lookup(?:\s|$)/i.test(inner)) return resolveLookup(inner, label, name);
   if (!inner.startsWith("/")) {
     // "[[2d6]]" — отложенный бросок без команды, содержимое и есть формула.
     return withLabel(inner, label);
@@ -57,11 +90,13 @@ function cleanRoll(inner, rawLabel) {
 }
 
 // cleanFoundryText — см. шапку модуля. Безопасна на пустом/чужом тексте: без
-// совпадений возвращает вход как есть (с обрезкой пробелов по краям).
-export function cleanFoundryText(text) {
+// совпадений возвращает вход как есть (с обрезкой пробелов по краям). name —
+// имя импортируемой карточки для [[lookup @name]]; без него такой макрос
+// сворачивается в свою подпись (обычно пустую).
+export function cleanFoundryText(text, name) {
   return String(text || "")
     .replace(compendiumRefRe, "$1")
-    .replace(inlineRollRe, (_, inner, label) => cleanRoll(inner, label))
+    .replace(inlineRollRe, (_, inner, label) => cleanRoll(inner, label, name))
     // Атака без подписи (см. cleanRoll) выше становится пустой строкой — на
     // её месте остаются два соседних пробела ("...+5,  на атаку."), которые
     // не бросаются в глаза только потому, что HTML их и так схлопнёт при

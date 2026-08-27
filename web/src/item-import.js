@@ -397,6 +397,6 @@ export function mapFoundryItemJson(raw) {
     modifiers: raw.type === "equipment" ? buildArmorModifiers(sys) : [],
     properties: raw.type === "weapon" ? buildWeaponProperties(sys) : "",
     charges: buildCharges(sys.uses),
-    description: cleanFoundryText(sys.description && sys.description.value),
+    description: cleanFoundryText(sys.description && sys.description.value, name),
   };
 }

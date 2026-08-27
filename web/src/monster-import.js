@@ -190,8 +190,8 @@ function escapeHtml(s) {
   return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-function itemParagraph(item) {
-  const desc = cleanFoundryText(item.system && item.system.description && item.system.description.value);
+function itemParagraph(item, name) {
+  const desc = cleanFoundryText(item.system && item.system.description && item.system.description.value, name);
   return `<p><strong>${escapeHtml(item.name)}.</strong> ${desc}</p>`;
 }
 
@@ -219,7 +219,7 @@ function bucketFor(item) {
   return "traits"; // "" (пассивные особенности) и "special" (напр. "Легендарная устойчивость") — сюда же
 }
 
-function buildAbilityBlocks(items, resources) {
+function buildAbilityBlocks(items, resources, name) {
   const buckets = { traits: [], actions: [], bonusActions: [], reactions: [], legendaryActions: [], lairActions: [] };
   let legendaryIntro = "";
   let lairIntro = "";
@@ -227,14 +227,14 @@ function buildAbilityBlocks(items, resources) {
     if (!ABILITY_ITEM_TYPES.has(item.type)) continue;
     const bucket = bucketFor(item);
     if (bucket === "legendaryIntro") {
-      legendaryIntro = cleanFoundryText(item.system && item.system.description && item.system.description.value);
+      legendaryIntro = cleanFoundryText(item.system && item.system.description && item.system.description.value, name);
       continue;
     }
     if (bucket === "lairIntro") {
-      lairIntro = cleanFoundryText(item.system && item.system.description && item.system.description.value);
+      lairIntro = cleanFoundryText(item.system && item.system.description && item.system.description.value, name);
       continue;
     }
-    buckets[bucket].push(itemParagraph(item));
+    buckets[bucket].push(itemParagraph(item, name));
   }
   // Легендарные действия почти всегда идут с готовым вступительным абзацем
   // из items[] (см. bucketFor) — но если TTG Club его не прислал (например,
@@ -320,9 +320,9 @@ export function mapFoundryMonsterJson(raw) {
       languages: buildLanguages(sys.traits),
       cr: crLabel(cr),
       proficiencyBonus: prof,
-      description: cleanFoundryText(details.biography && details.biography.value),
+      description: cleanFoundryText(details.biography && details.biography.value, name),
       tags: buildTags(details),
     },
-    buildAbilityBlocks(items, sys.resources)
+    buildAbilityBlocks(items, sys.resources, name)
   );
 }

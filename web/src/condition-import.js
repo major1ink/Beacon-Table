@@ -153,8 +153,8 @@ export function effectRounds(duration) {
 // рендерит marked), у состояния описание короткое и почти всегда одним
 // абзацем — оставляем HTML как есть, но подчищаем пустые обёртки, чтобы
 // карточка не начиналась с пустой строки.
-function cleanDescription(html) {
-  return cleanFoundryText(html)
+function cleanDescription(html, name) {
+  return cleanFoundryText(html, name)
     .replace(/<p>\s*(&nbsp;|\s)*<\/p>/gi, "")
     .trim();
 }
@@ -200,7 +200,7 @@ export function mapFoundryEffect(effect) {
     overlay: !!(effect.flags && effect.flags.core && effect.flags.core.overlay),
     levels: 0,
     defaultRounds: rounds,
-    description: cleanDescription(effect.description),
+    description: cleanDescription(effect.description, name),
     modifiers,
     mechanics: describeChanges(leftover),
     source: "Foundry VTT",

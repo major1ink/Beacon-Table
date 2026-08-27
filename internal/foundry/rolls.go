@@ -3,6 +3,7 @@ package foundry
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Инлайн-броски Foundry. В тексте модуля бросок пишется вторым видом
@@ -69,11 +70,17 @@ var damageTypeNames = map[string]string{
 
 // RewriteRolls переводит все инлайн-броски и &Reference в тексте.
 func RewriteRolls(text string) string {
+	return rewriteRollsNamed(text, "")
+}
+
+// rewriteRollsNamed — RewriteRolls с именем документа для обогатителя
+// [[lookup @name]] (см. lookupValue). Пустое name — прежнее поведение.
+func rewriteRollsNamed(text, name string) string {
 	if !strings.Contains(text, "[[") && !strings.Contains(text, "Reference[") {
 		return text
 	}
 	out := replaceWithTail(text, inlineRollRe, func(parts []string, tail string) string {
-		return rewriteRoll(parts[1], strings.TrimSpace(parts[2]), tail)
+		return rewriteRoll(parts[1], strings.TrimSpace(parts[2]), tail, name)
 	})
 	return referenceRe.ReplaceAllStringFunc(out, func(match string) string {
 		parts := referenceRe.FindStringSubmatch(match)
@@ -148,10 +155,16 @@ func alreadySays(tail string, words ...string) bool {
 }
 
 // rewriteRoll — один макрос: содержимое скобок, подпись и текст после него.
-func rewriteRoll(inner, label, tail string) string {
+func rewriteRoll(inner, label, tail, name string) string {
 	inner = strings.TrimSpace(inner)
 	if inner == "" {
 		return label
+	}
+	// [[lookup @name]] (без слэша) — обогатитель Foundry, подставляющий поле
+	// документа. Ловим его до общей ветки «отложенный бросок», иначе слово
+	// "lookup" ушло бы в текст формулой (см. lookupValue).
+	if lower := strings.ToLower(inner); lower == "lookup" || strings.HasPrefix(lower, "lookup ") {
+		return lookupValue(inner, name, label)
 	}
 	if !strings.HasPrefix(inner, "/") {
 		// [[2d6+3]] — отложенный бросок без команды.
@@ -228,6 +241,43 @@ func withLabel(formula, label string) string {
 		return formula
 	default:
 		return label + " (" + formula + ")"
+	}
+}
+
+// lookupValue — обогатитель [[lookup @path FORMAT]] Foundry подставляет
+// значение поля из данных документа. Здесь мы можем разрешить только @name
+// (имя импортируемого документа, см. RewriteDocMacros); прочие пути
+// (@abilities.str.mod и т.п.) без данных актёра подставить нечем — остаётся
+// подпись, если Foundry её задавал.
+func lookupValue(inner, name, label string) string {
+	fields := strings.Fields(inner) // ["lookup", "@name", "capitalize"?]
+	if len(fields) >= 2 && strings.EqualFold(fields[1], "@name") && name != "" {
+		format := ""
+		if len(fields) >= 3 {
+			format = fields[2]
+		}
+		return applyLookupFormat(name, format)
+	}
+	return label
+}
+
+// applyLookupFormat — модификатор регистра из [[lookup @path FORMAT]]
+// (capitalize/lowercase/uppercase — ядро Foundry). Прочее не трогаем.
+func applyLookupFormat(value, format string) string {
+	switch strings.ToLower(format) {
+	case "lowercase":
+		return strings.ToLower(value)
+	case "uppercase":
+		return strings.ToUpper(value)
+	case "capitalize":
+		r := []rune(value)
+		if len(r) == 0 {
+			return value
+		}
+		r[0] = unicode.ToUpper(r[0])
+		return string(r)
+	default:
+		return value
 	}
 }
 

@@ -659,6 +659,28 @@ func TestRewriteDocMacros(t *testing.T) {
 	}
 }
 
+// TestRewriteDocMacrosLookupName — обогатитель [[lookup @name]] в описании
+// способности существа подставляется именем самого существа (регрессия:
+// карточка «Спрайт», способность «Проворное бегство» приносила в текст
+// буквальное «lookup @name совершает действие …»).
+func TestRewriteDocMacrosLookupName(t *testing.T) {
+	doc := Doc{
+		"name": "Спрайт",
+		"items": []any{
+			map[string]any{"name": "Проворное бегство", "system": map[string]any{"description": map[string]any{
+				"value": `<p>[[lookup @name]] совершает действие Отступление или Засада.</p>`,
+			}}},
+		},
+	}
+	RewriteDocMacros(doc, &LinkIndex{targets: map[string]LinkTarget{}})
+
+	nested := asMap(asSlice(doc["items"])[0])
+	got := digString(nested, "system", "description", "value")
+	if want := `<p>Спрайт совершает действие Отступление или Засада.</p>`; got != want {
+		t.Fatalf("lookup @name не подставлен:\n получили %q\n ожидали  %q", got, want)
+	}
+}
+
 // TestRewriteRolls — инлайн-броски Foundry. Формула должна остаться
 // формулой (её делает кликабельной клиент, см. web/src/inline-rolls.js), а
 // проверки и спасброски — стать человеческой фразой.
@@ -696,6 +718,11 @@ func TestRewriteRolls(t *testing.T) {
 		},
 		{"экранированный амперсанд у &Reference", `состояние &amp;Reference[Prone]`, `состояние Prone`},
 		{"незнакомая команда без подписи исчезает", `а[[/item Меч]]б`, `аб`},
+		// [[lookup @name]] без данных документа (RewriteRolls вызывают и на
+		// тексте журнала — там имени актёра нет): макрос сворачивается в свою
+		// подпись, а не утекает словом «lookup» в текст.
+		{"lookup без имени и подписи исчезает", `а[[lookup @name]]б`, `аб`},
+		{"lookup без имени, но с подписью — остаётся подпись", `[[lookup @name]]{Существо} бежит`, `Существо бежит`},
 		// Регрессия на реальных данных (см. data/references — "Покрытое ядом
 		// оружие"): цель /item названа "Русское [English]" — из-за одиночной
 		// пары [...] внутри макроса он раньше не матчился ВООБЩЕ (жадный

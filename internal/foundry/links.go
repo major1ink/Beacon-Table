@@ -142,7 +142,14 @@ func (ix *LinkIndex) Lookup(id string) (LinkTarget, bool) {
 // документ, другой модуль, документ мира) — остаётся только подпись: лучше
 // просто текст, чем «@UUID[Compendium.…]» посреди абзаца.
 func (ix *LinkIndex) Rewrite(text string) string {
-	return RewriteRolls(ix.rewriteLinks(text))
+	return ix.rewriteWithName(text, "")
+}
+
+// rewriteWithName — то же, что Rewrite, но обогатитель [[lookup @name]]
+// подставляет переданное имя документа (см. rolls.go: lookupValue). Пустое
+// name = поведение Rewrite (макрос сворачивается в свою подпись).
+func (ix *LinkIndex) rewriteWithName(text, name string) string {
+	return rewriteRollsNamed(ix.rewriteLinks(text), name)
 }
 
 func (ix *LinkIndex) rewriteLinks(text string) string {
@@ -211,10 +218,15 @@ func RewriteDocMacros(doc Doc, ix *LinkIndex) {
 	if ix == nil {
 		return
 	}
-	rewriteValue(map[string]any(doc), ix, 0)
+	// Имя документа верхнего уровня — для обогатителя [[lookup @name]] в
+	// описаниях его же способностей ("[[lookup @name]] совершает действие …").
+	// У владеемых предметов актёра @name в данных броска — это имя АКТЁРА, а
+	// не предмета, поэтому имя берём здесь один раз и несём вглубь.
+	name := strings.TrimSpace(asString(map[string]any(doc)["name"]))
+	rewriteValue(map[string]any(doc), ix, name, 0)
 }
 
-func rewriteValue(node any, ix *LinkIndex, depth int) {
+func rewriteValue(node any, ix *LinkIndex, name string, depth int) {
 	if depth > 12 {
 		return // защита от неожиданно глубокой вложенности чужого документа
 	}
@@ -222,18 +234,18 @@ func rewriteValue(node any, ix *LinkIndex, depth int) {
 	case map[string]any:
 		for key, value := range v {
 			if s, ok := value.(string); ok {
-				v[key] = ix.Rewrite(s)
+				v[key] = ix.rewriteWithName(s, name)
 				continue
 			}
-			rewriteValue(value, ix, depth+1)
+			rewriteValue(value, ix, name, depth+1)
 		}
 	case []any:
 		for i, value := range v {
 			if s, ok := value.(string); ok {
-				v[i] = ix.Rewrite(s)
+				v[i] = ix.rewriteWithName(s, name)
 				continue
 			}
-			rewriteValue(value, ix, depth+1)
+			rewriteValue(value, ix, name, depth+1)
 		}
 	}
 }

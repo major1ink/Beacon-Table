@@ -41,6 +41,25 @@ test("незнакомая команда без подписи убираетс
   assert.equal(cleanFoundryText("[[/save dex 15]]{Спасбросок Ловкости}"), "Спасбросок Ловкости");
 });
 
+test("[[lookup @name]] подставляется именем карточки", () => {
+  // Ровно случай из карточки существа «Спрайт»: «Проворное бегство».
+  assert.equal(
+    cleanFoundryText("[[lookup @name]] совершает действие Отступление или Засада", "Спрайт"),
+    "Спрайт совершает действие Отступление или Засада"
+  );
+});
+
+test("[[lookup @name]] с модификатором регистра", () => {
+  assert.equal(cleanFoundryText("[[lookup @name lowercase]] прячется", "Спрайт"), "спрайт прячется");
+  assert.equal(cleanFoundryText("[[lookup @name uppercase]]", "Гоблин"), "ГОБЛИН");
+  assert.equal(cleanFoundryText("[[lookup @name capitalize]] бьёт", "гоблин"), "Гоблин бьёт");
+});
+
+test("[[lookup @name]] без имени карточки — макрос сворачивается в подпись/пустоту", () => {
+  assert.equal(cleanFoundryText("[[lookup @name]] совершает действие"), "совершает действие");
+  assert.equal(cleanFoundryText("[[lookup @unknown.path]]{имя}", "Спрайт"), "имя");
+});
+
 test("пусто/не-строка не падают", () => {
   assert.equal(cleanFoundryText(""), "");
   assert.equal(cleanFoundryText(undefined), "");
