@@ -34,7 +34,6 @@ func (a *API) handleCharacterInventoryList(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, entries)
 }
 
-
 func (a *API) handleCharacterInventoryUpdate(w http.ResponseWriter, r *http.Request) {
 	acc, ok := a.requireAccount(w, r)
 	if !ok {

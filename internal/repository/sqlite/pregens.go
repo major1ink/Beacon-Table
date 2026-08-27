@@ -45,9 +45,16 @@ func scanPregen(row interface{ Scan(...any) error }) (*domain.Pregen, error) {
 	return &p, nil
 }
 
-func (s *PregenStore) queryList(ctx context.Context, where string, args ...any) ([]*domain.Pregen, error) {
-	q := `SELECT ` + pregenColumns + ` FROM pregen_characters WHERE company_id = ?` + where + ` ORDER BY created_at`
-	rows, err := s.db.QueryContext(ctx, q, append([]any{s.companyID}, args...)...)
+// Оба запроса списка — целиком константы (никакой конкатенации с
+// не-константами), чтобы не давать gosec G202 повода: фильтр «только
+// свободные» — это отдельный SQL, а не подставляемый фрагмент.
+const (
+	listPregensSQL          = `SELECT ` + pregenColumns + ` FROM pregen_characters WHERE company_id = ? ORDER BY created_at`
+	listAvailablePregensSQL = `SELECT ` + pregenColumns + ` FROM pregen_characters WHERE company_id = ? AND claimed_by = '' ORDER BY created_at`
+)
+
+func (s *PregenStore) queryList(ctx context.Context, query string) ([]*domain.Pregen, error) {
+	rows, err := s.db.QueryContext(ctx, query, s.companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -65,12 +72,12 @@ func (s *PregenStore) queryList(ctx context.Context, where string, args ...any) 
 
 // List — весь пул мира (для ДМ).
 func (s *PregenStore) List(ctx context.Context) ([]*domain.Pregen, error) {
-	return s.queryList(ctx, "")
+	return s.queryList(ctx, listPregensSQL)
 }
 
 // Available — только свободные пре-гены (для игрока).
 func (s *PregenStore) Available(ctx context.Context) ([]*domain.Pregen, error) {
-	return s.queryList(ctx, ` AND claimed_by = ''`)
+	return s.queryList(ctx, listAvailablePregensSQL)
 }
 
 // ByID — один пре-ген; domain.ErrNotFound, если такого в этом мире нет.

@@ -23,7 +23,6 @@ const (
 	maxModifierNoteLen  = 120
 )
 
-
 func sanitizeModifiers(mods []domain.Modifier) []domain.Modifier {
 	if len(mods) > maxModifiers {
 		mods = mods[:maxModifiers]

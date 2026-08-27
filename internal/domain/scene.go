@@ -310,7 +310,7 @@ type NoteMarker struct {
 	Size    float64 `json:"size,omitempty"`
 	// Locked — см. Token.Locked (общий для всех объектов карты флаг).
 	Locked bool `json:"locked,omitempty"`
-	
+
 	FoundryEntry  string `json:"foundryEntry,omitempty"`
 	FoundryFolder string `json:"foundryFolder,omitempty"`
 }

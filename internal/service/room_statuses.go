@@ -510,7 +510,7 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 			}
 			formula := normalizeDiceFormula(m.Value)
 			var result domain.RollResult
-			
+
 			if v, ok := domain.ParseModifierValue(m.Value); ok {
 				result = domain.RollResult{Total: v}
 			} else {

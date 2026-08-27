@@ -512,7 +512,7 @@ func TestMapJournal(t *testing.T) {
 func TestMapJournalCallouts(t *testing.T) {
 	_, assets := testModule(t)
 	doc := Doc{
-		"name": "Сцена 1",
+		"name":  "Сцена 1",
 		"pages": []any{map[string]any{"name": "Вход", "type": "text", "text": map[string]any{"content": `<section class="fvtt narrative"><p>Зачитайте это игрокам.</p></section><section class="fvtt advice ag-advice"><article><p>А это совет Мастеру.</p></article></section><aside class="notable"><p>Сбоку.</p></aside>`}}},
 	}
 	content := MapJournal(context.Background(), doc, "", assets).Content
