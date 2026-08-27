@@ -72,8 +72,12 @@ const CSS = `
 /* Закреплённый (следящий) попап — не у курсора, а в правом нижнем углу
    карты: он живёт весь бой и переоткрывается сам на каждом ходу, поэтому
    стоит на постоянном месте, где ничего не перекрывает (сверху справа —
-   лог бросков, снизу — плашка сцены и зум). */
-.actions-peek-pinned { right: 56px; bottom: 52px; max-height: 62vh; }
+   лог бросков, снизу — плашка сцены и зум).
+   z-index ниже сайд-меню (vtt/side-menu.js: column z-index 41) и комбат-бара:
+   выезжающие справа панели («Кубы», «Справочник») открываются поверх него,
+   а не уезжают под него — в отличие от НЕзакреплённого попапа (z-index 60),
+   который пользователь открыл сам у курсора и ждёт увидеть сверху. */
+.actions-peek-pinned { right: 56px; bottom: 52px; max-height: 62vh; z-index: 39; }
 .actions-peek-turn {
   flex: 0 0 auto; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em;
   padding: 2px 6px; border-radius: var(--radius-pill); background: var(--accent-bg, rgba(124,108,240,0.18));
