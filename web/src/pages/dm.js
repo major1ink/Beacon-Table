@@ -3093,6 +3093,9 @@ document.addEventListener("vtt:hubState", (e) => {
 
 initItemPicker(document.getElementById("lootHubPicker"), {
   onPick: (item, qty) => vtt.send({ type: "hub_add_item", itemId: item.id, quantity: qty }),
+  // Вшитый каталог прячем, пока в "Настройках" не включён показ встроенных
+  // карточек (см. showBuiltinCardsToggle) — геттер, чекбокс синкается сервером.
+  excludeBuiltin: () => !document.getElementById("showBuiltinCardsToggle").checked,
 });
 
 onPanelOpen("loot", renderLootHub);
@@ -3192,6 +3195,28 @@ document.addEventListener("vtt:combatState", (e) => {
 });
 combatHighlightActiveToggle.onchange = () => {
   vtt.send({ type: "set_highlight_active_token", highlightActiveToken: combatHighlightActiveToggle.checked });
+};
+
+// showBuiltinCardsToggle / hideLightMarkersToggle — тот же приём: общие тумблеры
+// стола, значение приходит внутри "combat_state" (см. domain.CombatState.
+// ShowBuiltinCards / HideLightMarkers, service.combatPayload). showBuiltinCards
+// правит дерево справочника и пикеры (compendium-menu.js, combat-panel.js,
+// status-palette.js, item-picker хаба лута ниже); hideLightMarkers долетает до
+// слоя токенов через vtt/index.js (см. vtt:combatState там).
+const showBuiltinCardsToggle = document.getElementById("showBuiltinCardsToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  showBuiltinCardsToggle.checked = !!e.detail.showBuiltinCards;
+});
+showBuiltinCardsToggle.onchange = () => {
+  vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
+};
+
+const hideLightMarkersToggle = document.getElementById("hideLightMarkersToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  hideLightMarkersToggle.checked = e.detail.hideLightMarkers !== false;
+});
+hideLightMarkersToggle.onchange = () => {
+  vtt.send({ type: "set_hide_light_markers", hideLightMarkers: hideLightMarkersToggle.checked });
 };
 
 // "🗗 Открыть в окне" — тот же приём, что у журнала (openJournalWindow): вся

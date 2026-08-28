@@ -10,11 +10,13 @@ import { icon } from "./icons.js";
 
 // initItemPicker(container, opts) — очищает container и рендерит в него
 // поле поиска + степпер количества + список результатов. opts.onPick(item,
-// quantity) — колбэк выбора. Список каталога подгружается один раз при
-// инициализации (тем же принципом, что searchList в combat-panel.js) — если
-// каталог мог измениться, вызывающая сторона просто заново зовёт
-// initItemPicker при следующем открытии панели/модалки.
-export function initItemPicker(container, { onPick, placeholder = "Поиск предмета в каталоге…" } = {}) {
+// quantity) — колбэк выбора. opts.excludeBuiltin — функция-геттер: пока она
+// возвращает true, из результатов выпадают карточки вшитого каталога
+// (item.system, см. dm.js: тумблер "Показывать встроенные карточки").
+// Список каталога подгружается один раз при инициализации (тем же принципом,
+// что searchList в combat-panel.js) — если каталог мог измениться, вызывающая
+// сторона просто заново зовёт initItemPicker при следующем открытии панели/модалки.
+export function initItemPicker(container, { onPick, placeholder = "Поиск предмета в каталоге…", excludeBuiltin } = {}) {
   container.innerHTML = "";
   container.classList.add("item-picker");
 
@@ -48,7 +50,10 @@ export function initItemPicker(container, { onPick, placeholder = "Поиск п
     const filter = search.value.trim().toLowerCase();
     results.innerHTML = "";
     if (!filter) return;
-    const filtered = items.filter((it) => it.name.toLowerCase().includes(filter)).slice(0, 20);
+    const hideBuiltin = typeof excludeBuiltin === "function" && excludeBuiltin();
+    const filtered = items
+      .filter((it) => (!hideBuiltin || !it.system) && it.name.toLowerCase().includes(filter))
+      .slice(0, 20);
     if (filtered.length === 0) {
       const empty = document.createElement("p");
       empty.className = "hint";

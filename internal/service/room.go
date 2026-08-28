@@ -549,6 +549,16 @@ func (r *Room) run() {
 					r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
 				}
 				continue
+			case "set_show_builtin_cards":
+				if im.msg.ShowBuiltinCards != nil {
+					r.handleSetShowBuiltinCards(*im.msg.ShowBuiltinCards)
+				}
+				continue
+			case "set_hide_light_markers":
+				if im.msg.HideLightMarkers != nil {
+					r.handleSetHideLightMarkers(*im.msg.HideLightMarkers)
+				}
+				continue
 			// revive_token — вкладка "Убитые" трекера (см. combatPayload:
 			// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
 			// тот умеет только create_scene-подобные мутации сцены, а тут
@@ -1621,6 +1631,25 @@ func (r *Room) handleSetHighlightActiveToken(v bool) {
 	r.broadcastCombat()
 }
 
+// handleSetShowBuiltinCards — "set_show_builtin_cards": общий тумблер стола,
+// показывать ли вшитый каталог "из коробки" в справочнике и пикерах (см.
+// domain.CombatState.ShowBuiltinCards, combatPayload). Только UI клиента —
+// сами карточки System сервер по-прежнему отдаёт всем эндпоинтам.
+func (r *Room) handleSetShowBuiltinCards(v bool) {
+	r.combat.ShowBuiltinCards = v
+	r.markCombatDirty()
+	r.broadcastCombat()
+}
+
+// handleSetHideLightMarkers — "set_hide_light_markers": общий тумблер стола,
+// прятать ли у ДМ лампочки токенов света вне раздела "Освещение" (см.
+// domain.CombatState.HideLightMarkers, combatPayload).
+func (r *Room) handleSetHideLightMarkers(v bool) {
+	r.combat.HideLightMarkers = &v
+	r.markCombatDirty()
+	r.broadcastCombat()
+}
+
 // handlePlaceCombatantToken — "place_combatant_token": ДМ вытащил карточку
 // бойца из трекера (см. web/src/combat-panel.js: dragstart на .combat-row,
 // pages/dm.js: drop на #scene) на карту. Актуально в первую очередь для
@@ -1841,6 +1870,10 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// combat.json/новый стол) трактуем как включено, см.
 		// domain.CombatState.HighlightActiveToken.
 		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
+		"showBuiltinCards":     r.combat.ShowBuiltinCards,
+		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
+		// включено (прятать), см. domain.CombatState.HideLightMarkers.
+		"hideLightMarkers": r.combat.HideLightMarkers == nil || *r.combat.HideLightMarkers,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()

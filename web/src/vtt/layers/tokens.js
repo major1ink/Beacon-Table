@@ -565,9 +565,13 @@ export function createTokensLayer(ctx) {
     // бы его из PublicScene целиком, см. domain.Token.LightOnly — и тогда
     // клиенту игрока/TV нечем было бы посчитать освещение в
     // layers/vision-fog.js), поэтому фильтруем его только тут, на отрисовке.
-    const tokenData = ctx.isDM
-      ? ctx.scene.tokens || {}
-      : Object.fromEntries(Object.entries(ctx.scene.tokens || {}).filter(([, t]) => !t.lightOnly));
+    // У ДМ маркер тоже прячется, если включён тумблер "Скрывать лампочки вне
+    // режима «Освещение»" (ctx.hideLightMarkers) и раздел "Освещение" сейчас
+    // закрыт (ctx.lightEditActive) — оба флага ставит vtt/index.js.
+    const hideLight = !ctx.isDM || (ctx.hideLightMarkers && !ctx.lightEditActive);
+    const tokenData = hideLight
+      ? Object.fromEntries(Object.entries(ctx.scene.tokens || {}).filter(([, t]) => !t.lightOnly))
+      : ctx.scene.tokens || {};
     syncMap(tokenViews, tokensContainer, tokenData, createTokenView, updateTokenView, (view) => {
       // Токен исчез из сцены — не оставляем в tokenArtViews ссылку на
       // сейчас уничтожаемую вьюху, иначе refreshArtViews() позже попробует

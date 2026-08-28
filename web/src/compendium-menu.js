@@ -97,10 +97,32 @@ function buildRoot(system, label, role, startOpen) {
   return wrap;
 }
 
+// foundryImportNode — импорт целого пакета Foundry VTT по ссылке на манифест
+// (см. web/foundry-import.html). Только у ДМ: импорт ходит с сервера в
+// интернет, пишет файлы в библиотеку загрузок и заводит сцены — тот же
+// набор прав, что и у остальных ДМ-инструментов (сервер откажет игроку
+// 403-м, см. handleFoundryInspect).
+function foundryImportNode() {
+  return leafNode("＋ Импорт из Foundry VTT", () =>
+    openFloatingWindow({
+      key: "foundry-import",
+      title: "Импорт из Foundry VTT",
+      url: "/foundry-import.html",
+      width: 560,
+      height: 640,
+    })
+  );
+}
+
 // mountCompendiumMenu — наполняет panelEl (см. sideMenu.addIcon) шапкой
 // (заголовок + ✕, см. panel.close() в side-menu.js) и деревом. role: "dm" |
 // "player" — только чтобы скрыть "Существа" у игрока (сервер всё равно
 // отказал бы 403 на /api/monsters, см. requireAdminAccount).
+//
+// Корень "Beacon Table" (вшитый каталог, System:true) виден только когда
+// включён общий тумблер стола "Показывать встроенные карточки" (см.
+// domain.CombatState.ShowBuiltinCards) — значение приходит в combat_state и
+// тем же событием "vtt:combatState" перестраивает дерево на лету.
 export function mountCompendiumMenu(panelEl, { role }) {
   panelEl.classList.add("compendium-tree");
 
@@ -117,25 +139,22 @@ export function mountCompendiumMenu(panelEl, { role }) {
   header.append(title, closeBtn);
   panelEl.appendChild(header);
 
-  panelEl.appendChild(buildRoot(true, "Beacon Table", role, true));
-  panelEl.appendChild(buildRoot(false, "Пользовательские", role, false));
+  const treeWrap = document.createElement("div");
+  panelEl.appendChild(treeWrap);
 
-  // Импорт целого пакета Foundry VTT по ссылке на манифест (см.
-  // web/foundry-import.html). Только у ДМ: импорт ходит с сервера в
-  // интернет, пишет файлы в библиотеку загрузок и заводит сцены — тот же
-  // набор прав, что и у остальных ДМ-инструментов (сервер откажет игроку
-  // 403-м, см. handleFoundryInspect).
-  if (role === "dm") {
-    panelEl.appendChild(
-      leafNode("＋ Импорт из Foundry VTT", () =>
-        openFloatingWindow({
-          key: "foundry-import",
-          title: "Импорт из Foundry VTT",
-          url: "/foundry-import.html",
-          width: 560,
-          height: 640,
-        })
-      )
-    );
+  let showBuiltin = false;
+  function renderTree() {
+    treeWrap.innerHTML = "";
+    if (showBuiltin) treeWrap.appendChild(buildRoot(true, "Beacon Table", role, true));
+    treeWrap.appendChild(buildRoot(false, "Пользовательские", role, !showBuiltin));
+    if (role === "dm") treeWrap.appendChild(foundryImportNode());
   }
+  renderTree();
+
+  document.addEventListener("vtt:combatState", (e) => {
+    const next = !!(e.detail && e.detail.showBuiltinCards);
+    if (next === showBuiltin) return;
+    showBuiltin = next;
+    renderTree();
+  });
 }

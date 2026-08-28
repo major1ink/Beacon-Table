@@ -79,6 +79,11 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
     dirty: createDirtyFlags(),
     mapStartedAt: 0,
     combatBarMount: combatBarMount || null,
+    // Лампочки токенов света у ДМ: дефолт — прятать вне раздела "Освещение"
+    // (как nil у domain.CombatState.HideLightMarkers). Обновляют слушатели
+    // vtt:combatState / vtt:lightEditMode ниже, читает layers/tokens.js.
+    hideLightMarkers: true,
+    lightEditActive: false,
   };
 
   ctx.applyCameraTransform = () => applyCameraTransform(world, app.screen.width, app.screen.height, ctx.scene, ctx.camera);
@@ -219,6 +224,27 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   ctx.applyCameraTransform();
 
   createInteraction(ctx);
+
+  // Лампочки токенов света (Token.LightOnly) у ДМ: по умолчанию видны только
+  // пока открыт раздел рейла "Освещение" (см. dm.js: vtt:lightEditMode) —
+  // общий тумблер стола "Скрывать лампочки вне режима «Освещение»" (см.
+  // domain.CombatState.HideLightMarkers, приходит в combat_state). Оба флага
+  // (ctx.hideLightMarkers / ctx.lightEditActive, дефолты в ctx выше) читает
+  // layers/tokens.js: update().
+  document.addEventListener("vtt:lightEditMode", (e) => {
+    const next = !!(e.detail && e.detail.active);
+    if (next === ctx.lightEditActive) return;
+    ctx.lightEditActive = next;
+    ctx.dirty.tokens = true;
+    ctx.render();
+  });
+  document.addEventListener("vtt:combatState", (e) => {
+    const next = !e.detail || e.detail.hideLightMarkers !== false;
+    if (next === ctx.hideLightMarkers) return;
+    ctx.hideLightMarkers = next;
+    ctx.dirty.tokens = true;
+    ctx.render();
+  });
 
   // ?debug=1 — отладочная ручка. Рендер живёт на GPU, поэтому «карты нет» со
   // стороны выглядит одинаково для десятка разных причин (кодек, автоплей,
