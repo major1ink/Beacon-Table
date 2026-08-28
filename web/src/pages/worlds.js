@@ -4,7 +4,7 @@
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
 import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany } from "../api.js";
-import { showAlert, showConfirm } from "../modal.js";
+import { openModal, showAlert, showConfirm } from "../modal.js";
 
 const listEl = document.getElementById("list");
 const createForm = document.getElementById("createForm");
@@ -81,8 +81,10 @@ async function render() {
     };
   });
   listEl.querySelectorAll(".export-btn").forEach((btn) => {
-    btn.onclick = () => {
-      window.location.href = exportCompanyURL(btn.dataset.id);
+    btn.onclick = async () => {
+      const choice = await askExportOptions();
+      if (!choice.export) return;
+      window.location.href = exportCompanyURL(btn.dataset.id, choice.withAccounts);
     };
   });
   listEl.querySelectorAll(".delete-btn").forEach((btn) => {
@@ -103,6 +105,35 @@ document.getElementById("logoutBtn").onclick = async () => {
   location.href = "/";
 };
 
+// askExportOptions — диалог перед скачиванием: с аккаунтами игроков или без.
+function askExportOptions() {
+  let cb = null;
+  return openModal({
+    title: "Экспорт мира",
+    okLabel: "Экспортировать",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const p = document.createElement("p");
+      p.className = "bt-modal-text";
+      p.textContent = "Скачать мир одним .zip: сцены, журнал, библиотеки, плейлисты, загрузки.";
+      body.appendChild(p);
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:6px;cursor:pointer;";
+      cb = document.createElement("input");
+      cb.type = "checkbox";
+      label.append(cb, document.createTextNode(" Перенести аккаунты (игроков и ДМ) с персонажами"));
+      body.appendChild(label);
+      const hint = document.createElement("p");
+      hint.className = "bt-modal-text dim";
+      hint.textContent = "Логины с паролями, листы, инвентарь. Нужно для демо-сервера и при переезде кампании — для обмена приключением обычно нет.";
+      body.appendChild(hint);
+      return cb;
+    },
+    onOk: () => ({ export: true, withAccounts: cb.checked }),
+    onCancel: () => ({ export: false }),
+  });
+}
+
 importBtn.onclick = () => importFile.click();
 importFile.addEventListener("change", async (e) => {
   const file = e.target.files[0];
@@ -113,7 +144,12 @@ importFile.addEventListener("change", async (e) => {
   importBtn.disabled = true;
   try {
     const world = await importCompany(file);
-    importMsg.textContent = `Мир «${world.name}» импортирован — запусти его в списке выше.`;
+    let msg = `Мир «${world.name}» импортирован — запусти его в списке выше.`;
+    const renamed = world.renamedLogins ? Object.entries(world.renamedLogins) : [];
+    if (renamed.length) {
+      msg += ` Логины переименованы из-за совпадений: ${renamed.map(([o, n]) => `${o} → ${n}`).join(", ")}.`;
+    }
+    importMsg.textContent = msg;
     importMsg.className = "msg ok";
     render();
   } catch (err) {

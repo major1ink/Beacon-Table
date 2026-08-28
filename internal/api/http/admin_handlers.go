@@ -93,11 +93,15 @@ func (a *API) handleAdminAccountDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	if err := world.Admin.DeleteAccount(r.Context(), admin.ID, id); err != nil {
-		if errors.Is(err, domain.ErrForbidden) {
+		var verr *domain.ValidationError
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
 			writeErr(w, http.StatusBadRequest, "нельзя удалить свой собственный аккаунт")
-			return
+		case errors.As(err, &verr):
+			writeErr(w, http.StatusBadRequest, verr.Msg)
+		default:
+			writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		}
-		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
 	// Персонажи аккаунта ушли каскадом (FK characters), а пул-записи

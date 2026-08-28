@@ -102,8 +102,8 @@ func (a *API) handleCompanyDelete(w http.ResponseWriter, r *http.Request) {
 
 // handleCompanyExport — GET /api/companies/{id}/export — отдаёт мир одним
 // .beacon-world.zip (см. app.CompanyManager.ExportWorld): сцены, журнал,
-// библиотеки, плейлисты, преген-персонажи, загрузки. Без аккаунтов и
-// персонажей игроков.
+// библиотеки, плейлисты, преген-персонажи, загрузки. С ?accounts=1 —
+// дополнительно аккаунты игроков и их персонажи.
 func (a *API) handleCompanyExport(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireAdminAccount(w, r); !ok {
 		return
@@ -117,9 +117,10 @@ func (a *API) handleCompanyExport(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	withAccounts := r.URL.Query().Get("accounts") == "1"
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.beacon-world.zip"`, worldFileSlug(c.Name)))
-	if err := a.Companies.ExportWorld(r.Context(), c.ID, a.Version, w); err != nil {
+	if err := a.Companies.ExportWorld(r.Context(), c.ID, a.Version, withAccounts, w); err != nil {
 		// Заголовки уже ушли — HTTP-статус не поменять; клиент получит
 		// оборванный zip. Логируем, чтобы причина не потерялась.
 		//nolint:gosec // G706: c.ID — 32-hex id из companies.ByID, не пользовательский ввод
@@ -160,7 +161,7 @@ func (a *API) handleCompanyImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := a.Companies.ImportWorld(r.Context(), tmp.Name())
+	res, err := a.Companies.ImportWorld(r.Context(), tmp.Name())
 	if err != nil {
 		var verr *domain.ValidationError
 		if errors.As(err, &verr) {
@@ -170,7 +171,12 @@ func (a *API) handleCompanyImport(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": c.ID, "name": c.Name, "system": c.System, "active": false})
+	c := res.Company
+	out := map[string]any{"id": c.ID, "name": c.Name, "system": c.System, "active": false}
+	if len(res.RenamedLogins) > 0 {
+		out["renamedLogins"] = res.RenamedLogins
+	}
+	writeJSON(w, http.StatusCreated, out)
 }
 
 // worldFileSlug — безопасное ASCII-имя файла экспорта из названия мира

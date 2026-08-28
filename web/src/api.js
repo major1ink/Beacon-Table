@@ -58,8 +58,9 @@ export async function deleteCompany(id) {
 }
 // exportCompanyURL — прямая ссылка на .beacon-world.zip мира; отдаётся по
 // cookie-сессии, качается обычной навигацией (Content-Disposition: attachment).
-export function exportCompanyURL(id) {
-  return `/api/companies/${id}/export`;
+// withAccounts — тащить ли аккаунты игроков и их персонажей.
+export function exportCompanyURL(id, withAccounts) {
+  return `/api/companies/${id}/export${withAccounts ? "?accounts=1" : ""}`;
 }
 // importCompany — загрузка .zip мира (multipart, поле "file"), в обход
 // apiFetch как uploadFile: браузер сам ставит boundary и шлёт cookie. Создаёт

@@ -25,6 +25,7 @@ func newTestManager(t *testing.T) (*CompanyManager, string) {
 	m := &CompanyManager{
 		db:          db,
 		companies:   sqlite.NewCompanyStore(db),
+		accounts:    sqlite.NewAccountStore(db),
 		dataRoot:    filepath.Join(root, "data"),
 		uploadsRoot: filepath.Join(root, "uploads"),
 		uploadsURL:  "/uploads/",
@@ -42,93 +43,6 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-func TestWorldPack_RoundTrip(t *testing.T) {
-	ctx := context.Background()
-	m, _ := newTestManager(t)
-
-	src, err := m.Create(ctx, "Демо-мир", domain.SystemDnD5e2024)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	srcData, srcUploads, srcURL := m.rootsFor(src)
-
-	writeFile(t, filepath.Join(srcData, "scenes", "scenes", "scene-1.json"),
-		`{"id":"scene-1","mapUrl":"`+srcURL+`maps/map.png"}`)
-	writeFile(t, filepath.Join(srcData, "journal", "Глава 1", "e1.md"),
-		"---\nowner: acc-123\nownerName: Гвен\ndefault: observer\naccess:\n  acc-9: owner\n---\n# Таверна\n\n![map](/uploads/companies/"+src.ID+"/maps/map.png)\n")
-	writeFile(t, filepath.Join(srcData, "bestiary", "bestiary", "m1.json"),
-		`{"id":"m1","name":"Гоблин","imageUrl":"`+srcURL+`tokens/g.png"}`)
-	writeFile(t, filepath.Join(srcUploads, "maps", "map.png"), "PNGDATA-map")
-	writeFile(t, filepath.Join(srcUploads, "tokens", "g.png"), "PNGDATA-goblin")
-
-	ps := sqlite.NewPlaylistStore(m.db, src.ID)
-	if err := ps.Create(ctx, "pl-1", "Бой"); err != nil {
-		t.Fatalf("playlist create: %v", err)
-	}
-	if err := ps.AddTrack(ctx, "tr-1", "pl-1", srcURL+"audio/x.mp3", "Драка", 0.7, true); err != nil {
-		t.Fatalf("playlist track: %v", err)
-	}
-	pg := sqlite.NewPregenStore(m.db, src.ID)
-	if err := pg.Create(ctx, &domain.Pregen{ID: "pg-1", Name: "Аня", AvatarURL: srcURL + "tokens/anya.png"}); err != nil {
-		t.Fatalf("pregen create: %v", err)
-	}
-
-	var buf bytes.Buffer
-	if err := m.ExportWorld(ctx, src.ID, "test", &buf); err != nil {
-		t.Fatalf("ExportWorld: %v", err)
-	}
-
-	zipPath := filepath.Join(t.TempDir(), "w.zip")
-	if err := os.WriteFile(zipPath, buf.Bytes(), 0o600); err != nil {
-		t.Fatalf("write zip: %v", err)
-	}
-	dst, err := m.ImportWorld(ctx, zipPath)
-	if err != nil {
-		t.Fatalf("ImportWorld: %v", err)
-	}
-	if dst.ID == src.ID {
-		t.Fatal("импортированный мир получил тот же id, что и исходный")
-	}
-	if dst.Name != "Демо-мир" || dst.System != domain.SystemDnD5e2024 {
-		t.Fatalf("метаданные мира не сохранились: %+v", dst)
-	}
-	dstData, dstUploads, dstURL := m.rootsFor(dst)
-
-	scene := readFile(t, filepath.Join(dstData, "scenes", "scenes", "scene-1.json"))
-	if !strings.Contains(scene, dstURL+"maps/map.png") || strings.Contains(scene, src.ID) {
-		t.Fatalf("URL в сцене не переписан: %s", scene)
-	}
-	journal := readFile(t, filepath.Join(dstData, "journal", "Глава 1", "e1.md"))
-	if strings.Contains(journal, "owner:") || strings.Contains(journal, "acc-123") {
-		t.Fatalf("привязка к аккаунту осталась в журнале: %s", journal)
-	}
-	if !strings.Contains(journal, "default: observer") {
-		t.Fatalf("уровень видимости журнала потерян: %s", journal)
-	}
-	if !strings.Contains(journal, dstURL+"maps/map.png") {
-		t.Fatalf("URL в журнале не переписан: %s", journal)
-	}
-	monster := readFile(t, filepath.Join(dstData, "bestiary", "bestiary", "m1.json"))
-	if !strings.Contains(monster, dstURL+"tokens/g.png") {
-		t.Fatalf("URL в карточке бестиария не переписан: %s", monster)
-	}
-	if got := readFile(t, filepath.Join(dstUploads, "maps", "map.png")); got != "PNGDATA-map" {
-		t.Fatalf("файл загрузки не перенесён дословно: %q", got)
-	}
-
-	pls, err := sqlite.NewPlaylistStore(m.db, dst.ID).List(ctx)
-	if err != nil || len(pls) != 1 || len(pls[0].Tracks) != 1 {
-		t.Fatalf("плейлист не импортирован: %+v (err %v)", pls, err)
-	}
-	if pls[0].Tracks[0].URL != dstURL+"audio/x.mp3" {
-		t.Fatalf("URL трека не переписан: %s", pls[0].Tracks[0].URL)
-	}
-	pgs, err := sqlite.NewPregenStore(m.db, dst.ID).List(ctx)
-	if err != nil || len(pgs) != 1 || pgs[0].AvatarURL != dstURL+"tokens/anya.png" {
-		t.Fatalf("преген не импортирован/URL не переписан: %+v (err %v)", pgs, err)
-	}
-}
-
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path) //nolint:gosec // тестовый путь
@@ -136,6 +50,19 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(b)
+}
+
+func exportToZip(t *testing.T, m *CompanyManager, companyID string, withAccounts bool) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := m.ExportWorld(context.Background(), companyID, "test", withAccounts, &buf); err != nil {
+		t.Fatalf("ExportWorld: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "w.zip")
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
+		t.Fatalf("write zip: %v", err)
+	}
+	return path
 }
 
 func makeZip(t *testing.T, files map[string]string) string {
@@ -161,6 +88,215 @@ func makeZip(t *testing.T, files map[string]string) string {
 	return path
 }
 
+// seedWorldContent раскладывает сцену (токен с владельцем), combat.json,
+// запись журнала с шапкой, карточку бестиария, загрузки, плейлист, преген.
+func seedWorldContent(t *testing.T, m *CompanyManager, c *domain.Company, ownerAcc, ownerChar string) {
+	t.Helper()
+	ctx := context.Background()
+	data, uploads, url := m.rootsFor(c)
+
+	writeFile(t, filepath.Join(data, "scenes", "scenes", "scene-1.json"),
+		`{"id":"scene-1","mapUrl":"`+url+`maps/map.png","tokens":{"t1":{"id":"t1","label":"Гвен","ownerId":"`+ownerAcc+`","characterId":"`+ownerChar+`"},"t2":{"id":"t2","label":"Гоблин","monsterId":"m1"}}}`)
+	writeFile(t, filepath.Join(data, "scenes", "combat.json"),
+		`{"active":false,"round":0,"combatants":{"c1":{"id":"c1","name":"Гвен","ownerId":"`+ownerAcc+`","characterId":"`+ownerChar+`"}}}`)
+	writeFile(t, filepath.Join(data, "journal", "Глава 1", "e1.md"),
+		"---\nowner: "+ownerAcc+"\nownerName: Гвен\ndefault: observer\naccess:\n  "+ownerAcc+": owner\n---\n# Таверна\n\n![map]("+url+"maps/map.png)\n")
+	writeFile(t, filepath.Join(data, "bestiary", "bestiary", "m1.json"),
+		`{"id":"m1","name":"Гоблин","imageUrl":"`+url+`tokens/g.png"}`)
+	writeFile(t, filepath.Join(uploads, "maps", "map.png"), "PNGDATA-map")
+	writeFile(t, filepath.Join(uploads, "tokens", "g.png"), "PNGDATA-goblin")
+
+	ps := sqlite.NewPlaylistStore(m.db, c.ID)
+	if err := ps.Create(ctx, "pl-1", "Бой"); err != nil {
+		t.Fatalf("playlist: %v", err)
+	}
+	if err := ps.AddTrack(ctx, "tr-1", "pl-1", url+"audio/x.mp3", "Драка", 0.7, true); err != nil {
+		t.Fatalf("track: %v", err)
+	}
+	if err := sqlite.NewPregenStore(m.db, c.ID).Create(ctx, &domain.Pregen{ID: "pg-1", Name: "Аня", AvatarURL: url + "tokens/anya.png"}); err != nil {
+		t.Fatalf("pregen: %v", err)
+	}
+}
+
+func TestWorldPack_RoundTrip_ContentOnly(t *testing.T) {
+	ctx := context.Background()
+	srcM, _ := newTestManager(t)
+	dstM, _ := newTestManager(t)
+
+	src, err := srcM.Create(ctx, "Демо-мир", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	seedWorldContent(t, srcM, src, "acc-123", "char-9")
+
+	res, err := dstM.ImportWorld(ctx, exportToZip(t, srcM, src.ID, false))
+	if err != nil {
+		t.Fatalf("ImportWorld: %v", err)
+	}
+	dst := res.Company
+	if dst.Name != "Демо-мир" || dst.System != domain.SystemDnD5e2024 {
+		t.Fatalf("метаданные мира: %+v", dst)
+	}
+	dstData, dstUploads, dstURL := dstM.rootsFor(dst)
+
+	scene := readFile(t, filepath.Join(dstData, "scenes", "scenes", "scene-1.json"))
+	if strings.Contains(scene, "acc-123") || strings.Contains(scene, "char-9") || strings.Contains(scene, `"ownerId"`) || strings.Contains(scene, `"characterId"`) {
+		t.Fatalf("владелец токена не обнулён: %s", scene)
+	}
+	if !strings.Contains(scene, `"monsterId"`) || !strings.Contains(scene, `"m1"`) || !strings.Contains(scene, dstURL+"maps/map.png") {
+		t.Fatalf("сцена потеряла данные / URL: %s", scene)
+	}
+	combat := readFile(t, filepath.Join(dstData, "scenes", "combat.json"))
+	if strings.Contains(combat, "acc-123") || strings.Contains(combat, `"ownerId"`) {
+		t.Fatalf("владелец combatant не обнулён: %s", combat)
+	}
+	journal := readFile(t, filepath.Join(dstData, "journal", "Глава 1", "e1.md"))
+	if strings.Contains(journal, "owner:") || strings.Contains(journal, "acc-123") {
+		t.Fatalf("привязка к аккаунту осталась в журнале: %s", journal)
+	}
+	if !strings.Contains(journal, "default: observer") || !strings.Contains(journal, dstURL+"maps/map.png") {
+		t.Fatalf("журнал: видимость/URL: %s", journal)
+	}
+	monster := readFile(t, filepath.Join(dstData, "bestiary", "bestiary", "m1.json"))
+	if !strings.Contains(monster, dstURL+"tokens/g.png") {
+		t.Fatalf("URL карточки бестиария: %s", monster)
+	}
+	if got := readFile(t, filepath.Join(dstUploads, "maps", "map.png")); got != "PNGDATA-map" {
+		t.Fatalf("загрузка не перенесена дословно: %q", got)
+	}
+	pls, err := sqlite.NewPlaylistStore(dstM.db, dst.ID).List(ctx)
+	if err != nil || len(pls) != 1 || len(pls[0].Tracks) != 1 || pls[0].Tracks[0].URL != dstURL+"audio/x.mp3" {
+		t.Fatalf("плейлист: %+v (err %v)", pls, err)
+	}
+	pgs, err := sqlite.NewPregenStore(dstM.db, dst.ID).List(ctx)
+	if err != nil || len(pgs) != 1 || pgs[0].AvatarURL != dstURL+"tokens/anya.png" {
+		t.Fatalf("преген: %+v (err %v)", pgs, err)
+	}
+	if accs, _ := dstM.accounts.List(ctx); len(accs) != 0 {
+		t.Fatalf("в content-only мир просочились аккаунты: %+v", accs)
+	}
+}
+
+func TestWorldPack_RoundTrip_WithAccounts(t *testing.T) {
+	ctx := context.Background()
+	srcM, _ := newTestManager(t)
+	dstM, _ := newTestManager(t)
+
+	src, err := srcM.Create(ctx, "Кампания", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := srcM.accounts.Create(ctx, &domain.Account{
+		ID: "acc-gwen", Username: "gwen", PasswordHash: "hash-gwen",
+		Role: domain.AccountRolePlayer, Status: domain.AccountStatusActive, CompanyID: src.ID,
+	}); err != nil {
+		t.Fatalf("account: %v", err)
+	}
+	// аккаунт ДМ (глобальный) — должен приехать как admin с CompanyID == ""
+	if err := srcM.accounts.Create(ctx, &domain.Account{
+		ID: "acc-dm", Username: "demo-dm", PasswordHash: "hash-dm",
+		Role: domain.AccountRoleAdmin, Status: domain.AccountStatusActive,
+	}); err != nil {
+		t.Fatalf("dm account: %v", err)
+	}
+	cstore := sqlite.NewCharacterStore(srcM.db, src.ID, src.System)
+	if err := cstore.Create(ctx, &domain.Character{ID: "char-gwen", AccountID: "acc-gwen", Name: "Гвен"}); err != nil {
+		t.Fatalf("character: %v", err)
+	}
+	if _, err := cstore.AddInventoryEntry(ctx, "char-gwen", "acc-gwen", domain.InventoryEntry{ID: "inv-1", Name: "Меч", Quantity: 1}); err != nil {
+		t.Fatalf("inventory: %v", err)
+	}
+	seedWorldContent(t, srcM, src, "acc-gwen", "char-gwen")
+
+	res, err := dstM.ImportWorld(ctx, exportToZip(t, srcM, src.ID, true))
+	if err != nil {
+		t.Fatalf("ImportWorld: %v", err)
+	}
+	if len(res.RenamedLogins) != 0 {
+		t.Fatalf("неожиданные переименования: %v", res.RenamedLogins)
+	}
+	dst := res.Company
+
+	acc, err := dstM.accounts.ByID(ctx, "acc-gwen")
+	if err != nil {
+		t.Fatalf("аккаунт не перенесён: %v", err)
+	}
+	if acc.CompanyID != dst.ID || acc.PasswordHash != "hash-gwen" || acc.Role != domain.AccountRolePlayer {
+		t.Fatalf("аккаунт игрока: %+v", acc)
+	}
+	dm, err := dstM.accounts.ByID(ctx, "acc-dm")
+	if err != nil {
+		t.Fatalf("аккаунт ДМ не перенесён: %v", err)
+	}
+	if dm.Role != domain.AccountRoleAdmin || dm.CompanyID != "" || dm.PasswordHash != "hash-dm" {
+		t.Fatalf("аккаунт ДМ: %+v (ожидали admin, CompanyID пустой)", dm)
+	}
+	dcstore := sqlite.NewCharacterStore(dstM.db, dst.ID, dst.System)
+	ch, err := dcstore.ByID(ctx, "char-gwen")
+	if err != nil || ch.AccountID != "acc-gwen" || ch.Name != "Гвен" {
+		t.Fatalf("персонаж: %+v (err %v)", ch, err)
+	}
+	inv, err := dcstore.ListInventory(ctx, "char-gwen")
+	if err != nil || len(inv) != 1 || inv[0].Name != "Меч" {
+		t.Fatalf("инвентарь: %+v (err %v)", inv, err)
+	}
+	dstData, _, _ := dstM.rootsFor(dst)
+	scene := readFile(t, filepath.Join(dstData, "scenes", "scenes", "scene-1.json"))
+	if !strings.Contains(scene, `"ownerId":"acc-gwen"`) || !strings.Contains(scene, `"characterId":"char-gwen"`) {
+		t.Fatalf("владелец токена потерян при переносе с аккаунтами: %s", scene)
+	}
+	journal := readFile(t, filepath.Join(dstData, "journal", "Глава 1", "e1.md"))
+	if !strings.Contains(journal, "owner: acc-gwen") || !strings.Contains(journal, "acc-gwen: owner") {
+		t.Fatalf("шапка журнала не сохранена при переносе с аккаунтами: %s", journal)
+	}
+}
+
+func TestWorldPack_ImportRenamesLoginCollision(t *testing.T) {
+	ctx := context.Background()
+	srcM, _ := newTestManager(t)
+	dstM, _ := newTestManager(t)
+
+	src, err := srcM.Create(ctx, "Кампания", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := srcM.accounts.Create(ctx, &domain.Account{
+		ID: "acc-src", Username: "gandalf", PasswordHash: "h",
+		Role: domain.AccountRolePlayer, Status: domain.AccountStatusActive, CompanyID: src.ID,
+	}); err != nil {
+		t.Fatalf("src account: %v", err)
+	}
+	if err := sqlite.NewCharacterStore(srcM.db, src.ID, src.System).Create(ctx, &domain.Character{ID: "char-src", AccountID: "acc-src", Name: "Гэндальф"}); err != nil {
+		t.Fatalf("src char: %v", err)
+	}
+	zipPath := exportToZip(t, srcM, src.ID, true)
+
+	// на целевом сервере уже занят логин "gandalf"
+	other, _ := dstM.Create(ctx, "Другой мир", domain.SystemDnD5e2024)
+	if err := dstM.accounts.Create(ctx, &domain.Account{
+		ID: "acc-other", Username: "gandalf", PasswordHash: "h2",
+		Role: domain.AccountRolePlayer, Status: domain.AccountStatusActive, CompanyID: other.ID,
+	}); err != nil {
+		t.Fatalf("other account: %v", err)
+	}
+
+	res, err := dstM.ImportWorld(ctx, zipPath)
+	if err != nil {
+		t.Fatalf("ImportWorld: %v", err)
+	}
+	if res.RenamedLogins["gandalf"] != "gandalf (2)" {
+		t.Fatalf("ожидали gandalf → gandalf (2), получили %v", res.RenamedLogins)
+	}
+	acc, err := dstM.accounts.ByID(ctx, "acc-src")
+	if err != nil || acc.Username != "gandalf (2)" || acc.CompanyID != res.Company.ID {
+		t.Fatalf("переименованный аккаунт: %+v (err %v)", acc, err)
+	}
+	ch, err := sqlite.NewCharacterStore(dstM.db, res.Company.ID, res.Company.System).ByID(ctx, "char-src")
+	if err != nil || ch.AccountID != "acc-src" {
+		t.Fatalf("персонаж не привязан к переименованному аккаунту: %+v (err %v)", ch, err)
+	}
+}
+
 func TestWorldPack_ImportRejectsZipSlip(t *testing.T) {
 	ctx := context.Background()
 	m, root := newTestManager(t)
@@ -176,7 +312,6 @@ func TestWorldPack_ImportRejectsZipSlip(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "evil.txt")); err == nil {
 		t.Fatal("файл записан за пределами каталога мира")
 	}
-	// откат: осиротевшего мира в списке не осталось
 	list, _ := m.companies.List(ctx)
 	if len(list) != 0 {
 		t.Fatalf("после сбоя импорта остался мир: %+v", list)

@@ -562,6 +562,8 @@ const tokenMenuAddInitiativeBtn = document.getElementById("tokenMenuAddInitiativ
 const tokenMenuLootBtn = document.getElementById("tokenMenuLootBtn");
 const tokenMenuHiddenRow = document.getElementById("tokenMenuHiddenRow");
 const tokenMenuShapeRow = document.getElementById("tokenMenuShapeRow");
+const tokenMenuOwnerRow = document.getElementById("tokenMenuOwnerRow");
+const tokenMenuOwner = document.getElementById("tokenMenuOwner");
 const tokenMenuLightRow = document.getElementById("tokenMenuLightRow");
 const tokenMenuLightLabel = document.getElementById("tokenMenuLightLabel");
 const tokenMenuHidden = document.getElementById("tokenMenuHidden");
@@ -963,6 +965,12 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLootBtn.style.display = !menuIsMulti && token.dead && menuTokenLoot.length ? "flex" : "none";
   tokenMenuHiddenRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
   tokenMenuShapeRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
+  // "Владелец" — привязать существующий токен к персонажу игрока задним
+  // числом (единственный путь после импорта мира, где персонажа надо было бы
+  // заново перетащить из панели). Не для токенов-лампочек и декораций.
+  const canOwn = !menuIsMulti && !menuIsLightOnly && !token.decor;
+  tokenMenuOwnerRow.style.display = canOwn ? "flex" : "none";
+  if (canOwn) fillTokenOwnerSelect(id, token);
   tokenMenuLightRow.style.display = menuIsLightOnly ? "none" : "flex";
   tokenMenuLightToggleBtn.style.display = menuIsLightOnly ? "flex" : "none";
   // У токена персонажа игрока свет — это не "токен-лампочка", а факел/фонарь
@@ -1097,6 +1105,61 @@ function closeCanvasMenu() {
   canvasMenu.style.display = "none";
   canvasMenuAt = null;
 }
+
+// fillTokenOwnerSelect — наполняет <select> "Владелец" персонажами мира
+// (GET /api/admin/characters). dmCharacters — общий кэш с панелью "Персонажи";
+// панель мог не открываться, поэтому дозапрашиваем и переотрисовываем, если
+// меню ещё висит на том же токене.
+function fillTokenOwnerSelect(id, token) {
+  const build = () => {
+    if (menuTokenId !== id || tokenMenu.style.display === "none") return;
+    const cur = token.characterId || "";
+    tokenMenuOwner.textContent = "";
+    tokenMenuOwner.add(new Option("— никто —", ""));
+    let matched = false;
+    for (const c of dmCharacters) {
+      const label = c.accountUsername ? `${c.name} (${c.accountUsername})` : c.name;
+      tokenMenuOwner.add(new Option(label, c.id, false, c.id === cur));
+      if (c.id === cur) matched = true;
+    }
+    if (!matched && (cur || token.ownerId)) {
+      const ghost = new Option("владелец не в этом мире", "__keep__", false, true);
+      ghost.disabled = true;
+      tokenMenuOwner.add(ghost);
+    }
+  };
+  build();
+  fetchAdminCharacters()
+    .then((list) => {
+      dmCharacters = list;
+      build();
+    })
+    .catch(() => {});
+}
+
+// sendTokenOwner — переназначить владельца существующего токена. Сервер
+// апсертит токен по id (move_token, только ДМ — см. room.go applyMutation).
+function sendTokenOwner(id, charId) {
+  if (charId === "__keep__") return; // "владелец не в этом мире" — не трогаем
+  const t = (vtt.getScene().tokens || {})[id];
+  if (!t) return;
+  let patch;
+  if (!charId) {
+    patch = { ownerId: "", characterId: "" };
+  } else {
+    const c = dmCharacters.find((x) => x.id === charId);
+    if (!c) return;
+    // назначение characterId, уже стоящего на карте другим токеном, снесёт
+    // тот токен (room.go: dropDuplicateCharacterTokens) — у персонажа один
+    // токен на сцене.
+    patch = { ownerId: c.accountId, characterId: c.id };
+  }
+  vtt.send({ type: "move_token", token: { ...t, ...patch } });
+}
+
+tokenMenuOwner.onchange = () => {
+  if (menuTokenId) sendTokenOwner(menuTokenId, tokenMenuOwner.value);
+};
 
 tokenMenuCopyBtn.onclick = () => {
   if (!menuTokenId) return;

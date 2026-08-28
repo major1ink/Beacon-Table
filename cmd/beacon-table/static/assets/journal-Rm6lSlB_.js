@@ -1,4 +1,4 @@
-import{m as Ne,l as Le,ax as Ie,aw as le,b as Me,ay as Te,au as ie,av as $e,az as He,aA as Ae,aB as We,aC as Oe,aD as Je,aE as Re}from"./api-AXxxI07i.js";import{s as Fe,w as Pe,a as _e,r as ze}from"./markdown-CH_1mRWr.js";import{s as Ue,b as O,i as I,a as Q}from"./modal-g49pjxWl.js";import{w as Ve}from"./catalog-links-DYEXUPUm.js";import{e as De}from"./inline-rolls-DrPnKcfh.js";const qe=`
+import{m as Ne,l as Le,ax as Ie,aw as le,b as Me,ay as Te,au as ie,av as $e,az as He,aA as Ae,aB as We,aC as Oe,aD as Je,aE as Re}from"./api-CUlNtZT3.js";import{s as Fe,w as Pe,a as _e,r as ze}from"./markdown-CH_1mRWr.js";import{s as Ue,b as O,i as I,a as Q}from"./modal-g49pjxWl.js";import{w as Ve}from"./catalog-links-LSTNGX14.js";import{e as De}from"./inline-rolls-DrPnKcfh.js";const qe=`
   position: fixed; z-index: 60; min-width: 200px; max-width: 340px;
   max-height: 60vh; overflow-y: auto; padding: 4px;
   background: var(--panel-bg, #1e1e22); color: var(--text, #eee);
