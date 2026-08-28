@@ -140,6 +140,12 @@ func (m *CompanyManager) List(ctx context.Context) ([]*domain.Company, error) {
 	return m.companies.List(ctx)
 }
 
+// ListAccounts — все аккаунты сервера (глобальны, не привязаны к Current()).
+// Нужен HTTP-слою: worlds.html показывает, сколько игроков в каждом мире.
+func (m *CompanyManager) ListAccounts(ctx context.Context) ([]*domain.Account, error) {
+	return m.accounts.List(ctx)
+}
+
 const maxCompanyNameLen = 80
 
 // Create заводит новый мир (ещё не запущенный — см. Launch). Пустые
@@ -160,28 +166,87 @@ func (m *CompanyManager) Create(ctx context.Context, name, system string) (*doma
 	return c, nil
 }
 
-// Delete удаляет мир — только если он сейчас не запущен и в нём нет ни
-// одного аккаунта (простое консервативное правило первой итерации: не
-// потерять чужие данные одним кликом). Файлы на диске (data/companies/<id>,
-// uploads/companies/<id>) НЕ удаляются — тем же принципом, что и delete_scene
-// в Room не трогает файл сцены сразу (см. комментарий в domain), тут проще
-// и безопаснее оставить осиротевшие файлы на диске, чем рисковать
-// рекурсивным os.RemoveAll по данным, которые могли зваться иначе, чем
-// ожидает код.
-func (m *CompanyManager) Delete(ctx context.Context, id string) error {
+// Delete удаляет мир. Запущенный сейчас мир удалить нельзя — сначала сними его
+// со стола (Deactivate; ДМ делает это, вернувшись на worlds.html). Если в мире
+// остались аккаунты игроков, нужен force: тогда сносятся и они (вместе с
+// персонажами, инвентарём и сессиями — каскадом по FK на accounts), и весь
+// привязанный к миру контент (пул прегенов, плейлисты, модули Foundry), и
+// каталоги мира на диске. Аккаунт ДМ (глобальный, CompanyID == "") не трогается.
+func (m *CompanyManager) Delete(ctx context.Context, id string, force bool) error {
 	if id == m.ActiveCompanyID() {
 		return domain.ErrForbidden
+	}
+	company, err := m.companies.ByID(ctx, id)
+	if err != nil {
+		return err
 	}
 	accs, err := m.accounts.List(ctx)
 	if err != nil {
 		return err
 	}
+	var players []string
 	for _, a := range accs {
 		if a.CompanyID == id {
-			return domain.ErrConflict
+			players = append(players, a.ID)
 		}
 	}
-	return m.companies.Delete(ctx, id)
+	if len(players) > 0 && !force {
+		return domain.ErrConflict
+	}
+	for _, aid := range players {
+		if err := m.accounts.Delete(ctx, aid); err != nil {
+			return err
+		}
+	}
+	if err := m.purgeCompanyData(ctx, id); err != nil {
+		return err
+	}
+	if err := m.companies.Delete(ctx, id); err != nil {
+		return err
+	}
+	// Файлы на диске. У легаси-мира rootsFor отдаёт КОРНИ всей инсталляции —
+	// их сносить нельзя.
+	if m.legacyID == "" || id != m.legacyID {
+		dataRoot, uploadsRoot, _ := m.rootsFor(company)
+		_ = os.RemoveAll(dataRoot)
+		_ = os.RemoveAll(uploadsRoot)
+	}
+	return nil
+}
+
+// purgeCompanyData сносит строки, привязанные к миру денормализованным
+// company_id без FK на companies (см. sqlite/db.go). Инвентарь уходит каскадом
+// от characters, треки — от playlists. Персонажи/сессии игроков к этому
+// моменту уже удалены вместе с их аккаунтами; DELETE FROM characters добирает
+// то, что осталось за ДМ.
+func (m *CompanyManager) purgeCompanyData(ctx context.Context, id string) error {
+	for _, stmt := range []string{
+		`DELETE FROM characters WHERE company_id = ?`,
+		`DELETE FROM pregen_characters WHERE company_id = ?`,
+		`DELETE FROM playlist_tracks WHERE playlist_id IN (SELECT id FROM playlists WHERE company_id = ?)`,
+		`DELETE FROM playlists WHERE company_id = ?`,
+		`DELETE FROM foundry_modules WHERE company_id = ?`,
+	} {
+		if _, err := m.db.ExecContext(ctx, stmt, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Deactivate снимает текущий мир со стола: гасит Room с синхронным flush на
+// диск (как Shutdown) и очищает active_company_id, чтобы рестарт сервера не
+// поднял мир заново. Nil-safe. ДМ на экране выбора мира (worlds.html) = стол
+// пуст, поэтому worlds.js дёргает это при загрузке.
+func (m *CompanyManager) Deactivate(ctx context.Context) error {
+	m.mu.Lock()
+	prev := m.current
+	m.current = nil
+	m.mu.Unlock()
+	if prev != nil {
+		prev.Room.Shutdown()
+	}
+	return m.companies.SetActiveID(ctx, "")
 }
 
 // rootsFor — корневые пути на диске для компании: у легаси-компании (см.

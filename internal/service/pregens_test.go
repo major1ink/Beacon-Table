@@ -59,15 +59,16 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 		t.Fatalf("Claim занятого чужим должен быть ErrForbidden, got %v", err)
 	}
 
-	// Вернуть в пул — пре-ген снова свободен, персонаж игрока остаётся.
+	// Отвязать от игрока — пре-ген снова свободен, а созданный при захвате
+	// персонаж УДАЛЁН (без этого было двусмысленное «и назначен, и не назначен»).
 	if err := svc.Release(ctx, p.ID); err != nil {
 		t.Fatalf("Release: %v", err)
 	}
 	if avail, _ := svc.Available(ctx); len(avail) != 1 {
 		t.Fatalf("после Release пре-ген должен вернуться в пул")
 	}
-	if got, err := chars.ByID(ctx, c.ID); err != nil || got.AccountID != "acc-1" {
-		t.Fatalf("Release не должен трогать персонажа игрока: got=%+v err=%v", got, err)
+	if _, err := chars.ByID(ctx, c.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("Release должен удалить персонажа, созданного при захвате, got err=%v", err)
 	}
 
 	// Назначение ДМ-ом — тот же Claim с явным аккаунтом.

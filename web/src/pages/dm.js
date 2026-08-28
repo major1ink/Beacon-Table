@@ -16,6 +16,7 @@ import { initShowcaseOverlay } from "../showcase-overlay.js";
 import {
   fetchMe,
   apiLogout,
+  stopActiveWorld,
   fetchVersion,
   fetchAssets,
   uploadFile,
@@ -25,6 +26,8 @@ import {
   fetchAdminCharacters,
   updateAdminCharacter,
   fetchAdminPregens,
+  createAdminPregen,
+  updateAdminPregen,
   assignPregen,
   releasePregen,
   deleteAdminPregen,
@@ -134,7 +137,13 @@ function openJournalWindow(entryId, section) {
 
 document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
-document.getElementById("worldsBtn").onclick = () => {
+// worldsBtn — уйти со стола в список миров. Явно гасим мир (stopActiveWorld):
+// стол закрывается, игроки отключаются, рестарт сервера не поднимет мир сам —
+// ДМ вернётся и выберет мир заново. Единственное место, где стол снимается;
+// сам заход на worlds.html его не трогает.
+document.getElementById("worldsBtn").onclick = async () => {
+  if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;
+  await stopActiveWorld().catch(() => {});
   location.href = "/worlds.html";
 };
 
@@ -1696,6 +1705,10 @@ const dmCharEditMsg = document.getElementById("dmCharEditMsg");
 let dmCharacters = []; // [{id, accountId, accountUsername, name, avatarUrl}] — кэш для drag&drop-постановки на карту
 let dmCharEditingId = null;
 let dmCharPendingAvatarUrl = "";
+// dmCharEditPregen — если правится заготовка из пула «Готовые персонажи», а не
+// персонаж игрока: полный объект пре-гена (нужен его лист/модуль при
+// перезаписи через updateAdminPregen). null — обычная правка персонажа игрока.
+let dmCharEditPregen = null;
 
 // showDmCharAvatarPreview — isVideoUrl уже есть чуть ниже в этом же файле
 // (библиотека токен-арта переиспользует ту же проверку по расширению).
@@ -1719,12 +1732,14 @@ function showDmCharAvatarPreview(url) {
 
 function closeDmCharEditForm() {
   dmCharEditingId = null;
+  dmCharEditPregen = null;
   dmCharEditForm.style.display = "none";
   dmCharEditMsg.textContent = "";
 }
 
 function openDmCharEditForm(c) {
   dmCharEditingId = c.id;
+  dmCharEditPregen = null;
   dmCharPendingAvatarUrl = c.avatarUrl || "";
   dmCharEditName.value = c.name;
   dmCharEditAvatarUpload.value = "";
@@ -1733,94 +1748,114 @@ function openDmCharEditForm(c) {
   dmCharEditForm.style.display = "block";
 }
 
-// renderDmPregenSection — секция «Готовые персонажи» в панели «Персонажи»:
-// пул предгенерированных листов мира из импортированного приключения (см.
-// internal/domain/pregen.go). ДМ видит статус занятости, назначает пре-гена
-// аккаунту игрока, возвращает в пул или убирает из пула. Полный лист до
-// захвата не показываем (в characters его ещё нет) — после назначения он
-// открывается обычной кнопкой у персонажа игрока ниже.
-async function renderDmPregenSection() {
-  let pregens = [];
+// openDmPregenEditForm — та же форма «Имя / аватар», но для свободной
+// заготовки из пула: сохранение уходит в updateAdminPregen (полная
+// перезапись — лист и метку модуля берём из самого пре-гена).
+function openDmPregenEditForm(p) {
+  dmCharEditingId = p.id;
+  dmCharEditPregen = p;
+  dmCharPendingAvatarUrl = p.avatarUrl || "";
+  dmCharEditName.value = p.name;
+  dmCharEditAvatarUpload.value = "";
+  showDmCharAvatarPreview(p.avatarUrl || "");
+  dmCharEditMsg.textContent = "";
+  dmCharEditForm.style.display = "block";
+}
+
+// createPregenFlow — ДМ заводит заготовку персонажа заранee (до того, как
+// игрок вообще появился): пустой пре-ген по имени, затем сразу открываем его
+// лист для заполнения. Дальше — «Назначить» аккаунту игрока, как у
+// импортированных из Foundry.
+async function createPregenFlow() {
+  const name = await showPrompt("Имя персонажа:", { title: "Новый готовый персонаж", okLabel: "Создать" });
+  if (!name || !name.trim()) return;
+  let created;
   try {
-    pregens = await fetchAdminPregens();
-  } catch {
-    return; // нет пула — секции просто нет
+    created = await createAdminPregen(name.trim());
+  } catch (err) {
+    showAlert("Не удалось создать: " + err.message);
+    return;
   }
-  if (!pregens.length) return;
+  await renderDmCharacters();
+  openFloatingWindow({ key: "pregen-" + created.id, title: created.name, url: `/character-sheet.html?pregen=${created.id}` });
+}
 
-  const group = document.createElement("div");
-  group.className = "dmchar-owner-group";
-  group.textContent = "Готовые персонажи";
-  dmCharactersList.appendChild(group);
+// pregenPoolRow — строка ещё не назначенной заготовки (см. internal/domain/pregen.go):
+// открыть/заполнить лист, поправить имя-аватар, назначить игроку, убрать.
+// orphan — заготовку кто-то брал, но своего персонажа игрок удалил: назначить
+// нельзя (Claim вернёт 409), поэтому вместо «назначить» — «вернуть в пул».
+function pregenPoolRow(p) {
+  const orphan = !!p.claimedBy;
+  const row = document.createElement("div");
+  row.className = "dmchar-row dmchar-row--pregen";
 
-  for (const p of pregens) {
-    const row = document.createElement("div");
-    row.className = "dmchar-row dmchar-row--pregen";
-    const avatar = document.createElement("div");
-    avatar.className = "dmchar-avatar";
-    if (p.avatarUrl) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
-    else avatar.textContent = "—";
-    const name = document.createElement("div");
-    name.className = "dmchar-name";
-    const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
-    name.innerHTML = `${p.name}<div style="font-size:11px;opacity:0.55;">${
-      p.claimedBy ? `у ${p.claimedByUsername || "игрока"}` : "свободен"
-    }${sub ? ` · ${sub}` : ""}</div>`;
-    row.append(avatar, name);
+  const avatar = document.createElement("div");
+  avatar.className = "dmchar-avatar";
+  if (p.avatarUrl) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+  else avatar.textContent = "—";
 
-    const sheetBtn = document.createElement("button");
-    sheetBtn.className = "icon-btn";
-    sheetBtn.innerHTML = icon("scroll", { size: 14 });
-    sheetBtn.title = p.claimedBy ? "Лист персонажа игрока" : "Посмотреть лист (без назначения)";
-    sheetBtn.onclick = () =>
-      openFloatingWindow({
-        key: p.claimedCharacterId ? "char-" + p.claimedCharacterId : "pregen-" + p.id,
-        title: p.name,
-        url: p.claimedCharacterId
-          ? `/character-sheet.html?id=${p.claimedCharacterId}`
-          : `/character-sheet.html?pregen=${p.id}`,
-      });
-    row.appendChild(sheetBtn);
+  const name = document.createElement("div");
+  name.className = "dmchar-name";
+  const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+  // «заготовка» в каждой строке — чтобы её не путали с настоящим персонажем
+  // игрока, у которого может быть такое же имя (заготовка — это шаблон листа,
+  // персонажа из неё ещё не создали).
+  const status = orphan ? `заготовка · игрок ${p.claimedByUsername || ""} удалил персонажа` : "заготовка · свободна";
+  name.innerHTML = `${p.name}<div style="font-size:11px;opacity:0.55;">${status}${sub ? ` · ${sub}` : ""}</div>`;
+  row.append(avatar, name);
 
-    if (p.claimedBy) {
-      const releaseBtn = document.createElement("button");
-      releaseBtn.className = "icon-btn";
-      releaseBtn.innerHTML = icon("chevron-left", { size: 14 });
-      releaseBtn.title = "Вернуть в пул (персонаж игрока останется у него)";
-      releaseBtn.onclick = async () => {
-        try {
-          await releasePregen(p.id);
-          await renderDmCharacters();
-        } catch (err) {
-          showAlert("Не удалось вернуть в пул: " + err.message);
-        }
-      };
-      row.appendChild(releaseBtn);
-    } else {
-      const assignBtn = document.createElement("button");
-      assignBtn.className = "icon-btn";
-      assignBtn.innerHTML = icon("user", { size: 14 });
-      assignBtn.title = "Назначить готового персонажа аккаунту игрока";
-      assignBtn.onclick = () => assignPregenFlow(p);
-      row.appendChild(assignBtn);
-    }
+  const sheetBtn = document.createElement("button");
+  sheetBtn.className = "icon-btn";
+  sheetBtn.innerHTML = icon("scroll", { size: 14 });
+  sheetBtn.title = "Открыть лист заготовки (можно править)";
+  sheetBtn.onclick = () => openFloatingWindow({ key: "pregen-" + p.id, title: p.name, url: `/character-sheet.html?pregen=${p.id}` });
+  row.appendChild(sheetBtn);
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "icon-btn";
-    delBtn.innerHTML = icon("trash", { size: 14 });
-    delBtn.title = "Убрать из пула";
-    delBtn.onclick = async () => {
-      if (!(await showConfirm(`Убрать «${p.name}» из пула готовых персонажей?`, { title: "Убрать из пула", okLabel: "Убрать", danger: true }))) return;
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.innerHTML = icon("pencil", { size: 14 });
+  editBtn.title = "Имя / аватар";
+  editBtn.onclick = () => openDmPregenEditForm(p);
+  row.appendChild(editBtn);
+
+  if (orphan) {
+    const releaseBtn = document.createElement("button");
+    releaseBtn.className = "icon-btn";
+    releaseBtn.innerHTML = icon("chevron-left", { size: 14 });
+    releaseBtn.title = "Снять пометку занятости — заготовка снова свободна для назначения";
+    releaseBtn.onclick = async () => {
       try {
-        await deleteAdminPregen(p.id);
+        await releasePregen(p.id);
         await renderDmCharacters();
       } catch (err) {
-        showAlert("Не удалось убрать: " + err.message);
+        showAlert("Не удалось: " + err.message);
       }
     };
-    row.appendChild(delBtn);
-    dmCharactersList.appendChild(row);
+    row.appendChild(releaseBtn);
+  } else {
+    const assignBtn = document.createElement("button");
+    assignBtn.className = "icon-btn";
+    assignBtn.innerHTML = icon("user", { size: 14 });
+    assignBtn.title = "Назначить аккаунту игрока";
+    assignBtn.onclick = () => assignPregenFlow(p);
+    row.appendChild(assignBtn);
   }
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.innerHTML = icon("trash", { size: 14 });
+  delBtn.title = "Удалить заготовку";
+  delBtn.onclick = async () => {
+    if (!(await showConfirm(`Удалить заготовку «${p.name}»?`, { title: "Удалить заготовку", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deleteAdminPregen(p.id);
+      await renderDmCharacters();
+    } catch (err) {
+      showAlert("Не удалось удалить: " + err.message);
+    }
+  };
+  row.appendChild(delBtn);
+  return row;
 }
 
 // assignPregenFlow — выбор аккаунта игрока и назначение пре-гена ему.
@@ -1868,23 +1903,131 @@ async function assignPregenFlow(pregen) {
   }
 }
 
+// assignedCharRow — строка назначенного персонажа (у конкретного игрока).
+// Перетаскивается на карту (ставит токен). pregen — заготовка, из которой он
+// создан (если есть): подпись «из заготовки «…»» + кнопка «отвязать» (удаляет
+// этого персонажа и возвращает заготовку в «Не назначенные»).
+function assignedCharRow(c, pregen) {
+  const row = document.createElement("div");
+  row.className = "dmchar-row";
+  row.draggable = true;
+  row.title = "Перетащи на карту, чтобы поставить токен";
+  // vtt:tokenContextMenu и остальной drag внутри канваса используют
+  // свои DOM-обработчики — свой тип данных не пересекается с ними, и
+  // preventDefault на dragover (см. ниже) не даёт браузеру попытаться
+  // "открыть" перетаскиваемый текст как ссылку/файл.
+  row.addEventListener("dragstart", (e) => {
+    e.dataTransfer.setData("application/x-beacon-character", c.id);
+    e.dataTransfer.effectAllowed = "copy";
+  });
+  const handle = document.createElement("span");
+  handle.className = "drag-handle";
+  handle.innerHTML = icon("grip-vertical", { size: 14 });
+  const avatar = document.createElement("div");
+  avatar.className = "dmchar-avatar";
+  if (c.avatarUrl) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
+  else avatar.textContent = "—";
+  const name = document.createElement("div");
+  name.className = "dmchar-name";
+  if (pregen) name.innerHTML = `${c.name}<div style="font-size:11px;opacity:0.55;">из заготовки «${pregen.name}»</div>`;
+  else name.textContent = c.name;
+  const sheetBtn = document.createElement("button");
+  sheetBtn.className = "icon-btn";
+  sheetBtn.innerHTML = icon("scroll", { size: 14 });
+  sheetBtn.title = "Лист персонажа";
+  sheetBtn.onclick = () => openFloatingWindow({ key: "char-" + c.id, title: c.name, url: `/character-sheet.html?id=${c.id}` });
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.innerHTML = icon("pencil", { size: 14 });
+  editBtn.title = "Имя / аватар";
+  editBtn.onclick = () => openDmCharEditForm(c);
+  row.append(handle, avatar, name, sheetBtn, editBtn);
+  if (pregen) {
+    const unassignBtn = document.createElement("button");
+    unassignBtn.className = "icon-btn";
+    unassignBtn.innerHTML = icon("chevron-left", { size: 14 });
+    unassignBtn.title = "Отвязать: удалить этого персонажа у игрока, заготовка вернётся в «Не назначенные»";
+    unassignBtn.onclick = async () => {
+      const who = c.accountUsername ? ` у ${c.accountUsername}` : "";
+      if (!(await showConfirm(`Отвязать «${c.name}»${who}? Персонаж будет удалён, заготовка «${pregen.name}» вернётся в «Не назначенные».`, { title: "Отвязать персонажа", okLabel: "Отвязать", danger: true }))) return;
+      try {
+        await releasePregen(pregen.id);
+        await renderDmCharacters();
+      } catch (err) {
+        showAlert("Не удалось отвязать: " + err.message);
+      }
+    };
+    row.append(unassignBtn);
+  }
+  return row;
+}
+
+// renderDmCharacters — панель «Персонажи»: сверху ещё не назначенные заготовки
+// (пул мира, см. internal/domain/pregen.go) + кнопка «Создать», ниже —
+// назначенные персонажи, сгруппированные по игрокам. Одна заготовка при
+// назначении превращается в обычного персонажа игрока (Claim), поэтому в
+// верхнем блоке остаются только свободные.
 async function renderDmCharacters() {
+  let pregens = [];
   try {
-    dmCharacters = await fetchAdminCharacters();
+    [dmCharacters, pregens] = await Promise.all([fetchAdminCharacters(), fetchAdminPregens().catch(() => [])]);
   } catch (err) {
     dmCharactersList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
     return;
   }
   closeDmCharEditForm();
   dmCharactersList.innerHTML = "";
-  await renderDmPregenSection();
+
+  const charById = new Map(dmCharacters.map((c) => [c.id, c]));
+  const pregenForChar = new Map(); // id персонажа игрока -> заготовка, из которой он создан
+  const pool = []; // заготовки для блока «Не назначенные»
+  for (const p of pregens) {
+    if (p.claimedBy && p.claimedCharacterId && charById.has(p.claimedCharacterId)) pregenForChar.set(p.claimedCharacterId, p);
+    else pool.push(p); // свободна, либо игрок удалил взятого персонажа
+  }
+
+  // ── Не назначенные ──
+  const poolHead = document.createElement("div");
+  poolHead.className = "dmchar-section";
+  poolHead.textContent = "Не назначенные персонажи";
+  dmCharactersList.appendChild(poolHead);
+
+  const addRow = document.createElement("div");
+  addRow.className = "dmchar-row dmchar-row--pregen";
+  const addBtn = document.createElement("button");
+  addBtn.className = "tool-btn";
+  addBtn.style.cssText = "width:100%;justify-content:center;gap:6px;";
+  addBtn.innerHTML = icon("plus", { size: 14 }) + "<span>Создать персонажа</span>";
+  addBtn.title = "Завести заготовку заранее — потом назначить игроку";
+  addBtn.onclick = createPregenFlow;
+  addRow.appendChild(addBtn);
+  dmCharactersList.appendChild(addRow);
+
+  if (pool.length) {
+    for (const p of pool) dmCharactersList.appendChild(pregenPoolRow(p));
+  } else {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.style.cssText = "margin:2px 2px 8px;font-size:11px;";
+    hint.textContent = "Свободных заготовок нет.";
+    dmCharactersList.appendChild(hint);
+  }
+
+  // ── Назначенные ──
+  const assignedHead = document.createElement("div");
+  assignedHead.className = "dmchar-section";
+  assignedHead.textContent = "Назначенные персонажи";
+  dmCharactersList.appendChild(assignedHead);
+
   if (dmCharacters.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "hint";
-    empty.textContent = "Персонажей у игроков пока нет — они заводят их сами или берут готового из пула выше.";
-    dmCharactersList.appendChild(empty);
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.style.cssText = "margin:2px 2px 4px;font-size:11px;";
+    hint.textContent = "Пока никому не назначено — назначь заготовку выше или игроки заведут своих.";
+    dmCharactersList.appendChild(hint);
     return;
   }
+
   const byAccount = new Map();
   for (const c of dmCharacters) {
     if (!byAccount.has(c.accountUsername)) byAccount.set(c.accountUsername, []);
@@ -1893,44 +2036,9 @@ async function renderDmCharacters() {
   for (const [username, chars] of byAccount) {
     const group = document.createElement("div");
     group.className = "dmchar-owner-group";
-    group.textContent = username;
+    group.textContent = username || "без аккаунта";
     dmCharactersList.appendChild(group);
-    for (const c of chars) {
-      const row = document.createElement("div");
-      row.className = "dmchar-row";
-      row.draggable = true;
-      row.title = "Перетащи на карту, чтобы поставить токен";
-      // vtt:tokenContextMenu и остальной drag внутри канваса используют
-      // свои DOM-обработчики — свой тип данных не пересекается с ними, и
-      // preventDefault на dragover (см. ниже) не даёт браузеру попытаться
-      // "открыть" перетаскиваемый текст как ссылку/файл.
-      row.addEventListener("dragstart", (e) => {
-        e.dataTransfer.setData("application/x-beacon-character", c.id);
-        e.dataTransfer.effectAllowed = "copy";
-      });
-      const handle = document.createElement("span");
-      handle.className = "drag-handle";
-      handle.innerHTML = icon("grip-vertical", { size: 14 });
-      const avatar = document.createElement("div");
-      avatar.className = "dmchar-avatar";
-      if (c.avatarUrl) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
-      else avatar.textContent = "—";
-      const name = document.createElement("div");
-      name.className = "dmchar-name";
-      name.textContent = c.name;
-      const sheetBtn = document.createElement("button");
-      sheetBtn.className = "icon-btn";
-      sheetBtn.innerHTML = icon("scroll", { size: 14 });
-      sheetBtn.title = "Лист персонажа";
-      sheetBtn.onclick = () => openFloatingWindow({ key: "char-" + c.id, title: c.name, url: `/character-sheet.html?id=${c.id}` });
-      const editBtn = document.createElement("button");
-      editBtn.className = "icon-btn";
-      editBtn.innerHTML = icon("pencil", { size: 14 });
-      editBtn.title = "Имя / аватар";
-      editBtn.onclick = () => openDmCharEditForm(c);
-      row.append(handle, avatar, name, sheetBtn, editBtn);
-      dmCharactersList.appendChild(row);
-    }
+    for (const c of chars) dmCharactersList.appendChild(assignedCharRow(c, pregenForChar.get(c.id)));
   }
 }
 onPanelOpen("characters", renderDmCharacters);
@@ -1955,7 +2063,17 @@ document.getElementById("dmCharEditSaveBtn").onclick = async () => {
     return;
   }
   try {
-    await updateAdminCharacter(dmCharEditingId, name, dmCharPendingAvatarUrl);
+    if (dmCharEditPregen) {
+      // Полная перезапись пре-гена — лист и метку модуля не трогаем.
+      await updateAdminPregen(dmCharEditingId, {
+        name,
+        avatarUrl: dmCharPendingAvatarUrl,
+        foundryModuleId: dmCharEditPregen.source || "",
+        sheet: dmCharEditPregen.sheet,
+      });
+    } else {
+      await updateAdminCharacter(dmCharEditingId, name, dmCharPendingAvatarUrl);
+    }
     await renderDmCharacters();
   } catch (err) {
     dmCharEditMsg.textContent = err.message;

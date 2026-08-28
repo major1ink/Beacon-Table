@@ -297,6 +297,113 @@ func TestWorldPack_ImportRenamesLoginCollision(t *testing.T) {
 	}
 }
 
+// На сервере всегда есть свой ДМ (seed-admin), поэтому архивный ДМ не
+// переносится, а заворачивается на локального — иначе повторный импорт своего
+// же архива всегда падал бы на «аккаунт уже есть».
+func TestWorldPack_ImportReusesExistingDM(t *testing.T) {
+	ctx := context.Background()
+	srcM, _ := newTestManager(t)
+	dstM, _ := newTestManager(t)
+
+	src, err := srcM.Create(ctx, "Кампания", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := srcM.accounts.Create(ctx, &domain.Account{
+		ID: "acc-gwen", Username: "gwen", PasswordHash: "h",
+		Role: domain.AccountRolePlayer, Status: domain.AccountStatusActive, CompanyID: src.ID,
+	}); err != nil {
+		t.Fatalf("player: %v", err)
+	}
+	if err := srcM.accounts.Create(ctx, &domain.Account{
+		ID: "acc-src-dm", Username: "dm", PasswordHash: "src-dm-hash",
+		Role: domain.AccountRoleAdmin, Status: domain.AccountStatusActive,
+	}); err != nil {
+		t.Fatalf("src dm: %v", err)
+	}
+	scstore := sqlite.NewCharacterStore(srcM.db, src.ID, src.System)
+	if err := scstore.Create(ctx, &domain.Character{ID: "char-dm", AccountID: "acc-src-dm", Name: "НПС ДМа"}); err != nil {
+		t.Fatalf("dm char: %v", err)
+	}
+	if err := sqlite.NewPregenStore(srcM.db, src.ID).Create(ctx, &domain.Pregen{
+		ID: "pg-1", Name: "Аня", ClaimedBy: "acc-gwen", ClaimedCharacterID: "char-gwen",
+	}); err != nil {
+		t.Fatalf("pregen: %v", err)
+	}
+	if err := scstore.Create(ctx, &domain.Character{ID: "char-gwen", AccountID: "acc-gwen", Name: "Гвен"}); err != nil {
+		t.Fatalf("player char: %v", err)
+	}
+	zipPath := exportToZip(t, srcM, src.ID, true)
+
+	// целевой сервер: свой ДМ с другим id
+	if err := dstM.accounts.Create(ctx, &domain.Account{
+		ID: "acc-local-dm", Username: "dm", PasswordHash: "local-dm-hash",
+		Role: domain.AccountRoleAdmin, Status: domain.AccountStatusActive,
+	}); err != nil {
+		t.Fatalf("local dm: %v", err)
+	}
+
+	res, err := dstM.ImportWorld(ctx, zipPath)
+	if err != nil {
+		t.Fatalf("ImportWorld: %v", err)
+	}
+	if _, err := dstM.accounts.ByID(ctx, "acc-src-dm"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("архивный ДМ не должен был появиться на сервере (err %v)", err)
+	}
+	if local, err := dstM.accounts.ByID(ctx, "acc-local-dm"); err != nil || local.PasswordHash != "local-dm-hash" {
+		t.Fatalf("локальный ДМ пострадал: %+v (err %v)", local, err)
+	}
+	dcstore := sqlite.NewCharacterStore(dstM.db, res.Company.ID, res.Company.System)
+	if ch, err := dcstore.ByID(ctx, "char-dm"); err != nil || ch.AccountID != "acc-local-dm" {
+		t.Fatalf("персонаж ДМа не завёрнут на локального ведущего: %+v (err %v)", ch, err)
+	}
+	pgs, err := sqlite.NewPregenStore(dstM.db, res.Company.ID).List(ctx)
+	if err != nil || len(pgs) != 1 || pgs[0].ClaimedBy != "acc-gwen" {
+		t.Fatalf("занятость прегена: %+v (err %v)", pgs, err)
+	}
+	if _, err := dstM.accounts.ByID(ctx, "acc-gwen"); err != nil {
+		t.Fatalf("игрок не перенесён: %v", err)
+	}
+}
+
+// Повторный импорт своего же архива на тот же сервер: id ДМ совпадает —
+// раньше это давало «мир уже импортирован», теперь ДМ просто переиспользуется.
+func TestWorldPack_ImportSameServerDMIdCollision(t *testing.T) {
+	ctx := context.Background()
+	m, _ := newTestManager(t)
+
+	src, err := m.Create(ctx, "Кампания", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := m.accounts.Create(ctx, &domain.Account{
+		ID: "acc-dm", Username: "dm", PasswordHash: "dm-hash",
+		Role: domain.AccountRoleAdmin, Status: domain.AccountStatusActive,
+	}); err != nil {
+		t.Fatalf("dm: %v", err)
+	}
+	if err := m.accounts.Create(ctx, &domain.Account{
+		ID: "acc-p", Username: "player", PasswordHash: "p",
+		Role: domain.AccountRolePlayer, Status: domain.AccountStatusActive, CompanyID: src.ID,
+	}); err != nil {
+		t.Fatalf("player: %v", err)
+	}
+	zipPath := exportToZip(t, m, src.ID, true)
+
+	// player id всё ещё занят — этот же мир уже на сервере
+	if _, err := m.ImportWorld(ctx, zipPath); err == nil {
+		t.Fatal("ожидали отказ: игрок с таким id уже есть")
+	}
+
+	// убираем игрока (мир «удалён»), но ДМ остаётся — импорт должен пройти
+	if err := m.accounts.Delete(ctx, "acc-p"); err != nil {
+		t.Fatalf("delete player: %v", err)
+	}
+	if _, err := m.ImportWorld(ctx, zipPath); err != nil {
+		t.Fatalf("повторный импорт с тем же ДМ отклонён: %v", err)
+	}
+}
+
 func TestWorldPack_ImportRejectsZipSlip(t *testing.T) {
 	ctx := context.Background()
 	m, root := newTestManager(t)

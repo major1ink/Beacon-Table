@@ -44,6 +44,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/companies", a.handleCompaniesList)
 	mux.HandleFunc("POST /api/companies", a.handleCompanyCreate)
 	mux.HandleFunc("POST /api/companies/{id}/launch", a.handleCompanyLaunch)
+	mux.HandleFunc("POST /api/companies/stop", a.handleCompanyStop)
 	mux.HandleFunc("DELETE /api/companies/{id}", a.handleCompanyDelete)
 	// Экспорт мира в .beacon-world.zip и импорт из него (создаёт новый мир) —
 	// см. company_handlers.go / app.CompanyManager.ExportWorld/ImportWorld.

@@ -31,11 +31,22 @@ func (a *API) handleCompaniesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	activeID := a.Companies.ActiveCompanyID()
+	// Счётчик аккаунтов игроков по мирам — worlds.html предупреждает перед
+	// удалением, сколько всего снесётся заодно.
+	playerCounts := map[string]int{}
+	if accs, err := a.Companies.ListAccounts(r.Context()); err == nil {
+		for _, acc := range accs {
+			if acc.CompanyID != "" {
+				playerCounts[acc.CompanyID]++
+			}
+		}
+	}
 	out := make([]map[string]any, 0, len(companies))
 	for _, c := range companies {
 		out = append(out, map[string]any{
 			"id": c.ID, "name": c.Name, "system": c.System,
 			"active": c.ID == activeID, "createdAt": c.CreatedAt.Format(time.RFC3339),
+			"accounts": playerCounts[c.ID],
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -86,15 +97,35 @@ func (a *API) handleCompanyDelete(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireAdminAccount(w, r); !ok {
 		return
 	}
-	if err := a.Companies.Delete(r.Context(), r.PathValue("id")); err != nil {
+	// force=1 — снести мир вместе с аккаунтами игроков, их персонажами и
+	// файлами на диске (см. app.CompanyManager.Delete). worlds.js подставляет
+	// его, предупредив ДМ в диалоге.
+	force := r.URL.Query().Get("force") == "1"
+	if err := a.Companies.Delete(r.Context(), r.PathValue("id"), force); err != nil {
 		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			writeErr(w, http.StatusNotFound, "мир не найден")
 		case errors.Is(err, domain.ErrForbidden):
-			writeErr(w, http.StatusBadRequest, "нельзя удалить запущенный мир — сначала запусти другой")
+			writeErr(w, http.StatusBadRequest, "мир сейчас на столе — сначала выйди в список миров")
 		case errors.Is(err, domain.ErrConflict):
-			writeErr(w, http.StatusConflict, "в этом мире ещё есть аккаунты — сначала удали их")
+			writeErr(w, http.StatusConflict, "в этом мире есть аккаунты игроков")
 		default:
 			writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleCompanyStop — снять текущий мир со стола (см.
+// app.CompanyManager.Deactivate). ДМ вызывает при возврате на worlds.html:
+// стол пустеет, игроки отваливаются до следующего Launch.
+func (a *API) handleCompanyStop(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireAdminAccount(w, r); !ok {
+		return
+	}
+	if err := a.Companies.Deactivate(r.Context()); err != nil {
+		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

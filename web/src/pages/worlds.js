@@ -3,8 +3,15 @@
 // поднят на сервере (см. internal/app.CompanyManager — активен ровно один).
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
-import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany } from "../api.js";
+import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
+
+// Версия сервера в углу — как на экране входа (index.js). Молча пусто при ошибке.
+fetchVersion()
+  .then(({ version }) => {
+    document.getElementById("appVersion").textContent = version;
+  })
+  .catch(() => {});
 
 const listEl = document.getElementById("list");
 const createForm = document.getElementById("createForm");
@@ -24,8 +31,12 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+// Мир может быть ещё запущен (ДМ пришёл сюда сразу после логина, а не кнопкой
+// «К мирам» из стола, которая гасит стол) — тогда «Открыть стол →» вместо
+// «Запустить», как и было. Удаление такого мира сначала снимет его со стола.
 function worldCardHTML(c) {
-  const badge = c.active ? `<span class="pill-badge on">Активен</span>` : "";
+  const players = c.accounts ? `<span class="pill-badge">игроков: ${c.accounts}</span>` : "";
+  const badge = c.active ? `<span class="pill-badge on">На столе</span>` : "";
   const actionBtn = c.active
     ? `<button class="world-btn open-btn" data-id="${c.id}">Открыть стол →</button>`
     : `<button class="world-btn launch-btn" data-id="${c.id}">Запустить</button>`;
@@ -35,6 +46,7 @@ function worldCardHTML(c) {
         <div class="world-name">${escapeHtml(c.name)}</div>
         <div class="world-meta">
           <span class="pill-badge">${systemLabel(c.system)}</span>
+          ${players}
           ${badge}
         </div>
       </div>
@@ -89,9 +101,17 @@ async function render() {
   });
   listEl.querySelectorAll(".delete-btn").forEach((btn) => {
     btn.onclick = async () => {
-      if (!(await showConfirm("Удалить этот мир из списка?", { title: "Удалить мир", okLabel: "Удалить", danger: true, hint: "Файлы на диске не трогаются." }))) return;
+      const c = companies.find((w) => w.id === btn.dataset.id);
+      const n = c?.accounts || 0;
+      const parts = [];
+      if (c?.active) parts.push("мир сейчас на столе — он будет снят, игроки отключатся");
+      if (n > 0) parts.push(`удалятся ${n} аккаунт(а/ов) игроков с персонажами и инвентарём (аккаунт ДМ останется)`);
+      parts.push("файлы мира на диске (сцены, журнал, загрузки) тоже удалятся");
+      const hint = parts.join("; ") + ". Это необратимо.";
+      if (!(await showConfirm(`Удалить мир «${c?.name || ""}»?`, { title: "Удалить мир", okLabel: "Удалить", danger: true, hint }))) return;
       try {
-        await deleteCompany(btn.dataset.id);
+        if (c?.active) await stopActiveWorld();
+        await deleteCompany(btn.dataset.id, n > 0);
         render();
       } catch (err) {
         showAlert(err.message);
@@ -121,11 +141,11 @@ function askExportOptions() {
       label.style.cssText = "display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:6px;cursor:pointer;";
       cb = document.createElement("input");
       cb.type = "checkbox";
-      label.append(cb, document.createTextNode(" Перенести аккаунты (игроков и ДМ) с персонажами"));
+      label.append(cb, document.createTextNode(" Перенести аккаунты игроков с персонажами"));
       body.appendChild(label);
       const hint = document.createElement("p");
       hint.className = "bt-modal-text dim";
-      hint.textContent = "Логины с паролями, листы, инвентарь. Нужно для демо-сервера и при переезде кампании — для обмена приключением обычно нет.";
+      hint.textContent = "Логины игроков с паролями, листы, инвентарь. Аккаунт ДМ не переносится — на сервере, куда импортируешь, используется его собственный. Нужно при переезде кампании; для обмена приключением обычно нет.";
       body.appendChild(hint);
       return cb;
     },

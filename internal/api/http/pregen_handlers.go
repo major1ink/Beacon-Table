@@ -78,6 +78,10 @@ func (a *API) handlePregenGet(w http.ResponseWriter, r *http.Request) {
 		"avatarUrl": p.AvatarURL,
 		"sheet":     p.Sheet,
 		"claimed":   !p.Free(),
+		// source — метка модуля Foundry: ДМ, правя лист заготовки, шлёт её
+		// обратно неизменной (см. character-sheet.js: doSave/isPregenAdmin),
+		// иначе «Удалить модуль» потерял бы связь с пул-записью.
+		"source": p.Source,
 	})
 }
 
@@ -128,6 +132,7 @@ func (a *API) handleAdminPregensList(w http.ResponseWriter, r *http.Request) {
 		// изменилась ли карточка» (см. foundry-import.js: sameCard) и не
 		// показывать конфликт на повторном импорте без правок.
 		row["sheet"] = p.Sheet
+		row["source"] = p.Source
 		row["claimedBy"] = p.ClaimedBy
 		row["claimedByUsername"] = usernames[p.ClaimedBy]
 		row["claimedCharacterId"] = p.ClaimedCharacterID

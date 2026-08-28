@@ -131,6 +131,20 @@ type ImportResult struct {
 type importOutcome struct {
 	renamedLogins     map[string]string
 	createdAccountIDs []string
+	// adminRemap — id ДМ-аккаунтов из архива → id ДМ на этом сервере. Архивный
+	// ДМ не переносится (ДМ глобален, seed-admin есть всегда, см.
+	// importAccounts), а ссылки на его id (если ДМ завёл себе персонажа/держал
+	// прегена) заворачиваются на локального ведущего.
+	adminRemap map[string]string
+}
+
+// remapAccountID — id аккаунта из архива с учётом замены архивного ДМ на
+// локального (см. importOutcome.adminRemap). Для всех прочих id — без изменений.
+func (o *importOutcome) remapAccountID(id string) string {
+	if to, ok := o.adminRemap[id]; ok {
+		return to
+	}
+	return id
 }
 
 // CompanyByID — один мир по id (для HTTP-слоя: 404 и имя файла экспорта).
@@ -321,9 +335,9 @@ func addJSONFile(addFile func(string, []byte) error, name string, v any, uploads
 }
 
 // exportAccounts — игроки ЭТОГО мира плюс все аккаунты ДМ (они глобальны,
-// CompanyID == ""). ДМ едут в архив ради демо-сида: развернул архив — и на
-// сервере уже есть готовый логин ведущего. Обычный бэкап/обмен приключением
-// тоже их несёт — импортёр видит их в панели и может удалить лишние.
+// CompanyID == ""). ДМ кладём в архив как справку («кто вёл») и ради сида на
+// голом сервере, где ведущего ещё нет; обычный импорт архивного ДМ не создаёт,
+// а заворачивает на своего seed-admin (см. importAccounts).
 func (m *CompanyManager) exportAccounts(ctx context.Context, companyID string) ([]exportAccount, error) {
 	all, err := m.accounts.List(ctx)
 	if err != nil {
@@ -532,8 +546,9 @@ func (m *CompanyManager) importWorldDB(ctx context.Context, companyID, system st
 		return []byte(strings.ReplaceAll(string(b), worldUploadsSentinel, uploadsURL))
 	}
 
-	// Аккаунты (игроки + ДМ) и персонажи — раньше всего: на их id (сохраняются
-	// как есть) ссылаются токены сцен, шапки журнала и занятость прегенов.
+	// Аккаунты игроков и персонажи — раньше всего: на их id (сохраняются как
+	// есть) ссылаются токены сцен, шапки журнала и занятость прегенов. Архивный
+	// ДМ не переносится — его id заворачивается на локального (см. importAccounts).
 	out, err := m.importAccounts(ctx, companyID, system, dbFiles)
 	if err != nil {
 		return out, err
@@ -571,10 +586,10 @@ func (m *CompanyManager) importWorldDB(ctx context.Context, companyID, system st
 			// id прегена генерим заново (pregen_characters.id уникален
 			// глобально, внешних ссылок на него нет). claimed_* непустые
 			// только если экспорт был с аккаунтами — тогда id аккаунта и
-			// персонажа тоже перенесены и разрешатся.
+			// персонажа тоже перенесены и разрешатся (ДМ — через adminRemap).
 			if err := store.Create(ctx, &domain.Pregen{
 				ID: newID(), Name: p.Name, AvatarURL: p.AvatarURL, Sheet: p.Sheet, Source: p.Source,
-				ClaimedBy: p.ClaimedBy, ClaimedCharacterID: p.ClaimedCharacterID,
+				ClaimedBy: out.remapAccountID(p.ClaimedBy), ClaimedCharacterID: p.ClaimedCharacterID,
 			}); err != nil {
 				return out, err
 			}
@@ -599,15 +614,17 @@ func (m *CompanyManager) importWorldDB(ctx context.Context, companyID, system st
 	return out, nil
 }
 
-// importAccounts переносит аккаунты (игроков этого мира и ДМ) и персонажей
-// (db/accounts.json, db/characters.json). id аккаунтов и персонажей
-// сохраняются как есть — на них ссылаются токены сцен, шапки журнала,
-// занятость прегенов. Логин при коллизии получает суффикс « (N)». Аккаунт ДМ
-// восстанавливается глобальным (CompanyID == ""), игрок — привязанным к
-// новому миру. Возвращаемый importOutcome несёт и переименования, и id всех
-// созданных аккаунтов (для отката при сбое дальше по распаковке).
+// importAccounts переносит аккаунты игроков этого мира и их персонажей
+// (db/accounts.json, db/characters.json). id игроков и персонажей сохраняются
+// как есть — на них ссылаются токены сцен, шапки журнала, занятость прегенов;
+// логин при коллизии получает суффикс « (N)», игрок привязывается к новому миру.
+// Аккаунт ДМ из архива НЕ переносится: ведущий глобален (CompanyID == "") и на
+// сервере всегда есть свой (seed-admin). Его id заворачивается на локального ДМ
+// (importOutcome.adminRemap) — иначе повторный импорт своего же архива всегда
+// падал бы на «аккаунт уже есть». Возвращаемый importOutcome несёт переименования,
+// id созданных аккаунтов (для отката при сбое дальше по распаковке) и adminRemap.
 func (m *CompanyManager) importAccounts(ctx context.Context, companyID, system string, dbFiles map[string][]byte) (*importOutcome, error) {
-	out := &importOutcome{renamedLogins: map[string]string{}}
+	out := &importOutcome{renamedLogins: map[string]string{}, adminRemap: map[string]string{}}
 	raw, ok := dbFiles["db/accounts.json"]
 	if !ok {
 		return out, nil
@@ -616,11 +633,46 @@ func (m *CompanyManager) importAccounts(ctx context.Context, companyID, system s
 	if err := json.Unmarshal(raw, &accs); err != nil {
 		return out, &domain.ValidationError{Msg: "битый db/accounts.json в архиве"}
 	}
-	// id аккаунтов сохраняются (на них ссылаются токены/журнал) — значит
-	// повторный импорт того же архива на тот же сервер невозможен. Ловим это
-	// заранее и понятным текстом, а не констрейнтом БД посреди распаковки.
+
+	// ДМ из архива не переносим: аккаунт ведущего глобальный (CompanyID == "")
+	// и на сервере всегда есть свой (seed-admin, см. authService.SeedAdmin;
+	// импорт и делает только залогиненный ДМ). Архивного ДМ заворачиваем на
+	// него — иначе повторный импорт своего же архива всегда падал бы на
+	// «аккаунт уже есть», а на чужом сервере плодил бы второго ведущего «dm (2)».
+	localAdmins, err := m.accounts.List(ctx)
+	if err != nil {
+		return out, err
+	}
+	var fallbackAdminID string
+	adminByName := map[string]string{}
+	for _, a := range localAdmins {
+		if a.Role == domain.AccountRoleAdmin {
+			adminByName[a.Username] = a.ID
+			if fallbackAdminID == "" {
+				fallbackAdminID = a.ID
+			}
+		}
+	}
 	for _, a := range accs {
-		if a.ID == "" {
+		if a.Role != domain.AccountRoleAdmin || a.ID == "" {
+			continue
+		}
+		target := adminByName[a.Username]
+		if target == "" {
+			target = fallbackAdminID
+		}
+		if target != "" {
+			out.adminRemap[a.ID] = target
+		}
+	}
+
+	// id игроков сохраняются (на них ссылаются токены сцен, выдачи журнала,
+	// занятость прегенов) — значит игрок с уже занятым id означает, что этот
+	// же мир уже импортирован на сервер. Ловим заранее и понятным текстом, а не
+	// констрейнтом БД посреди распаковки. ДМ в этой проверке не участвует —
+	// его коллизия ожидаема и разрешена ремапом выше.
+	for _, a := range accs {
+		if a.ID == "" || a.Role == domain.AccountRoleAdmin {
 			continue
 		}
 		if _, err := m.accounts.ByID(ctx, a.ID); err == nil {
@@ -632,6 +684,10 @@ func (m *CompanyManager) importAccounts(ctx context.Context, companyID, system s
 
 	uploadsURL := m.uploadsURLFor(companyID)
 	for _, a := range accs {
+		// ДМ из архива пропускаем — его id уже заведён в adminRemap (см. выше).
+		if a.Role == domain.AccountRoleAdmin && out.adminRemap[a.ID] != "" {
+			continue
+		}
 		if a.ID == "" || a.Username == "" || a.PasswordHash == "" {
 			return out, &domain.ValidationError{Msg: "битый db/accounts.json: пустой id, логин или пароль"}
 		}
@@ -675,8 +731,11 @@ func (m *CompanyManager) importAccounts(ctx context.Context, companyID, system s
 			if c.ID == "" || c.AccountID == "" {
 				return out, &domain.ValidationError{Msg: "битый db/characters.json: пустой id или accountId"}
 			}
+			// ДМ завёл персонажа под своим аккаунтом — заворачиваем на
+			// локального ведущего (архивного ДМ мы не переносим).
+			accountID := out.remapAccountID(c.AccountID)
 			if err := cstore.Create(ctx, &domain.Character{
-				ID: c.ID, AccountID: c.AccountID, Name: c.Name, AvatarURL: c.AvatarURL, Sheet: c.Sheet,
+				ID: c.ID, AccountID: accountID, Name: c.Name, AvatarURL: c.AvatarURL, Sheet: c.Sheet,
 			}); err != nil {
 				return out, &domain.ValidationError{Msg: "не удалось создать персонажа «" + c.Name + "» из архива"}
 			}
@@ -684,7 +743,7 @@ func (m *CompanyManager) importAccounts(ctx context.Context, companyID, system s
 				if e == nil {
 					continue
 				}
-				if _, err := cstore.AddInventoryEntry(ctx, c.ID, c.AccountID, *e); err != nil {
+				if _, err := cstore.AddInventoryEntry(ctx, c.ID, accountID, *e); err != nil {
 					return out, err
 				}
 			}

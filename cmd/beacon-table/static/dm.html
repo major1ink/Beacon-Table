@@ -415,6 +415,10 @@
     .account-row .account-actions button.approve:hover { background: var(--green-hover); }
 
     /* ---- раздел "Персонажи" (в панели) ---- */
+    /* .dmchar-section — крупный заголовок блока («Не назначенные» / «Назначенные»);
+       .dmchar-owner-group — подзаголовок с логином игрока внутри «Назначенных». */
+    .dmchar-section { font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.9; margin: 16px 0 8px; }
+    .dmchar-section:first-child { margin-top: 0; }
     .dmchar-owner-group { font-size: 11px; opacity: 0.55; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: 0.04em; }
     .dmchar-owner-group:first-child { margin-top: 0; }
     .dmchar-row {
@@ -771,23 +775,23 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BO_003dF.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CUlNtZT3.js">
+  <script type="module" crossorigin src="/assets/dm-BBmnJs4N.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-DiMl2pz6.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-g49pjxWl.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-BMFo98Kf.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-RNjAK43p.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-VL3zpNr8.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-D7ExoI5z.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-LSTNGX14.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CrmUzOkk.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BHQXa5J7.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-CvkRylsW.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BwuI-qdO.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-BXTsphRp.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-CIWxIQ39.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-Cctpt9Gp.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-2Uso0I43.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-Cp6qOlRl.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CBzOfbLI.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-BuYZOOmp.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-DpkbwMmg.js">
   <link rel="stylesheet" crossorigin href="/assets/api-Cc7gT-d9.css">
 </head>
 <body>
@@ -1071,7 +1075,7 @@
       <section class="panel-section" data-panel="characters">
         <header class="panel-header"><h3>Персонажи</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
-          <p class="hint">Персонажи всех игроков. Перетащи на карту — поставит токен с именем/артом и владельцем. 📜 открывает лист (можно править), ✎ — имя/аватар.</p>
+          <p class="hint">Сверху — заготовки, ещё никому не назначенные: заполни лист, потом назначь игроку (или игрок сам возьмёт). Ниже — назначенные, по игрокам: перетащи на карту, чтобы поставить токен. 📜 — лист, ✎ — имя/аватар.</p>
           <div id="dmCharactersList"></div>
           <div id="dmCharEditForm" style="display:none;">
             <div class="section-divider"></div>

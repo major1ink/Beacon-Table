@@ -53,8 +53,15 @@ export async function createCompany(name, system) {
 export async function launchCompany(id) {
   return apiFetch(`/api/companies/${id}/launch`, { method: "POST" });
 }
-export async function deleteCompany(id) {
-  return apiFetch(`/api/companies/${id}`, { method: "DELETE" });
+// stopActiveWorld — снять текущий мир со стола (ДМ вернулся на worlds.html):
+// стол пустеет, игроки отваливаются до следующего launchCompany.
+export async function stopActiveWorld() {
+  return apiFetch("/api/companies/stop", { method: "POST" });
+}
+// deleteCompany — force=true сносит мир вместе с аккаунтами игроков, их
+// персонажами и файлами мира на диске (см. handleCompanyDelete).
+export async function deleteCompany(id, force) {
+  return apiFetch(`/api/companies/${id}${force ? "?force=1" : ""}`, { method: "DELETE" });
 }
 // exportCompanyURL — прямая ссылка на .beacon-world.zip мира; отдаётся по
 // cookie-сессии, качается обычной навигацией (Content-Disposition: attachment).
