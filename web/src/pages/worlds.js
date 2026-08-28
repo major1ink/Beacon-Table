@@ -3,12 +3,15 @@
 // поднят на сервере (см. internal/app.CompanyManager — активен ровно один).
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
-import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany } from "../api.js";
+import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany } from "../api.js";
 import { showAlert, showConfirm } from "../modal.js";
 
 const listEl = document.getElementById("list");
 const createForm = document.getElementById("createForm");
 const createMsg = document.getElementById("createMsg");
+const importBtn = document.getElementById("importBtn");
+const importFile = document.getElementById("importFile");
+const importMsg = document.getElementById("importMsg");
 
 const SYSTEM_LABELS = { "dnd5e-2024": "D&D 2024", "dnd5e-2014": "D&D 5e (2014)" };
 function systemLabel(system) {
@@ -37,6 +40,7 @@ function worldCardHTML(c) {
       </div>
       <div class="world-actions">
         ${actionBtn}
+        <button class="icon-btn export-btn" data-id="${c.id}" title="Экспортировать мир в .zip">⬇</button>
         <button class="icon-btn danger delete-btn" data-id="${c.id}" title="Удалить">✕</button>
       </div>
     </div>
@@ -76,6 +80,11 @@ async function render() {
       location.href = "/dm.html";
     };
   });
+  listEl.querySelectorAll(".export-btn").forEach((btn) => {
+    btn.onclick = () => {
+      window.location.href = exportCompanyURL(btn.dataset.id);
+    };
+  });
   listEl.querySelectorAll(".delete-btn").forEach((btn) => {
     btn.onclick = async () => {
       if (!(await showConfirm("Удалить этот мир из списка?", { title: "Удалить мир", okLabel: "Удалить", danger: true, hint: "Файлы на диске не трогаются." }))) return;
@@ -93,6 +102,27 @@ document.getElementById("logoutBtn").onclick = async () => {
   await apiLogout();
   location.href = "/";
 };
+
+importBtn.onclick = () => importFile.click();
+importFile.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ""; // сброс, чтобы повторный выбор того же файла сработал
+  if (!file) return;
+  importMsg.textContent = "Импортирую…";
+  importMsg.className = "msg";
+  importBtn.disabled = true;
+  try {
+    const world = await importCompany(file);
+    importMsg.textContent = `Мир «${world.name}» импортирован — запусти его в списке выше.`;
+    importMsg.className = "msg ok";
+    render();
+  } catch (err) {
+    importMsg.textContent = err.message;
+    importMsg.className = "msg error";
+  } finally {
+    importBtn.disabled = false;
+  }
+});
 
 createForm.addEventListener("submit", async (e) => {
   e.preventDefault();

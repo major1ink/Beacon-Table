@@ -56,6 +56,24 @@ export async function launchCompany(id) {
 export async function deleteCompany(id) {
   return apiFetch(`/api/companies/${id}`, { method: "DELETE" });
 }
+// exportCompanyURL — прямая ссылка на .beacon-world.zip мира; отдаётся по
+// cookie-сессии, качается обычной навигацией (Content-Disposition: attachment).
+export function exportCompanyURL(id) {
+  return `/api/companies/${id}/export`;
+}
+// importCompany — загрузка .zip мира (multipart, поле "file"), в обход
+// apiFetch как uploadFile: браузер сам ставит boundary и шлёт cookie. Создаёт
+// новый мир, запускать его ДМ должен сам.
+export async function importCompany(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/companies/import", { method: "POST", body: form });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error((data && data.error) || res.statusText || "ошибка импорта");
+  }
+  return res.json();
+}
 
 // fetchVersion — версия сервера (short commit hash из VCS-метаданных сборки,
 // см. cmd/beacon-table/version.go), для раздела "Настройки" на экранах ДМ и
