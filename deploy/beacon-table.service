@@ -1,0 +1,46 @@
+# Служба systemd для запуска на сервере.
+#
+#   sudo useradd --system --home /var/lib/beacon-table --create-home beacon
+#   sudo cp beacon-table /usr/local/bin/
+#   sudo mkdir -p /etc/beacon-table && sudo cp beacon.conf /etc/beacon-table/
+#   sudo cp deploy/beacon-table.service /etc/systemd/system/
+#   sudo systemctl enable --now beacon-table
+#
+# Настройки берутся из /etc/beacon-table/beacon.conf — того же файла, что
+# приложение создаёт рядом с собой при первом запуске.
+
+[Unit]
+Description=Beacon Table — виртуальный стол для настольных ролевых игр
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=beacon
+Group=beacon
+WorkingDirectory=/var/lib/beacon-table
+EnvironmentFile=/etc/beacon-table/beacon.conf
+Environment=BEACON_DATA_DIR=/var/lib/beacon-table/data
+Environment=BEACON_UPLOADS_DIR=/var/lib/beacon-table/uploads
+ExecStart=/usr/local/bin/beacon-table
+Restart=on-failure
+RestartSec=5s
+
+# Сервер сохраняет мир и прощается с экранами по SIGTERM — даём ему время
+# договорить начатые запросы (см. shutdown в cmd/beacon-table/main.go).
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+# Журнал не должен съесть диск.
+StandardOutput=journal
+StandardError=journal
+
+# Ограничения: службе нужны только свои каталоги.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/beacon-table
+
+[Install]
+WantedBy=multi-user.target

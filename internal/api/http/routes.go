@@ -19,6 +19,11 @@ type API struct {
 	Auth      service.AuthService
 	Broadcast service.BroadcastService
 	Companies *app.CompanyManager
+	// SecureCookies — сервер стоит за HTTPS-прокси (--behind-proxy), значит
+	// cookie можно и нужно помечать Secure: браузер перестанет отправлять их
+	// по незашифрованному соединению. На голом HTTP флаг оставляют
+	// выключенным — иначе cookie не долетит обратно и войти будет нельзя.
+	SecureCookies bool
 	// Version — версия сервера (см. cmd/beacon-table/version.go), отдаётся
 	// как есть по GET /api/version; сюда, а не в service-слой, потому что
 	// это не бизнес-логика, а факт про сам процесс/сборку.
@@ -27,8 +32,8 @@ type API struct {
 
 // NewAPI собирает REST-хендлеры поверх Auth и Broadcast (оба глобальны) и
 // Companies (переключаемый набор сервисов текущего мира).
-func NewAPI(auth service.AuthService, broadcast service.BroadcastService, companies *app.CompanyManager, version string) *API {
-	return &API{Auth: auth, Broadcast: broadcast, Companies: companies, Version: version}
+func NewAPI(auth service.AuthService, broadcast service.BroadcastService, companies *app.CompanyManager, version string, secureCookies bool) *API {
+	return &API{Auth: auth, Broadcast: broadcast, Companies: companies, Version: version, SecureCookies: secureCookies}
 }
 
 // RegisterRoutes навешивает все /api/*, /upload и /assets хендлеры на mux.

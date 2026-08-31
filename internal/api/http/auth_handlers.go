@@ -107,7 +107,7 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "неверный логин или пароль")
 		return
 	}
-	setSessionCookie(w, token)
+	a.setSessionCookie(w, token)
 	chars, err := a.myCharacters(r.Context(), acc)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
@@ -120,7 +120,7 @@ func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(domain.SessionCookieName); err == nil {
 		_ = a.Auth.Logout(r.Context(), c.Value)
 	}
-	clearSessionCookie(w)
+	a.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -174,6 +174,6 @@ func (a *API) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	clearSessionCookie(w)
+	a.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

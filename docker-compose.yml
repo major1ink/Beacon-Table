@@ -1,0 +1,30 @@
+# Запуск одной командой: docker compose up -d
+#
+# Настройки — через environment ниже либо через файл: раскомментируйте
+# env_file и положите рядом beacon.conf (формат тот же, что и у файла,
+# который приложение создаёт рядом с собой при первом запуске).
+services:
+  beacon-table:
+    build: .
+    # Готовый образ вместо сборки из исходников:
+    # image: ghcr.io/major1ink/beacon-table:latest
+    restart: unless-stopped
+    ports:
+      # Порт наружу. За обратным прокси на этой же машине разумно закрыть
+      # его от внешней сети: "127.0.0.1:8080:8080".
+      - "8080:8080"
+    environment:
+      # Стол за HTTPS-прокси — включает Secure у cookie. Без прокси (просто
+      # локальная сеть) оставьте false, иначе войти не получится.
+      BEACON_BEHIND_PROXY: "false"
+    # env_file:
+    #   - beacon.conf
+    volumes:
+      # База, журнал, сцены, заметки.
+      - beacon-data:/data
+      # Карты, токены, аудио.
+      - beacon-uploads:/uploads
+
+volumes:
+  beacon-data:
+  beacon-uploads:

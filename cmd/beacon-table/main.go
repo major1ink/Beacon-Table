@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"embed"
 	"errors"
+	"flag"
 	"io/fs"
 	"log"
 	"net/http"
@@ -38,24 +39,41 @@ var staticFiles embed.FS
 //go:embed systemdata
 var systemFiles embed.FS
 
+// Пути раздачи — не настройка: адреса внутри приложения, на них завязаны
+// ссылки в базе (см. app.CompanyManager.rootsFor) и код фронтенда.
 const (
-	dataDir         = "data"
-	dbPath          = "data/beacon.db"
-	uploadsDir      = "uploads"
 	uploadsURL      = "/uploads/"
 	systemAssetsURL = "/system-assets/"
 )
 
 func main() {
 	ctx := context.Background()
-	version := serverVersion()
-	log.Println("Beacon Table версия:", version)
 
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+	// Настройки разбираем до всего остального: с --help программа должна
+	// напечатать справку и выйти молча, не создавая каталогов и не печатая
+	// ничего лишнего.
+	cfg, configFile, err := loadConfig(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return // справку flag напечатал сам
+		}
 		log.Fatal(err)
 	}
 
-	db, err := sqlite.Open(dbPath)
+	version := serverVersion()
+	log.Println("Beacon Table версия:", version)
+	if configFile != "" {
+		//nolint:gosec // G706: путь пришёл из аргументов запуска/окружения,
+		// не по сети — подставить в него перевод строки может только тот,
+		// кто и так запускает процесс.
+		log.Println("настройки из файла:", configFile)
+	}
+
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		log.Fatal(err)
+	}
+
+	db, err := sqlite.Open(cfg.DBPath())
 	if err != nil {
 		log.Fatal("не удалось открыть базу аккаунтов:", err)
 	}
@@ -70,7 +88,7 @@ func main() {
 	// Room) заново при каждом переключении мира — см. internal/app. Auth
 	// (аккаунты/сессии) — единственный полностью глобальный сервис, живёт
 	// здесь, а не внутри неё (см. её package-doc).
-	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, dataDir, uploadsDir, uploadsURL)
+	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL)
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
 	broadcastSvc := service.NewBroadcastService(stateRepo)
@@ -90,12 +108,12 @@ func main() {
 	static := http.FileServer(http.FS(sub))
 	mux.Handle("/", static)
 
-	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version)
+	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version, cfg.BehindProxy)
 
 	mux.Handle("GET /broadcast.html", api.BroadcastEntry(static))
 
 	mux.Handle(uploadsURL, api.RequireViewer(
-		http.StripPrefix(uploadsURL, http.FileServer(apihttp.NoDirListing{FS: http.Dir(uploadsDir)})),
+		http.StripPrefix(uploadsURL, http.FileServer(apihttp.NoDirListing{FS: http.Dir(cfg.UploadsDir)})),
 	))
 
 	systemAssets, err := fs.Sub(systemFiles, "systemdata/assets")
@@ -110,9 +128,8 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
-	addr := ":8080"
 	srv := &http.Server{
-		Addr:              addr,
+		Addr:              cfg.Addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -121,8 +138,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
-	log.Println("Beacon Table сервер запущен на", addr)
-	printAccessURLs()
+	log.Println("Beacon Table сервер запущен на", cfg.Addr)
+	printAccessURLs(cfg.Addr)
 
 	<-sigCh
 	shutdown(srv, gateway, companies, db)

@@ -10,13 +10,25 @@ import (
 // сети могут открыть стол — вместо плейсхолдера "<ip-этого-компа>". Если ни одного адреса найти не
 // удалось (сеть отключена и т.п.), localhost — сервер
 // всё равно рабочий на этом же компе.
-func printAccessURLs() {
-	ips := localIPv4s()
-	if len(ips) == 0 {
-		ips = []string{"localhost"}
+//
+// addr — то, что слушает сервер (см. Config.Addr): из него берётся порт, а
+// если слушаем конкретный адрес ("127.0.0.1:8080"), то печатается он один —
+// перебирать интерфейсы, на которых сервера всё равно нет, незачем.
+func printAccessURLs(addr string) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		log.Printf("Стол: http://localhost%s/", addr)
+		return
+	}
+	ips := []string{host}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		ips = localIPv4s()
+		if len(ips) == 0 {
+			ips = []string{"localhost"}
+		}
 	}
 	for _, ip := range ips {
-		log.Printf("Стол: http://%s:8080/  (ДМ и игроки входят через одну страницу)", ip)
+		log.Printf("Стол: http://%s:%s/  (ДМ и игроки входят через одну страницу)", ip, port)
 	}
 
 	log.Println("Трансляция (ТВ/проектор): ссылку с ключом ДМ берёт на столе, раздел «Настройки»")

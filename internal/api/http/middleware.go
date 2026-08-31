@@ -7,16 +7,22 @@ import (
 	"beacon-table/internal/domain"
 )
 
-func setSessionCookie(w http.ResponseWriter, token string) {
-	//nolint:gosec // G124: Secure сознательно не ставим — сервер по умолчанию
-	// плейн HTTP (см. README "Доступ через интернет"), Secure-cookie тут
-	// просто не долетела бы обратно. За HTTPS-реверс-прокси включайте
-	// отдельно на уровне прокси (или форкайте это место под свой деплой).
+// setSessionCookie — cookie сессии. Secure ставится по флагу
+// --behind-proxy (см. API.SecureCookies): на голом HTTP, каким сервер
+// работает в локальной сети, такая cookie просто не долетела бы обратно, а
+// за HTTPS-прокси она обязательна — иначе токен на месяцы уходит открытым
+// текстом при первом же заходе по http://.
+func (a *API) setSessionCookie(w http.ResponseWriter, token string) {
+	//nolint:gosec // G124: Secure выставляется из конфигурации (--behind-proxy),
+	// а не константой — статический анализ видит переменную и считает флаг
+	// потенциально снятым. Так и задумано: на голом HTTP в локальной сети
+	// Secure-cookie просто не долетела бы обратно.
 	http.SetCookie(w, &http.Cookie{
 		Name:     domain.SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   a.SecureCookies,
 		// SameSite=Lax: не улетает на кросс-сайтовые POST/WS из чужого
 		// origin, но переживает обычную навигацию.
 		SameSite: http.SameSiteLaxMode,
@@ -24,13 +30,14 @@ func setSessionCookie(w http.ResponseWriter, token string) {
 	})
 }
 
-func clearSessionCookie(w http.ResponseWriter) {
+func (a *API) clearSessionCookie(w http.ResponseWriter) {
 	//nolint:gosec // G124: см. обоснование в setSessionCookie выше.
 	http.SetCookie(w, &http.Cookie{
 		Name:     domain.SessionCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   a.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

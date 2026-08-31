@@ -18,14 +18,15 @@ const broadcastPagePath = "/broadcast.html"
 // domain.BroadcastCookieName). Значение — сам ключ: он проверяется на каждом
 // запросе, поэтому перевыпуск ключа отзывает доступ мгновенно, без списка
 // выданных зрительских сессий.
-func setBroadcastCookie(w http.ResponseWriter, key string) {
-	//nolint:gosec // G124: Secure не ставим по той же причине, что и у
-	// cookie сессии — см. обоснование в setSessionCookie (middleware.go).
+func (a *API) setBroadcastCookie(w http.ResponseWriter, key string) {
+	//nolint:gosec // G124: Secure — из конфигурации, см. setSessionCookie
+	// (middleware.go).
 	http.SetCookie(w, &http.Cookie{
 		Name:     domain.BroadcastCookieName,
 		Value:    key,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   a.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(domain.BroadcastCookieTTL.Seconds()),
 	})
@@ -107,7 +108,7 @@ func (a *API) BroadcastEntry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.URL.Query().Get(domain.BroadcastKeyParam)
 		if key != "" && a.Broadcast.Valid(r.Context(), key) {
-			setBroadcastCookie(w, key)
+			a.setBroadcastCookie(w, key)
 			http.Redirect(w, r, broadcastPagePath, http.StatusSeeOther)
 			return
 		}
@@ -177,7 +178,7 @@ func (a *API) handleBroadcastRequestCreate(w http.ResponseWriter, r *http.Reques
 func (a *API) handleBroadcastRequestState(w http.ResponseWriter, r *http.Request) {
 	state, key := a.Broadcast.RequestState(r.PathValue("id"))
 	if state == domain.BroadcastRequestApproved && key != "" {
-		setBroadcastCookie(w, key)
+		a.setBroadcastCookie(w, key)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"state": state})
 }
