@@ -18,6 +18,11 @@ import {
   apiLogout,
   stopActiveWorld,
   fetchVersion,
+  fetchBroadcastLink,
+  rotateBroadcastLink,
+  fetchBroadcastRequests,
+  approveBroadcastRequest,
+  rejectBroadcastRequest,
   fetchAssets,
   uploadFile,
   createAssetFolder,
@@ -1503,9 +1508,9 @@ async function renderAccounts() {
 onPanelOpen("accounts", renderAccounts);
 
 // ================= раздел "Настройки" =================
-// Пока единственное поле — версия сервера (short commit hash, см.
-// cmd/beacon-table/version.go); раздел заведён отдельно от "Аккаунтов",
-// чтобы будущим общим настройкам приложения было куда встать, не мешая
+// Версия сервера (short commit hash, см. cmd/beacon-table/version.go),
+// ссылка на трансляцию и общие тумблеры приложения; раздел заведён отдельно
+// от "Аккаунтов", чтобы будущим общим настройкам было куда встать, не мешая
 // уже существующим разделам.
 onPanelOpen("settings", async () => {
   const el = document.getElementById("appVersion");
@@ -1515,8 +1520,152 @@ onPanelOpen("settings", async () => {
   } catch {
     el.textContent = "неизвестна";
   }
+  await renderBroadcastLink();
+  await renderBroadcastRequests();
   await renderFoundryModules();
 });
+
+// ---- ссылка на трансляцию (раздел "Настройки") ----
+// Адрес с ключом, по которому телевизор получает доступ к столу без аккаунта
+// (см. internal/service/broadcast.go). Перевыпуск отключает все экраны разом,
+// поэтому спрашиваем подтверждение.
+const broadcastLinkInput = document.getElementById("broadcastLink");
+const broadcastCopyBtn = document.getElementById("broadcastCopyBtn");
+const broadcastRotateBtn = document.getElementById("broadcastRotateBtn");
+
+async function renderBroadcastLink() {
+  try {
+    const { url } = await fetchBroadcastLink();
+    broadcastLinkInput.value = url;
+  } catch {
+    broadcastLinkInput.value = "не удалось получить ссылку";
+  }
+}
+
+broadcastCopyBtn.onclick = async () => {
+  const url = broadcastLinkInput.value;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    // Буфер обмена недоступен (не защищённое соединение, отказ в правах) —
+    // выделяем текст, чтобы ссылку можно было скопировать вручную.
+    broadcastLinkInput.select();
+    return;
+  }
+  const label = broadcastCopyBtn.textContent;
+  broadcastCopyBtn.textContent = "Скопировано";
+  setTimeout(() => {
+    broadcastCopyBtn.textContent = label;
+  }, 1500);
+};
+
+// ---- экраны, ожидающие подтверждения (раздел "Настройки") ----
+// Второй путь для телевизора: ссылку с ключом на нём не набрать, поэтому
+// экран открывает /broadcast.html как есть, показывает код и ждёт здесь (см.
+// internal/service/broadcast_requests.go). ДМ сверяет код с тем, что горит на
+// экране, и пускает.
+const broadcastRequestsBox = document.getElementById("broadcastRequests");
+const settingsRailBtn = document.getElementById("settingsBtn");
+
+// BROADCAST_REQUESTS_POLL_MS — опрос идёт всё время, пока открыт стол: ДМ
+// узнаёт о ждущем экране по точке на иконке «Настройки», не открывая раздел.
+// Пять секунд — человек у телевизора не успевает решить, что не работает.
+const BROADCAST_REQUESTS_POLL_MS = 5000;
+
+function formatRequestAge(iso) {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return "только что";
+  const minutes = Math.round(seconds / 60);
+  return minutes + " мин назад";
+}
+
+function drawBroadcastRequests(requests) {
+  broadcastRequestsBox.replaceChildren();
+  if (!requests.length) {
+    const empty = document.createElement("div");
+    empty.className = "bcast-req-empty";
+    empty.textContent = "Сейчас никто не ждёт.";
+    broadcastRequestsBox.appendChild(empty);
+    return;
+  }
+  for (const req of requests) {
+    const card = document.createElement("div");
+    card.className = "bcast-req";
+
+    const code = document.createElement("div");
+    code.className = "bcast-req-code";
+    code.textContent = req.code;
+
+    const meta = document.createElement("div");
+    meta.className = "bcast-req-meta";
+    meta.textContent = `${req.remoteAddr} · ${formatRequestAge(req.createdAt)}`;
+
+    const buttons = document.createElement("div");
+    buttons.className = "row-inline";
+
+    const approve = document.createElement("button");
+    approve.type = "button";
+    approve.textContent = "Пустить";
+    approve.onclick = async () => {
+      approve.disabled = true;
+      try {
+        await approveBroadcastRequest(req.id);
+      } catch (e) {
+        showAlert(e.message || "не удалось пустить экран");
+      }
+      await renderBroadcastRequests();
+    };
+
+    const reject = document.createElement("button");
+    reject.type = "button";
+    reject.textContent = "Отклонить";
+    reject.onclick = async () => {
+      reject.disabled = true;
+      try {
+        await rejectBroadcastRequest(req.id);
+      } catch {
+        /* заявка уже неактуальна — список всё равно перечитаем */
+      }
+      await renderBroadcastRequests();
+    };
+
+    buttons.append(approve, reject);
+    card.append(code, meta, buttons);
+    broadcastRequestsBox.appendChild(card);
+  }
+}
+
+async function renderBroadcastRequests() {
+  let requests = [];
+  try {
+    requests = (await fetchBroadcastRequests()) || [];
+  } catch {
+    return; // не мешаем работе стола из-за упавшего опроса
+  }
+  // Точка на иконке рейла — единственный способ узнать о ждущем экране, не
+  // открывая раздел; ДМ во время игры смотрит на карту, а не в настройки.
+  settingsRailBtn.classList.toggle("has-badge", requests.length > 0);
+  // Раздел закрыт — перерисовывать нечего, но точку выше обновить надо было.
+  if (!broadcastRequestsBox.offsetParent) return;
+  drawBroadcastRequests(requests);
+}
+
+setInterval(renderBroadcastRequests, BROADCAST_REQUESTS_POLL_MS);
+renderBroadcastRequests();
+
+broadcastRotateBtn.onclick = async () => {
+  const ok = await showConfirm(
+    "Все экраны, открытые по прежней ссылке, потеряют доступ к столу. Чтобы вернуть их, нужно будет открыть на каждом новую ссылку.",
+    { title: "Перевыпустить ссылку трансляции?", okLabel: "Перевыпустить", danger: true },
+  );
+  if (!ok) return;
+  try {
+    const { url } = await rotateBroadcastLink();
+    broadcastLinkInput.value = url;
+  } catch (e) {
+    showAlert(e.message || "не удалось перевыпустить ссылку");
+  }
+};
 
 // ---- модули Foundry VTT (раздел "Настройки") ----
 // Список того, что ДМ хотя бы раз импортировал в этот мир (см.

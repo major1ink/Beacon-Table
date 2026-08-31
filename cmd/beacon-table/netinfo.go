@@ -17,8 +17,9 @@ func printAccessURLs() {
 	}
 	for _, ip := range ips {
 		log.Printf("Стол: http://%s:8080/  (ДМ и игроки входят через одну страницу)", ip)
-		log.Printf("Трансляция: http://%s:8080/broadcast.html", ip)
 	}
+
+	log.Println("Трансляция (ТВ/проектор): ссылку с ключом ДМ берёт на столе, раздел «Настройки»")
 }
 
 // virtualIfaceHints — куски имён интерфейсов, по которым отсеиваем адреса

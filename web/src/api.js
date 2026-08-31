@@ -90,6 +90,60 @@ export async function fetchVersion() {
   return apiFetch("/api/version");
 }
 
+// ---- трансляция (ТВ/проектор) ----
+// Ссылка с ключом, по которой экран в комнате получает доступ к столу без
+// аккаунта (см. internal/service/broadcast.go). Сервер отдаёт только путь —
+// origin подставляем здесь: за обратным прокси своего внешнего адреса он не
+// знает.
+export async function fetchBroadcastLink() {
+  const { key, path } = await apiFetch("/api/broadcast/link");
+  return { key, path, url: location.origin + path };
+}
+
+// rotateBroadcastLink — перевыпуск ключа: прежняя ссылка перестаёт работать
+// сразу у всех экранов, которым её раздали.
+export async function rotateBroadcastLink() {
+  const { key, path } = await apiFetch("/api/broadcast/link/rotate", { method: "POST" });
+  return { key, path, url: location.origin + path };
+}
+
+// broadcastAccessGranted — пускают ли этот браузер смотреть трансляцию.
+// Нужна самой странице трансляции, чтобы показать понятную подсказку вместо
+// чёрного экрана с молча упавшим WebSocket.
+export async function broadcastAccessGranted() {
+  try {
+    await apiFetch("/api/broadcast/access");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// requestBroadcastAccess — заявка экрана, которому ссылку с ключом вбить
+// некуда (пульт телевизора — не клавиатура): экран открывает broadcast.html
+// как есть, показывает код и ждёт, пока ДМ пустит его со своего стола.
+export async function requestBroadcastAccess() {
+  return apiFetch("/api/broadcast/requests", { method: "POST" });
+}
+
+// broadcastRequestState — что ответил ДМ: "pending" / "approved" /
+// "rejected" / "unknown" (заявка истекла — нужна новая). Вместе с "approved"
+// сервер кладёт браузеру cookie зрителя, так что ключ нигде не показывается.
+export async function broadcastRequestState(id) {
+  return apiFetch(`/api/broadcast/requests/${encodeURIComponent(id)}`);
+}
+
+// ---- заявки экранов, сторона ДМ ----
+export async function fetchBroadcastRequests() {
+  return apiFetch("/api/broadcast/requests");
+}
+export async function approveBroadcastRequest(id) {
+  return apiFetch(`/api/broadcast/requests/${encodeURIComponent(id)}/approve`, { method: "POST" });
+}
+export async function rejectBroadcastRequest(id) {
+  return apiFetch(`/api/broadcast/requests/${encodeURIComponent(id)}/reject`, { method: "POST" });
+}
+
 // ---- персонажи (свои, по сессии) — web/player.html ----
 export async function fetchCharacters() {
   return apiFetch("/api/characters");

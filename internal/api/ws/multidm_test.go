@@ -67,7 +67,8 @@ func TestTwoDMsInSameWorld(t *testing.T) {
 	tok2 := mkDM("dm-2", "dm2")
 
 	mux := http.NewServeMux()
-	apiws.RegisterRoutes(mux, mgr, service.NewAuthService(accounts, sessions))
+	apiws.RegisterRoutes(mux, mgr, service.NewAuthService(accounts, sessions),
+		service.NewBroadcastService(sqlite.NewServerStateStore(db)))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 

@@ -105,6 +105,16 @@
     .field-label { font-size: 11px; opacity: 0.6; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .field-label-row button { padding: 4px 8px; font-size: 11px; width: auto; }
+    /* Пара кнопок в строку под полем (ссылка на трансляцию): делят ширину
+       поровну, панель узкая — в одну строку с меткой они не помещаются. */
+    .row-inline { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .row-inline button { flex: 1; width: auto; padding: 4px 8px; font-size: 11px; }
+    /* Заявка экрана на трансляцию: код — то, что ДМ сверяет с телевизором,
+       поэтому он и есть главный элемент карточки. */
+    .bcast-req { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+    .bcast-req-code { font-size: 20px; font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
+    .bcast-req-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .bcast-req-empty { font-size: 12px; color: var(--text-dim); }
     .check-row { font-size: 13px; cursor: pointer; padding: 2px 0; }
     .tool-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 9px; }
     .primary-btn { width: 100%; background: var(--accent); font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -1028,6 +1038,21 @@
           <div class="field-block">
             <span class="field-label">Версия</span>
             <span id="appVersion">…</span>
+          </div>
+          <div class="section-divider"></div>
+          <div class="field-block">
+            <span class="field-label">Ссылка на трансляцию</span>
+            <input type="text" id="broadcastLink" readonly value="…" />
+            <div class="row-inline">
+              <button id="broadcastCopyBtn" type="button">Копировать</button>
+              <button id="broadcastRotateBtn" type="button">Перевыпустить</button>
+            </div>
+            <p class="hint">Откройте её на телевизоре или проекторе — экран получит доступ к столу без аккаунта и запомнит его. Ссылка секретна: кто её открыл, тот видит стол. «Перевыпустить» мгновенно отключает все экраны, которым ссылку уже дали, — тогда её нужно открыть заново на каждом.</p>
+          </div>
+          <div class="field-block">
+            <span class="field-label">Экраны, ожидающие подтверждения</span>
+            <div id="broadcastRequests"></div>
+            <p class="hint">Если ссылку вбить некуда (телевизор, приставка) — откройте на нём просто <b>/broadcast.html</b>: экран покажет код и появится здесь. Сверьте код с тем, что горит на экране, и нажмите «Пустить».</p>
           </div>
           <div class="section-divider"></div>
           <div class="field-block">

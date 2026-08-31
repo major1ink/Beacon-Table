@@ -17,6 +17,7 @@ import (
 // всегда сначала нужно получить world через requireWorld.
 type API struct {
 	Auth      service.AuthService
+	Broadcast service.BroadcastService
 	Companies *app.CompanyManager
 	// Version — версия сервера (см. cmd/beacon-table/version.go), отдаётся
 	// как есть по GET /api/version; сюда, а не в service-слой, потому что
@@ -24,10 +25,10 @@ type API struct {
 	Version string
 }
 
-// NewAPI собирает REST-хендлеры поверх Auth (глобален) и Companies
-// (переключаемый набор сервисов текущего мира).
-func NewAPI(auth service.AuthService, companies *app.CompanyManager, version string) *API {
-	return &API{Auth: auth, Companies: companies, Version: version}
+// NewAPI собирает REST-хендлеры поверх Auth и Broadcast (оба глобальны) и
+// Companies (переключаемый набор сервисов текущего мира).
+func NewAPI(auth service.AuthService, broadcast service.BroadcastService, companies *app.CompanyManager, version string) *API {
+	return &API{Auth: auth, Broadcast: broadcast, Companies: companies, Version: version}
 }
 
 // RegisterRoutes навешивает все /api/*, /upload и /assets хендлеры на mux.
@@ -39,6 +40,19 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/me", a.handleMe)
 	mux.HandleFunc("PUT /api/me/password", a.handleChangeOwnPassword)
 	mux.HandleFunc("GET /api/version", a.handleVersion)
+
+	// Трансляция: ссылку выдаёт и перевыпускает ДМ, проверку доступа дёргает
+	// сама страница трансляции — ей аккаунт не нужен (см. broadcast_handlers.go).
+	mux.HandleFunc("GET /api/broadcast/link", a.handleBroadcastLink)
+	mux.HandleFunc("POST /api/broadcast/link/rotate", a.handleBroadcastRotate)
+	mux.HandleFunc("GET /api/broadcast/access", a.handleBroadcastAccess)
+	// Заявка экрана, которому ссылку вбить некуда: создаёт и опрашивает сам
+	// экран без авторизации, отвечает на неё ДМ.
+	mux.HandleFunc("POST /api/broadcast/requests", a.handleBroadcastRequestCreate)
+	mux.HandleFunc("GET /api/broadcast/requests/{id}", a.handleBroadcastRequestState)
+	mux.HandleFunc("GET /api/broadcast/requests", a.handleBroadcastRequestList)
+	mux.HandleFunc("POST /api/broadcast/requests/{id}/approve", a.handleBroadcastRequestApprove)
+	mux.HandleFunc("POST /api/broadcast/requests/{id}/reject", a.handleBroadcastRequestReject)
 
 	// Миры (компании) — управляет только ДМ, см. company_handlers.go.
 	mux.HandleFunc("GET /api/companies", a.handleCompaniesList)

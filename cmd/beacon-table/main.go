@@ -60,6 +60,7 @@ func main() {
 	accountRepo := sqlite.NewAccountStore(db)
 	sessionRepo := sqlite.NewSessionStore(db, accountRepo)
 	companyRepo := sqlite.NewCompanyStore(db)
+	stateRepo := sqlite.NewServerStateStore(db)
 	dice := service.NewDiceRoller()
 
 	// ---- CompanyManager: собирает per-мировые репозитории/сервисы (сцены,
@@ -70,6 +71,7 @@ func main() {
 	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, dataDir, uploadsDir, uploadsURL)
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
+	broadcastSvc := service.NewBroadcastService(stateRepo)
 	if err := authSvc.SeedAdmin(ctx); err != nil {
 		log.Fatal("не удалось создать/проверить аккаунт ДМ:", err)
 	}
@@ -83,9 +85,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(sub)))
+	static := http.FileServer(http.FS(sub))
+	mux.Handle("/", static)
 
-	mux.Handle(uploadsURL, http.StripPrefix(uploadsURL, http.FileServer(http.Dir(uploadsDir))))
+	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version)
+
+	mux.Handle("GET /broadcast.html", api.BroadcastEntry(static))
+
+	mux.Handle(uploadsURL, api.RequireViewer(
+		http.StripPrefix(uploadsURL, http.FileServer(apihttp.NoDirListing{FS: http.Dir(uploadsDir)})),
+	))
 
 	systemAssets, err := fs.Sub(systemFiles, "systemdata/assets")
 	if err != nil {
@@ -93,8 +102,8 @@ func main() {
 	}
 	mux.Handle(systemAssetsURL, http.StripPrefix(systemAssetsURL, http.FileServer(http.FS(systemAssets))))
 
-	apihttp.NewAPI(authSvc, companies, version).RegisterRoutes(mux)
-	apiws.RegisterRoutes(mux, companies, authSvc)
+	api.RegisterRoutes(mux)
+	apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc)
 
 	// Ловим Ctrl+C/остановку службы и сохраняем текущий мир перед выходом
 	sigCh := make(chan os.Signal, 1)

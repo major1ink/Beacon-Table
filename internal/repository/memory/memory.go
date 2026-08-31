@@ -576,3 +576,30 @@ func (s *FoundryModuleStore) Delete(ctx context.Context, id string) error {
 	delete(s.byID, id)
 	return nil
 }
+
+// ServerStateStore — in-memory repository.ServerStateRepository.
+type ServerStateStore struct {
+	mu     sync.Mutex
+	values map[string]string
+}
+
+// NewServerStateStore создаёт пустое KV глобальных настроек сервера.
+func NewServerStateStore() *ServerStateStore {
+	return &ServerStateStore{values: map[string]string{}}
+}
+
+// Get implements repository.ServerStateRepository. Отсутствующий ключ —
+// пустая строка без ошибки, как и у sqlite.ServerStateStore.
+func (s *ServerStateStore) Get(ctx context.Context, key string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.values[key], nil
+}
+
+// Set implements repository.ServerStateRepository.
+func (s *ServerStateStore) Set(ctx context.Context, key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.values[key] = value
+	return nil
+}

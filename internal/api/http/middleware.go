@@ -71,6 +71,26 @@ func (a *API) requireAccount(w http.ResponseWriter, r *http.Request) (*domain.Ac
 	return acc, true
 }
 
+// viewerAllowed — можно ли этому запросу отдавать содержимое стола, которое
+// не является чьими-то личными данными: загруженные карты/токены/аудио
+// (/uploads/) и картинку сцены по /ws/view. Пускаем два вида клиентов:
+//
+//   - любой активный аккаунт — ДМ и игроки; намеренно БЕЗ проверки
+//     активного мира (в отличие от requireAccount), иначе у игрока, чей мир
+//     сейчас не запущен, перестал бы грузиться аватар собственного
+//     персонажа на странице листа;
+//   - телевизор с ключом трансляции — аккаунта у него нет по устройству
+//     сценария (см. domain.BroadcastCookieName).
+//
+// Разделения «чей это файл» тут нет и не предполагается: внутри одного стола
+// карты и токены и так общие, а границей служит сам факт участия в столе.
+func (a *API) viewerAllowed(r *http.Request) bool {
+	if acc, err := a.sessionAccount(r); err == nil && acc.IsActive() {
+		return true
+	}
+	return a.Broadcast.Valid(r.Context(), broadcastKey(r))
+}
+
 func (a *API) requireAdminAccount(w http.ResponseWriter, r *http.Request) (*domain.Account, bool) {
 	acc, ok := a.requireAccount(w, r)
 	if !ok {
