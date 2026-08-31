@@ -163,6 +163,21 @@ docker compose up -d
 Настройки он берёт из `/etc/beacon-table/beacon.conf` — того же файла, что
 приложение создаёт рядом с собой.
 
+### HTTPS
+
+Своего TLS у сервера нет — его даёт обратный прокси.
+[`deploy/Caddyfile.example`](deploy/Caddyfile.example) — готовый конфиг для
+[Caddy](https://caddyserver.com): он сам получает сертификат Let's Encrypt и
+продлевает его, нужен только домен на этот сервер и открытые порты 80/443.
+Вместе с прокси поставьте в `beacon.conf`:
+
+```ini
+BEACON_ADDR=127.0.0.1:8080
+BEACON_BEHIND_PROXY=true
+```
+
+В `docker-compose.yml` для Caddy есть закомментированный сервис.
+
 ### Защита входа от подбора
 
 Пять неудачных попыток входа подряд с одного адреса или под одним логином
