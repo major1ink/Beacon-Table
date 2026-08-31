@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"strings"
 
 	"beacon-table/internal/domain"
 )
@@ -68,6 +70,17 @@ func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
+	// Отдельный от входа ключ ("reg:"), чтобы поток регистраций из одного
+	// дома (общий NAT) не запирал вход тем же игрокам. Считаем каждую
+	// попытку, а не только неуспешную: успех тоже создаёт запись в базе.
+	regKey := "reg:" + clientAddr(r)
+	if wait := a.loginGuard.worst(regKey); wait > 0 {
+		w.Header().Set("Retry-After", retryAfterHeader(wait))
+		writeErr(w, http.StatusTooManyRequests, "слишком много попыток регистрации — подождите пару минут")
+		return
+	}
+	a.loginGuard.record(regKey)
+
 	// Саморегистрация привязывает игрока к тому миру, что сейчас запущен —
 	// без запущенного мира регистрировать некуда (см. AuthService.Register).
 	companyID := a.Companies.ActiveCompanyID()
@@ -98,15 +111,36 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
+
+	addr := clientAddr(r)
+	ipKey := "ip:" + addr
+	userKey := "user:" + strings.ToLower(strings.TrimSpace(req.Username))
+	if wait := a.loginGuard.worst(ipKey, userKey); wait > 0 {
+		w.Header().Set("Retry-After", retryAfterHeader(wait))
+		writeErr(w, http.StatusTooManyRequests, "слишком много попыток входа — подождите и попробуйте снова")
+		return
+	}
+
 	token, acc, err := a.Auth.Login(r.Context(), req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, domain.ErrForbidden) {
+			// Аккаунт ждёт одобрения ДМ — это не подбор, счётчик не трогаем.
 			writeErr(w, http.StatusForbidden, "аккаунт ждёт подтверждения ДМ")
 			return
 		}
+		a.loginGuard.record(ipKey)
+		a.loginGuard.record(userKey)
+		//nolint:gosec // G706: логин приходит по сети, но %q экранирует
+		// переводы строк и прочие управляющие символы — лишнюю строку в
+		// журнал через него не вставить.
+		log.Printf("неудачный вход: логин %q, адрес %q", req.Username, addr)
 		writeErr(w, http.StatusUnauthorized, "неверный логин или пароль")
 		return
 	}
+
+	// Успех — начинаем считать заново: важны срывы подряд, а не за всё время.
+	a.loginGuard.clear(ipKey)
+	a.loginGuard.clear(userKey)
 	a.setSessionCookie(w, token)
 	chars, err := a.myCharacters(r.Context(), acc)
 	if err != nil {

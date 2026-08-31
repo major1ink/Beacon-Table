@@ -28,12 +28,20 @@ type API struct {
 	// как есть по GET /api/version; сюда, а не в service-слой, потому что
 	// это не бизнес-логика, а факт про сам процесс/сборку.
 	Version string
+	// loginGuard — защита /api/login и /api/register от перебора (см.
+	// loginguard.go). Транспортный уровень: считает по IP из запроса,
+	// service-слою про такое знать незачем.
+	loginGuard *loginGuard
 }
 
 // NewAPI собирает REST-хендлеры поверх Auth и Broadcast (оба глобальны) и
 // Companies (переключаемый набор сервисов текущего мира).
 func NewAPI(auth service.AuthService, broadcast service.BroadcastService, companies *app.CompanyManager, version string, secureCookies bool) *API {
-	return &API{Auth: auth, Broadcast: broadcast, Companies: companies, Version: version, SecureCookies: secureCookies}
+	return &API{
+		Auth: auth, Broadcast: broadcast, Companies: companies,
+		Version: version, SecureCookies: secureCookies,
+		loginGuard: newLoginGuard(),
+	}
 }
 
 // RegisterRoutes навешивает все /api/*, /upload и /assets хендлеры на mux.
