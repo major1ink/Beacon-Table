@@ -23,4 +23,10 @@ VOLUME ["/data", "/uploads"]
 
 USER beacon
 EXPOSE 8080
+
+# /healthz отвечает 503, если база не откликнулась (см. health_handlers.go),
+# поэтому docker видит разницу между «процесс жив» и «сервер работает».
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1
+
 ENTRYPOINT ["beacon-table"]

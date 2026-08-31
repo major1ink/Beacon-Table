@@ -28,6 +28,9 @@ type API struct {
 	// как есть по GET /api/version; сюда, а не в service-слой, потому что
 	// это не бизнес-логика, а факт про сам процесс/сборку.
 	Version string
+	// Health — чем проверять живость по /healthz (база). nil — проверка
+	// пропускается и ручка отвечает «ok» по факту того, что процесс жив.
+	Health Pinger
 	// loginGuard — защита /api/login и /api/register от перебора (см.
 	// loginguard.go). Транспортный уровень: считает по IP из запроса,
 	// service-слою про такое знать незачем.
@@ -36,10 +39,10 @@ type API struct {
 
 // NewAPI собирает REST-хендлеры поверх Auth и Broadcast (оба глобальны) и
 // Companies (переключаемый набор сервисов текущего мира).
-func NewAPI(auth service.AuthService, broadcast service.BroadcastService, companies *app.CompanyManager, version string, secureCookies bool) *API {
+func NewAPI(auth service.AuthService, broadcast service.BroadcastService, companies *app.CompanyManager, version string, secureCookies bool, health Pinger) *API {
 	return &API{
 		Auth: auth, Broadcast: broadcast, Companies: companies,
-		Version: version, SecureCookies: secureCookies,
+		Version: version, SecureCookies: secureCookies, Health: health,
 		loginGuard: newLoginGuard(),
 	}
 }
@@ -53,6 +56,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/me", a.handleMe)
 	mux.HandleFunc("PUT /api/me/password", a.handleChangeOwnPassword)
 	mux.HandleFunc("GET /api/version", a.handleVersion)
+	// /healthz вне /api/ — это не часть API стола, а точка для мониторинга,
+	// systemd и docker healthcheck.
+	mux.HandleFunc("GET /healthz", a.handleHealth)
 
 	// Трансляция: ссылку выдаёт и перевыпускает ДМ, проверку доступа дёргает
 	// сама страница трансляции — ей аккаунт не нужен (см. broadcast_handlers.go).

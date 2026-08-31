@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -130,10 +130,7 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		a.loginGuard.record(ipKey)
 		a.loginGuard.record(userKey)
-		//nolint:gosec // G706: логин приходит по сети, но %q экранирует
-		// переводы строк и прочие управляющие символы — лишнюю строку в
-		// журнал через него не вставить.
-		log.Printf("неудачный вход: логин %q, адрес %q", req.Username, addr)
+		slog.Warn("неудачный вход", "username", req.Username, "addr", addr)
 		writeErr(w, http.StatusUnauthorized, "неверный логин или пароль")
 		return
 	}

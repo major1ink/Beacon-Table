@@ -10,6 +10,7 @@ import (
 	"flag"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -68,6 +69,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	setupLogging(cfg)
+
 	version := serverVersion()
 	log.Println("Beacon Table версия:", version)
 	if configFile != "" {
@@ -119,7 +122,7 @@ func main() {
 	static := http.FileServer(http.FS(sub))
 	mux.Handle("/", static)
 
-	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version, cfg.BehindProxy)
+	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version, cfg.BehindProxy, db)
 
 	mux.Handle("GET /broadcast.html", api.BroadcastEntry(static))
 
@@ -151,7 +154,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           api.LimitAPIBodies(mux),
+		Handler:           apihttp.LogRequests(api.LimitAPIBodies(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
@@ -191,12 +194,12 @@ func shutdown(srv *http.Server, gateway *apiws.Gateway, companies *app.CompanyMa
 	if err := srv.Shutdown(ctx); err != nil {
 		// Не дождались — дальше всё равно закрываемся: мир сохранить важнее,
 		// чем дотерпеть зависший запрос.
-		log.Println("не все запросы успели завершиться:", err)
+		slog.Warn("не все запросы успели завершиться", "err", err)
 	}
 	gateway.CloseAll()
 	companies.Shutdown()
 	if err := db.Close(); err != nil {
-		log.Println("ошибка закрытия базы:", err)
+		slog.Error("ошибка закрытия базы", "err", err)
 	}
 	log.Println("сервер остановлен")
 }

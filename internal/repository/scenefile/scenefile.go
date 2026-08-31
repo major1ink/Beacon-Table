@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -130,7 +131,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 		}
 		sc := &domain.SceneState{}
 		if err := json.Unmarshal(data, sc); err != nil {
-			log.Println("сцена повреждена, пропускаю:", p, err)
+			slog.Warn("сцена повреждена, пропускаю", "path", p, "err", err)
 			continue
 		}
 		stem := strings.TrimSuffix(e.Name(), ".json")
@@ -200,7 +201,7 @@ func (s *Store) loadCombat() *domain.CombatState {
 		return combat
 	}
 	if err := json.Unmarshal(data, combat); err != nil {
-		log.Println("трекер инициативы повреждён, начинаю с пустого:", err)
+		slog.Warn("трекер инициативы повреждён, начинаю с пустого", "err", err)
 		return domain.NewCombatState()
 	}
 	if combat.Combatants == nil {
@@ -236,7 +237,7 @@ func (s *Store) loadHub() *domain.LootHub {
 		return hub
 	}
 	if err := json.Unmarshal(data, hub); err != nil {
-		log.Println("хаб лута повреждён, начинаю с пустого:", err)
+		slog.Warn("хаб лута повреждён, начинаю с пустого", "err", err)
 		return domain.NewLootHub()
 	}
 	if hub.Entries == nil {

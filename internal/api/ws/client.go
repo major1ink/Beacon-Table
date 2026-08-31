@@ -7,6 +7,7 @@ package ws
 import (
 	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -57,10 +58,7 @@ func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *ht
 		// Сюда же попадает отказ по Origin (см. checkOrigin): gorilla сам
 		// отвечает 403, мы дописываем адрес и Origin в журнал.
 		//
-		//nolint:gosec // G706: заголовок приходит по сети, но печатается
-		// через %q — переводы строк и прочие управляющие символы
-		// экранируются, подделать лишнюю строку в журнале через него нельзя.
-		log.Printf("отклонён WS-хендшейк (origin %q): %v", r.Header.Get("Origin"), err)
+		slog.Warn("отклонён WS-хендшейк", "origin", r.Header.Get("Origin"), "err", err)
 		return
 	}
 	// Соединение под присмотром Gateway до самого конца — иначе остановка

@@ -65,6 +65,14 @@ type Config struct {
 	// хранить.
 	BackupInterval time.Duration
 	BackupKeep     int
+
+	// ---- журнал ----
+	// LogLevel — debug, info, warn или error. debug добавляет строку на
+	// каждый HTTP-запрос; на info журнал пишется только о событиях.
+	LogLevel string
+	// LogFormat — "text" (по умолчанию, читается глазами) или "json" для
+	// систем сбора логов.
+	LogFormat string
 }
 
 func defaultConfig() Config {
@@ -76,6 +84,8 @@ func defaultConfig() Config {
 		BackupEnabled:  true,
 		BackupInterval: 24 * time.Hour,
 		BackupKeep:     7,
+		LogLevel:       "info",
+		LogFormat:      "text",
 	}
 }
 
@@ -103,6 +113,9 @@ const (
 	envBackupDir      = "BEACON_BACKUP_DIR"
 	envBackupInterval = "BEACON_BACKUP_INTERVAL"
 	envBackupKeep     = "BEACON_BACKUP_KEEP"
+
+	envLogLevel  = "BEACON_LOG_LEVEL"
+	envLogFormat = "BEACON_LOG_FORMAT"
 	// envConfig — где лежит файл конфига, если не там, где его ищут по
 	// умолчанию (см. findConfigFile).
 	envConfig = "BEACON_CONFIG"
@@ -232,6 +245,7 @@ func envValues() map[string]string {
 	for _, key := range []string{
 		envAddr, envDataDir, envUploadsDir, envBehindProxy, envAllowedOrigins,
 		envBackupEnabled, envBackupDir, envBackupInterval, envBackupKeep,
+		envLogLevel, envLogFormat,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			values[key] = v
@@ -301,7 +315,29 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 		}
 		cfg.BackupKeep = n
 	}
+	if v, ok := values[envLogLevel]; ok && v != "" {
+		level := strings.ToLower(unquote(v))
+		if !validLogLevel(level) {
+			return fmt.Errorf("%s в %s: %q — ожидалось debug, info, warn или error", envLogLevel, source, v)
+		}
+		cfg.LogLevel = level
+	}
+	if v, ok := values[envLogFormat]; ok && v != "" {
+		format := strings.ToLower(unquote(v))
+		if format != "text" && format != "json" {
+			return fmt.Errorf("%s в %s: %q — ожидалось text или json", envLogFormat, source, v)
+		}
+		cfg.LogFormat = format
+	}
 	return nil
+}
+
+func validLogLevel(v string) bool {
+	switch v {
+	case "debug", "info", "warn", "error":
+		return true
+	}
+	return false
 }
 
 // splitOrigins разбирает список через запятую, пропуская пустые куски: с
@@ -332,12 +368,25 @@ func bindFlags(cfg *Config, args []string) error {
 	fs.StringVar(&cfg.BackupDir, "backup-dir", cfg.BackupDir, "куда складывать архивы бэкапов (по умолчанию <data>/backups)")
 	fs.DurationVar(&cfg.BackupInterval, "backup-interval", cfg.BackupInterval, "как часто делать бэкап")
 	fs.IntVar(&cfg.BackupKeep, "backup-keep", cfg.BackupKeep, "сколько последних архивов хранить")
+	fs.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "подробность журнала: debug, info, warn, error")
+	fs.StringVar(&cfg.LogFormat, "log-format", cfg.LogFormat, "формат журнала: text или json")
 	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")
 	fs.String("config", "", "путь к файлу настроек (по умолчанию "+configFileName+" рядом с программой)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	cfg.AllowedOrigins = splitOrigins(*origins)
+
+	// Флаги проверяем здесь: значения из файла и окружения уже проверил
+	// applyValues, но флаг приходит мимо него.
+	cfg.LogLevel = strings.ToLower(cfg.LogLevel)
+	if !validLogLevel(cfg.LogLevel) {
+		return fmt.Errorf("--log-level %q: ожидалось debug, info, warn или error", cfg.LogLevel)
+	}
+	cfg.LogFormat = strings.ToLower(cfg.LogFormat)
+	if cfg.LogFormat != "text" && cfg.LogFormat != "json" {
+		return fmt.Errorf("--log-format %q: ожидалось text или json", cfg.LogFormat)
+	}
 	return nil
 }
 
@@ -384,6 +433,14 @@ const exampleConfig = `# Настройки Beacon Table.
 #BEACON_BACKUP_DIR=data/backups
 #BEACON_BACKUP_INTERVAL=24h
 #BEACON_BACKUP_KEEP=7
+
+# Подробность журнала: debug, info, warn, error.
+# На debug добавляется строка на каждый HTTP-запрос — удобно при разборе
+# проблемы, но журнал растёт быстро.
+#BEACON_LOG_LEVEL=info
+
+# Формат журнала: text (читается глазами) или json (для систем сбора логов).
+#BEACON_LOG_FORMAT=text
 `
 
 // writeExampleConfig создаёт файл-подсказку, если его ещё нет. Ошибку

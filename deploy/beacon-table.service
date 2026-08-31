@@ -31,9 +31,14 @@ RestartSec=5s
 KillSignal=SIGTERM
 TimeoutStopSec=30s
 
-# Журнал не должен съесть диск.
+# Журнал не должен съесть диск. Здесь — ограничение частоты: цикл ошибок
+# (недоступная база, отказ прокси) иначе пишет тысячи строк в секунду.
+# Общий размер журнала задаётся один раз на систему, в
+# /etc/systemd/journald.conf: SystemMaxUse=500M.
 StandardOutput=journal
 StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=1000
 
 # Ограничения: службе нужны только свои каталоги.
 NoNewPrivileges=true

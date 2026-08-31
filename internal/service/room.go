@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"math"
 	"regexp"
 	"sort"
@@ -686,7 +687,7 @@ func (r *Room) flushIfDirty() {
 		delete(r.dirtyScenes, id)
 	}
 	if err := r.store.SaveMeta(ctx, r.currentSceneID, r.sceneOrder); err != nil {
-		log.Println("не удалось сохранить активную сцену:", err)
+		slog.Error("не удалось сохранить активную сцену", "err", err)
 		return
 	}
 	if r.combatDirty {

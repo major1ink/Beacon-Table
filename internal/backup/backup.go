@@ -11,7 +11,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -106,10 +106,10 @@ func backupNow(ctx context.Context, o Options) {
 		if ctx.Err() != nil {
 			return // остановка сервера — не ошибка
 		}
-		log.Println("бэкап не удался:", err)
+		slog.Error("бэкап не удался", "err", err)
 		return
 	}
-	log.Println("бэкап готов:", path)
+	slog.Info("бэкап готов", "path", path)
 }
 
 // checkDB открывает снимок и убеждается, что он читается и целостен —
@@ -296,7 +296,7 @@ func rotate(dest string, keep int) {
 	}
 	for _, name := range archives[:len(archives)-keep] {
 		if err := os.Remove(filepath.Join(dest, name)); err != nil {
-			log.Println("не удалось удалить старый бэкап:", err)
+			slog.Warn("не удалось удалить старый бэкап", "err", err)
 		}
 	}
 }
