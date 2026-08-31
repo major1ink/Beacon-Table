@@ -59,12 +59,19 @@ func (c *Client) PlayerID() string { return c.playerID }
 // PlayerName implements service.RoomClient.
 func (c *Client) PlayerName() string { return c.playerName }
 
-func serveWs(room service.RoomService, w http.ResponseWriter, r *http.Request, role domain.ClientRole, playerID, playerName string) {
+func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *http.Request, role domain.ClientRole, playerID, playerName string) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("upgrade error:", err)
 		return
 	}
+	// Соединение под присмотром Gateway до самого конца — иначе остановка
+	// сервера не смогла бы его закрыть (см. Gateway.CloseAll).
+	if !gw.track(conn) {
+		conn.Close() // сервер уже останавливается — подключаться некуда
+		return
+	}
+	defer gw.untrack(conn)
 
 	c := &Client{conn: conn, room: room, out: make(chan any, 16), role: role, playerID: playerID, playerName: playerName}
 	room.Join(c)

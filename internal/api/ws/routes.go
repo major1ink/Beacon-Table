@@ -2,11 +2,74 @@ package ws
 
 import (
 	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
 
 	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
 	"beacon-table/internal/service"
 )
+
+// Gateway — все живые WS-подключения стола. Нужен ровно для одного:
+// закрыть их при остановке сервера. http.Server.Shutdown этого не сделает —
+// после апгрейда соединение hijacked, сервер его больше не отслеживает, и
+// без Gateway оно просто обрывалось бы на выходе процесса, а браузер видел
+// бы разрыв TCP вместо внятного «сервер перезапускается».
+type Gateway struct {
+	mu    sync.Mutex
+	conns map[*websocket.Conn]struct{}
+	// closing — сервер уже останавливается: новые подключения принимать
+	// поздно, иначе соединение, проскочившее между CloseAll и выходом
+	// процесса, снова повисло бы необорванным.
+	closing bool
+}
+
+func newGateway() *Gateway {
+	return &Gateway{conns: map[*websocket.Conn]struct{}{}}
+}
+
+// track берёт соединение под присмотр. false — сервер уже останавливается,
+// вызывающему остаётся закрыть соединение и уйти.
+func (g *Gateway) track(conn *websocket.Conn) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closing {
+		return false
+	}
+	g.conns[conn] = struct{}{}
+	return true
+}
+
+func (g *Gateway) untrack(conn *websocket.Conn) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.conns, conn)
+}
+
+// CloseAll вежливо прощается со всеми экранами: код 1012 «сервис
+// перезапускается» — тот самый случай, для которого он в стандарте и
+// заведён. Браузер получает закрытие сразу, а не по таймауту мёртвого
+// соединения. Ошибки записи игнорируются намеренно: половина соединений на
+// этом этапе может быть уже мертва, и делать с этим всё равно нечего —
+// соединение закрывается следом в любом случае.
+func (g *Gateway) CloseAll() {
+	g.mu.Lock()
+	g.closing = true
+	conns := make([]*websocket.Conn, 0, len(g.conns))
+	for conn := range g.conns {
+		conns = append(conns, conn)
+	}
+	g.conns = map[*websocket.Conn]struct{}{}
+	g.mu.Unlock()
+
+	bye := websocket.FormatCloseMessage(websocket.CloseServiceRestart, "сервер перезапускается")
+	for _, conn := range conns {
+		_ = conn.WriteControl(websocket.CloseMessage, bye, time.Now().Add(time.Second))
+		_ = conn.Close()
+	}
+}
 
 // RegisterRoutes навешивает /ws/dm, /ws/view, /ws/player на mux. Роль и
 // личность резолвятся из cookie-сессии (см. auth.AccountBySession), а не из
@@ -17,7 +80,8 @@ import (
 // один раз при регистрации маршрутов), потому что Room целиком меняется при
 // переключении мира (см. app.CompanyManager.Launch) — если сейчас ничего не
 // запущено, отвечаем 503, а не паникуем на nil.
-func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.AuthService, broadcast service.BroadcastService) {
+func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.AuthService, broadcast service.BroadcastService) *Gateway {
+	gw := newGateway()
 	mux.HandleFunc("/ws/dm", func(w http.ResponseWriter, r *http.Request) {
 		acc, err := sessionAccount(auth, r)
 		if err != nil || !acc.IsActive() || !acc.IsAdmin() {
@@ -29,7 +93,7 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
-		serveWs(world.Room, w, r, domain.RoleDM, acc.ID, acc.Username)
+		serveWs(gw, world.Room, w, r, domain.RoleDM, acc.ID, acc.Username)
 	})
 	// /ws/view — зритель (ТВ/проектор): аккаунта у него нет по устройству
 	// сценария, вместо него — ключ трансляции, выданный ДМ (см.
@@ -49,7 +113,7 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
-		serveWs(world.Room, w, r, domain.RoleTV, "", "")
+		serveWs(gw, world.Room, w, r, domain.RoleTV, "", "")
 	})
 	mux.HandleFunc("/ws/player", func(w http.ResponseWriter, r *http.Request) {
 		acc, err := sessionAccount(auth, r)
@@ -66,8 +130,9 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
-		serveWs(world.Room, w, r, domain.RolePlayer, acc.ID, acc.Username)
+		serveWs(gw, world.Room, w, r, domain.RolePlayer, acc.ID, acc.Username)
 	})
+	return gw
 }
 
 // viewerAllowed — то же правило, что и у api/http для /uploads/ (см.

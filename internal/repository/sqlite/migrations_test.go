@@ -304,3 +304,72 @@ func TestApplyMigrationsRejectsBrokenList(t *testing.T) {
 		t.Fatal("сбитый список миграций принят")
 	}
 }
+
+// TestOpenEnablesWALAndBusyTimeout — режим журнала и ожидание блокировки
+// настраиваются на файловой базе. В памяти WAL не поддерживается, поэтому
+// проверка идёт именно на файле — как в бою.
+func TestOpenEnablesWALAndBusyTimeout(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "beacon.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	var mode string
+	if err := db.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil {
+		t.Fatalf("journal_mode: %v", err)
+	}
+	if mode != "wal" {
+		t.Fatalf("journal_mode = %q, ожидался wal", mode)
+	}
+
+	var timeout int
+	if err := db.QueryRow(`PRAGMA busy_timeout`).Scan(&timeout); err != nil {
+		t.Fatalf("busy_timeout: %v", err)
+	}
+	if timeout == 0 {
+		t.Fatal("busy_timeout не выставлен — запрос упадёт на первой же внешней блокировке")
+	}
+
+	var fk int
+	if err := db.QueryRow(`PRAGMA foreign_keys`).Scan(&fk); err != nil {
+		t.Fatalf("foreign_keys: %v", err)
+	}
+	if fk != 1 {
+		t.Fatal("foreign_keys выключены — ON DELETE CASCADE не сработает")
+	}
+}
+
+// TestCloseCheckpointsWAL — после закрытия базы данные должны лежать в самом
+// beacon.db, а не в соседнем -wal: иначе копия файла, снятая после остановки
+// сервера, приехала бы без последних правок.
+func TestCloseCheckpointsWAL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "beacon.db")
+
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO companies (id, name, system, created_at) VALUES ('c1', 'Мир', 'dnd5e-2024', '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatalf("вставка: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if _, err := os.Stat(path + "-wal"); err == nil {
+		t.Fatal("файл -wal остался после закрытия базы")
+	}
+
+	again, err := Open(path)
+	if err != nil {
+		t.Fatalf("повторный Open: %v", err)
+	}
+	defer again.Close()
+	var name string
+	if err := again.QueryRow(`SELECT name FROM companies WHERE id = 'c1'`).Scan(&name); err != nil {
+		t.Fatalf("данные не долетели до основного файла: %v", err)
+	}
+}

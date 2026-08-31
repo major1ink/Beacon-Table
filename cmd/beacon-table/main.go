@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"embed"
+	"errors"
 	"io/fs"
 	"log"
 	"net/http"
@@ -103,26 +105,59 @@ func main() {
 	mux.Handle(systemAssetsURL, http.StripPrefix(systemAssetsURL, http.FileServer(http.FS(systemAssets))))
 
 	api.RegisterRoutes(mux)
-	apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc)
+	gateway := apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc)
 
-	// Ловим Ctrl+C/остановку службы и сохраняем текущий мир перед выходом
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		log.Println("завершение работы, сохраняю мир...")
-		companies.Shutdown()
-		db.Close()
-		os.Exit(0)
-	}()
 
 	addr := ":8080"
-	log.Println("Beacon Table сервер запущен на", addr)
-	printAccessURLs()
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Fatal(srv.ListenAndServe())
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+	log.Println("Beacon Table сервер запущен на", addr)
+	printAccessURLs()
+
+	<-sigCh
+	shutdown(srv, gateway, companies, db)
+}
+
+// shutdownTimeout — сколько ждём запросы, начатые до остановки. Пятнадцать
+// секунд: столько может занять сохранение листа персонажа или разбор
+// загруженной карты, а systemd по умолчанию даёт на остановку девяносто.
+const shutdownTimeout = 15 * time.Second
+
+// shutdown останавливает сервер по порядку, в котором каждый следующий шаг
+// не может помешать предыдущему:
+//
+//  1. перестаём принимать новое и даём договорить уже начатым HTTP-запросам —
+//     иначе загрузка карты или сохранение листа рвались бы на середине;
+//  2. закрываем WS: http.Server.Shutdown их не ждёт (после апгрейда
+//     соединение hijacked), поэтому прощаемся сами, а не бросаем сокет;
+//  3. только теперь сохраняем мир — правки к этому моменту уже не приходят
+//     ни по HTTP, ни по WS, так что на диск ложится итоговое состояние;
+//  4. закрываем базу: на закрытии последнего соединения SQLite сливает WAL
+//     в основной файл, и рядом с beacon.db не остаётся -wal с данными.
+func shutdown(srv *http.Server, gateway *apiws.Gateway, companies *app.CompanyManager, db *sql.DB) {
+	log.Println("завершение работы, сохраняю мир...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		// Не дождались — дальше всё равно закрываемся: мир сохранить важнее,
+		// чем дотерпеть зависший запрос.
+		log.Println("не все запросы успели завершиться:", err)
+	}
+	gateway.CloseAll()
+	companies.Shutdown()
+	if err := db.Close(); err != nil {
+		log.Println("ошибка закрытия базы:", err)
+	}
+	log.Println("сервер остановлен")
 }
