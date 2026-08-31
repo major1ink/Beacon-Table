@@ -2,10 +2,38 @@ package http
 
 import (
 	"net/http"
+	"strings"
 
 	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
 )
+
+// maxAPIBody — потолок на тело обычного запроса к /api/*. Лист персонажа,
+// заметка, карточка — это килобайты; мегабайт с огромным запасом. Без него
+// любой залогиненный игрок мог прислать гигабайтный JSON, и сервер прочитал
+// бы его в память.
+const maxAPIBody = 1 << 20
+
+// bigBodyAPIPath — единственная /api/*-ручка с файлом (импорт мира), у неё
+// свой, больший лимит (см. company_handlers.go: maxWorldImportSize).
+// /upload лежит вне /api/ и под этот middleware не попадает вовсе.
+const bigBodyAPIPath = "/api/companies/import"
+
+// LimitAPIBodies оборачивает весь mux: тело запроса к /api/* читается не
+// дальше maxAPIBody. Слишком длинный Content-Length отсекается сразу, тело
+// без него (chunked) — на чтении в хендлере.
+func (a *API) LimitAPIBodies(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != bigBodyAPIPath {
+			if r.ContentLength > maxAPIBody {
+				writeErr(w, http.StatusRequestEntityTooLarge, "тело запроса слишком большое")
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxAPIBody)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // setSessionCookie — cookie сессии. Secure ставится по флагу
 // --behind-proxy (см. API.SecureCookies): на голом HTTP, каким сервер
