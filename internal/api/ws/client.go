@@ -55,8 +55,7 @@ func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *ht
 	conn, err := gw.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		// Сюда же попадает отказ по Origin (см. checkOrigin): gorilla сам
-		// отвечает 403, нам остаётся записать, с какого адреса пришли — на
-		// публичном сервере это первый признак, что кто-то ходит не оттуда.
+		// отвечает 403, мы дописываем адрес и Origin в журнал.
 		//
 		//nolint:gosec // G706: заголовок приходит по сети, но печатается
 		// через %q — переводы строк и прочие управляющие символы
