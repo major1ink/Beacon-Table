@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config — всё, что настраивается снаружи. Значения берутся из четырёх
@@ -52,15 +53,38 @@ type Config struct {
 	// обратный прокси не передаёт исходный Host — тогда сервер видит вместо
 	// имени сайта что-то своё и отвергает собственные же страницы.
 	AllowedOrigins []string
+
+	// ---- резервное копирование ----
+	// Снимок базы (VACUUM INTO) плюс архив каталогов данных и загрузок, по
+	// расписанию. По умолчанию включено: потерять кампанию куда дороже места
+	// под архивы.
+	BackupEnabled bool
+	// BackupDir — куда складывать архивы. Пусто — <DataDir>/backups.
+	BackupDir string
+	// BackupInterval — как часто; BackupKeep — сколько последних архивов
+	// хранить.
+	BackupInterval time.Duration
+	BackupKeep     int
 }
 
 func defaultConfig() Config {
 	return Config{
-		Addr:        ":8080",
-		DataDir:     "data",
-		UploadsDir:  "uploads",
-		BehindProxy: false,
+		Addr:           ":8080",
+		DataDir:        "data",
+		UploadsDir:     "uploads",
+		BehindProxy:    false,
+		BackupEnabled:  true,
+		BackupInterval: 24 * time.Hour,
+		BackupKeep:     7,
 	}
+}
+
+// BackupPath — куда пишутся архивы с учётом значения по умолчанию.
+func (c Config) BackupPath() string {
+	if c.BackupDir != "" {
+		return c.BackupDir
+	}
+	return filepath.Join(c.DataDir, "backups")
 }
 
 // DBPath — файл базы внутри каталога данных.
@@ -74,6 +98,11 @@ const (
 	envUploadsDir     = "BEACON_UPLOADS_DIR"
 	envBehindProxy    = "BEACON_BEHIND_PROXY"
 	envAllowedOrigins = "BEACON_ALLOWED_ORIGINS"
+
+	envBackupEnabled  = "BEACON_BACKUP_ENABLED"
+	envBackupDir      = "BEACON_BACKUP_DIR"
+	envBackupInterval = "BEACON_BACKUP_INTERVAL"
+	envBackupKeep     = "BEACON_BACKUP_KEEP"
 	// envConfig — где лежит файл конфига, если не там, где его ищут по
 	// умолчанию (см. findConfigFile).
 	envConfig = "BEACON_CONFIG"
@@ -200,7 +229,10 @@ func readConfigFile(path string) (map[string]string, error) {
 
 func envValues() map[string]string {
 	values := map[string]string{}
-	for _, key := range []string{envAddr, envDataDir, envUploadsDir, envBehindProxy, envAllowedOrigins} {
+	for _, key := range []string{
+		envAddr, envDataDir, envUploadsDir, envBehindProxy, envAllowedOrigins,
+		envBackupEnabled, envBackupDir, envBackupInterval, envBackupKeep,
+	} {
 		if v, ok := os.LookupEnv(key); ok {
 			values[key] = v
 		}
@@ -245,6 +277,30 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 	if v, ok := values[envAllowedOrigins]; ok && v != "" {
 		cfg.AllowedOrigins = splitOrigins(unquote(v))
 	}
+	if v, ok := values[envBackupEnabled]; ok && v != "" {
+		b, err := strconv.ParseBool(unquote(v))
+		if err != nil {
+			return fmt.Errorf("%s в %s: %q — ожидалось true или false", envBackupEnabled, source, v)
+		}
+		cfg.BackupEnabled = b
+	}
+	if v, ok := values[envBackupDir]; ok && v != "" {
+		cfg.BackupDir = unquote(v)
+	}
+	if v, ok := values[envBackupInterval]; ok && v != "" {
+		d, err := time.ParseDuration(unquote(v))
+		if err != nil || d <= 0 {
+			return fmt.Errorf("%s в %s: %q — ожидалась длительность вроде 24h или 30m", envBackupInterval, source, v)
+		}
+		cfg.BackupInterval = d
+	}
+	if v, ok := values[envBackupKeep]; ok && v != "" {
+		n, err := strconv.Atoi(unquote(v))
+		if err != nil || n < 1 {
+			return fmt.Errorf("%s в %s: %q — ожидалось целое число не меньше 1", envBackupKeep, source, v)
+		}
+		cfg.BackupKeep = n
+	}
 	return nil
 }
 
@@ -272,6 +328,10 @@ func bindFlags(cfg *Config, args []string) error {
 	fs.StringVar(&cfg.DataDir, "data", cfg.DataDir, "каталог данных: база, журнал, сцены")
 	fs.StringVar(&cfg.UploadsDir, "uploads", cfg.UploadsDir, "каталог загрузок: карты, токены, аудио")
 	fs.BoolVar(&cfg.BehindProxy, "behind-proxy", cfg.BehindProxy, "сервер стоит за HTTPS-прокси (включает Secure у cookie)")
+	fs.BoolVar(&cfg.BackupEnabled, "backup", cfg.BackupEnabled, "делать резервные копии по расписанию")
+	fs.StringVar(&cfg.BackupDir, "backup-dir", cfg.BackupDir, "куда складывать архивы бэкапов (по умолчанию <data>/backups)")
+	fs.DurationVar(&cfg.BackupInterval, "backup-interval", cfg.BackupInterval, "как часто делать бэкап")
+	fs.IntVar(&cfg.BackupKeep, "backup-keep", cfg.BackupKeep, "сколько последних архивов хранить")
 	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")
 	fs.String("config", "", "путь к файлу настроек (по умолчанию "+configFileName+" рядом с программой)")
 	if err := fs.Parse(args); err != nil {
@@ -316,6 +376,14 @@ const exampleConfig = `# Настройки Beacon Table.
 # обратный прокси не передаёт исходный Host — тогда стол не откроется, а в
 # журнале будет «отклонён WS-хендшейк».
 #BEACON_ALLOWED_ORIGINS=стол.example.com,192.168.1.10:8080
+
+# Резервное копирование: снимок базы (VACUUM INTO) плюс архив каталогов
+# данных и загрузок. Делается при старте и дальше по интервалу; каждый архив
+# проверяется на восстановимость. Хранятся последние BEACON_BACKUP_KEEP штук.
+#BEACON_BACKUP_ENABLED=true
+#BEACON_BACKUP_DIR=data/backups
+#BEACON_BACKUP_INTERVAL=24h
+#BEACON_BACKUP_KEEP=7
 `
 
 // writeExampleConfig создаёт файл-подсказку, если его ещё нет. Ошибку

@@ -19,6 +19,7 @@ import (
 	apihttp "beacon-table/internal/api/http"
 	apiws "beacon-table/internal/api/ws"
 	"beacon-table/internal/app"
+	"beacon-table/internal/backup"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
@@ -48,6 +49,13 @@ const (
 
 func main() {
 	ctx := context.Background()
+
+	// Подкоманда `beacon-table backup` — один бэкап и выход, аргументы после
+	// неё разбираются как обычные (--data, --config).
+	if len(os.Args) > 1 && os.Args[1] == "backup" {
+		runBackupCommand(os.Args[2:])
+		return
+	}
 
 	// Настройки разбираем до всего остального: с --help программа должна
 	// напечатать справку и выйти молча, не создавая каталогов и не печатая
@@ -134,6 +142,13 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
+	bgCtx, stopBackground := context.WithCancel(context.Background())
+	if cfg.BackupEnabled {
+		go backup.Run(bgCtx, cfg.BackupInterval, backupOptions(cfg, db))
+	} else {
+		log.Println("резервное копирование выключено (BEACON_BACKUP_ENABLED=false)")
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           api.LimitAPIBodies(mux),
@@ -148,6 +163,7 @@ func main() {
 	printAccessURLs(cfg.Addr)
 
 	<-sigCh
+	stopBackground()
 	shutdown(srv, gateway, companies, db)
 }
 
