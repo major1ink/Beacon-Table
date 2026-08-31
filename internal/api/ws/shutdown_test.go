@@ -38,7 +38,7 @@ func TestGatewayCloseAllSaysGoodbye(t *testing.T) {
 	sessions := sqlite.NewSessionStore(db, accounts)
 	companies := sqlite.NewCompanyStore(db)
 	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
-		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/")
+		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true)
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestGatewayRefusesConnectionsAfterClose(t *testing.T) {
 	sessions := sqlite.NewSessionStore(db, accounts)
 	companies := sqlite.NewCompanyStore(db)
 	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
-		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/")
+		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true)
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestHandshakeRejectsForeignOrigin(t *testing.T) {
 	sessions := sqlite.NewSessionStore(db, accounts)
 	companies := sqlite.NewCompanyStore(db)
 	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
-		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/")
+		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true)
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}

@@ -80,6 +80,10 @@ type CompanyManager struct {
 
 	legacyID string // см. repository.CompanyRepository.LegacyID — кэш, читается один раз в Bootstrap
 
+	// allowPrivateFoundryNet — пускать ли импорт модулей Foundry в приватную
+	// сеть (см. foundry.GuardedTransport). На сервере в интернете — нет.
+	allowPrivateFoundryNet bool
+
 	current *ActiveWorld
 }
 
@@ -88,10 +92,11 @@ type CompanyManager struct {
 // данные инсталляции, существовавшей до появления миров (см. Bootstrap);
 // любая другая компания получает свои собственные подпапки внутри тех же
 // корней.
-func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, systemFS fs.FS, dataRoot, uploadsRoot, uploadsURL string) *CompanyManager {
+func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, systemFS fs.FS, dataRoot, uploadsRoot, uploadsURL string, allowPrivateFoundryNet bool) *CompanyManager {
 	return &CompanyManager{
 		db: db, companies: companies, accounts: accounts, sessions: sessions, dice: dice, systemFS: systemFS,
 		dataRoot: dataRoot, uploadsRoot: uploadsRoot, uploadsURL: uploadsURL,
+		allowPrivateFoundryNet: allowPrivateFoundryNet,
 	}
 }
 
@@ -364,6 +369,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Foundry: service.NewFoundryService(
 			filepath.Join(dataRoot, "foundry-cache"), assets, room, playlists, foundryModuleRepo,
 			bestiary, spells, items, references, conditions, pregenRepo,
+			m.allowPrivateFoundryNet,
 		),
 	}
 

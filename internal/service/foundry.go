@@ -219,13 +219,29 @@ const roomImportTimeout = 30 * time.Second
 // пакеты этого мира (см. Installed/CheckUpdates). bestiary/spells/items/
 // references/conditions — те же сервисы этого мира, нужны только Delete
 // (см. её комментарий).
+// allowPrivateNetwork — пускать ли импорт в приватные диапазоны сети (см.
+// foundry.GuardedTransport). Для сервера в интернете — нет; для локальной
+// установки — да, там законно тянуть модуль с соседней машины.
 func NewFoundryService(
 	cacheDir string,
 	assets AssetService, room RoomService, playlists PlaylistService, modules repository.FoundryModuleRepository,
 	bestiary BestiaryService, spells SpellService, items ItemService, references ReferenceService, conditions ConditionService,
 	pregens repository.PregenRepository,
+	allowPrivateNetwork bool,
 ) FoundryService {
-	client := &http.Client{Timeout: foundryHTTPTimeout}
+	client := &http.Client{
+		Timeout:   foundryHTTPTimeout,
+		Transport: foundry.GuardedTransport(allowPrivateNetwork),
+		// Редиректы транспорт проверяет тем же дозвоном, что и первый запрос
+		// (см. GuardedTransport); тут только предел на их число, чтобы цепочка
+		// перенаправлений не съедала часовой таймаут.
+		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
+			if len(via) >= 8 {
+				return fmt.Errorf("слишком много перенаправлений")
+			}
+			return nil
+		},
+	}
 	return &foundryService{
 		cache:      foundry.NewCache(cacheDir, client),
 		assets:     assets,

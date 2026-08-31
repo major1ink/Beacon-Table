@@ -88,7 +88,10 @@ func main() {
 	// Room) заново при каждом переключении мира — см. internal/app. Auth
 	// (аккаунты/сессии) — единственный полностью глобальный сервис, живёт
 	// здесь, а не внутри неё (см. её package-doc).
-	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL)
+	// За обратным прокси (сервер в интернете) импорт модулей Foundry не
+	// должен ходить в приватную сеть — там нет ни локального зеркала, ни
+	// причин туда стучаться, зато есть служебные адреса облака.
+	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy)
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
 	broadcastSvc := service.NewBroadcastService(stateRepo)
