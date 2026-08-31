@@ -123,7 +123,10 @@ func main() {
 	mux.Handle(systemAssetsURL, http.StripPrefix(systemAssetsURL, http.FileServer(http.FS(systemAssets))))
 
 	api.RegisterRoutes(mux)
-	gateway := apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc)
+	gateway := apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc, apiws.Options{
+		BehindProxy:    cfg.BehindProxy,
+		AllowedOrigins: cfg.AllowedOrigins,
+	})
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)

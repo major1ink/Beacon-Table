@@ -63,7 +63,7 @@ func TestGatewayCloseAllSaysGoodbye(t *testing.T) {
 
 	mux := http.NewServeMux()
 	gw := apiws.RegisterRoutes(mux, mgr, service.NewAuthService(accounts, sessions),
-		service.NewBroadcastService(sqlite.NewServerStateStore(db)))
+		service.NewBroadcastService(sqlite.NewServerStateStore(db)), apiws.Options{})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -138,7 +138,7 @@ func TestGatewayRefusesConnectionsAfterClose(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	gw := apiws.RegisterRoutes(mux, mgr, service.NewAuthService(accounts, sessions), broadcast)
+	gw := apiws.RegisterRoutes(mux, mgr, service.NewAuthService(accounts, sessions), broadcast, apiws.Options{})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -161,5 +161,90 @@ func TestGatewayRefusesConnectionsAfterClose(t *testing.T) {
 	}
 	if _, _, err := conn.ReadMessage(); err == nil {
 		t.Fatal("соединение, открытое после остановки, осталось живым")
+	}
+}
+
+// TestHandshakeRejectsForeignOrigin — проверка Origin на настоящем
+// хендшейке, а не только в чистой функции: чужая страница с живой cookie
+// сессии ДМ не должна получить сокет к столу.
+func TestHandshakeRejectsForeignOrigin(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	db, err := sqlite.Open(filepath.Join(dir, "beacon.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	accounts := sqlite.NewAccountStore(db)
+	sessions := sqlite.NewSessionStore(db, accounts)
+	companies := sqlite.NewCompanyStore(db)
+	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
+		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/")
+	if err := mgr.Bootstrap(ctx); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	company, err := mgr.Create(ctx, "Мир", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := mgr.Launch(ctx, company.ID); err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	t.Cleanup(mgr.Shutdown)
+
+	if err := accounts.Create(ctx, &domain.Account{
+		ID: "dm-1", Username: "dm", PasswordHash: "x",
+		Role: domain.AccountRoleAdmin, Status: domain.AccountStatusActive,
+	}); err != nil {
+		t.Fatalf("аккаунт: %v", err)
+	}
+	if err := sessions.Create(ctx, "sess-dm", "dm-1"); err != nil {
+		t.Fatalf("сессия: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	apiws.RegisterRoutes(mux, mgr, service.NewAuthService(accounts, sessions),
+		service.NewBroadcastService(sqlite.NewServerStateStore(db)), apiws.Options{})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	dial := func(origin string) (*websocket.Conn, int) {
+		h := http.Header{"Cookie": {domain.SessionCookieName + "=sess-dm"}}
+		if origin != "" {
+			h.Set("Origin", origin)
+		}
+		conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws/dm", h)
+		code := 0
+		if resp != nil {
+			code = resp.StatusCode
+			_ = resp.Body.Close()
+		}
+		if err != nil {
+			return nil, code
+		}
+		return conn, code
+	}
+
+	// Чужой сайт: cookie сессии браузер приложил бы сам, но сокета не будет.
+	if conn, code := dial("https://злодей.example.net"); conn != nil {
+		conn.Close()
+		t.Fatalf("чужой origin принят (http %d)", code)
+	} else if code != http.StatusForbidden {
+		t.Fatalf("чужой origin отклонён с кодом %d, ожидался 403", code)
+	}
+
+	// Своя страница — как обычно.
+	conn, _ := dial(srv.URL)
+	if conn == nil {
+		t.Fatal("собственная страница стола не смогла подключиться")
+	}
+	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline: %v", err)
+	}
+	if _, _, err := conn.ReadMessage(); err != nil {
+		t.Fatalf("снапшот не пришёл: %v", err)
 	}
 }

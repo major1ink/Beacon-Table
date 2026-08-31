@@ -68,7 +68,7 @@ func TestTwoDMsInSameWorld(t *testing.T) {
 
 	mux := http.NewServeMux()
 	apiws.RegisterRoutes(mux, mgr, service.NewAuthService(accounts, sessions),
-		service.NewBroadcastService(sqlite.NewServerStateStore(db)))
+		service.NewBroadcastService(sqlite.NewServerStateStore(db)), apiws.Options{})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 

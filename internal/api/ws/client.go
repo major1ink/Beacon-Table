@@ -15,14 +15,6 @@ import (
 	"beacon-table/internal/service"
 )
 
-var upgrader = websocket.Upgrader{
-	// В демо разрешаем любой origin — сам факт подключения ничего не даёт без
-	// валидной cookie сессии (см. sessionAccount в routes.go), она и есть
-	// настоящая граница авторизации, а не Origin-заголовок, которому легко
-	// соврать.
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
 // Client — одно WS-подключение; реализация service.RoomClient для
 // транспорта на базе gorilla/websocket. PlayerID/PlayerName заполнены для
 // RoleDM и RolePlayer из аккаунта, к которому привязана cookie сессии —
@@ -60,9 +52,16 @@ func (c *Client) PlayerID() string { return c.playerID }
 func (c *Client) PlayerName() string { return c.playerName }
 
 func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *http.Request, role domain.ClientRole, playerID, playerName string) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := gw.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("upgrade error:", err)
+		// Сюда же попадает отказ по Origin (см. checkOrigin): gorilla сам
+		// отвечает 403, нам остаётся записать, с какого адреса пришли — на
+		// публичном сервере это первый признак, что кто-то ходит не оттуда.
+		//
+		//nolint:gosec // G706: заголовок приходит по сети, но печатается
+		// через %q — переводы строк и прочие управляющие символы
+		// экранируются, подделать лишнюю строку в журнале через него нельзя.
+		log.Printf("отклонён WS-хендшейк (origin %q): %v", r.Header.Get("Origin"), err)
 		return
 	}
 	// Соединение под присмотром Gateway до самого конца — иначе остановка

@@ -18,6 +18,10 @@ import (
 // без Gateway оно просто обрывалось бы на выходе процесса, а браузер видел
 // бы разрыв TCP вместо внятного «сервер перезапускается».
 type Gateway struct {
+	// upgrader держит проверку Origin (см. origin.go) — она зависит от
+	// настроек запуска, поэтому живёт здесь, а не в пакетной переменной.
+	upgrader websocket.Upgrader
+
 	mu    sync.Mutex
 	conns map[*websocket.Conn]struct{}
 	// closing — сервер уже останавливается: новые подключения принимать
@@ -26,8 +30,13 @@ type Gateway struct {
 	closing bool
 }
 
-func newGateway() *Gateway {
-	return &Gateway{conns: map[*websocket.Conn]struct{}{}}
+func newGateway(opts Options) *Gateway {
+	return &Gateway{
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool { return checkOrigin(r, opts) },
+		},
+		conns: map[*websocket.Conn]struct{}{},
+	}
 }
 
 // track берёт соединение под присмотр. false — сервер уже останавливается,
@@ -80,8 +89,8 @@ func (g *Gateway) CloseAll() {
 // один раз при регистрации маршрутов), потому что Room целиком меняется при
 // переключении мира (см. app.CompanyManager.Launch) — если сейчас ничего не
 // запущено, отвечаем 503, а не паникуем на nil.
-func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.AuthService, broadcast service.BroadcastService) *Gateway {
-	gw := newGateway()
+func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.AuthService, broadcast service.BroadcastService, opts Options) *Gateway {
+	gw := newGateway(opts)
 	mux.HandleFunc("/ws/dm", func(w http.ResponseWriter, r *http.Request) {
 		acc, err := sessionAccount(auth, r)
 		if err != nil || !acc.IsActive() || !acc.IsAdmin() {

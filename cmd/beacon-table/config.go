@@ -46,6 +46,12 @@ type Config struct {
 	// соединению. Держать включённым, ТОЛЬКО если снаружи действительно
 	// https — иначе войти не получится вовсе.
 	BehindProxy bool
+	// AllowedOrigins — дополнительные адреса, с которых разрешено открывать
+	// стол (проверка Origin на WebSocket, см. ws.Options). Обычно пуст:
+	// сервер и так узнаёт собственный адрес из запроса. Понадобится, если
+	// обратный прокси не передаёт исходный Host — тогда сервер видит вместо
+	// имени сайта что-то своё и отвергает собственные же страницы.
+	AllowedOrigins []string
 }
 
 func defaultConfig() Config {
@@ -63,10 +69,11 @@ func (c Config) DBPath() string { return filepath.Join(c.DataDir, "beacon.db") }
 // Имена настроек. Одна константа на настройку: в файле и в окружении это имя
 // как есть, во флаге — его же нижний регистр без префикса (см. bindFlags).
 const (
-	envAddr        = "BEACON_ADDR"
-	envDataDir     = "BEACON_DATA_DIR"
-	envUploadsDir  = "BEACON_UPLOADS_DIR"
-	envBehindProxy = "BEACON_BEHIND_PROXY"
+	envAddr           = "BEACON_ADDR"
+	envDataDir        = "BEACON_DATA_DIR"
+	envUploadsDir     = "BEACON_UPLOADS_DIR"
+	envBehindProxy    = "BEACON_BEHIND_PROXY"
+	envAllowedOrigins = "BEACON_ALLOWED_ORIGINS"
 	// envConfig — где лежит файл конфига, если не там, где его ищут по
 	// умолчанию (см. findConfigFile).
 	envConfig = "BEACON_CONFIG"
@@ -193,7 +200,7 @@ func readConfigFile(path string) (map[string]string, error) {
 
 func envValues() map[string]string {
 	values := map[string]string{}
-	for _, key := range []string{envAddr, envDataDir, envUploadsDir, envBehindProxy} {
+	for _, key := range []string{envAddr, envDataDir, envUploadsDir, envBehindProxy, envAllowedOrigins} {
 		if v, ok := os.LookupEnv(key); ok {
 			values[key] = v
 		}
@@ -235,7 +242,24 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 		}
 		cfg.BehindProxy = b
 	}
+	if v, ok := values[envAllowedOrigins]; ok && v != "" {
+		cfg.AllowedOrigins = splitOrigins(unquote(v))
+	}
 	return nil
+}
+
+// splitOrigins разбирает список через запятую, пропуская пустые куски: с
+// «a.example.com, b.example.com,» человек не должен получить пустой адрес в
+// списке разрешённых.
+func splitOrigins(v string) []string {
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // bindFlags разбирает аргументы командной строки. Значения по умолчанию у
@@ -248,8 +272,13 @@ func bindFlags(cfg *Config, args []string) error {
 	fs.StringVar(&cfg.DataDir, "data", cfg.DataDir, "каталог данных: база, журнал, сцены")
 	fs.StringVar(&cfg.UploadsDir, "uploads", cfg.UploadsDir, "каталог загрузок: карты, токены, аудио")
 	fs.BoolVar(&cfg.BehindProxy, "behind-proxy", cfg.BehindProxy, "сервер стоит за HTTPS-прокси (включает Secure у cookie)")
+	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")
 	fs.String("config", "", "путь к файлу настроек (по умолчанию "+configFileName+" рядом с программой)")
-	return fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg.AllowedOrigins = splitOrigins(*origins)
+	return nil
 }
 
 // exampleConfig — то, что кладётся рядом с программой при первом запуске.
@@ -280,6 +309,13 @@ const exampleConfig = `# Настройки Beacon Table.
 # соединению. Включайте, ТОЛЬКО если снаружи действительно https, иначе
 # войти не получится вовсе.
 #BEACON_BEHIND_PROXY=false
+
+# Дополнительные адреса, с которых разрешено открывать стол, через запятую.
+# Обычно не нужно: сервер узнаёт свой адрес из самого запроса и принимает
+# подключения только со страниц, открытых по нему же. Понадобится, если
+# обратный прокси не передаёт исходный Host — тогда стол не откроется, а в
+# журнале будет «отклонён WS-хендшейк».
+#BEACON_ALLOWED_ORIGINS=стол.example.com,192.168.1.10:8080
 `
 
 // writeExampleConfig создаёт файл-подсказку, если его ещё нет. Ошибку
