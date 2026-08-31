@@ -22,6 +22,10 @@ var (
 	ErrForbidden = errors.New("недостаточно прав")
 	// ErrUnauthorized — нет валидной сессии.
 	ErrUnauthorized = errors.New("не авторизован")
+	// ErrNoSpace — загрузка не помещается в отведённую квоту (см.
+	// internal/quota). Отдельно от ErrValidation: данные корректны, дело в
+	// месте на диске, и ответ на неё — 507, а не 400.
+	ErrNoSpace = errors.New("не хватает места")
 )
 
 // ValidationError — провал бизнес-валидации входных данных сервиса, с

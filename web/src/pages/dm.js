@@ -20,6 +20,8 @@ import {
   fetchVersion,
   fetchBroadcastLink,
   rotateBroadcastLink,
+  fetchServerSettings,
+  saveServerSettings,
   fetchBroadcastRequests,
   approveBroadcastRequest,
   rejectBroadcastRequest,
@@ -203,6 +205,7 @@ const ASSET_KIND = "props";
 const assetsPanelSection = document.querySelector('.panel-section[data-panel="assets"]');
 const assetsBreadcrumb = document.getElementById("assetsBreadcrumb");
 const assetsGrid = document.getElementById("assetsGrid");
+const assetsStorage = document.getElementById("assetsStorage");
 let currentAssetFolder = ""; // "" — корень; иначе posix-путь "Огонь/Костры"
 
 function assetFolderName(path) {
@@ -236,6 +239,40 @@ function renderAssetsBreadcrumb() {
   });
 }
 
+// formatBytes — размер по-человечески, теми же словами, что сервер пишет в
+// сообщении об отказе (см. internal/quota: FormatSize).
+function formatBytes(n) {
+  if (!n || n <= 0) return "0 Б";
+  if (n < 1024) return n + " Б";
+  if (n < 1024 * 1024) return Math.round(n / 1024) + " КБ";
+  if (n < 1024 * 1024 * 1024) return Math.round(n / (1024 * 1024)) + " МБ";
+  return (n / (1024 * 1024 * 1024)).toFixed(1) + " ГБ";
+}
+
+// renderAssetsStorage — строка «занято X из Y». Показывается, только если
+// квота задана на сервере (см. BEACON_UPLOADS_QUOTA): без неё цифра ничего
+// не значит и только мешала бы.
+function renderAssetsStorage() {
+  const storage = latestAssets.storage;
+  if (!storage) {
+    assetsStorage.textContent = "";
+    assetsStorage.className = "assets-storage";
+    return;
+  }
+  // Показываем тот предел, к которому ближе: упрёмся мы именно в него.
+  const world = storage.worldLimit > 0 ? storage.worldUsed / storage.worldLimit : 0;
+  const total = storage.totalLimit > 0 ? storage.totalUsed / storage.totalLimit : 0;
+  const worldIsTighter = world >= total;
+  const used = worldIsTighter ? storage.worldUsed : storage.totalUsed;
+  const limit = worldIsTighter ? storage.worldLimit : storage.totalLimit;
+  const share = worldIsTighter ? world : total;
+
+  assetsStorage.textContent =
+    `Занято ${formatBytes(used)} из ${formatBytes(limit)}` + (worldIsTighter ? " (этот мир)" : " (весь сервер)");
+  assetsStorage.className =
+    "assets-storage" + (share >= 0.95 ? " full" : share >= 0.8 ? " low" : "");
+}
+
 function renderAssetsGrid() {
   // Папка могла исчезнуть (удалена в другой вкладке/сессии) — откатываемся
   // к корню, а не показываем вечно пустую сетку без выхода.
@@ -245,6 +282,7 @@ function renderAssetsGrid() {
     currentAssetFolder = "";
   }
   renderAssetsBreadcrumb();
+  renderAssetsStorage();
   assetsGrid.innerHTML = "";
 
   const prefix = currentAssetFolder ? currentAssetFolder + "/" : "";
@@ -1513,6 +1551,37 @@ onPanelOpen("accounts", renderAccounts);
 // от "Аккаунтов", чтобы будущим общим настройкам было куда встать, не мешая
 // уже существующим разделам.
 onPanelOpen("settings", async () => {
+  await loadSettingsTab(activeSettingsTab);
+});
+
+// ---- вкладки раздела «Настройки» ----
+// Раздел собрал слишком разное: тумблеры стола, ссылку на трансляцию,
+// настройки сервера и список модулей. Одним списком это читается как свалка,
+// поэтому разложено по вкладкам, а данные грузятся только для открытой —
+// список модулей Foundry, например, незачем тянуть ради смены уровня журнала.
+const settingsTabButtons = [...document.querySelectorAll(".set-tabs button")];
+const settingsTabPanels = [...document.querySelectorAll(".set-tab-panel")];
+let activeSettingsTab = "table";
+
+async function loadSettingsTab(tab) {
+  switch (tab) {
+    case "cast":
+      await renderBroadcastLink();
+      await renderBroadcastRequests();
+      break;
+    case "server":
+      await renderServerSettings();
+      await renderAppVersion();
+      break;
+    case "modules":
+      await renderFoundryModules();
+      break;
+    default:
+      break; // «Стол» — тумблеры, они приходят со снапшотом сцены
+  }
+}
+
+async function renderAppVersion() {
   const el = document.getElementById("appVersion");
   try {
     const { version } = await fetchVersion();
@@ -1520,10 +1589,168 @@ onPanelOpen("settings", async () => {
   } catch {
     el.textContent = "неизвестна";
   }
-  await renderBroadcastLink();
-  await renderBroadcastRequests();
-  await renderFoundryModules();
+}
+
+function switchSettingsTab(tab) {
+  activeSettingsTab = tab;
+  settingsTabButtons.forEach((b) => b.classList.toggle("active", b.dataset.settab === tab));
+  settingsTabPanels.forEach((p) => p.classList.toggle("active", p.dataset.settabPanel === tab));
+  loadSettingsTab(tab);
+}
+
+settingsTabButtons.forEach((btn) => {
+  btn.onclick = () => switchSettingsTab(btn.dataset.settab);
 });
+
+// ---- настройки сервера (раздел "Настройки") ----
+// Те же значения, что лежат в beacon.conf, но с подписями и проверкой (см.
+// internal/api/http/settings_handlers.go). Пути и порт показываются серыми:
+// это уровень машины, а не игры, и меняются они только в файле.
+const serverSettingsBox = document.getElementById("serverSettings");
+const serverSettingsMsg = document.getElementById("serverSettingsMsg");
+const serverSettingsSaveBtn = document.getElementById("serverSettingsSaveBtn");
+
+// serverSettingsInputs — key → поле формы; serverSettingsSaved — что было в
+// полях на момент отрисовки. Отправляем только изменённое: иначе сервер
+// пересохранял бы всё подряд и честно сообщал, что половине настроек нужен
+// перезапуск, хотя человек тронул одну.
+let serverSettingsInputs = new Map();
+let serverSettingsSaved = new Map();
+
+function settingField(setting) {
+  const wrap = document.createElement("div");
+  wrap.className = "srv-set" + (setting.editable ? "" : " readonly");
+
+  const title = document.createElement("div");
+  title.className = "srv-set-title";
+  title.textContent = setting.title;
+  wrap.appendChild(title);
+
+  let input;
+  if (setting.kind === "bool" || setting.kind === "enum") {
+    input = document.createElement("select");
+    const options = setting.kind === "bool" ? ["true", "false"] : setting.options || [];
+    for (const value of options) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = setting.kind === "bool" ? (value === "true" ? "включено" : "выключено") : value;
+      input.appendChild(opt);
+    }
+    input.value = setting.value;
+  } else {
+    input = document.createElement("input");
+    input.type = "text";
+    input.value = setting.value;
+  }
+  input.disabled = !setting.editable;
+  wrap.appendChild(input);
+  if (setting.editable) serverSettingsInputs.set(setting.key, input);
+
+  if (setting.hint) {
+    const hint = document.createElement("div");
+    hint.className = "srv-set-hint";
+    hint.textContent = setting.hint;
+    wrap.appendChild(hint);
+  }
+  if (setting.locked) {
+    const locked = document.createElement("div");
+    locked.className = "srv-set-locked";
+    locked.textContent = setting.locked;
+    wrap.appendChild(locked);
+  }
+  return wrap;
+}
+
+// SETTINGS_GROUP_ORDER — порядок групп в форме. То, что можно менять, идёт
+// сверху; пути и порт — в конец, они только для чтения, и упираться в них
+// первым делом незачем.
+const SETTINGS_GROUP_ORDER = ["Доступ", "Резервное копирование", "Журнал", "Место под загрузки", "Пути и порт"];
+
+// SETTINGS_GROUP_NOTES — пояснение на всю группу. Пишем его один раз сверху,
+// а не пометкой под каждым полем: под четырьмя строками подряд одно и то же
+// предупреждение читается как ошибка, а не как объяснение.
+const SETTINGS_GROUP_NOTES = {
+  "Пути и порт": "Меняются только в файле beacon.conf или флагом запуска — на сервере это уровень машины, а не игры.",
+};
+
+function drawServerSettings(settings) {
+  serverSettingsInputs = new Map();
+  serverSettingsSaved = new Map();
+  serverSettingsBox.replaceChildren();
+
+  // Группируем по секции, а не по соседству в списке: в файле настройки
+  // идут в своём порядке (каталог бэкапов стоит рядом с бэкапами), и
+  // «подряд идущие» дали бы одну и ту же группу дважды.
+  const groups = new Map();
+  for (const setting of settings) {
+    if (!groups.has(setting.section)) groups.set(setting.section, []);
+    groups.get(setting.section).push(setting);
+    if (setting.editable) serverSettingsSaved.set(setting.key, setting.value);
+  }
+
+  const order = [
+    ...SETTINGS_GROUP_ORDER.filter((g) => groups.has(g)),
+    ...[...groups.keys()].filter((g) => !SETTINGS_GROUP_ORDER.includes(g)),
+  ];
+  for (const name of order) {
+    const groupBox = document.createElement("div");
+    groupBox.className = "set-group";
+
+    const title = document.createElement("div");
+    title.className = "set-group-title";
+    title.textContent = name;
+    groupBox.appendChild(title);
+
+    const note = SETTINGS_GROUP_NOTES[name];
+    if (note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "set-group-note";
+      noteEl.textContent = note;
+      groupBox.appendChild(noteEl);
+    }
+    for (const setting of groups.get(name)) groupBox.appendChild(settingField(setting));
+    serverSettingsBox.appendChild(groupBox);
+  }
+}
+
+async function renderServerSettings() {
+  try {
+    drawServerSettings((await fetchServerSettings()) || []);
+    serverSettingsMsg.textContent = "";
+  } catch (e) {
+    serverSettingsBox.replaceChildren();
+    serverSettingsMsg.textContent = e.message || "не удалось прочитать настройки";
+  }
+}
+
+serverSettingsSaveBtn.onclick = async () => {
+  const values = {};
+  for (const [key, input] of serverSettingsInputs) {
+    const value = input.value.trim();
+    if (value !== serverSettingsSaved.get(key)) values[key] = value;
+  }
+  if (Object.keys(values).length === 0) {
+    serverSettingsMsg.textContent = "Менять нечего — ничего не изменилось.";
+    return;
+  }
+
+  serverSettingsSaveBtn.disabled = true;
+  try {
+    const res = await saveServerSettings(values);
+    drawServerSettings(res.settings || []);
+    // Часть настроек применяется сразу, часть — только при следующем
+    // запуске; говорим прямо, какие именно, чтобы «не подействовало» не
+    // выглядело поломкой.
+    const restart = res.needRestart || [];
+    serverSettingsMsg.textContent = restart.length
+      ? "Сохранено. Вступит в силу после перезапуска сервера: " + restart.join(", ")
+      : "Сохранено и уже действует.";
+  } catch (e) {
+    serverSettingsMsg.textContent = e.message || "не удалось сохранить";
+  } finally {
+    serverSettingsSaveBtn.disabled = false;
+  }
+};
 
 // ---- ссылка на трансляцию (раздел "Настройки") ----
 // Адрес с ключом, по которому телевизор получает доступ к столу без аккаунта

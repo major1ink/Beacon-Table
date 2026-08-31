@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/quota"
 	"beacon-table/internal/repository"
 	"beacon-table/internal/repository/conditionfile"
 	"beacon-table/internal/repository/itemfile"
@@ -84,6 +85,10 @@ type CompanyManager struct {
 	// сеть (см. foundry.GuardedTransport). На сервере в интернете — нет.
 	allowPrivateFoundryNet bool
 
+	// quota — общий учёт места под загрузками (см. internal/quota). nil —
+	// пределы не заданы.
+	quota *quota.Tracker
+
 	current *ActiveWorld
 }
 
@@ -92,12 +97,20 @@ type CompanyManager struct {
 // данные инсталляции, существовавшей до появления миров (см. Bootstrap);
 // любая другая компания получает свои собственные подпапки внутри тех же
 // корней.
-func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, systemFS fs.FS, dataRoot, uploadsRoot, uploadsURL string, allowPrivateFoundryNet bool) *CompanyManager {
+func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, systemFS fs.FS, dataRoot, uploadsRoot, uploadsURL string, allowPrivateFoundryNet bool, uploadQuota *quota.Tracker) *CompanyManager {
 	return &CompanyManager{
 		db: db, companies: companies, accounts: accounts, sessions: sessions, dice: dice, systemFS: systemFS,
 		dataRoot: dataRoot, uploadsRoot: uploadsRoot, uploadsURL: uploadsURL,
 		allowPrivateFoundryNet: allowPrivateFoundryNet,
+		quota:                  uploadQuota,
 	}
+}
+
+// UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу
+// ассетов этого мира, и импорту мира из архива.
+func (m *CompanyManager) UploadQuota(company *domain.Company) *quota.World {
+	_, uploadsRoot, _ := m.rootsFor(company)
+	return m.quota.World(uploadsRoot)
 }
 
 // newID — тот же принцип, что и service.newID (crypto/rand, 16 байт hex),
@@ -215,6 +228,8 @@ func (m *CompanyManager) Delete(ctx context.Context, id string, force bool) erro
 		dataRoot, uploadsRoot, _ := m.rootsFor(company)
 		_ = os.RemoveAll(dataRoot)
 		_ = os.RemoveAll(uploadsRoot)
+		// Файлы удалены мимо трекера — пусть пересчитает диск заново.
+		m.quota.Invalidate()
 	}
 	return nil
 }
@@ -323,7 +338,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		conditionfile.NewStore(filepath.Join(dataRoot, "conditions")),
 		conditionfile.NewSystemStore(m.systemFS, "systemdata/conditions/"+company.System),
 	)
-	assetRepo := localfs.NewStore(uploadsRoot, uploadsURL)
+	assetRepo := localfs.NewStore(uploadsRoot, uploadsURL, m.quota.World(uploadsRoot))
 	if err := assetRepo.EnsureDirs(); err != nil {
 		return err
 	}

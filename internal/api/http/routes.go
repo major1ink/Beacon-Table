@@ -31,6 +31,9 @@ type API struct {
 	// Health — чем проверять живость по /healthz (база). nil — проверка
 	// пропускается и ручка отвечает «ok» по факту того, что процесс жив.
 	Health Pinger
+	// Settings — форма настроек в разделе «Настройки» у ДМ. nil — раздел
+	// недоступен (например, в тестах).
+	Settings SettingsStore
 	// loginGuard — защита /api/login и /api/register от перебора (см.
 	// loginguard.go). Транспортный уровень: считает по IP из запроса,
 	// service-слою про такое знать незачем.
@@ -59,6 +62,10 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// /healthz вне /api/ — это не часть API стола, а точка для мониторинга,
 	// systemd и docker healthcheck.
 	mux.HandleFunc("GET /healthz", a.handleHealth)
+
+	// Настройки сервера глазами ДМ — см. settings_handlers.go.
+	mux.HandleFunc("GET /api/settings", a.handleSettingsList)
+	mux.HandleFunc("PUT /api/settings", a.handleSettingsSave)
 
 	// Трансляция: ссылку выдаёт и перевыпускает ДМ, проверку доступа дёргает
 	// сама страница трансляции — ей аккаунт не нужен (см. broadcast_handlers.go).

@@ -90,6 +90,19 @@ export async function fetchVersion() {
   return apiFetch("/api/version");
 }
 
+// ---- настройки сервера (раздел «Настройки» у ДМ) ----
+// Список полей с их значениями, источником и признаком «можно ли менять
+// отсюда» (см. internal/api/http/settings_handlers.go).
+export async function fetchServerSettings() {
+  return apiFetch("/api/settings");
+}
+
+// saveServerSettings — {ключ: значение}. Ответ говорит, каким настройкам
+// нужен перезапуск, и отдаёт обновлённый список.
+export async function saveServerSettings(values) {
+  return apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(values) });
+}
+
 // ---- трансляция (ТВ/проектор) ----
 // Ссылка с ключом, по которой экран в комнате получает доступ к столу без
 // аккаунта (см. internal/service/broadcast.go). Сервер отдаёт только путь —

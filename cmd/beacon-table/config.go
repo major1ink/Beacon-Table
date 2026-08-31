@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"beacon-table/internal/quota"
 )
 
 // Config — всё, что настраивается снаружи. Значения берутся из четырёх
@@ -73,6 +75,14 @@ type Config struct {
 	// LogFormat — "text" (по умолчанию, читается глазами) или "json" для
 	// систем сбора логов.
 	LogFormat string
+
+	// ---- место под загрузками ----
+	// UploadsQuota — предел на весь каталог загрузок, UploadsWorldQuota — на
+	// один мир. 0 в любом из них снимает соответствующий предел; по
+	// умолчанию оба сняты, чтобы обновление не начало отказывать в загрузке
+	// там, где места и так вдоволь.
+	UploadsQuota      int64
+	UploadsWorldQuota int64
 }
 
 func defaultConfig() Config {
@@ -116,6 +126,9 @@ const (
 
 	envLogLevel  = "BEACON_LOG_LEVEL"
 	envLogFormat = "BEACON_LOG_FORMAT"
+
+	envUploadsQuota      = "BEACON_UPLOADS_QUOTA"
+	envUploadsWorldQuota = "BEACON_UPLOADS_WORLD_QUOTA"
 	// envConfig — где лежит файл конфига, если не там, где его ищут по
 	// умолчанию (см. findConfigFile).
 	envConfig = "BEACON_CONFIG"
@@ -150,7 +163,14 @@ func loadConfig(args []string) (Config, string, error) {
 				// Файла нет и никто его не обещал — это норма (Docker, где
 				// всё в окружении). Заведём пример, чтобы человеку было что
 				// открыть, но настаивать не будем.
-				_ = writeExampleConfig(configPath)
+				//
+				// Удачно созданный файл сразу считаем действующим: он весь
+				// закомментирован, поведения не меняет, зато форма настроек
+				// у ДМ знает, куда писать, — иначе она заработала бы только
+				// со второго запуска.
+				if writeExampleConfig(configPath) == nil {
+					used = configPath
+				}
 			} else {
 				return cfg, "", fmt.Errorf("конфиг %s: %w", configPath, err)
 			}
@@ -246,6 +266,7 @@ func envValues() map[string]string {
 		envAddr, envDataDir, envUploadsDir, envBehindProxy, envAllowedOrigins,
 		envBackupEnabled, envBackupDir, envBackupInterval, envBackupKeep,
 		envLogLevel, envLogFormat,
+		envUploadsQuota, envUploadsWorldQuota,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			values[key] = v
@@ -329,6 +350,23 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 		}
 		cfg.LogFormat = format
 	}
+	for _, q := range []struct {
+		key string
+		dst *int64
+	}{
+		{envUploadsQuota, &cfg.UploadsQuota},
+		{envUploadsWorldQuota, &cfg.UploadsWorldQuota},
+	} {
+		v, ok := values[q.key]
+		if !ok || v == "" {
+			continue
+		}
+		n, err := quota.ParseSize(unquote(v))
+		if err != nil {
+			return fmt.Errorf("%s в %s: %q — ожидался размер вроде 20GB или 500MB", q.key, source, v)
+		}
+		*q.dst = n
+	}
 	return nil
 }
 
@@ -370,11 +408,28 @@ func bindFlags(cfg *Config, args []string) error {
 	fs.IntVar(&cfg.BackupKeep, "backup-keep", cfg.BackupKeep, "сколько последних архивов хранить")
 	fs.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "подробность журнала: debug, info, warn, error")
 	fs.StringVar(&cfg.LogFormat, "log-format", cfg.LogFormat, "формат журнала: text или json")
+	uploadsQuota := fs.String("uploads-quota", quota.FormatFlag(cfg.UploadsQuota), "предел на весь каталог загрузок, например 20GB (0 — без предела)")
+	worldQuota := fs.String("uploads-world-quota", quota.FormatFlag(cfg.UploadsWorldQuota), "предел на загрузки одного мира, например 5GB (0 — без предела)")
 	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")
 	fs.String("config", "", "путь к файлу настроек (по умолчанию "+configFileName+" рядом с программой)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	// Запоминаем, что задано флагом: флаг перебивает файл, и форма настроек
+	// не должна делать вид, что запись в файл на это повлияет.
+	flagToEnv := map[string]string{
+		"addr": envAddr, "data": envDataDir, "uploads": envUploadsDir,
+		"behind-proxy": envBehindProxy, "allowed-origins": envAllowedOrigins,
+		"backup": envBackupEnabled, "backup-dir": envBackupDir,
+		"backup-interval": envBackupInterval, "backup-keep": envBackupKeep,
+		"log-level": envLogLevel, "log-format": envLogFormat,
+		"uploads-quota": envUploadsQuota, "uploads-world-quota": envUploadsWorldQuota,
+	}
+	fs.Visit(func(f *flag.Flag) {
+		if key, ok := flagToEnv[f.Name]; ok {
+			flagsSet[key] = true
+		}
+	})
 	cfg.AllowedOrigins = splitOrigins(*origins)
 
 	// Флаги проверяем здесь: значения из файла и окружения уже проверил
@@ -387,73 +442,12 @@ func bindFlags(cfg *Config, args []string) error {
 	if cfg.LogFormat != "text" && cfg.LogFormat != "json" {
 		return fmt.Errorf("--log-format %q: ожидалось text или json", cfg.LogFormat)
 	}
-	return nil
-}
-
-// exampleConfig — то, что кладётся рядом с программой при первом запуске.
-// Всё закомментировано: файл ничего не меняет, пока его не тронули, и
-// служит подсказкой, что вообще можно настроить.
-const exampleConfig = `# Настройки Beacon Table.
-#
-# Формат — ИМЯ=значение. Уберите # в начале строки, чтобы настройка
-# заработала, и перезапустите программу.
-#
-# Этот же файл понимают docker (--env-file beacon.conf) и systemd
-# (EnvironmentFile=/etc/beacon-table/beacon.conf).
-
-# Адрес и порт, на которых открыт стол.
-# ":8080" — все сетевые интерфейсы: стол виден с телевизора и телефонов
-# в той же сети. За обратным прокси лучше "127.0.0.1:8080", чтобы снаружи
-# нельзя было подключиться в обход него.
-#BEACON_ADDR=:8080
-
-# Каталог данных: база аккаунтов, журнал, сцены, заметки.
-#BEACON_DATA_DIR=data
-
-# Каталог загрузок: карты, токены, аудио.
-#BEACON_UPLOADS_DIR=uploads
-
-# Сервер стоит за HTTPS-прокси (Caddy, nginx).
-# Включает Secure у cookie — они перестают ходить по незашифрованному
-# соединению. Включайте, ТОЛЬКО если снаружи действительно https, иначе
-# войти не получится вовсе.
-#BEACON_BEHIND_PROXY=false
-
-# Дополнительные адреса, с которых разрешено открывать стол, через запятую.
-# Обычно не нужно: сервер узнаёт свой адрес из самого запроса и принимает
-# подключения только со страниц, открытых по нему же. Понадобится, если
-# обратный прокси не передаёт исходный Host — тогда стол не откроется, а в
-# журнале будет «отклонён WS-хендшейк».
-#BEACON_ALLOWED_ORIGINS=стол.example.com,192.168.1.10:8080
-
-# Резервное копирование: снимок базы (VACUUM INTO) плюс архив каталогов
-# данных и загрузок. Делается при старте и дальше по интервалу; каждый архив
-# проверяется на восстановимость. Хранятся последние BEACON_BACKUP_KEEP штук.
-#BEACON_BACKUP_ENABLED=true
-#BEACON_BACKUP_DIR=data/backups
-#BEACON_BACKUP_INTERVAL=24h
-#BEACON_BACKUP_KEEP=7
-
-# Подробность журнала: debug, info, warn, error.
-# На debug добавляется строка на каждый HTTP-запрос — удобно при разборе
-# проблемы, но журнал растёт быстро.
-#BEACON_LOG_LEVEL=info
-
-# Формат журнала: text (читается глазами) или json (для систем сбора логов).
-#BEACON_LOG_FORMAT=text
-`
-
-// writeExampleConfig создаёт файл-подсказку, если его ещё нет. Ошибку
-// вызывающий игнорирует намеренно: в контейнере с файловой системой только
-// для чтения писать некуда, и это не повод не запускаться.
-func writeExampleConfig(path string) error {
-	//nolint:gosec // G703: путь конфига приходит из аргументов запуска или
-	// из окружения — его задаёт тот, кто и так запускает этот процесс, а не
-	// пользователь по сети. Ограничивать его каталогом бессмысленно: файл
-	// настроек как раз и кладут туда, куда удобно администратору.
-	if _, err := os.Stat(path); err == nil {
-		return nil
+	var err error
+	if cfg.UploadsQuota, err = quota.ParseSize(*uploadsQuota); err != nil {
+		return fmt.Errorf("--uploads-quota %q: ожидался размер вроде 20GB", *uploadsQuota)
 	}
-	//nolint:gosec // G703: см. выше.
-	return os.WriteFile(path, []byte(exampleConfig), 0o600)
+	if cfg.UploadsWorldQuota, err = quota.ParseSize(*worldQuota); err != nil {
+		return fmt.Errorf("--uploads-world-quota %q: ожидался размер вроде 5GB", *worldQuota)
+	}
+	return nil
 }

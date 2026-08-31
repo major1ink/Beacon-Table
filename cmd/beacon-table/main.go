@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	apiws "beacon-table/internal/api/ws"
 	"beacon-table/internal/app"
 	"beacon-table/internal/backup"
+	"beacon-table/internal/quota"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
@@ -69,7 +71,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	setupLogging(cfg)
+	logLevel := setupLogging(cfg)
+	settingsFile = configFile
 
 	version := serverVersion()
 	log.Println("Beacon Table версия:", version)
@@ -78,6 +81,16 @@ func main() {
 		// не по сети — подставить в него перевод строки может только тот,
 		// кто и так запускает процесс.
 		log.Println("настройки из файла:", configFile)
+
+		// Файл создаётся один раз, а настройки в новых версиях прибавляются:
+		// дописываем недостающие, чтобы обновивший бинарник о них узнал.
+		// Ошибку не считаем фатальной — файл может лежать только для чтения.
+		if added, err := syncConfigFile(configFile); err != nil {
+			slog.Warn("не удалось дописать новые настройки в файл", "file", configFile, "err", err)
+		} else if len(added) > 0 {
+			slog.Info("в файл настроек добавлены новые параметры",
+				"file", configFile, "параметры", strings.Join(added, ", "))
+		}
 	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
@@ -99,10 +112,26 @@ func main() {
 	// Room) заново при каждом переключении мира — см. internal/app. Auth
 	// (аккаунты/сессии) — единственный полностью глобальный сервис, живёт
 	// здесь, а не внутри неё (см. её package-doc).
+	//
 	// За обратным прокси (сервер в интернете) импорт модулей Foundry не
 	// должен ходить в приватную сеть — там нет ни локального зеркала, ни
 	// причин туда стучаться, зато есть служебные адреса облака.
-	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy)
+
+	// Учёт места под загрузками: один трекер на сервер, у каждого мира свой
+	// вид на него (см. internal/quota). Считаем каталог сразу — первая же
+	// загрузка должна знать реальную картину, а не начинать с нуля.
+	uploadQuota := quota.New(cfg.UploadsDir, cfg.UploadsQuota, cfg.UploadsWorldQuota)
+	if cfg.UploadsQuota > 0 || cfg.UploadsWorldQuota > 0 {
+		if err := uploadQuota.Scan(); err != nil {
+			log.Fatal("не удалось посчитать занятое место в каталоге загрузок:", err)
+		}
+		slog.Info("квота загрузок",
+			"занято", quota.FormatSize(uploadQuota.TotalUsed()),
+			"предел", quota.FormatSize(cfg.UploadsQuota),
+			"на мир", quota.FormatSize(cfg.UploadsWorldQuota))
+	}
+
+	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy, uploadQuota)
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
 	broadcastSvc := service.NewBroadcastService(stateRepo)
@@ -123,6 +152,9 @@ func main() {
 	mux.Handle("/", static)
 
 	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version, cfg.BehindProxy, db)
+	// Форма настроек в разделе «Настройки» у ДМ: пишет в тот же beacon.conf
+	// и применяет на лету то, что можно (см. settings.go).
+	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota)
 
 	mux.Handle("GET /broadcast.html", api.BroadcastEntry(static))
 

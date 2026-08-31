@@ -39,7 +39,7 @@ func TestTwoDMsInSameWorld(t *testing.T) {
 	mgr := app.NewCompanyManager(
 		db, sqlite.NewCompanyStore(db), accounts, sessions,
 		service.NewDiceRoller(), fstest.MapFS{},
-		filepath.Join(root, "data"), filepath.Join(root, "uploads"), "/uploads/", true,
+		filepath.Join(root, "data"), filepath.Join(root, "uploads"), "/uploads/", true, nil,
 	)
 
 	co, err := mgr.Create(ctx, "Мир", domain.SystemDnD5e2024)

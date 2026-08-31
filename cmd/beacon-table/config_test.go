@@ -33,8 +33,10 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	if file != "" {
-		t.Fatalf("прочитан файл %q, хотя его не было", file)
+	// Файла не было — он создаётся и сразу считается действующим (весь
+	// закомментированный), чтобы форма настроек у ДМ знала, куда писать.
+	if file != configFileName {
+		t.Fatalf("действующий файл %q, ожидался %s", file, configFileName)
 	}
 	if cfg.Addr != ":8080" || cfg.DataDir != "data" || cfg.UploadsDir != "uploads" || cfg.BehindProxy {
 		t.Fatalf("значения по умолчанию разъехались: %+v", cfg)

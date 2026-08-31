@@ -12,8 +12,13 @@ import (
 // хендлером и подчиняются выбранному уровню (как записи уровня info).
 // Явный slog.Warn/slog.Error ставится там, где уровень действительно
 // что-то значит: ошибка бэкапа, отказ по Origin, неудачный вход.
-func setupLogging(cfg Config) {
-	opts := &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}
+//
+// Уровень держится в slog.LevelVar, а не зашит в хендлер: его правят из
+// раздела «Настройки» у ДМ, и перезапускать ради этого сервер незачем.
+func setupLogging(cfg Config) *slog.LevelVar {
+	level := new(slog.LevelVar)
+	level.Set(parseLevel(cfg.LogLevel))
+	opts := &slog.HandlerOptions{Level: level}
 
 	var h slog.Handler
 	if cfg.LogFormat == "json" {
@@ -22,6 +27,9 @@ func setupLogging(cfg Config) {
 		h = slog.NewTextHandler(os.Stderr, opts)
 	}
 	slog.SetDefault(slog.New(h))
+	// Возвращаем ручку уровня: его меняют из формы настроек без перезапуска
+	// (см. settingsStore.apply).
+	return level
 }
 
 func parseLevel(name string) slog.Level {

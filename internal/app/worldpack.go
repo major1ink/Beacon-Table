@@ -439,6 +439,13 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 		return nil, &domain.ValidationError{Msg: "в архиве неизвестная игровая система: " + man.World.System}
 	}
 
+	// Квоту проверяем ДО создания мира и распаковки: размер загрузок виден
+	// по оглавлению архива, и отказать сразу честнее, чем оставить
+	// полураспакованный мир и удалять его задним числом.
+	if err := m.quota.World("").Reserve(uploadsSizeInArchive(&zr.Reader)); err != nil {
+		return nil, err
+	}
+
 	company, err := m.Create(ctx, man.World.Name, man.World.System)
 	if err != nil {
 		return nil, err
@@ -453,6 +460,7 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 		_ = m.companies.Delete(ctx, company.ID)
 		_ = os.RemoveAll(dataRoot)
 		_ = os.RemoveAll(uploadsRoot)
+		m.quota.Invalidate()
 		return nil, err
 	}
 	return &ImportResult{Company: company, RenamedLogins: out.renamedLogins}, nil
@@ -460,6 +468,7 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 
 func (m *CompanyManager) populateWorld(ctx context.Context, zr *zip.Reader, companyID, system, dataRoot, uploadsRoot, uploadsURL string) (*importOutcome, error) {
 	out := &importOutcome{}
+	worldQuota := m.quota.World(uploadsRoot)
 	if err := os.MkdirAll(dataRoot, 0o750); err != nil {
 		return out, err
 	}
@@ -536,9 +545,37 @@ func (m *CompanyManager) populateWorld(ctx context.Context, zr *zip.Reader, comp
 		if err := os.WriteFile(dst, b, 0o600); err != nil {
 			return out, err
 		}
+		if destRoot == uploadsRoot {
+			// Пишем мимо хранилища ассетов, поэтому учитываем сами.
+			worldQuota.Add(int64(len(b)))
+		}
 	}
 
 	return m.importWorldDB(ctx, companyID, system, dbFiles, uploadsURL)
+}
+
+// uploadsSizeInArchive — сколько места займут файлы загрузок из архива.
+// Считается по оглавлению zip (несжатые размеры), без распаковки.
+func uploadsSizeInArchive(zr *zip.Reader) int64 {
+	var total int64
+	for _, entry := range zr.File {
+		if !strings.HasPrefix(filepath.ToSlash(entry.Name), "uploads/") {
+			continue
+		}
+		// Размер берётся из оглавления архива, то есть от того, кто архив
+		// прислал: подставленное там огромное число не должно переполнить
+		// счётчик и обернуться отрицательным «влезает». Потолок распаковки
+		// всё равно ниже (maxWorldUnpackedBytes), так что упереться в него
+		// честнее, чем притвориться, что места хватает.
+		if entry.UncompressedSize64 > uint64(maxWorldUnpackedBytes) {
+			return maxWorldUnpackedBytes
+		}
+		total += int64(entry.UncompressedSize64)
+		if total >= maxWorldUnpackedBytes {
+			return maxWorldUnpackedBytes
+		}
+	}
+	return total
 }
 
 func (m *CompanyManager) importWorldDB(ctx context.Context, companyID, system string, dbFiles map[string][]byte, uploadsURL string) (*importOutcome, error) {

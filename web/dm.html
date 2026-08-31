@@ -115,6 +115,39 @@
     .bcast-req-code { font-size: 20px; font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
     .bcast-req-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
     .bcast-req-empty { font-size: 12px; color: var(--text-dim); }
+    /* ---- форма настроек сервера ----
+       Тринадцать полей подряд читались как простыня, поэтому они собраны в
+       группы с заголовками, а под заголовком группы — одно пояснение на всю
+       группу вместо повторяющейся пометки под каждым полем. */
+    .set-group { margin-bottom: 14px; }
+    .set-group-title {
+      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 6px;
+      padding-bottom: 4px; border-bottom: 1px solid var(--border);
+    }
+    .set-group-note { font-size: 10px; color: var(--text-dim); margin: -2px 0 8px; line-height: 1.4; }
+    /* Подпись относится к переключателю над ней — сдвигаем её под текст,
+       а не под сам квадратик. */
+    .set-tab-panel .checkbox-row + .hint { margin-left: 20px; margin-top: 2px; }
+    .set-tab-panel .field-block { margin-bottom: 8px; }
+    .srv-set { margin-bottom: 9px; }
+    .srv-set-title { font-size: 12px; margin-bottom: 3px; }
+    .srv-set input[type="text"], .srv-set select { width: 100%; }
+    /* Закрытое поле не должно выглядеть как обычное: приглушаем и фон, и
+       текст, и курсор — иначе непонятно, почему в него не печатается. */
+    .srv-set input:disabled, .srv-set select:disabled {
+      background: transparent; border-style: dashed; color: var(--text-dim);
+      cursor: not-allowed; opacity: 0.75;
+    }
+    .srv-set-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; line-height: 1.4; }
+    /* Янтарный, а не красный: «задано снаружи» — это не ошибка, а факт,
+       который стоит заметить. Показывается только в этом редком случае. */
+    .srv-set-locked { font-size: 10px; color: #d9a441; margin-top: 3px; line-height: 1.4; }
+    .srv-set.readonly .srv-set-title { color: var(--text-dim); }
+    /* Занятое место под загрузками — видно заранее, а не в момент отказа. */
+    .assets-storage { font-size: 11px; color: var(--text-dim); margin: 4px 0 6px; }
+    .assets-storage.low { color: #e0a94a; }
+    .assets-storage.full { color: #e74c3c; }
     .check-row { font-size: 13px; cursor: pointer; padding: 2px 0; }
     .tool-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 9px; }
     .primary-btn { width: 100%; background: var(--accent); font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -365,6 +398,17 @@
        глобальным селектором ".modal-tabs button" (см. dm.js: tabButtons,
        switchTab) для вкладок "Настроить сцену" — общий класс означало бы,
        что тот код тоже находит и перевешивает onclick на этих кнопках. */
+    /* .set-tabs — вкладки раздела «Настройки». Свой класс по той же
+       причине, что и у .cat-tabs ниже: глобальный ".modal-tabs button" в
+       dm.js перевесил бы на них свои обработчики. */
+    .set-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    /* Четыре вкладки должны уместиться в одну строку узкой панели, отсюда
+       мелкий шрифт и тесные поля. */
+    .set-tabs button { background: #2a2a35; font-size: 11px; padding: 6px 4px; flex: 1 1 0; min-width: 0; white-space: nowrap; }
+    .set-tabs button.active { background: var(--accent); color: #fff; }
+    .set-tab-panel { display: none; }
+    .set-tab-panel.active { display: block; }
+
     .cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .cat-tabs button { background: #2a2a35; font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
     .cat-tabs button.active { background: var(--green); }
@@ -842,6 +886,7 @@
             <input type="file" id="assetUpload" accept="image/*,video/mp4,video/webm" multiple title="Картинка или mp4/webm — анимированный арт (зациклен на карте)" />
           </div>
           <div id="assetsBreadcrumb" class="assets-breadcrumb"></div>
+          <div id="assetsStorage" class="assets-storage"></div>
           <div id="assetsGrid" class="assets-grid"></div>
           <p class="hint">Ассеты карты (костры, бочки, лодки и т.п.) — перетащи карточку на карту, чтобы поставить как токен. ПКМ на токене на карте → форма/скрыт от игроков/источник света. У монстров и персонажей свой токен-арт — в их собственных карточках.</p>
         </div>
@@ -1035,57 +1080,90 @@
       <section class="panel-section" data-panel="settings">
         <header class="panel-header"><h3>Настройки</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
-          <div class="field-block">
-            <span class="field-label">Версия</span>
-            <span id="appVersion">…</span>
+          <div class="set-tabs">
+            <button type="button" class="active" data-settab="table">Стол</button>
+            <button type="button" data-settab="cast">Трансляция</button>
+            <button type="button" data-settab="server">Сервер</button>
+            <button type="button" data-settab="modules">Модули</button>
           </div>
-          <div class="section-divider"></div>
-          <div class="field-block">
-            <span class="field-label">Ссылка на трансляцию</span>
-            <input type="text" id="broadcastLink" readonly value="…" />
-            <div class="row-inline">
-              <button id="broadcastCopyBtn" type="button">Копировать</button>
-              <button id="broadcastRotateBtn" type="button">Перевыпустить</button>
+
+          <!-- Стол: что видят игроки и как ведёт себя карта. -->
+          <div class="set-tab-panel active" data-settab-panel="table">
+            <div class="set-group">
+              <div class="set-group-title">Что видят игроки</div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="combatShowHpToggle" /> Показывать HP в верхней панели хода</label></div>
+                <p class="hint">ДМ видит HP в трекере и в верхней панели всегда — переключатель влияет только на игроков и экран трансляции.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить лутить убитых монстров</label></div>
+                <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах доступен только ДМ.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="combatHighlightActiveToggle" /> Подсвечивать токен активного хода</label></div>
+                <p class="hint">Токен бойца, чей сейчас ход, обводится красным — видно всем, пока идёт бой.</p>
+              </div>
             </div>
-            <p class="hint">Откройте её на телевизоре или проекторе — экран получит доступ к столу без аккаунта и запомнит его. Ссылка секретна: кто её открыл, тот видит стол. «Перевыпустить» мгновенно отключает все экраны, которым ссылку уже дали, — тогда её нужно открыть заново на каждом.</p>
-          </div>
-          <div class="field-block">
-            <span class="field-label">Экраны, ожидающие подтверждения</span>
-            <div id="broadcastRequests"></div>
-            <p class="hint">Если ссылку вбить некуда (телевизор, приставка) — откройте на нём просто <b>/broadcast.html</b>: экран покажет код и появится здесь. Сверьте код с тем, что горит на экране, и нажмите «Пустить».</p>
-          </div>
-          <div class="section-divider"></div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="combatShowHpToggle" /> Показывать HP в верхней панели хода — игрокам и на TV</label></div>
-            <p class="hint">ДМ видит HP в трекере и в верхней панели всегда — переключатель влияет только на то, что видят игроки и экран TV.</p>
-          </div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить игрокам лутить убитых монстров</label></div>
-            <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах (костях) недоступен игрокам — только ДМ.</p>
-          </div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="combatHighlightActiveToggle" /> Подсвечивать красным токен активного хода</label></div>
-            <p class="hint">Токен бойца, чей сейчас ход, обводится на карте красным — видно всем ролям, пока идёт бой.</p>
-          </div>
-          <div class="section-divider"></div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="showBuiltinCardsToggle" /> Показывать встроенные карточки (бестиарий, заклинания и т.д.)</label></div>
-            <p class="hint">Вшитый каталог «из коробки» в справочнике и пикерах. Пока выключено, видна только библиотека этого мира. Свои карточки не затрагивает.</p>
-          </div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="hideLightMarkersToggle" /> Скрывать лампочки источников света вне режима «Освещение»</label></div>
-            <p class="hint">Иконки-лампочки токенов света на карте ДМ показываются, только когда открыт раздел рейла «Освещение». Освещение от них работает всегда.</p>
-          </div>
-          <div class="section-divider"></div>
-          <div class="field-block">
-            <div class="field-label-row">
-              <span class="field-label">Модули Foundry VTT</span>
-              <button id="foundryModulesCheckBtn" type="button">Проверить обновления</button>
+            <div class="set-group">
+              <div class="set-group-title">Интерфейс ДМ</div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="showBuiltinCardsToggle" /> Показывать встроенные карточки</label></div>
+                <p class="hint">Вшитый каталог «из коробки» в справочнике и пикерах. Пока выключено, видна только библиотека этого мира; свои карточки не затрагивает.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="hideLightMarkersToggle" /> Скрывать лампочки света вне режима «Освещение»</label></div>
+                <p class="hint">Иконки-лампочки на карте ДМ видны, только когда открыт раздел «Освещение». Само освещение работает всегда.</p>
+              </div>
             </div>
-            <p class="hint">Пакеты, хотя бы раз импортированные в этот мир. Проверка сверяет версию по той же ссылке на манифест, что использовалась при импорте.</p>
-            <div id="foundryModulesList"></div>
           </div>
-          <p class="hint">Раздел общих настроек приложения — здесь появятся будущие опции, не привязанные к конкретной сцене.</p>
+
+          <!-- Трансляция: как пустить телевизор к столу. -->
+          <div class="set-tab-panel" data-settab-panel="cast">
+            <div class="field-block">
+              <span class="field-label">Ссылка на трансляцию</span>
+              <input type="text" id="broadcastLink" readonly value="…" />
+              <div class="row-inline">
+                <button id="broadcastCopyBtn" type="button">Копировать</button>
+                <button id="broadcastRotateBtn" type="button">Перевыпустить</button>
+              </div>
+              <p class="hint">Откройте её на телевизоре или проекторе — экран получит доступ к столу без аккаунта и запомнит его. Ссылка секретна: кто её открыл, тот видит стол. «Перевыпустить» мгновенно отключает все экраны, которым ссылку уже дали, — тогда её нужно открыть заново на каждом.</p>
+            </div>
+            <div class="section-divider"></div>
+            <div class="field-block">
+              <span class="field-label">Экраны, ожидающие подтверждения</span>
+              <div id="broadcastRequests"></div>
+              <p class="hint">Если ссылку вбить некуда (телевизор, приставка) — откройте на нём просто <b>/broadcast.html</b>: экран покажет код и появится здесь. Сверьте код с тем, что горит на экране, и нажмите «Пустить».</p>
+            </div>
+          </div>
+
+          <!-- Сервер: то же, что лежит в beacon.conf. -->
+          <div class="set-tab-panel" data-settab-panel="server">
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Настройки сервера</span>
+                <button id="serverSettingsSaveBtn" type="button">Сохранить</button>
+              </div>
+              <div id="serverSettings" class="srv-settings"></div>
+              <p class="hint" id="serverSettingsMsg"></p>
+            </div>
+            <div class="section-divider"></div>
+            <div class="field-block">
+              <span class="field-label">Версия</span>
+              <span id="appVersion">…</span>
+            </div>
+          </div>
+
+          <!-- Модули: что импортировано из Foundry. -->
+          <div class="set-tab-panel" data-settab-panel="modules">
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Модули Foundry VTT</span>
+                <button id="foundryModulesCheckBtn" type="button">Проверить обновления</button>
+              </div>
+              <p class="hint">Пакеты, хотя бы раз импортированные в этот мир. Проверка сверяет версию по той же ссылке на манифест, что использовалась при импорте.</p>
+              <div id="foundryModulesList"></div>
+            </div>
+          </div>
         </div>
       </section>
 
