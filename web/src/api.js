@@ -53,8 +53,34 @@ export async function createCompany(name, system) {
 export async function launchCompany(id) {
   return apiFetch(`/api/companies/${id}/launch`, { method: "POST" });
 }
-export async function deleteCompany(id) {
-  return apiFetch(`/api/companies/${id}`, { method: "DELETE" });
+// stopActiveWorld — снять текущий мир со стола (ДМ вернулся на worlds.html):
+// стол пустеет, игроки отваливаются до следующего launchCompany.
+export async function stopActiveWorld() {
+  return apiFetch("/api/companies/stop", { method: "POST" });
+}
+// deleteCompany — force=true сносит мир вместе с аккаунтами игроков, их
+// персонажами и файлами мира на диске (см. handleCompanyDelete).
+export async function deleteCompany(id, force) {
+  return apiFetch(`/api/companies/${id}${force ? "?force=1" : ""}`, { method: "DELETE" });
+}
+// exportCompanyURL — прямая ссылка на .beacon-world.zip мира; отдаётся по
+// cookie-сессии, качается обычной навигацией (Content-Disposition: attachment).
+// withAccounts — тащить ли аккаунты игроков и их персонажей.
+export function exportCompanyURL(id, withAccounts) {
+  return `/api/companies/${id}/export${withAccounts ? "?accounts=1" : ""}`;
+}
+// importCompany — загрузка .zip мира (multipart, поле "file"), в обход
+// apiFetch как uploadFile: браузер сам ставит boundary и шлёт cookie. Создаёт
+// новый мир, запускать его ДМ должен сам.
+export async function importCompany(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/companies/import", { method: "POST", body: form });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error((data && data.error) || res.statusText || "ошибка импорта");
+  }
+  return res.json();
 }
 
 // fetchVersion — версия сервера (short commit hash из VCS-метаданных сборки,
@@ -62,6 +88,89 @@ export async function deleteCompany(id) {
 // игрока. Публичный эндпойнт, авторизация не нужна.
 export async function fetchVersion() {
   return apiFetch("/api/version");
+}
+
+// ---- публичное демо ----
+// Включён ли демо-режим (кнопка «Посмотреть демо» на входе) и вход гостем.
+export async function fetchDemoStatus() {
+  try {
+    return await apiFetch("/api/demo");
+  } catch {
+    return { enabled: false };
+  }
+}
+// enterDemo — role: "dm" (гость садится за ширму) или "player" (гость
+// садится игроком: сервер выдаёт ему персонажа и ставит токен на карту, см.
+// internal/api/http/demo_handlers.go).
+export async function enterDemo(role) {
+  return apiFetch("/api/demo/guest", { method: "POST", body: JSON.stringify({ role }) });
+}
+
+// ---- настройки сервера (раздел «Настройки» у ДМ) ----
+// Список полей с их значениями, источником и признаком «можно ли менять
+// отсюда» (см. internal/api/http/settings_handlers.go).
+export async function fetchServerSettings() {
+  return apiFetch("/api/settings");
+}
+
+// saveServerSettings — {ключ: значение}. Ответ говорит, каким настройкам
+// нужен перезапуск, и отдаёт обновлённый список.
+export async function saveServerSettings(values) {
+  return apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(values) });
+}
+
+// ---- трансляция (ТВ/проектор) ----
+// Ссылка с ключом, по которой экран в комнате получает доступ к столу без
+// аккаунта (см. internal/service/broadcast.go). Сервер отдаёт только путь —
+// origin подставляем здесь: за обратным прокси своего внешнего адреса он не
+// знает.
+export async function fetchBroadcastLink() {
+  const { key, path } = await apiFetch("/api/broadcast/link");
+  return { key, path, url: location.origin + path };
+}
+
+// rotateBroadcastLink — перевыпуск ключа: прежняя ссылка перестаёт работать
+// сразу у всех экранов, которым её раздали.
+export async function rotateBroadcastLink() {
+  const { key, path } = await apiFetch("/api/broadcast/link/rotate", { method: "POST" });
+  return { key, path, url: location.origin + path };
+}
+
+// broadcastAccessGranted — пускают ли этот браузер смотреть трансляцию.
+// Нужна самой странице трансляции, чтобы показать понятную подсказку вместо
+// чёрного экрана с молча упавшим WebSocket.
+export async function broadcastAccessGranted() {
+  try {
+    await apiFetch("/api/broadcast/access");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// requestBroadcastAccess — заявка экрана, которому ссылку с ключом вбить
+// некуда (пульт телевизора — не клавиатура): экран открывает broadcast.html
+// как есть, показывает код и ждёт, пока ДМ пустит его со своего стола.
+export async function requestBroadcastAccess() {
+  return apiFetch("/api/broadcast/requests", { method: "POST" });
+}
+
+// broadcastRequestState — что ответил ДМ: "pending" / "approved" /
+// "rejected" / "unknown" (заявка истекла — нужна новая). Вместе с "approved"
+// сервер кладёт браузеру cookie зрителя, так что ключ нигде не показывается.
+export async function broadcastRequestState(id) {
+  return apiFetch(`/api/broadcast/requests/${encodeURIComponent(id)}`);
+}
+
+// ---- заявки экранов, сторона ДМ ----
+export async function fetchBroadcastRequests() {
+  return apiFetch("/api/broadcast/requests");
+}
+export async function approveBroadcastRequest(id) {
+  return apiFetch(`/api/broadcast/requests/${encodeURIComponent(id)}/approve`, { method: "POST" });
+}
+export async function rejectBroadcastRequest(id) {
+  return apiFetch(`/api/broadcast/requests/${encodeURIComponent(id)}/reject`, { method: "POST" });
 }
 
 // ---- персонажи (свои, по сессии) — web/player.html ----

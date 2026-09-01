@@ -46,6 +46,11 @@ type CompanyRepository interface {
 	SetLegacyID(ctx context.Context, id string) error
 }
 
+type ServerStateRepository interface {
+	Get(ctx context.Context, key string) (string, error)
+	Set(ctx context.Context, key, value string) error
+}
+
 // AccountRepository — CRUD аккаунтов стола.
 type AccountRepository interface {
 	Create(ctx context.Context, a *domain.Account) error

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"math"
 	"regexp"
 	"sort"
@@ -52,6 +53,19 @@ type RoomService interface {
 	// панель "Плейлисты" (см. web/src/pages/dm.js) должна перечитать список
 	// сама, без ручной перезагрузки страницы.
 	NotifyPlaylistsChanged()
+	// SpawnPlayerToken ставит на активную сцену токен персонажа игрока —
+	// нужен входу в публичное демо игроком, где ДМ-а, который перетащил бы
+	// фишку на карту, может не быть вовсе (см. room_guest.go).
+	SpawnPlayerToken(ctx context.Context, ownerID, characterID, label, image string) (bool, error)
+	// RemoveOwnerTokens убирает со всех сцен фишки игрока, которого за
+	// столом больше нет: гость демо ушёл или его убрал уборщик по
+	// бездействию (см. room_guest.go, app.GuestKeeper).
+	RemoveOwnerTokens(ctx context.Context, ownerID string) (int, error)
+	// Announce — текстовое сообщение всем сидящим за столом прямо сейчас,
+	// мимо state сцены. Нужен публичному демо: предупредить о скором сбросе
+	// стола к эталону
+	// (см. cmd/beacon-table/demo.go: demoResetter).
+	Announce(text string)
 }
 
 type inboundMsg struct {
@@ -114,6 +128,14 @@ type Room struct {
 	// актёрами (см. LinkTokensToMonsters): свой канал по той же причине, что
 	// и importScenes — это не команда клиента и роль по ней не проверяется.
 	linkTokens chan linkTokensReq
+	// spawnToken — «поставь токен этому игроку» из HTTP-хендлера (см.
+	// room_guest.go: SpawnPlayerToken): свой канал по той же причине, что и
+	// importScenes — это не команда клиента и роль по ней не проверяется.
+	spawnToken chan spawnTokenReq
+	// dropTokens — «убери фишки этого игрока» из HTTP-хендлера (см.
+	// room_guest.go: RemoveOwnerTokens): свой канал по той же причине, что и
+	// spawnToken выше — это не команда клиента и роль по ней не проверяется.
+	dropTokens chan dropTokensReq
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -129,8 +151,13 @@ type Room struct {
 	// NotifyPlaylistsChanged: admin-CRUD плейлистов и импорт Foundry) — тот
 	// же принцип и те же свойства, что journalChanged выше.
 	playlistsChanged chan struct{}
-	dirty            bool            // есть хоть одна несохранённая мутация с последнего флаша
-	dirtyScenes      map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
+	// announce — текстовое сообщение всем за столом мимо клиента (см.
+	// Announce): сейчас единственный отправитель — demoResetter
+	// (cmd/beacon-table/demo.go), предупреждающий за пару минут до сброса
+	// демо-стола к эталону. Тот же принцип и свойства, что journalChanged.
+	announce    chan string
+	dirty       bool            // есть хоть одна несохранённая мутация с последнего флаша
+	dirtyScenes map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
 	// combat — трекер инициативы всего стола (см. domain.CombatState), не
 	// привязан к конкретной сцене — переживает switch_scene. combatDirty —
@@ -203,10 +230,13 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		shutdown:       make(chan chan struct{}),
 		importScenes:   make(chan importScenesReq),
 		linkTokens:     make(chan linkTokensReq),
+		spawnToken:     make(chan spawnTokenReq),
+		dropTokens:     make(chan dropTokensReq),
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
 		playlistsChanged:      make(chan struct{}, 4),
+		announce:              make(chan string, 4),
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
 		hub:                   hub,
@@ -549,6 +579,16 @@ func (r *Room) run() {
 					r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
 				}
 				continue
+			case "set_show_builtin_cards":
+				if im.msg.ShowBuiltinCards != nil {
+					r.handleSetShowBuiltinCards(*im.msg.ShowBuiltinCards)
+				}
+				continue
+			case "set_hide_light_markers":
+				if im.msg.HideLightMarkers != nil {
+					r.handleSetHideLightMarkers(*im.msg.HideLightMarkers)
+				}
+				continue
 			// revive_token — вкладка "Убитые" трекера (см. combatPayload:
 			// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
 			// тот умеет только create_scene-подобные мутации сцены, а тут
@@ -617,6 +657,12 @@ func (r *Room) run() {
 		case req := <-r.linkTokens:
 			req.reply <- r.linkTokensToMonsters(req.monsterByActor)
 
+		case req := <-r.spawnToken:
+			req.reply <- r.spawnPlayerToken(req)
+
+		case req := <-r.dropTokens:
+			req.reply <- r.removeOwnerTokens(req.ownerID)
+
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
 
@@ -625,6 +671,9 @@ func (r *Room) run() {
 
 		case <-r.playlistsChanged:
 			r.broadcastPlaylistsChanged()
+
+		case text := <-r.announce:
+			r.broadcastAnnounce(text)
 
 		case <-ticker.C:
 			r.flushIfDirty()
@@ -676,7 +725,7 @@ func (r *Room) flushIfDirty() {
 		delete(r.dirtyScenes, id)
 	}
 	if err := r.store.SaveMeta(ctx, r.currentSceneID, r.sceneOrder); err != nil {
-		log.Println("не удалось сохранить активную сцену:", err)
+		slog.Error("не удалось сохранить активную сцену", "err", err)
 		return
 	}
 	if r.combatDirty {
@@ -1079,6 +1128,30 @@ func (r *Room) broadcastPlaylistsChanged() {
 		if c.Role() == domain.RoleDM {
 			c.Send(payload)
 		}
+	}
+}
+
+// Announce — текстовое сообщение всем сидящим за столом прямо сейчас, мимо
+// state сцены (эфемерно, как fx: не пишется в снапшот и не ждёт свежих
+// подключений — тот, кто зайдёт после, этого сообщения уже не увидит).
+// Единственный вызывающий — demoResetter (cmd/beacon-table/demo.go),
+// предупреждающий за пару минут до сброса демо-стола к эталону: без этого
+// человек посреди партии узнавал бы о сбросе по факту разрыва соединения.
+func (r *Room) Announce(text string) {
+	select {
+	case r.announce <- text:
+	default:
+	}
+}
+
+// broadcastAnnounce — уже внутри горутины run(). Всем ролям разом (ДМ,
+// игрокам, TV): в отличие от playlists_changed это не служебное «перечитай
+// список», а сообщение ДЛЯ ЧЕЛОВЕКА — прочитать его может кто угодно за
+// столом, а не только тот, у кого открыта конкретная панель.
+func (r *Room) broadcastAnnounce(text string) {
+	payload := map[string]any{"type": "table_notice", "text": text}
+	for c := range r.clients {
+		c.Send(payload)
 	}
 }
 
@@ -1621,6 +1694,25 @@ func (r *Room) handleSetHighlightActiveToken(v bool) {
 	r.broadcastCombat()
 }
 
+// handleSetShowBuiltinCards — "set_show_builtin_cards": общий тумблер стола,
+// показывать ли вшитый каталог "из коробки" в справочнике и пикерах (см.
+// domain.CombatState.ShowBuiltinCards, combatPayload). Только UI клиента —
+// сами карточки System сервер по-прежнему отдаёт всем эндпоинтам.
+func (r *Room) handleSetShowBuiltinCards(v bool) {
+	r.combat.ShowBuiltinCards = v
+	r.markCombatDirty()
+	r.broadcastCombat()
+}
+
+// handleSetHideLightMarkers — "set_hide_light_markers": общий тумблер стола,
+// прятать ли у ДМ лампочки токенов света вне раздела "Освещение" (см.
+// domain.CombatState.HideLightMarkers, combatPayload).
+func (r *Room) handleSetHideLightMarkers(v bool) {
+	r.combat.HideLightMarkers = &v
+	r.markCombatDirty()
+	r.broadcastCombat()
+}
+
 // handlePlaceCombatantToken — "place_combatant_token": ДМ вытащил карточку
 // бойца из трекера (см. web/src/combat-panel.js: dragstart на .combat-row,
 // pages/dm.js: drop на #scene) на карту. Актуально в первую очередь для
@@ -1841,6 +1933,10 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// combat.json/новый стол) трактуем как включено, см.
 		// domain.CombatState.HighlightActiveToken.
 		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
+		"showBuiltinCards":     r.combat.ShowBuiltinCards,
+		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
+		// включено (прятать), см. domain.CombatState.HideLightMarkers.
+		"hideLightMarkers": r.combat.HideLightMarkers == nil || *r.combat.HideLightMarkers,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()

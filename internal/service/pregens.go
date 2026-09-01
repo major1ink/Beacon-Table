@@ -36,8 +36,12 @@ type PregenService interface {
 	// вызов тем же аккаунтом идемпотентен (возвращает уже созданного).
 	// domain.ErrForbidden — пре-ген уже занят другим аккаунтом.
 	Claim(ctx context.Context, pregenID, accountID string) (*domain.Character, error)
-	// Release — снять пометку занятости (пре-ген снова в пуле). Персонажа
-	// игрока не трогает.
+	// Release — отвязать заготовку от игрока: УДАЛИТЬ созданного при захвате
+	// персонажа (Claim.ClaimedCharacterID) и снять пометку занятости, вернув
+	// заготовку в пул свободных. Раньше персонаж оставался у игрока, а
+	// заготовка числилась свободной — двусмысленное «и назначен, и не
+	// назначен» (см. панель «Персонажи» ДМ). Если персонажа уже нет — просто
+	// снимает пометку.
 	Release(ctx context.Context, pregenID string) error
 	// Delete — убрать пре-гена из пула.
 	Delete(ctx context.Context, pregenID string) error
@@ -139,6 +143,19 @@ func (s *pregenService) Claim(ctx context.Context, pregenID, accountID string) (
 }
 
 func (s *pregenService) Release(ctx context.Context, pregenID string) error {
+	p, err := s.pregens.ByID(ctx, pregenID)
+	if err != nil {
+		return err
+	}
+	// Персонаж, созданный при захвате, уходит вместе с откреплением — иначе
+	// остаётся «осиротевший» персонаж у игрока при формально свободной
+	// заготовке. Если игрок уже удалил его сам — Delete вернёт found=false,
+	// это не ошибка.
+	if p.ClaimedCharacterID != "" && p.ClaimedBy != "" {
+		if _, err := s.characters.Delete(ctx, p.ClaimedCharacterID, p.ClaimedBy); err != nil {
+			return err
+		}
+	}
 	found, err := s.pregens.ClearClaim(ctx, pregenID)
 	if err != nil {
 		return err

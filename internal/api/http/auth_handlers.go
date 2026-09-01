@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"beacon-table/internal/domain"
 )
@@ -24,7 +26,7 @@ func characterListJSON(chars []*domain.Character) []map[string]string {
 // сообщение вместо списка персонажей).
 func (a *API) myCharacters(ctx context.Context, acc *domain.Account) ([]*domain.Character, error) {
 	world := a.Companies.Current()
-	if world == nil || (!acc.IsAdmin() && acc.CompanyID != world.Company.ID) {
+	if world == nil || (!acc.IsGM() && acc.CompanyID != world.Company.ID) {
 		return nil, nil
 	}
 	return world.Characters.List(ctx, acc.ID)
@@ -44,7 +46,7 @@ func (a *API) meResponseJSON(acc *domain.Account, chars []*domain.Character) map
 		"mustChangePassword": acc.MustChangePassword,
 		"characters":         characterListJSON(chars),
 	}
-	if acc.IsAdmin() {
+	if acc.IsGM() {
 		return resp
 	}
 	world := a.Companies.Current()
@@ -68,6 +70,17 @@ func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
+	// Отдельный от входа ключ ("reg:"), чтобы поток регистраций из одного
+	// дома (общий NAT) не запирал вход тем же игрокам. Считаем каждую
+	// попытку, а не только неуспешную: успех тоже создаёт запись в базе.
+	regKey := "reg:" + clientAddr(r)
+	if wait := a.loginGuard.worst(regKey); wait > 0 {
+		w.Header().Set("Retry-After", retryAfterHeader(wait))
+		writeErr(w, http.StatusTooManyRequests, "слишком много попыток регистрации — подождите пару минут")
+		return
+	}
+	a.loginGuard.record(regKey)
+
 	// Саморегистрация привязывает игрока к тому миру, что сейчас запущен —
 	// без запущенного мира регистрировать некуда (см. AuthService.Register).
 	companyID := a.Companies.ActiveCompanyID()
@@ -98,16 +111,34 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
+
+	addr := clientAddr(r)
+	ipKey := "ip:" + addr
+	userKey := "user:" + strings.ToLower(strings.TrimSpace(req.Username))
+	if wait := a.loginGuard.worst(ipKey, userKey); wait > 0 {
+		w.Header().Set("Retry-After", retryAfterHeader(wait))
+		writeErr(w, http.StatusTooManyRequests, "слишком много попыток входа — подождите и попробуйте снова")
+		return
+	}
+
 	token, acc, err := a.Auth.Login(r.Context(), req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, domain.ErrForbidden) {
+			// Аккаунт ждёт одобрения ДМ — это не подбор, счётчик не трогаем.
 			writeErr(w, http.StatusForbidden, "аккаунт ждёт подтверждения ДМ")
 			return
 		}
+		a.loginGuard.record(ipKey)
+		a.loginGuard.record(userKey)
+		slog.Warn("неудачный вход", "username", req.Username, "addr", addr)
 		writeErr(w, http.StatusUnauthorized, "неверный логин или пароль")
 		return
 	}
-	setSessionCookie(w, token)
+
+	// Успех — начинаем считать заново: важны срывы подряд, а не за всё время.
+	a.loginGuard.clear(ipKey)
+	a.loginGuard.clear(userKey)
+	a.setSessionCookie(w, token)
 	chars, err := a.myCharacters(r.Context(), acc)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
@@ -116,11 +147,30 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.meResponseJSON(acc, chars))
 }
 
+// handleLogout — «Выйти». Для обычного аккаунта это закрытие ОДНОЙ сессии:
+// человек вернётся тем же логином, и его персонажи, заметки и фишка на карте
+// ждут его на месте.
+//
+// Гость публичного демо возвращаться некуда и незачем: логина у него нет
+// (пароль случайный и никому не показан, см. service.CreateGuest), а стол
+// один на всех. Поэтому «Выйти» уносит его целиком — вместе с фишкой,
+// персонажем и местом в очереди, которое иначе держалось бы до уборки по
+// бездействию (см. app.GuestKeeper).
 func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// Аккаунт достаём ДО Logout: после удаления сессии по cookie уже никого
+	// не найти, и гость остался бы висеть до уборщика.
+	acc, accErr := a.sessionAccount(r)
 	if c, err := r.Cookie(domain.SessionCookieName); err == nil {
 		_ = a.Auth.Logout(r.Context(), c.Value)
 	}
-	clearSessionCookie(w)
+	if accErr == nil && acc.IsDemo() {
+		if err := a.Guests.Release(r.Context(), acc); err != nil {
+			// Выходу это не мешает: cookie уже погашена, сессии больше нет.
+			// Аккаунт подберёт Sweep — он и так ищет замолчавших.
+			slog.Warn("не удалось убрать гостя на выходе", "гость", acc.Username, "err", err)
+		}
+	}
+	a.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -174,6 +224,6 @@ func (a *API) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	clearSessionCookie(w)
+	a.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

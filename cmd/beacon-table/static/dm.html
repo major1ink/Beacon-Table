@@ -104,6 +104,49 @@
     .field-label { font-size: 11px; opacity: 0.6; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .field-label-row button { padding: 4px 8px; font-size: 11px; width: auto; }
+    /* Пара кнопок в строку под полем (ссылка на трансляцию): делят ширину
+       поровну, панель узкая — в одну строку с меткой они не помещаются. */
+    .row-inline { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .row-inline button { flex: 1; width: auto; padding: 4px 8px; font-size: 11px; }
+    /* Заявка экрана на трансляцию: код — то, что ДМ сверяет с телевизором,
+       поэтому он и есть главный элемент карточки. */
+    .bcast-req { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+    .bcast-req-code { font-size: 20px; font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
+    .bcast-req-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .bcast-req-empty { font-size: 12px; color: var(--text-dim); }
+    /* ---- форма настроек сервера ----
+       Тринадцать полей подряд читались как простыня, поэтому они собраны в
+       группы с заголовками, а под заголовком группы — одно пояснение на всю
+       группу вместо повторяющейся пометки под каждым полем. */
+    .set-group { margin-bottom: 14px; }
+    .set-group-title {
+      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 6px;
+      padding-bottom: 4px; border-bottom: 1px solid var(--border);
+    }
+    .set-group-note { font-size: 10px; color: var(--text-dim); margin: -2px 0 8px; line-height: 1.4; }
+    /* Подпись относится к переключателю над ней — сдвигаем её под текст,
+       а не под сам квадратик. */
+    .set-tab-panel .checkbox-row + .hint { margin-left: 20px; margin-top: 2px; }
+    .set-tab-panel .field-block { margin-bottom: 8px; }
+    .srv-set { margin-bottom: 9px; }
+    .srv-set-title { font-size: 12px; margin-bottom: 3px; }
+    .srv-set input[type="text"], .srv-set select { width: 100%; }
+    /* Закрытое поле не должно выглядеть как обычное: приглушаем и фон, и
+       текст, и курсор — иначе непонятно, почему в него не печатается. */
+    .srv-set input:disabled, .srv-set select:disabled {
+      background: transparent; border-style: dashed; color: var(--text-dim);
+      cursor: not-allowed; opacity: 0.75;
+    }
+    .srv-set-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; line-height: 1.4; }
+    /* Янтарный, а не красный: «задано снаружи» — это не ошибка, а факт,
+       который стоит заметить. Показывается только в этом редком случае. */
+    .srv-set-locked { font-size: 10px; color: #d9a441; margin-top: 3px; line-height: 1.4; }
+    .srv-set.readonly .srv-set-title { color: var(--text-dim); }
+    /* Занятое место под загрузками — видно заранее, а не в момент отказа. */
+    .assets-storage { font-size: 11px; color: var(--text-dim); margin: 4px 0 6px; }
+    .assets-storage.low { color: #e0a94a; }
+    .assets-storage.full { color: #e74c3c; }
     .check-row { font-size: 13px; cursor: pointer; padding: 2px 0; }
     .tool-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 9px; }
     .primary-btn { width: 100%; background: var(--accent); font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -354,6 +397,17 @@
        глобальным селектором ".modal-tabs button" (см. dm.js: tabButtons,
        switchTab) для вкладок "Настроить сцену" — общий класс означало бы,
        что тот код тоже находит и перевешивает onclick на этих кнопках. */
+    /* .set-tabs — вкладки раздела «Настройки». Свой класс по той же
+       причине, что и у .cat-tabs ниже: глобальный ".modal-tabs button" в
+       dm.js перевесил бы на них свои обработчики. */
+    .set-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    /* Четыре вкладки должны уместиться в одну строку узкой панели, отсюда
+       мелкий шрифт и тесные поля. */
+    .set-tabs button { background: #2a2a35; font-size: 11px; padding: 6px 4px; flex: 1 1 0; min-width: 0; white-space: nowrap; }
+    .set-tabs button.active { background: var(--accent); color: #fff; }
+    .set-tab-panel { display: none; }
+    .set-tab-panel.active { display: block; }
+
     .cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .cat-tabs button { background: #2a2a35; font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
     .cat-tabs button.active { background: var(--green); }
@@ -415,6 +469,10 @@
     .account-row .account-actions button.approve:hover { background: var(--green-hover); }
 
     /* ---- раздел "Персонажи" (в панели) ---- */
+    /* .dmchar-section — крупный заголовок блока («Не назначенные» / «Назначенные»);
+       .dmchar-owner-group — подзаголовок с логином игрока внутри «Назначенных». */
+    .dmchar-section { font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.9; margin: 16px 0 8px; }
+    .dmchar-section:first-child { margin-top: 0; }
     .dmchar-owner-group { font-size: 11px; opacity: 0.55; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: 0.04em; }
     .dmchar-owner-group:first-child { margin-top: 0; }
     .dmchar-row {
@@ -771,24 +829,26 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-B6WGJEaP.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-BCEgvPLR.js">
+  <script type="module" crossorigin src="/assets/dm-DaaWCSxA.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CY52lSOM.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-g49pjxWl.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-BMFo98Kf.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-CKXEes09.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-VL3zpNr8.js">
+  <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-B8JTVvYi.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-BIYNZBaq.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DF8PVeGV.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-DiANMNfS.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-B4XOg01T.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-DK2KtK30.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-Cv11r98u.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-CIWxIQ39.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-dHxsTSmC.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-Bhy0V1RH.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-Cp6qOlRl.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CRxxyY8n.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-Cc7gT-d9.css">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-4FSWw15w.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-CoqrhlZS.js">
+  <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
+  <link rel="stylesheet" crossorigin href="/assets/api-BWzjUmfx.css">
 </head>
 <body>
   <div id="appBody">
@@ -845,6 +905,7 @@
             <input type="file" id="assetUpload" accept="image/*,video/mp4,video/webm" multiple title="Картинка или mp4/webm — анимированный арт (зациклен на карте)" />
           </div>
           <div id="assetsBreadcrumb" class="assets-breadcrumb"></div>
+          <div id="assetsStorage" class="assets-storage"></div>
           <div id="assetsGrid" class="assets-grid"></div>
           <p class="hint">Ассеты карты (костры, бочки, лодки и т.п.) — перетащи карточку на карту, чтобы поставить как токен. ПКМ на токене на карте → форма/скрыт от игроков/источник света. У монстров и персонажей свой токен-арт — в их собственных карточках.</p>
         </div>
@@ -1038,40 +1099,97 @@
       <section class="panel-section" data-panel="settings">
         <header class="panel-header"><h3>Настройки</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
-          <div class="field-block">
-            <span class="field-label">Версия</span>
-            <span id="appVersion">…</span>
+          <div class="set-tabs">
+            <button type="button" class="active" data-settab="table">Стол</button>
+            <button type="button" data-settab="cast">Трансляция</button>
+            <button type="button" data-settab="server">Сервер</button>
+            <button type="button" data-settab="modules">Модули</button>
           </div>
-          <div class="section-divider"></div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="combatShowHpToggle" /> Показывать HP в верхней панели хода — игрокам и на TV</label></div>
-            <p class="hint">ДМ видит HP в трекере и в верхней панели всегда — переключатель влияет только на то, что видят игроки и экран TV.</p>
-          </div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить игрокам лутить убитых монстров</label></div>
-            <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах (костях) недоступен игрокам — только ДМ.</p>
-          </div>
-          <div class="field-block">
-            <div class="checkbox-row"><label><input type="checkbox" id="combatHighlightActiveToggle" /> Подсвечивать красным токен активного хода</label></div>
-            <p class="hint">Токен бойца, чей сейчас ход, обводится на карте красным — видно всем ролям, пока идёт бой.</p>
-          </div>
-          <div class="section-divider"></div>
-          <div class="field-block">
-            <div class="field-label-row">
-              <span class="field-label">Модули Foundry VTT</span>
-              <button id="foundryModulesCheckBtn" type="button">Проверить обновления</button>
+
+          <!-- Стол: что видят игроки и как ведёт себя карта. -->
+          <div class="set-tab-panel active" data-settab-panel="table">
+            <div class="set-group">
+              <div class="set-group-title">Что видят игроки</div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="combatShowHpToggle" /> Показывать HP в верхней панели хода</label></div>
+                <p class="hint">ДМ видит HP в трекере и в верхней панели всегда — переключатель влияет только на игроков и экран трансляции.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить лутить убитых монстров</label></div>
+                <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах доступен только ДМ.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="combatHighlightActiveToggle" /> Подсвечивать токен активного хода</label></div>
+                <p class="hint">Токен бойца, чей сейчас ход, обводится красным — видно всем, пока идёт бой.</p>
+              </div>
             </div>
-            <p class="hint">Пакеты, хотя бы раз импортированные в этот мир. Проверка сверяет версию по той же ссылке на манифест, что использовалась при импорте.</p>
-            <div id="foundryModulesList"></div>
+            <div class="set-group">
+              <div class="set-group-title">Интерфейс ДМ</div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="showBuiltinCardsToggle" /> Показывать встроенные карточки</label></div>
+                <p class="hint">Вшитый каталог «из коробки» в справочнике и пикерах. Пока выключено, видна только библиотека этого мира; свои карточки не затрагивает.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="hideLightMarkersToggle" /> Скрывать лампочки света вне режима «Освещение»</label></div>
+                <p class="hint">Иконки-лампочки на карте ДМ видны, только когда открыт раздел «Освещение». Само освещение работает всегда.</p>
+              </div>
+            </div>
           </div>
-          <p class="hint">Раздел общих настроек приложения — здесь появятся будущие опции, не привязанные к конкретной сцене.</p>
+
+          <!-- Трансляция: как пустить телевизор к столу. -->
+          <div class="set-tab-panel" data-settab-panel="cast">
+            <div class="field-block">
+              <span class="field-label">Ссылка на трансляцию</span>
+              <input type="text" id="broadcastLink" readonly value="…" />
+              <div class="row-inline">
+                <button id="broadcastCopyBtn" type="button">Копировать</button>
+                <button id="broadcastRotateBtn" type="button">Перевыпустить</button>
+              </div>
+              <p class="hint">Откройте её на телевизоре или проекторе — экран получит доступ к столу без аккаунта и запомнит его. Ссылка секретна: кто её открыл, тот видит стол. «Перевыпустить» мгновенно отключает все экраны, которым ссылку уже дали, — тогда её нужно открыть заново на каждом.</p>
+            </div>
+            <div class="section-divider"></div>
+            <div class="field-block">
+              <span class="field-label">Экраны, ожидающие подтверждения</span>
+              <div id="broadcastRequests"></div>
+              <p class="hint">Если ссылку вбить некуда (телевизор, приставка) — откройте на нём просто <b>/broadcast.html</b>: экран покажет код и появится здесь. Сверьте код с тем, что горит на экране, и нажмите «Пустить».</p>
+            </div>
+          </div>
+
+          <!-- Сервер: то же, что лежит в beacon.conf. -->
+          <div class="set-tab-panel" data-settab-panel="server">
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Настройки сервера</span>
+                <button id="serverSettingsSaveBtn" type="button">Сохранить</button>
+              </div>
+              <div id="serverSettings" class="srv-settings"></div>
+              <p class="hint" id="serverSettingsMsg"></p>
+            </div>
+            <div class="section-divider"></div>
+            <div class="field-block">
+              <span class="field-label">Версия</span>
+              <span id="appVersion">…</span>
+            </div>
+          </div>
+
+          <!-- Модули: что импортировано из Foundry. -->
+          <div class="set-tab-panel" data-settab-panel="modules">
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Модули Foundry VTT</span>
+                <button id="foundryModulesCheckBtn" type="button">Проверить обновления</button>
+              </div>
+              <p class="hint">Пакеты, хотя бы раз импортированные в этот мир. Проверка сверяет версию по той же ссылке на манифест, что использовалась при импорте.</p>
+              <div id="foundryModulesList"></div>
+            </div>
+          </div>
         </div>
       </section>
 
       <section class="panel-section" data-panel="characters">
         <header class="panel-header"><h3>Персонажи</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
-          <p class="hint">Персонажи всех игроков. Перетащи на карту — поставит токен с именем/артом и владельцем. 📜 открывает лист (можно править), ✎ — имя/аватар.</p>
+          <p class="hint">Сверху — заготовки, ещё никому не назначенные: заполни лист, потом назначь игроку (или игрок сам возьмёт). Ниже — назначенные, по игрокам: перетащи на карту, чтобы поставить токен. 📜 — лист, ✎ — имя/аватар.</p>
           <div id="dmCharactersList"></div>
           <div id="dmCharEditForm" style="display:none;">
             <div class="section-divider"></div>
@@ -1163,6 +1281,7 @@
     <button id="tokenMenuAddInitiativeBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg> Добавить в инициативу</button>
     <button id="tokenMenuStatusBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.7 4.3L17 9l-4.3 1.7L11 15l-1.7-4.3L5 9l4.3-1.7z"/><path d="M18 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg> Состояния</button>
     <button id="tokenMenuLootBtn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg> Лутить</button>
+    <label id="tokenMenuOwnerRow">Владелец: <select id="tokenMenuOwner"></select></label>
     <label id="tokenMenuHiddenRow"><input type="checkbox" id="tokenMenuHidden" /> скрыт от игроков</label>
     <label id="tokenMenuShapeRow">Форма: <select id="tokenMenuShape">
       <option value="circle">○ Круг</option>

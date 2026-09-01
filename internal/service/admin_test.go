@@ -45,6 +45,59 @@ func TestAdminService_UpdateCharacter_BypassesOwnership(t *testing.T) {
 	}
 }
 
+// TestAdminService_MultipleDM — несколько аккаунтов ДМ: создаются через
+// панель, видны в списке аккаунтов любого мира (CompanyID == ""), последний
+// удалить нельзя.
+func TestAdminService_MultipleDM(t *testing.T) {
+	ctx := context.Background()
+	accounts := memory.NewAccountStore()
+	sessions := memory.NewSessionStore(accounts)
+	characters := memory.NewCharacterStore()
+
+	// первый ДМ — как seed "dm"
+	if err := accounts.Create(ctx, &domain.Account{
+		ID: "dm-1", Username: "dm", PasswordHash: "h", Role: domain.AccountRoleAdmin,
+		Status: domain.AccountStatusActive,
+	}); err != nil {
+		t.Fatalf("seed dm: %v", err)
+	}
+
+	admin := service.NewAdminService(accounts, sessions, characters, "co-1")
+
+	dm2, err := admin.CreateAccount(ctx, "dm-two", "password2", domain.AccountRoleAdmin)
+	if err != nil {
+		t.Fatalf("CreateAccount(admin): %v", err)
+	}
+	if dm2.CompanyID != "" || dm2.Role != domain.AccountRoleAdmin {
+		t.Fatalf("второй ДМ должен быть глобальным admin: %+v", dm2)
+	}
+
+	list, err := admin.ListAccounts(ctx)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	admins := 0
+	for _, a := range list {
+		if a.Role == domain.AccountRoleAdmin {
+			admins++
+		}
+	}
+	if admins != 2 {
+		t.Fatalf("ожидали 2 ДМ в списке мира, получили %d: %+v", admins, list)
+	}
+
+	// второго ДМ можно удалить (первый остаётся)
+	if err := admin.DeleteAccount(ctx, "dm-1", dm2.ID); err != nil {
+		t.Fatalf("DeleteAccount(второй ДМ): %v", err)
+	}
+	// последнего — нельзя
+	err = admin.DeleteAccount(ctx, dm2.ID, "dm-1")
+	var verr *domain.ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("ожидали ValidationError на удалении последнего ДМ, получили %v", err)
+	}
+}
+
 // TestAdminService_UpdateCharacterSheet_BypassesOwnership — тот же принцип,
 // что и выше, но для листа персонажа (character-sheet.html в режиме ДМ).
 func TestAdminService_UpdateCharacterSheet_BypassesOwnership(t *testing.T) {

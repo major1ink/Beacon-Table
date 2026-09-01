@@ -44,7 +44,7 @@ func dmOnlyKind(kind string) bool {
 }
 
 func (s *assetService) Upload(ctx context.Context, account *domain.Account, kind, folder, filename string, r io.Reader) (string, error) {
-	if dmOnlyKind(kind) && !account.IsAdmin() {
+	if dmOnlyKind(kind) && !account.IsGM() {
 		return "", domain.ErrForbidden
 	}
 	return s.assets.Save(ctx, kind, folder, filename, r)
@@ -75,21 +75,21 @@ func (s *assetService) FoldersAll(ctx context.Context) (map[string][]domain.Asse
 }
 
 func (s *assetService) CreateFolder(ctx context.Context, account *domain.Account, kind, folder string) error {
-	if dmOnlyKind(kind) && !account.IsAdmin() {
+	if dmOnlyKind(kind) && !account.IsGM() {
 		return domain.ErrForbidden
 	}
 	return s.assets.CreateFolder(ctx, kind, folder)
 }
 
 func (s *assetService) DeleteFolder(ctx context.Context, account *domain.Account, kind, folder string) error {
-	if dmOnlyKind(kind) && !account.IsAdmin() {
+	if dmOnlyKind(kind) && !account.IsGM() {
 		return domain.ErrForbidden
 	}
 	return s.assets.DeleteFolder(ctx, kind, folder)
 }
 
 func (s *assetService) DeleteAsset(ctx context.Context, account *domain.Account, kind, url string) error {
-	if dmOnlyKind(kind) && !account.IsAdmin() {
+	if dmOnlyKind(kind) && !account.IsGM() {
 		return domain.ErrForbidden
 	}
 	return s.assets.DeleteAsset(ctx, kind, url)

@@ -142,7 +142,29 @@ export function openFloatingWindow({
   openWindows.set(key, el);
   bringToFront(el);
 
-  function close() {
+  // flushIframe — дать встроенной странице дописать несохранённое до того,
+  // как iframe исчезнет: его удаление не поднимает beforeunload и обрывает
+  // fetch на полпути (см. character-sheet.js: beaconFlush — debounce-сейв
+  // терялся при закрытии сразу после правки, особенно на импорте LSS).
+  // Контракт: страница вешает на свой window async-функцию beaconFlush().
+  // Ограничиваем ожидание, чтобы битая страница не подвесила закрытие.
+  async function flushIframe() {
+    let flush;
+    try {
+      flush = iframe.contentWindow && iframe.contentWindow.beaconFlush;
+    } catch {
+      return; // всегда тот же origin, сюда не попадём
+    }
+    if (typeof flush !== "function") return;
+    try {
+      await Promise.race([Promise.resolve(flush()), new Promise((r) => setTimeout(r, 3000))]);
+    } catch {
+      /* не смогла сохранить — закрываем всё равно */
+    }
+  }
+
+  async function close() {
+    await flushIframe();
     window.removeEventListener("message", onMessage);
     el.remove();
     openWindows.delete(key);
@@ -173,6 +195,7 @@ export function openFloatingWindow({
     // Вынос в отдельное окно перезагружает страницу с нуля — для процесса
     // внутри это то же самое, что закрытие, поэтому спрашиваем так же.
     if (!(await confirmClose())) return;
+    await flushIframe(); // новое окно грузится с сервера — сначала дописать несохранённое
     window.open(url, key, popoutFeatures);
     close();
   };

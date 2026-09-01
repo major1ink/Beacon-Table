@@ -133,6 +133,15 @@ export function invalidateConditions() {
   conditionsCache = null;
 }
 
+// showBuiltinCards — общий тумблер стола (см. domain.CombatState.
+// ShowBuiltinCards, приходит в combat_state): пока false, из сетки палитры
+// выпадают состояния вшитого каталога (c.system). combat-panel.js и так
+// зовёт refreshStatusPalette() на каждый combat_state — тут только держим флаг.
+let showBuiltinCards = false;
+document.addEventListener("vtt:combatState", (e) => {
+  showBuiltinCards = !!(e.detail && e.detail.showBuiltinCards);
+});
+
 // Конструктор состояний (conditions.html) живёт в отдельном плавающем окне и
 // сообщает о правке тем же postMessage-механизмом, что и остальные карточки
 // (см. floating-window.js: postToOpenWindows, "beacon:*Saved") — ловим его и
@@ -321,7 +330,9 @@ function renderPalette(state) {
   // ---- сетка ----
   const filter = state.filter.trim().toLowerCase();
   const list = (conditionsCache || []).filter(
-    (c) => !filter || [c.name, c.slug, ...(c.tags || [])].join(" ").toLowerCase().includes(filter)
+    (c) =>
+      (showBuiltinCards || !c.system) &&
+      (!filter || [c.name, c.slug, ...(c.tags || [])].join(" ").toLowerCase().includes(filter))
   );
   if (list.length === 0) {
     const empty = document.createElement("p");

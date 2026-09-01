@@ -75,6 +75,11 @@ func (f *fakeRoom) Shutdown()                             {}
 func (f *fakeRoom) NotifyJournalChanged(string)           {}
 func (f *fakeRoom) NotifyCharacterSheetChanged(string)    {}
 func (f *fakeRoom) NotifyPlaylistsChanged()               {}
+func (f *fakeRoom) SpawnPlayerToken(context.Context, string, string, string, string) (bool, error) {
+	return false, nil
+}
+func (f *fakeRoom) RemoveOwnerTokens(context.Context, string) (int, error) { return 0, nil }
+func (f *fakeRoom) Announce(string)                                        {}
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil
@@ -344,7 +349,7 @@ func TestFoundryImportEndToEnd(t *testing.T) {
 	room := &fakeRoom{}
 	playlists := &fakePlaylists{}
 	svc := NewFoundryService(t.TempDir(), assets, room, playlists, memory.NewFoundryModuleStore(),
-		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore(), true)
 	ctx := context.Background()
 	account := &domain.Account{ID: "dm", Role: "admin"}
 
@@ -466,7 +471,7 @@ func TestFoundryModuleDelete(t *testing.T) {
 	spells := newFakeSpells()
 	assets := &fakeAssets{}
 	svc := NewFoundryService(t.TempDir(), assets, &fakeRoom{}, &fakePlaylists{}, modules,
-		bestiary, spells, newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
+		bestiary, spells, newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore(), true)
 	ctx := context.Background()
 
 	if err := modules.Upsert(ctx, domain.FoundryModule{
@@ -532,7 +537,7 @@ func TestFoundryModuleDelete(t *testing.T) {
 
 func TestFoundryInspectRejectsBadURL(t *testing.T) {
 	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, &fakeRoom{}, &fakePlaylists{}, memory.NewFoundryModuleStore(),
-		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
+		newFakeBestiary(), newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore(), true)
 	if _, err := svc.Inspect(context.Background(), "file:///etc/passwd"); err == nil {
 		t.Fatal("не-http ссылка должна отклоняться")
 	}
@@ -548,7 +553,7 @@ func TestFoundryLinkSceneTokens(t *testing.T) {
 	bestiary := newFakeBestiary()
 	room := &fakeRoom{}
 	svc := NewFoundryService(t.TempDir(), &fakeAssets{}, room, &fakePlaylists{}, memory.NewFoundryModuleStore(),
-		bestiary, newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore())
+		bestiary, newFakeSpells(), newFakeItems(), newFakeReferences(), newFakeConditions(), memory.NewPregenStore(), true)
 	ctx := context.Background()
 
 	scene := domain.NewScene("sc1", "Логово")

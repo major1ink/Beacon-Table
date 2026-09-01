@@ -21,13 +21,11 @@ import (
 
 const timeLayout = time.RFC3339
 
-// Open открывает (и при первом запуске создаёт) файл базы по path и
-// накатывает схему. CREATE TABLE IF NOT EXISTS — миграций пока не нужно,
-// схема одна и меняется редко; при появлении реальной эволюции схемы стоит
-// завести отдельный migrations-механизм по аналогии с scenefile-пакетом.
-// Возвращает сырой *sql.DB — из него конструируются AccountStore/
-// CharacterStore/SessionStore/PlaylistStore (см. New* в соседних файлах),
-// закрывать его (db.Close()) — забота композиционного корня.
+// Open открывает (и при первом запуске создаёт) файл базы по path и доводит
+// его схему до актуальной версии (см. migrations.go). Возвращает сырой
+// *sql.DB — из него конструируются AccountStore/CharacterStore/SessionStore/
+// PlaylistStore (см. New* в соседних файлах), закрывать его (db.Close()) —
+// забота композиционного корня.
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -38,156 +36,21 @@ func Open(path string) (*sql.DB, error) {
 	// сервера (один стол, десятки аккаунтов, редкие записи) с запасом.
 	db.SetMaxOpenConns(1)
 
-	schema := []string{
-		`CREATE TABLE IF NOT EXISTS accounts (
-			id TEXT PRIMARY KEY,
-			username TEXT NOT NULL UNIQUE,
-			password_hash TEXT NOT NULL,
-			role TEXT NOT NULL,
-			status TEXT NOT NULL,
-			must_change_password INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS characters (
-			id TEXT PRIMARY KEY,
-			account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-			name TEXT NOT NULL,
-			avatar_url TEXT NOT NULL DEFAULT '',
-			sheet_json TEXT NOT NULL DEFAULT '{}',
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS sessions (
-			token TEXT PRIMARY KEY,
-			account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-			created_at TEXT NOT NULL,
-			expires_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS playlists (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS playlist_tracks (
-			id TEXT PRIMARY KEY,
-			playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
-			url TEXT NOT NULL,
-			name TEXT NOT NULL,
-			volume REAL NOT NULL DEFAULT 0.8,
-			loop INTEGER NOT NULL DEFAULT 0,
-			position INTEGER NOT NULL
-		)`,
-		// inventory_items — инвентарь персонажей (см. domain.InventoryEntry),
-		// своя таблица, НЕ поле characters.sheet_json (см. комментарий
-		// repository.CharacterRepository про гонку с автосейвом листа).
-		// account_id/company_id денормализованы на строку (как и у остальных
-		// таблиц выше) — Update/Remove/List фильтруются напрямую без JOIN.
-		`CREATE TABLE IF NOT EXISTS inventory_items (
-			id TEXT PRIMARY KEY,
-			character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-			account_id TEXT NOT NULL,
-			company_id TEXT NOT NULL,
-			item_id TEXT NOT NULL DEFAULT '',
-			name TEXT NOT NULL,
-			image_url TEXT NOT NULL DEFAULT '',
-			weight_lb REAL NOT NULL DEFAULT 0,
-			quantity INTEGER NOT NULL DEFAULT 1,
-			equipped INTEGER NOT NULL DEFAULT 0,
-			notes TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL
-		)`,
-		// companies — миры/столы (см. domain.Company); server_state —
-		// однострочный-на-ключ KV, сейчас хранит active_company_id (какой
-		// мир сейчас запущен, см. service.CompanyManager) и legacy_company_id
-		// (какая компания — если есть — унаследовала данные инсталляции до
-		// появления этой фичи, см. MigrateLegacyCompany).
-		`CREATE TABLE IF NOT EXISTS companies (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			system TEXT NOT NULL,
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS server_state (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-		)`,
-		// foundry_modules — пакеты Foundry VTT, хотя бы раз импортированные в
-		// мир (см. domain.FoundryModule): раздел "Настройки" показывает по
-		// ним список и проверяет обновления по manifest_url. Ключ — (id,
-		// company_id): id пакета уникален внутри мира, но два разных мира
-		// вполне могут поставить один и тот же модуль независимо.
-		`CREATE TABLE IF NOT EXISTS foundry_modules (
-			id TEXT NOT NULL,
-			company_id TEXT NOT NULL DEFAULT '',
-			title TEXT NOT NULL,
-			version TEXT NOT NULL,
-			manifest_url TEXT NOT NULL,
-			imported_at TEXT NOT NULL,
-			PRIMARY KEY (id, company_id)
-		)`,
-		// pregen_characters — пул «готовых персонажей» мира (см. domain.Pregen):
-		// актёры type "character" из импортированных приключений Foundry. Игрок
-		// берёт свободного, ДМ назначает/возвращает в пул. Захват создаёт
-		// обычную строку characters (claimed_character_id) — она и есть
-		// персонаж игрока; строка тут остаётся шаблоном с пометкой занятости.
-		// company_id денормализован на строку (как у characters) — стор
-		// company-scoped, JOIN не нужен. FK на claimed_by нет нарочно: аккаунт
-		// удаляют вместе с его персонажами (FK characters), а пул-запись при
-		// этом лишь освобождается (см. sqlite/pregens.go: FreeByAccount,
-		// вызывается из handleAdminAccountDelete).
-		`CREATE TABLE IF NOT EXISTS pregen_characters (
-			id TEXT PRIMARY KEY,
-			company_id TEXT NOT NULL,
-			name TEXT NOT NULL,
-			avatar_url TEXT NOT NULL DEFAULT '',
-			sheet_json TEXT NOT NULL DEFAULT '{}',
-			source TEXT NOT NULL DEFAULT '',
-			claimed_by TEXT NOT NULL DEFAULT '',
-			claimed_character_id TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_pregen_characters_company ON pregen_characters(company_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks(playlist_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_inventory_items_character ON inventory_items(character_id)`,
+	if err := applyPragmas(db); err != nil {
+		db.Close()
+		return nil, err
 	}
-	for _, stmt := range schema {
-		if _, err := db.Exec(stmt); err != nil {
-			db.Close()
-			return nil, err
-		}
-	}
-	// CREATE TABLE IF NOT EXISTS не добавляет колонки к уже существующей
-	// таблице — sheet_json/company_id/system появились позже исходной схемы,
-	// поэтому для баз, созданных до них, догоняем ALTER TABLE вручную.
-	alters := []struct{ table, column, definition string }{
-		{"characters", "sheet_json", `TEXT NOT NULL DEFAULT '{}'`},
-		{"accounts", "company_id", `TEXT NOT NULL DEFAULT ''`},
-		{"characters", "company_id", `TEXT NOT NULL DEFAULT ''`},
-		{"characters", "system", `TEXT NOT NULL DEFAULT ''`},
-		{"playlists", "company_id", `TEXT NOT NULL DEFAULT ''`},
-	}
-	for _, a := range alters {
-		if err := addColumnIfMissing(db, a.table, a.column, a.definition); err != nil {
-			db.Close()
-			return nil, err
-		}
-	}
-	// Индексы по company_id — заводим уже после ALTER TABLE выше (колонки
-	// должны существовать к этому моменту).
-	postAlterIndexes := []string{
-		`CREATE INDEX IF NOT EXISTS idx_accounts_company ON accounts(company_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_characters_company ON characters(company_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_playlists_company ON playlists(company_id)`,
-	}
-	for _, stmt := range postAlterIndexes {
-		if _, err := db.Exec(stmt); err != nil {
-			db.Close()
-			return nil, err
-		}
+
+	// Схема живёт в migrations.go: Open только открывает файл и доводит его
+	// до актуальной версии.
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	// Внешние ключи (ON DELETE CASCADE) в SQLite по умолчанию выключены на
-	// уровне соединения, а не БД — включаем на каждое открытие.
+	// уровне соединения, а не БД — включаем ПОСЛЕ миграций: шагу схемы
+	// (ALTER/пересозданию таблицы) проверка ссылок только мешала бы, а
+	// рабочим запросам она нужна.
 	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
 		db.Close()
 		return nil, err
@@ -195,41 +58,31 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// addColumnIfMissing — минимальная замена полноценного migrations-механизма
-// (см. комментарий Open выше) для единственного случая, когда он реально
-// понадобился: колонка добавлена в схему после того, как у части
-// пользователей уже есть data/beacon.db без неё. PRAGMA table_info не
-// поддерживает плейсхолдеры для имени таблицы — table здесь всегда
-// константа из кода (не пользовательский ввод), поэтому строим запрос
-// напрямую без риска SQL-инъекции.
-func addColumnIfMissing(db *sql.DB, table, column, definition string) error {
-	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
-	if err != nil {
+// applyPragmas настраивает соединение до миграций — чтобы и сами миграции
+// шли уже в этом режиме.
+func applyPragmas(db *sql.DB) error {
+	// WAL: пишущая транзакция (сохранение сцены, импорт мира) больше не
+	// блокирует читающие — а импорт модуля Foundry держит запись секундами.
+	// Побочный эффект: рядом с beacon.db появляются -wal и -shm; они
+	// сливаются в основной файл при закрытии базы (см. shutdown в
+	// cmd/beacon-table/main.go), но копировать базу «на живую» мимо них
+	// нельзя — резервная копия делается через VACUUM INTO.
+	//
+	// Результат читаем, а не выполняем Exec'ом: PRAGMA journal_mode
+	// возвращает установившийся режим. Для базы в памяти (тесты) это будет
+	// "memory" — WAL там не поддерживается, и это не ошибка.
+	var mode string
+	if err := db.QueryRow(`PRAGMA journal_mode = WAL`).Scan(&mode); err != nil {
 		return err
 	}
-	found := false
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notNull, pk int
-		var dflt sql.NullString
-		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
-		}
-		if name == column {
-			found = true
-		}
-	}
-	if err := rows.Err(); err != nil {
+	// busy_timeout: вместо мгновенного "database is locked" соединение ждёт
+	// освобождения до пяти секунд. С единственным соединением в пуле блокировки
+	// изнутри процесса не случаются, но снаружи файл может держать бэкап или
+	// консоль sqlite3 — тогда лучше подождать, чем уронить запрос.
+	if _, err := db.Exec(`PRAGMA busy_timeout = 5000`); err != nil {
 		return err
 	}
-	rows.Close()
-	if found {
-		return nil
-	}
-	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + definition)
-	return err
+	return nil
 }
 
 func boolToInt(b bool) int {

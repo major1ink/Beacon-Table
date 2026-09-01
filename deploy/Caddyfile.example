@@ -1,0 +1,67 @@
+# Обратный прокси с HTTPS для Beacon Table.
+#
+# Caddy сам получает сертификат Let's Encrypt и продлевает его — от вас нужен
+# только домен, направленный A/AAAA-записью на этот сервер, и открытые порты
+# 80 и 443.
+#
+# ---- Docker (см. docker-compose.yml — этот файл там уже подключён) ----
+#
+#   впишите свой домен и почту вместо примеров ниже, затем:
+#   docker compose up -d
+#
+# ---- без Docker, службой systemd рядом с Caddy на самом сервере ----
+#
+#   sudo apt install caddy           # или https://caddyserver.com/docs/install
+#   sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile
+#   # впишите свой домен и почту, И замените reverse_proxy ниже на 127.0.0.1:8080
+#   sudo systemctl reload caddy
+#
+# Beacon Table при этом должен:
+#   - слушать только localhost:  BEACON_ADDR=127.0.0.1:8080
+#   - знать, что он за HTTPS:     BEACON_BEHIND_PROXY=true
+# (см. beacon.conf / README, раздел «Настройка»; в docker-compose.yml оба
+# уже выставлены как надо).
+
+table.example.com {
+	# Почта для уведомлений Let's Encrypt об истечении сертификата.
+	tls you@example.com
+
+	# Сжатие для JSON API и HTML; на карты/видео/аудио не влияет — они уже
+	# сжаты.
+	encode zstd gzip
+
+	# WebSocket (стол, трансляция) Caddy проксирует сам, ничего настраивать
+	# не нужно — в отличие от nginx.
+	#
+	# beacon-table:8080 — имя сервиса из docker-compose.yml, Caddy достаёт
+	# его по нему внутри docker-сети (порт наружу нигде не публикуется —
+	# так безопаснее по умолчанию, см. комментарий в docker-compose.yml).
+	# Без Docker (Caddy службой прямо на сервере) замените на 127.0.0.1:8080.
+	reverse_proxy beacon-table:8080
+
+	# Потолок на тело запроса: чуть больше самой крупной легальной загрузки —
+	# импорта мира (.zip до 1 ГБ, см. maxWorldImportSize). Карты/токены/аудио
+	# (до 200 МБ) укладываются с запасом. Всё, что меньше, приложение
+	# ограничивает само по каждому маршруту.
+	request_body {
+		max_size 1100MB
+	}
+
+	header {
+		# Только по HTTPS в течение года. Убедитесь, что домен больше не
+		# нужен по http, прежде чем оставлять это надолго.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		# Окна стола (лист, журнал, импорт) открываются во фреймах того же
+		# origin — стороннему сайту встроить стол нельзя.
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/beacon-table.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}

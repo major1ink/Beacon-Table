@@ -1,8 +1,18 @@
 package main
 
-import "runtime/debug"
+import (
+	"errors"
+	"fmt"
+	"runtime/debug"
+)
 
 var version string
+
+var errShowVersion = errors.New("--version")
+
+func printVersion() {
+	fmt.Println("beacon-table", serverVersion())
+}
 
 // serverVersion возвращает версию сервера: тег релиза, если бинарник собран
 // GoReleaser'ом, иначе — короткий hash текущего git-коммита.

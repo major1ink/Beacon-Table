@@ -7,7 +7,9 @@ package ws
 import (
 	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -15,13 +17,15 @@ import (
 	"beacon-table/internal/service"
 )
 
-var upgrader = websocket.Upgrader{
-	// В демо разрешаем любой origin — сам факт подключения ничего не даёт без
-	// валидной cookie сессии (см. sessionAccount в routes.go), она и есть
-	// настоящая граница авторизации, а не Origin-заголовок, которому легко
-	// соврать.
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
+const (
+	maxClientFrame = 1 << 20
+	writeWait      = 10 * time.Second
+)
+
+var (
+	pongWait  = 60 * time.Second
+	pingEvery = 15 * time.Second
+)
 
 // Client — одно WS-подключение; реализация service.RoomClient для
 // транспорта на базе gorilla/websocket. PlayerID/PlayerName заполнены для
@@ -59,12 +63,22 @@ func (c *Client) PlayerID() string { return c.playerID }
 // PlayerName implements service.RoomClient.
 func (c *Client) PlayerName() string { return c.playerName }
 
-func serveWs(room service.RoomService, w http.ResponseWriter, r *http.Request, role domain.ClientRole, playerID, playerName string) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *http.Request, role domain.ClientRole, playerID, playerName string) {
+	conn, err := gw.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("upgrade error:", err)
+		// Сюда же попадает отказ по Origin (см. checkOrigin): gorilla сам
+		// отвечает 403, мы дописываем адрес и Origin в журнал.
+		//
+		slog.Warn("отклонён WS-хендшейк", "origin", r.Header.Get("Origin"), "err", err)
 		return
 	}
+	// Соединение под присмотром Gateway до самого конца — иначе остановка
+	// сервера не смогла бы его закрыть (см. Gateway.CloseAll).
+	if !gw.track(conn) {
+		conn.Close() // сервер уже останавливается — подключаться некуда
+		return
+	}
+	defer gw.untrack(conn)
 
 	c := &Client{conn: conn, room: room, out: make(chan any, 16), role: role, playerID: playerID, playerName: playerName}
 	room.Join(c)
@@ -74,14 +88,34 @@ func serveWs(room service.RoomService, w http.ResponseWriter, r *http.Request, r
 }
 
 func (c *Client) writeLoop() {
-	defer c.conn.Close()
-	for v := range c.out {
-		b, err := json.Marshal(v)
-		if err != nil {
-			continue
-		}
-		if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {
-			return
+	ping := time.NewTicker(pingEvery)
+	defer func() {
+		ping.Stop()
+		c.conn.Close()
+	}()
+	for {
+		select {
+		case v, ok := <-c.out:
+			if !ok {
+				_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+				_ = c.conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				return
+			}
+			b, err := json.Marshal(v)
+			if err != nil {
+				continue
+			}
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {
+				return
+			}
+
+		case <-ping.C:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -91,11 +125,19 @@ func (c *Client) readLoop() {
 		c.room.Leave(c)
 		c.conn.Close()
 	}()
+
+	c.conn.SetReadLimit(maxClientFrame)
+	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+
 	for {
 		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
 			return
 		}
+		_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		msg, err := service.DecodeClientMsg(raw)
 		if err != nil {
 			log.Println("bad message:", err)

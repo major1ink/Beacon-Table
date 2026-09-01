@@ -21,7 +21,9 @@ import {
   deleteCharacterInventoryItem,
   fetchReferences,
   fetchPregen,
+  updateAdminPregen,
 } from "../api.js";
+import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -32,6 +34,7 @@ import { showAlert, openModal } from "../modal.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { createRollLog } from "../roll-log.js";
+import { isGM, isPlayer } from "../roles.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -179,6 +182,12 @@ let readOnly = false;
 // подзаголовок с именем игрока, баннер и то, какой из двух PUT-эндпоинтов
 // (свой/админский) дёргать при автосохранении, см. doSave().
 let isAdminView = false;
+// isPregenAdmin — ДМ правит заготовку из пула «Готовые персонажи»
+// (character-sheet.html?pregen=<id> под ролью admin, см. dm.js:
+// createPregenFlow). Полноценная правка листа, но персонажа ещё нет —
+// автосохранение уходит в updateAdminPregen, инвентаря и бросков нет.
+let isPregenAdmin = false;
+let pregenEditId = null;
 let rollWS = null;
 let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js); null во встроенном листе — там лог показывает стол
 
@@ -432,7 +441,7 @@ function personalityFields() {
 // не мержит патч — тот же принцип, что и у остального этого файла (sheet
 // правится через геттеры/сеттеры на месте, не иммутабельно). Затрагивает
 // поля почти всех 4 вкладок — после успеха перерисовываем всё.
-function applyLssFile(rawText, msgEl) {
+async function applyLssFile(rawText, msgEl) {
   msgEl.classList.remove("error", "ok");
   msgEl.textContent = "";
   let parsed;
@@ -446,8 +455,8 @@ function applyLssFile(rawText, msgEl) {
   const { name, warnings } = applyLssImport(sheet, parsed, isClassic());
   msgEl.textContent = `Импортировано${name ? `: «${name}»` : ""}.` + (warnings.length ? " " + warnings.join(" ") : "");
   msgEl.classList.add("ok");
-  scheduleSave();
   renderEditTabs();
+  await saveNow(); // сразу, не дожидаясь debounce — иначе теряется при быстром закрытии
 }
 
 function importSection() {
@@ -456,7 +465,7 @@ function importSection() {
   fileInput.addEventListener("change", async () => {
     const file = fileInput.files[0];
     if (!file) return;
-    applyLssFile(await file.text(), msg);
+    await applyLssFile(await file.text(), msg);
     fileInput.value = "";
   });
   const textarea = h("textarea", { placeholder: "...или вставь сюда содержимое JSON-файла экспорта", rows: 2 });
@@ -2240,16 +2249,46 @@ function scheduleSave() {
   saveTimer = setTimeout(doSave, 700);
 }
 
+// saveNow — сохранить немедленно, без debounce. Для разовых крупных правок
+// (импорт LSS): ждать 700мс незачем, а если окно закроют раньше — правка
+// терялась (fetch дебаунса умирает вместе с iframe, см. beaconFlush ниже).
+async function saveNow() {
+  if (readOnly) return;
+  clearTimeout(saveTimer);
+  dirty = true;
+  await doSave();
+}
+
+// saveInFlight — промис текущей записи на сервер (null, когда её нет).
+// beaconFlush ждёт именно его: dirty сбрасывается в начале doSave, так что
+// без этого закрытие окна в момент «уже шлём» убило бы запрос.
+let saveInFlight = null;
+
 async function doSave() {
   if (!dirty || readOnly) return;
   dirty = false;
   setSaveStatus("saving");
+  const p = isPregenAdmin
+    ? // Полная перезапись пре-гена — имя/аватар/метку модуля возвращаем как
+      // есть, правится только лист (имя/аватар заготовки — в панели ДМ).
+      updateAdminPregen(pregenEditId, {
+        name: character.name,
+        avatarUrl: character.avatarUrl || "",
+        foundryModuleId: character.source || "",
+        sheet,
+      })
+    : isAdminView
+      ? updateAdminCharacterSheet(charId, sheet)
+      : updateCharacterSheet(charId, sheet);
+  saveInFlight = p;
   try {
-    await (isAdminView ? updateAdminCharacterSheet(charId, sheet) : updateCharacterSheet(charId, sheet));
+    await p;
     setSaveStatus("saved");
   } catch (err) {
     dirty = true;
     setSaveStatus("error", err.message);
+  } finally {
+    if (saveInFlight === p) saveInFlight = null;
   }
 }
 
@@ -2261,10 +2300,20 @@ window.addEventListener("beforeunload", () => {
   }
 });
 
+// beaconFlush — floating-window.js зовёт это ПЕРЕД удалением iframe (см.
+// flushIframe там же). Удаление iframe не показывает beforeunload и убивает
+// его fetch на полпути, поэтому debounce-сейв (700мс) терялся, если лист
+// закрыть сразу после правки — заметнее всего на импорте LSS. Здесь ждём
+// завершения записи по-настоящему.
+window.beaconFlush = async () => {
+  clearTimeout(saveTimer);
+  if (dirty && !readOnly) await doSave();
+  if (saveInFlight) await saveInFlight.catch(() => {});
+};
+
 // ==================== dice rolls ====================
 
 function connectRollSocket() {
-  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   // /ws/player требует роль "player" (см. internal/api/ws/routes.go) — ДМ
   // туда просто не пустят, поэтому в режиме ДМ бросок идёт через /ws/dm
   // (авторизован ролью admin из той же cookie сессии). Сервер разрешает DM
@@ -2282,9 +2331,12 @@ function connectRollSocket() {
   if (!rollLog && !isEmbedded()) {
     rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
   }
-  rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
-  rollWS.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
+  // Сокет с переподключением — см. web/src/ws-reconnect.js. Листу это нужнее
+  // прочих окон: им же приезжают хиты, правленные ДМ в трекере, и лут из
+  // хаба. После обрыва цифры на бланке молча расходились бы с тем, что
+  // видит стол, до перезагрузки страницы.
+  rollWS = openSocket(isAdminView ? "/ws/dm" : "/ws/player", {
+    onMessage: (data) => {
     if (data.type === "roll_result") rollLog?.push(data);
     // Наложенные состояния этого персонажа (см. domain.AppliedStatus)
     // приезжают тем же сокетом в combat_state — сервер уже свёл их с токена
@@ -2324,17 +2376,18 @@ function connectRollSocket() {
       // обновлены, а увидит их бланк при следующем переключении режима.
       if (mode === "view") refreshView();
     }
-  };
+    },
+  });
 }
 
 function sendRoll(formula, label) {
-  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
+  if (!rollWS) return;
   // characterId — сервер сам подставит имя ПЕРСОНАЖА в общий лог вместо
   // логина игрока/роли "ДМ" сокета (см. room.go: handleRollDice/rollerName),
   // раз бросок сделан именно с его листа. Так лог всегда называет того, кто
   // за столом реально кидал кубик — даже когда открыто несколько листов
   // подряд или ДМ бросает за чужого персонажа.
-  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label, characterId: charId }));
+  rollWS.send({ type: "roll_dice", formula, label, characterId: charId });
 }
 
 // isEmbedded — лист открыт ВНУТРИ страницы стола: боковым доком
@@ -2361,9 +2414,10 @@ document.getElementById("closeBtn").onclick = () => {
   // вынесли кнопкой 🗗 в настоящее окно браузера (window.parent === window),
   // ведём себя как раньше.
   if (isEmbedded()) {
+    // Родитель сам дёрнет beaconFlush перед удалением iframe (floating-window.js).
     window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);
   } else {
-    window.close();
+    window.beaconFlush().finally(() => window.close());
   }
 };
 
@@ -2381,14 +2435,13 @@ function currentPregenId() {
 
 (async function boot() {
   me = await fetchMe();
-  if (!me || (me.role !== "player" && me.role !== "admin")) {
+  if (!me || (!isPlayer(me.role) && !isGM(me.role))) {
     location.href = "/";
     return;
   }
 
   const pregenId = currentPregenId();
   if (pregenId) {
-    readOnly = true;
     try {
       character = await fetchPregen(pregenId);
     } catch (err) {
@@ -2398,6 +2451,26 @@ function currentPregenId() {
     sheet = normalizeSheet(character.sheet);
     references = await fetchReferences().catch(() => []);
 
+    // ДМ открыл заготовку из пула — полноценная правка листа (шаблон
+    // скопируется игроку при «Назначить»). Инвентарь и броски заготовке
+    // недоступны — записи characters ещё нет.
+    if (isGM(me.role)) {
+      isPregenAdmin = true;
+      pregenEditId = pregenId;
+      document.getElementById("charTitle").textContent = character.name;
+      document.getElementById("charSub").textContent = "заготовка из пула — ещё не назначена игроку";
+      const banner = document.getElementById("readonlyBanner");
+      banner.textContent = "Заготовка «Готовые персонажи». Заполни лист заранее — при назначении игроку он скопируется ему.";
+      banner.classList.add("shown");
+      const tab5Btn = document.querySelector('.tab-btn[data-tab="5"]');
+      if (tab5Btn) tab5Btn.style.display = "none";
+      setMode("view");
+      document.getElementById("loadingHint").style.display = "none";
+      document.getElementById("app").classList.add("ready");
+      return;
+    }
+
+    readOnly = true;
     document.getElementById("charTitle").textContent = character.name;
     document.getElementById("charSub").textContent = "готовый персонаж приключения";
     const banner = document.getElementById("readonlyBanner");
@@ -2421,7 +2494,7 @@ function currentPregenId() {
     document.getElementById("loadingHint").textContent = "Не указан id персонажа (?id=...).";
     return;
   }
-  isAdminView = me.role === "admin";
+  isAdminView = isGM(me.role);
   try {
     character = isAdminView ? await fetchAdminCharacter(charId) : await fetchCharacter(charId);
   } catch (err) {

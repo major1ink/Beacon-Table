@@ -16,7 +16,15 @@ import { initShowcaseOverlay } from "../showcase-overlay.js";
 import {
   fetchMe,
   apiLogout,
+  stopActiveWorld,
   fetchVersion,
+  fetchBroadcastLink,
+  rotateBroadcastLink,
+  fetchServerSettings,
+  saveServerSettings,
+  fetchBroadcastRequests,
+  approveBroadcastRequest,
+  rejectBroadcastRequest,
   fetchAssets,
   uploadFile,
   createAssetFolder,
@@ -25,6 +33,8 @@ import {
   fetchAdminCharacters,
   updateAdminCharacter,
   fetchAdminPregens,
+  createAdminPregen,
+  updateAdminPregen,
   assignPregen,
   releasePregen,
   deleteAdminPregen,
@@ -52,18 +62,26 @@ import { icon } from "../icons.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
+import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabel } from "../roles.js";
 
 // ================= сессия ДМ =================
 // /ws/dm, /upload, /assets проверяют cookie сессии на сервере
 // (internal/api/http, internal/api/ws). Если сессии нет или роль не admin —
 // сразу уводим на страницу входа, до всякой попытки подключиться по WS.
 let vtt;
+// isDemoGuest — гость публичного демо. Стол ведёт наравне с ДМ, но сервером
+// не распоряжается (см. domain.AccountRoleDemo), поэтому кнопки, которые
+// всё равно получат 403, ему не показываем: неработающая кнопка хуже, чем
+// её отсутствие.
+let isDemoGuest = false;
 (async function boot() {
   const me = await fetchMe();
-  if (!me || me.role !== "admin") {
+  if (!me || !isGM(me.role)) {
     location.href = "/";
     return;
   }
+  isDemoGuest = isDemoRole(me.role);
+  if (isDemoGuest) hideOwnerOnlyUI();
   document.getElementById("dmUsername").textContent = me.username;
   // Всё остальное в этом файле — обычные top-level обработчики
   // (onclick/addEventListener), выполняются один раз при загрузке страницы
@@ -94,7 +112,9 @@ let vtt;
   // (пользователь кликает по только что открытым спискам/карточкам, это не
   // "мимо"), только своей кнопкой ✕ в шапке.
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
-  mountCompendiumMenu(compendiumPanel, { role: "dm" });
+  // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
+  // и пункт меню ему показывать незачем.
+  mountCompendiumMenu(compendiumPanel, { role: "dm", canImport: !isDemoGuest });
   // Оверлей «Показать игрокам» — на экране ДМ это предпросмотр того, что
   // видят игроки, плюс кнопка «✕» (шлёт hide_image всем, см.
   // web/src/showcase-overlay.js). Раздел рейла «Показ» — ниже по файлу.
@@ -134,9 +154,28 @@ function openJournalWindow(entryId, section) {
 
 document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
-document.getElementById("worldsBtn").onclick = () => {
+// hideOwnerOnlyUI — убрать со стола то, что доступно только хозяину сервера:
+// список миров, вкладки «Трансляция» и «Сервер» в настройках. Права на
+// сервере проверяет он сам (см. requireOwner), здесь — только внешний вид.
+function hideOwnerOnlyUI() {
+  document.getElementById("worldsBtn")?.remove();
+  // «Модули» тоже: список пакетов и импорт — за requireOwner, гость увидел
+  // бы пустую вкладку с ошибкой.
+  for (const tab of ["cast", "server", "modules"]) {
+    document.querySelector(`.set-tabs [data-settab="${tab}"]`)?.remove();
+    document.querySelector(`[data-settab-panel="${tab}"]`)?.remove();
+  }
+}
+
+// worldsBtn — уйти со стола в список миров. Явно гасим мир (stopActiveWorld):
+// стол закрывается, игроки отключаются, рестарт сервера не поднимет мир сам —
+// ДМ вернётся и выберет мир заново. Единственное место, где стол снимается;
+// сам заход на worlds.html его не трогает.
+document.getElementById("worldsBtn")?.addEventListener("click", async () => {
+  if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;
+  await stopActiveWorld().catch(() => {});
   location.href = "/worlds.html";
-};
+});
 
 // ================= выезжающая панель: реестр "открыть → подгрузить данные" =================
 // Разделы "Аккаунты"/"Плейлисты"/"Настроить сцену" регистрируют сюда коллбэк
@@ -189,6 +228,7 @@ const ASSET_KIND = "props";
 const assetsPanelSection = document.querySelector('.panel-section[data-panel="assets"]');
 const assetsBreadcrumb = document.getElementById("assetsBreadcrumb");
 const assetsGrid = document.getElementById("assetsGrid");
+const assetsStorage = document.getElementById("assetsStorage");
 let currentAssetFolder = ""; // "" — корень; иначе posix-путь "Огонь/Костры"
 
 function assetFolderName(path) {
@@ -222,6 +262,40 @@ function renderAssetsBreadcrumb() {
   });
 }
 
+// formatBytes — размер по-человечески, теми же словами, что сервер пишет в
+// сообщении об отказе (см. internal/quota: FormatSize).
+function formatBytes(n) {
+  if (!n || n <= 0) return "0 Б";
+  if (n < 1024) return n + " Б";
+  if (n < 1024 * 1024) return Math.round(n / 1024) + " КБ";
+  if (n < 1024 * 1024 * 1024) return Math.round(n / (1024 * 1024)) + " МБ";
+  return (n / (1024 * 1024 * 1024)).toFixed(1) + " ГБ";
+}
+
+// renderAssetsStorage — строка «занято X из Y». Показывается, только если
+// квота задана на сервере (см. BEACON_UPLOADS_QUOTA): без неё цифра ничего
+// не значит и только мешала бы.
+function renderAssetsStorage() {
+  const storage = latestAssets.storage;
+  if (!storage) {
+    assetsStorage.textContent = "";
+    assetsStorage.className = "assets-storage";
+    return;
+  }
+  // Показываем тот предел, к которому ближе: упрёмся мы именно в него.
+  const world = storage.worldLimit > 0 ? storage.worldUsed / storage.worldLimit : 0;
+  const total = storage.totalLimit > 0 ? storage.totalUsed / storage.totalLimit : 0;
+  const worldIsTighter = world >= total;
+  const used = worldIsTighter ? storage.worldUsed : storage.totalUsed;
+  const limit = worldIsTighter ? storage.worldLimit : storage.totalLimit;
+  const share = worldIsTighter ? world : total;
+
+  assetsStorage.textContent =
+    `Занято ${formatBytes(used)} из ${formatBytes(limit)}` + (worldIsTighter ? " (этот мир)" : " (весь сервер)");
+  assetsStorage.className =
+    "assets-storage" + (share >= 0.95 ? " full" : share >= 0.8 ? " low" : "");
+}
+
 function renderAssetsGrid() {
   // Папка могла исчезнуть (удалена в другой вкладке/сессии) — откатываемся
   // к корню, а не показываем вечно пустую сетку без выхода.
@@ -231,6 +305,7 @@ function renderAssetsGrid() {
     currentAssetFolder = "";
   }
   renderAssetsBreadcrumb();
+  renderAssetsStorage();
   assetsGrid.innerHTML = "";
 
   const prefix = currentAssetFolder ? currentAssetFolder + "/" : "";
@@ -562,6 +637,8 @@ const tokenMenuAddInitiativeBtn = document.getElementById("tokenMenuAddInitiativ
 const tokenMenuLootBtn = document.getElementById("tokenMenuLootBtn");
 const tokenMenuHiddenRow = document.getElementById("tokenMenuHiddenRow");
 const tokenMenuShapeRow = document.getElementById("tokenMenuShapeRow");
+const tokenMenuOwnerRow = document.getElementById("tokenMenuOwnerRow");
+const tokenMenuOwner = document.getElementById("tokenMenuOwner");
 const tokenMenuLightRow = document.getElementById("tokenMenuLightRow");
 const tokenMenuLightLabel = document.getElementById("tokenMenuLightLabel");
 const tokenMenuHidden = document.getElementById("tokenMenuHidden");
@@ -963,6 +1040,12 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLootBtn.style.display = !menuIsMulti && token.dead && menuTokenLoot.length ? "flex" : "none";
   tokenMenuHiddenRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
   tokenMenuShapeRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
+  // "Владелец" — привязать существующий токен к персонажу игрока задним
+  // числом (единственный путь после импорта мира, где персонажа надо было бы
+  // заново перетащить из панели). Не для токенов-лампочек и декораций.
+  const canOwn = !menuIsMulti && !menuIsLightOnly && !token.decor;
+  tokenMenuOwnerRow.style.display = canOwn ? "flex" : "none";
+  if (canOwn) fillTokenOwnerSelect(id, token);
   tokenMenuLightRow.style.display = menuIsLightOnly ? "none" : "flex";
   tokenMenuLightToggleBtn.style.display = menuIsLightOnly ? "flex" : "none";
   // У токена персонажа игрока свет — это не "токен-лампочка", а факел/фонарь
@@ -1097,6 +1180,61 @@ function closeCanvasMenu() {
   canvasMenu.style.display = "none";
   canvasMenuAt = null;
 }
+
+// fillTokenOwnerSelect — наполняет <select> "Владелец" персонажами мира
+// (GET /api/admin/characters). dmCharacters — общий кэш с панелью "Персонажи";
+// панель мог не открываться, поэтому дозапрашиваем и переотрисовываем, если
+// меню ещё висит на том же токене.
+function fillTokenOwnerSelect(id, token) {
+  const build = () => {
+    if (menuTokenId !== id || tokenMenu.style.display === "none") return;
+    const cur = token.characterId || "";
+    tokenMenuOwner.textContent = "";
+    tokenMenuOwner.add(new Option("— никто —", ""));
+    let matched = false;
+    for (const c of dmCharacters) {
+      const label = c.accountUsername ? `${c.name} (${c.accountUsername})` : c.name;
+      tokenMenuOwner.add(new Option(label, c.id, false, c.id === cur));
+      if (c.id === cur) matched = true;
+    }
+    if (!matched && (cur || token.ownerId)) {
+      const ghost = new Option("владелец не в этом мире", "__keep__", false, true);
+      ghost.disabled = true;
+      tokenMenuOwner.add(ghost);
+    }
+  };
+  build();
+  fetchAdminCharacters()
+    .then((list) => {
+      dmCharacters = list;
+      build();
+    })
+    .catch(() => {});
+}
+
+// sendTokenOwner — переназначить владельца существующего токена. Сервер
+// апсертит токен по id (move_token, только ДМ — см. room.go applyMutation).
+function sendTokenOwner(id, charId) {
+  if (charId === "__keep__") return; // "владелец не в этом мире" — не трогаем
+  const t = (vtt.getScene().tokens || {})[id];
+  if (!t) return;
+  let patch;
+  if (!charId) {
+    patch = { ownerId: "", characterId: "" };
+  } else {
+    const c = dmCharacters.find((x) => x.id === charId);
+    if (!c) return;
+    // назначение characterId, уже стоящего на карте другим токеном, снесёт
+    // тот токен (room.go: dropDuplicateCharacterTokens) — у персонажа один
+    // токен на сцене.
+    patch = { ownerId: c.accountId, characterId: c.id };
+  }
+  vtt.send({ type: "move_token", token: { ...t, ...patch } });
+}
+
+tokenMenuOwner.onchange = () => {
+  if (menuTokenId) sendTokenOwner(menuTokenId, tokenMenuOwner.value);
+};
 
 tokenMenuCopyBtn.onclick = () => {
   if (!menuTokenId) return;
@@ -1353,7 +1491,7 @@ async function renderAccounts() {
   for (const a of accs) {
     const row = document.createElement("div");
     row.className = "account-row";
-    const roleLabel = a.role === "admin" ? "ДМ" : "Игрок";
+    const roleLabel = accountRoleLabel(a.role);
     row.innerHTML = `
       <div class="account-top">
         <span class="account-name">${a.username}</span>
@@ -1431,11 +1569,42 @@ async function renderAccounts() {
 onPanelOpen("accounts", renderAccounts);
 
 // ================= раздел "Настройки" =================
-// Пока единственное поле — версия сервера (short commit hash, см.
-// cmd/beacon-table/version.go); раздел заведён отдельно от "Аккаунтов",
-// чтобы будущим общим настройкам приложения было куда встать, не мешая
+// Версия сервера (short commit hash, см. cmd/beacon-table/version.go),
+// ссылка на трансляцию и общие тумблеры приложения; раздел заведён отдельно
+// от "Аккаунтов", чтобы будущим общим настройкам было куда встать, не мешая
 // уже существующим разделам.
 onPanelOpen("settings", async () => {
+  await loadSettingsTab(activeSettingsTab);
+});
+
+// ---- вкладки раздела «Настройки» ----
+// Раздел собрал слишком разное: тумблеры стола, ссылку на трансляцию,
+// настройки сервера и список модулей. Одним списком это читается как свалка,
+// поэтому разложено по вкладкам, а данные грузятся только для открытой —
+// список модулей Foundry, например, незачем тянуть ради смены уровня журнала.
+const settingsTabButtons = [...document.querySelectorAll(".set-tabs button")];
+const settingsTabPanels = [...document.querySelectorAll(".set-tab-panel")];
+let activeSettingsTab = "table";
+
+async function loadSettingsTab(tab) {
+  switch (tab) {
+    case "cast":
+      await renderBroadcastLink();
+      await renderBroadcastRequests();
+      break;
+    case "server":
+      await renderServerSettings();
+      await renderAppVersion();
+      break;
+    case "modules":
+      await renderFoundryModules();
+      break;
+    default:
+      break; // «Стол» — тумблеры, они приходят со снапшотом сцены
+  }
+}
+
+async function renderAppVersion() {
   const el = document.getElementById("appVersion");
   try {
     const { version } = await fetchVersion();
@@ -1443,8 +1612,310 @@ onPanelOpen("settings", async () => {
   } catch {
     el.textContent = "неизвестна";
   }
-  await renderFoundryModules();
+}
+
+function switchSettingsTab(tab) {
+  activeSettingsTab = tab;
+  settingsTabButtons.forEach((b) => b.classList.toggle("active", b.dataset.settab === tab));
+  settingsTabPanels.forEach((p) => p.classList.toggle("active", p.dataset.settabPanel === tab));
+  loadSettingsTab(tab);
+}
+
+settingsTabButtons.forEach((btn) => {
+  btn.onclick = () => switchSettingsTab(btn.dataset.settab);
 });
+
+// ---- настройки сервера (раздел "Настройки") ----
+// Те же значения, что лежат в beacon.conf, но с подписями и проверкой (см.
+// internal/api/http/settings_handlers.go). Пути и порт показываются серыми:
+// это уровень машины, а не игры, и меняются они только в файле.
+const serverSettingsBox = document.getElementById("serverSettings");
+const serverSettingsMsg = document.getElementById("serverSettingsMsg");
+const serverSettingsSaveBtn = document.getElementById("serverSettingsSaveBtn");
+
+// serverSettingsInputs — key → поле формы; serverSettingsSaved — что было в
+// полях на момент отрисовки. Отправляем только изменённое: иначе сервер
+// пересохранял бы всё подряд и честно сообщал, что половине настроек нужен
+// перезапуск, хотя человек тронул одну.
+let serverSettingsInputs = new Map();
+let serverSettingsSaved = new Map();
+
+function settingField(setting) {
+  const wrap = document.createElement("div");
+  wrap.className = "srv-set" + (setting.editable ? "" : " readonly");
+
+  const title = document.createElement("div");
+  title.className = "srv-set-title";
+  title.textContent = setting.title;
+  wrap.appendChild(title);
+
+  let input;
+  if (setting.kind === "bool" || setting.kind === "enum") {
+    input = document.createElement("select");
+    const options = setting.kind === "bool" ? ["true", "false"] : setting.options || [];
+    for (const value of options) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = setting.kind === "bool" ? (value === "true" ? "включено" : "выключено") : value;
+      input.appendChild(opt);
+    }
+    input.value = setting.value;
+  } else {
+    input = document.createElement("input");
+    input.type = "text";
+    input.value = setting.value;
+  }
+  input.disabled = !setting.editable;
+  wrap.appendChild(input);
+  if (setting.editable) serverSettingsInputs.set(setting.key, input);
+
+  if (setting.hint) {
+    const hint = document.createElement("div");
+    hint.className = "srv-set-hint";
+    hint.textContent = setting.hint;
+    wrap.appendChild(hint);
+  }
+  if (setting.locked) {
+    const locked = document.createElement("div");
+    locked.className = "srv-set-locked";
+    locked.textContent = setting.locked;
+    wrap.appendChild(locked);
+  }
+  return wrap;
+}
+
+// SETTINGS_GROUP_ORDER — порядок групп в форме. То, что можно менять, идёт
+// сверху; пути и порт — в конец, они только для чтения, и упираться в них
+// первым делом незачем.
+const SETTINGS_GROUP_ORDER = ["Доступ", "Резервное копирование", "Журнал", "Место под загрузки", "Пути и порт"];
+
+// SETTINGS_GROUP_NOTES — пояснение на всю группу. Пишем его один раз сверху,
+// а не пометкой под каждым полем: под четырьмя строками подряд одно и то же
+// предупреждение читается как ошибка, а не как объяснение.
+const SETTINGS_GROUP_NOTES = {
+  "Пути и порт": "Меняются только в файле beacon.conf или флагом запуска — на сервере это уровень машины, а не игры.",
+};
+
+function drawServerSettings(settings) {
+  serverSettingsInputs = new Map();
+  serverSettingsSaved = new Map();
+  serverSettingsBox.replaceChildren();
+
+  // Группируем по секции, а не по соседству в списке: в файле настройки
+  // идут в своём порядке (каталог бэкапов стоит рядом с бэкапами), и
+  // «подряд идущие» дали бы одну и ту же группу дважды.
+  const groups = new Map();
+  for (const setting of settings) {
+    if (!groups.has(setting.section)) groups.set(setting.section, []);
+    groups.get(setting.section).push(setting);
+    if (setting.editable) serverSettingsSaved.set(setting.key, setting.value);
+  }
+
+  const order = [
+    ...SETTINGS_GROUP_ORDER.filter((g) => groups.has(g)),
+    ...[...groups.keys()].filter((g) => !SETTINGS_GROUP_ORDER.includes(g)),
+  ];
+  for (const name of order) {
+    const groupBox = document.createElement("div");
+    groupBox.className = "set-group";
+
+    const title = document.createElement("div");
+    title.className = "set-group-title";
+    title.textContent = name;
+    groupBox.appendChild(title);
+
+    const note = SETTINGS_GROUP_NOTES[name];
+    if (note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "set-group-note";
+      noteEl.textContent = note;
+      groupBox.appendChild(noteEl);
+    }
+    for (const setting of groups.get(name)) groupBox.appendChild(settingField(setting));
+    serverSettingsBox.appendChild(groupBox);
+  }
+}
+
+async function renderServerSettings() {
+  try {
+    drawServerSettings((await fetchServerSettings()) || []);
+    serverSettingsMsg.textContent = "";
+  } catch (e) {
+    serverSettingsBox.replaceChildren();
+    serverSettingsMsg.textContent = e.message || "не удалось прочитать настройки";
+  }
+}
+
+serverSettingsSaveBtn.onclick = async () => {
+  const values = {};
+  for (const [key, input] of serverSettingsInputs) {
+    const value = input.value.trim();
+    if (value !== serverSettingsSaved.get(key)) values[key] = value;
+  }
+  if (Object.keys(values).length === 0) {
+    serverSettingsMsg.textContent = "Менять нечего — ничего не изменилось.";
+    return;
+  }
+
+  serverSettingsSaveBtn.disabled = true;
+  try {
+    const res = await saveServerSettings(values);
+    drawServerSettings(res.settings || []);
+    // Часть настроек применяется сразу, часть — только при следующем
+    // запуске; говорим прямо, какие именно, чтобы «не подействовало» не
+    // выглядело поломкой.
+    const restart = res.needRestart || [];
+    serverSettingsMsg.textContent = restart.length
+      ? "Сохранено. Вступит в силу после перезапуска сервера: " + restart.join(", ")
+      : "Сохранено и уже действует.";
+  } catch (e) {
+    serverSettingsMsg.textContent = e.message || "не удалось сохранить";
+  } finally {
+    serverSettingsSaveBtn.disabled = false;
+  }
+};
+
+// ---- ссылка на трансляцию (раздел "Настройки") ----
+// Адрес с ключом, по которому телевизор получает доступ к столу без аккаунта
+// (см. internal/service/broadcast.go). Перевыпуск отключает все экраны разом,
+// поэтому спрашиваем подтверждение.
+const broadcastLinkInput = document.getElementById("broadcastLink");
+const broadcastCopyBtn = document.getElementById("broadcastCopyBtn");
+const broadcastRotateBtn = document.getElementById("broadcastRotateBtn");
+
+async function renderBroadcastLink() {
+  try {
+    const { url } = await fetchBroadcastLink();
+    broadcastLinkInput.value = url;
+  } catch {
+    broadcastLinkInput.value = "не удалось получить ссылку";
+  }
+}
+
+broadcastCopyBtn.onclick = async () => {
+  const url = broadcastLinkInput.value;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    // Буфер обмена недоступен (не защищённое соединение, отказ в правах) —
+    // выделяем текст, чтобы ссылку можно было скопировать вручную.
+    broadcastLinkInput.select();
+    return;
+  }
+  const label = broadcastCopyBtn.textContent;
+  broadcastCopyBtn.textContent = "Скопировано";
+  setTimeout(() => {
+    broadcastCopyBtn.textContent = label;
+  }, 1500);
+};
+
+// ---- экраны, ожидающие подтверждения (раздел "Настройки") ----
+// Второй путь для телевизора: ссылку с ключом на нём не набрать, поэтому
+// экран открывает /broadcast.html как есть, показывает код и ждёт здесь (см.
+// internal/service/broadcast_requests.go). ДМ сверяет код с тем, что горит на
+// экране, и пускает.
+const broadcastRequestsBox = document.getElementById("broadcastRequests");
+const settingsRailBtn = document.getElementById("settingsBtn");
+
+// BROADCAST_REQUESTS_POLL_MS — опрос идёт всё время, пока открыт стол: ДМ
+// узнаёт о ждущем экране по точке на иконке «Настройки», не открывая раздел.
+// Пять секунд — человек у телевизора не успевает решить, что не работает.
+const BROADCAST_REQUESTS_POLL_MS = 5000;
+
+function formatRequestAge(iso) {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return "только что";
+  const minutes = Math.round(seconds / 60);
+  return minutes + " мин назад";
+}
+
+function drawBroadcastRequests(requests) {
+  broadcastRequestsBox.replaceChildren();
+  if (!requests.length) {
+    const empty = document.createElement("div");
+    empty.className = "bcast-req-empty";
+    empty.textContent = "Сейчас никто не ждёт.";
+    broadcastRequestsBox.appendChild(empty);
+    return;
+  }
+  for (const req of requests) {
+    const card = document.createElement("div");
+    card.className = "bcast-req";
+
+    const code = document.createElement("div");
+    code.className = "bcast-req-code";
+    code.textContent = req.code;
+
+    const meta = document.createElement("div");
+    meta.className = "bcast-req-meta";
+    meta.textContent = `${req.remoteAddr} · ${formatRequestAge(req.createdAt)}`;
+
+    const buttons = document.createElement("div");
+    buttons.className = "row-inline";
+
+    const approve = document.createElement("button");
+    approve.type = "button";
+    approve.textContent = "Пустить";
+    approve.onclick = async () => {
+      approve.disabled = true;
+      try {
+        await approveBroadcastRequest(req.id);
+      } catch (e) {
+        showAlert(e.message || "не удалось пустить экран");
+      }
+      await renderBroadcastRequests();
+    };
+
+    const reject = document.createElement("button");
+    reject.type = "button";
+    reject.textContent = "Отклонить";
+    reject.onclick = async () => {
+      reject.disabled = true;
+      try {
+        await rejectBroadcastRequest(req.id);
+      } catch {
+        /* заявка уже неактуальна — список всё равно перечитаем */
+      }
+      await renderBroadcastRequests();
+    };
+
+    buttons.append(approve, reject);
+    card.append(code, meta, buttons);
+    broadcastRequestsBox.appendChild(card);
+  }
+}
+
+async function renderBroadcastRequests() {
+  let requests = [];
+  try {
+    requests = (await fetchBroadcastRequests()) || [];
+  } catch {
+    return; // не мешаем работе стола из-за упавшего опроса
+  }
+  // Точка на иконке рейла — единственный способ узнать о ждущем экране, не
+  // открывая раздел; ДМ во время игры смотрит на карту, а не в настройки.
+  settingsRailBtn.classList.toggle("has-badge", requests.length > 0);
+  // Раздел закрыт — перерисовывать нечего, но точку выше обновить надо было.
+  if (!broadcastRequestsBox.offsetParent) return;
+  drawBroadcastRequests(requests);
+}
+
+setInterval(renderBroadcastRequests, BROADCAST_REQUESTS_POLL_MS);
+renderBroadcastRequests();
+
+broadcastRotateBtn.onclick = async () => {
+  const ok = await showConfirm(
+    "Все экраны, открытые по прежней ссылке, потеряют доступ к столу. Чтобы вернуть их, нужно будет открыть на каждом новую ссылку.",
+    { title: "Перевыпустить ссылку трансляции?", okLabel: "Перевыпустить", danger: true },
+  );
+  if (!ok) return;
+  try {
+    const { url } = await rotateBroadcastLink();
+    broadcastLinkInput.value = url;
+  } catch (e) {
+    showAlert(e.message || "не удалось перевыпустить ссылку");
+  }
+};
 
 // ---- модули Foundry VTT (раздел "Настройки") ----
 // Список того, что ДМ хотя бы раз импортировал в этот мир (см.
@@ -1633,6 +2104,10 @@ const dmCharEditMsg = document.getElementById("dmCharEditMsg");
 let dmCharacters = []; // [{id, accountId, accountUsername, name, avatarUrl}] — кэш для drag&drop-постановки на карту
 let dmCharEditingId = null;
 let dmCharPendingAvatarUrl = "";
+// dmCharEditPregen — если правится заготовка из пула «Готовые персонажи», а не
+// персонаж игрока: полный объект пре-гена (нужен его лист/модуль при
+// перезаписи через updateAdminPregen). null — обычная правка персонажа игрока.
+let dmCharEditPregen = null;
 
 // showDmCharAvatarPreview — isVideoUrl уже есть чуть ниже в этом же файле
 // (библиотека токен-арта переиспользует ту же проверку по расширению).
@@ -1656,12 +2131,14 @@ function showDmCharAvatarPreview(url) {
 
 function closeDmCharEditForm() {
   dmCharEditingId = null;
+  dmCharEditPregen = null;
   dmCharEditForm.style.display = "none";
   dmCharEditMsg.textContent = "";
 }
 
 function openDmCharEditForm(c) {
   dmCharEditingId = c.id;
+  dmCharEditPregen = null;
   dmCharPendingAvatarUrl = c.avatarUrl || "";
   dmCharEditName.value = c.name;
   dmCharEditAvatarUpload.value = "";
@@ -1670,101 +2147,121 @@ function openDmCharEditForm(c) {
   dmCharEditForm.style.display = "block";
 }
 
-// renderDmPregenSection — секция «Готовые персонажи» в панели «Персонажи»:
-// пул предгенерированных листов мира из импортированного приключения (см.
-// internal/domain/pregen.go). ДМ видит статус занятости, назначает пре-гена
-// аккаунту игрока, возвращает в пул или убирает из пула. Полный лист до
-// захвата не показываем (в characters его ещё нет) — после назначения он
-// открывается обычной кнопкой у персонажа игрока ниже.
-async function renderDmPregenSection() {
-  let pregens = [];
+// openDmPregenEditForm — та же форма «Имя / аватар», но для свободной
+// заготовки из пула: сохранение уходит в updateAdminPregen (полная
+// перезапись — лист и метку модуля берём из самого пре-гена).
+function openDmPregenEditForm(p) {
+  dmCharEditingId = p.id;
+  dmCharEditPregen = p;
+  dmCharPendingAvatarUrl = p.avatarUrl || "";
+  dmCharEditName.value = p.name;
+  dmCharEditAvatarUpload.value = "";
+  showDmCharAvatarPreview(p.avatarUrl || "");
+  dmCharEditMsg.textContent = "";
+  dmCharEditForm.style.display = "block";
+}
+
+// createPregenFlow — ДМ заводит заготовку персонажа заранee (до того, как
+// игрок вообще появился): пустой пре-ген по имени, затем сразу открываем его
+// лист для заполнения. Дальше — «Назначить» аккаунту игрока, как у
+// импортированных из Foundry.
+async function createPregenFlow() {
+  const name = await showPrompt("Имя персонажа:", { title: "Новый готовый персонаж", okLabel: "Создать" });
+  if (!name || !name.trim()) return;
+  let created;
   try {
-    pregens = await fetchAdminPregens();
-  } catch {
-    return; // нет пула — секции просто нет
+    created = await createAdminPregen(name.trim());
+  } catch (err) {
+    showAlert("Не удалось создать: " + err.message);
+    return;
   }
-  if (!pregens.length) return;
+  await renderDmCharacters();
+  openFloatingWindow({ key: "pregen-" + created.id, title: created.name, url: `/character-sheet.html?pregen=${created.id}` });
+}
 
-  const group = document.createElement("div");
-  group.className = "dmchar-owner-group";
-  group.textContent = "Готовые персонажи";
-  dmCharactersList.appendChild(group);
+// pregenPoolRow — строка ещё не назначенной заготовки (см. internal/domain/pregen.go):
+// открыть/заполнить лист, поправить имя-аватар, назначить игроку, убрать.
+// orphan — заготовку кто-то брал, но своего персонажа игрок удалил: назначить
+// нельзя (Claim вернёт 409), поэтому вместо «назначить» — «вернуть в пул».
+function pregenPoolRow(p) {
+  const orphan = !!p.claimedBy;
+  const row = document.createElement("div");
+  row.className = "dmchar-row dmchar-row--pregen";
 
-  for (const p of pregens) {
-    const row = document.createElement("div");
-    row.className = "dmchar-row dmchar-row--pregen";
-    const avatar = document.createElement("div");
-    avatar.className = "dmchar-avatar";
-    if (p.avatarUrl) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
-    else avatar.textContent = "—";
-    const name = document.createElement("div");
-    name.className = "dmchar-name";
-    const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
-    name.innerHTML = `${p.name}<div style="font-size:11px;opacity:0.55;">${
-      p.claimedBy ? `у ${p.claimedByUsername || "игрока"}` : "свободен"
-    }${sub ? ` · ${sub}` : ""}</div>`;
-    row.append(avatar, name);
+  const avatar = document.createElement("div");
+  avatar.className = "dmchar-avatar";
+  if (p.avatarUrl) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+  else avatar.textContent = "—";
 
-    const sheetBtn = document.createElement("button");
-    sheetBtn.className = "icon-btn";
-    sheetBtn.innerHTML = icon("scroll", { size: 14 });
-    sheetBtn.title = p.claimedBy ? "Лист персонажа игрока" : "Посмотреть лист (без назначения)";
-    sheetBtn.onclick = () =>
-      openFloatingWindow({
-        key: p.claimedCharacterId ? "char-" + p.claimedCharacterId : "pregen-" + p.id,
-        title: p.name,
-        url: p.claimedCharacterId
-          ? `/character-sheet.html?id=${p.claimedCharacterId}`
-          : `/character-sheet.html?pregen=${p.id}`,
-      });
-    row.appendChild(sheetBtn);
+  const name = document.createElement("div");
+  name.className = "dmchar-name";
+  const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+  // «заготовка» в каждой строке — чтобы её не путали с настоящим персонажем
+  // игрока, у которого может быть такое же имя (заготовка — это шаблон листа,
+  // персонажа из неё ещё не создали).
+  const status = orphan ? `заготовка · игрок ${p.claimedByUsername || ""} удалил персонажа` : "заготовка · свободна";
+  name.innerHTML = `${p.name}<div style="font-size:11px;opacity:0.55;">${status}${sub ? ` · ${sub}` : ""}</div>`;
+  row.append(avatar, name);
 
-    if (p.claimedBy) {
-      const releaseBtn = document.createElement("button");
-      releaseBtn.className = "icon-btn";
-      releaseBtn.innerHTML = icon("chevron-left", { size: 14 });
-      releaseBtn.title = "Вернуть в пул (персонаж игрока останется у него)";
-      releaseBtn.onclick = async () => {
-        try {
-          await releasePregen(p.id);
-          await renderDmCharacters();
-        } catch (err) {
-          showAlert("Не удалось вернуть в пул: " + err.message);
-        }
-      };
-      row.appendChild(releaseBtn);
-    } else {
-      const assignBtn = document.createElement("button");
-      assignBtn.className = "icon-btn";
-      assignBtn.innerHTML = icon("user", { size: 14 });
-      assignBtn.title = "Назначить готового персонажа аккаунту игрока";
-      assignBtn.onclick = () => assignPregenFlow(p);
-      row.appendChild(assignBtn);
-    }
+  const sheetBtn = document.createElement("button");
+  sheetBtn.className = "icon-btn";
+  sheetBtn.innerHTML = icon("scroll", { size: 14 });
+  sheetBtn.title = "Открыть лист заготовки (можно править)";
+  sheetBtn.onclick = () => openFloatingWindow({ key: "pregen-" + p.id, title: p.name, url: `/character-sheet.html?pregen=${p.id}` });
+  row.appendChild(sheetBtn);
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "icon-btn";
-    delBtn.innerHTML = icon("trash", { size: 14 });
-    delBtn.title = "Убрать из пула";
-    delBtn.onclick = async () => {
-      if (!(await showConfirm(`Убрать «${p.name}» из пула готовых персонажей?`, { title: "Убрать из пула", okLabel: "Убрать", danger: true }))) return;
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.innerHTML = icon("pencil", { size: 14 });
+  editBtn.title = "Имя / аватар";
+  editBtn.onclick = () => openDmPregenEditForm(p);
+  row.appendChild(editBtn);
+
+  if (orphan) {
+    const releaseBtn = document.createElement("button");
+    releaseBtn.className = "icon-btn";
+    releaseBtn.innerHTML = icon("chevron-left", { size: 14 });
+    releaseBtn.title = "Снять пометку занятости — заготовка снова свободна для назначения";
+    releaseBtn.onclick = async () => {
       try {
-        await deleteAdminPregen(p.id);
+        await releasePregen(p.id);
         await renderDmCharacters();
       } catch (err) {
-        showAlert("Не удалось убрать: " + err.message);
+        showAlert("Не удалось: " + err.message);
       }
     };
-    row.appendChild(delBtn);
-    dmCharactersList.appendChild(row);
+    row.appendChild(releaseBtn);
+  } else {
+    const assignBtn = document.createElement("button");
+    assignBtn.className = "icon-btn";
+    assignBtn.innerHTML = icon("user", { size: 14 });
+    assignBtn.title = "Назначить аккаунту игрока";
+    assignBtn.onclick = () => assignPregenFlow(p);
+    row.appendChild(assignBtn);
   }
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.innerHTML = icon("trash", { size: 14 });
+  delBtn.title = "Удалить заготовку";
+  delBtn.onclick = async () => {
+    if (!(await showConfirm(`Удалить заготовку «${p.name}»?`, { title: "Удалить заготовку", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deleteAdminPregen(p.id);
+      await renderDmCharacters();
+    } catch (err) {
+      showAlert("Не удалось удалить: " + err.message);
+    }
+  };
+  row.appendChild(delBtn);
+  return row;
 }
 
 // assignPregenFlow — выбор аккаунта игрока и назначение пре-гена ему.
 async function assignPregenFlow(pregen) {
   let accounts = [];
   try {
-    accounts = (await fetchAdminAccounts()).filter((a) => a.role === "player" && a.status === "active");
+    accounts = (await fetchAdminAccounts()).filter((a) => isPlayer(a.role) && a.status === "active");
   } catch (err) {
     showAlert("Не удалось загрузить список игроков: " + err.message);
     return;
@@ -1805,23 +2302,131 @@ async function assignPregenFlow(pregen) {
   }
 }
 
+// assignedCharRow — строка назначенного персонажа (у конкретного игрока).
+// Перетаскивается на карту (ставит токен). pregen — заготовка, из которой он
+// создан (если есть): подпись «из заготовки «…»» + кнопка «отвязать» (удаляет
+// этого персонажа и возвращает заготовку в «Не назначенные»).
+function assignedCharRow(c, pregen) {
+  const row = document.createElement("div");
+  row.className = "dmchar-row";
+  row.draggable = true;
+  row.title = "Перетащи на карту, чтобы поставить токен";
+  // vtt:tokenContextMenu и остальной drag внутри канваса используют
+  // свои DOM-обработчики — свой тип данных не пересекается с ними, и
+  // preventDefault на dragover (см. ниже) не даёт браузеру попытаться
+  // "открыть" перетаскиваемый текст как ссылку/файл.
+  row.addEventListener("dragstart", (e) => {
+    e.dataTransfer.setData("application/x-beacon-character", c.id);
+    e.dataTransfer.effectAllowed = "copy";
+  });
+  const handle = document.createElement("span");
+  handle.className = "drag-handle";
+  handle.innerHTML = icon("grip-vertical", { size: 14 });
+  const avatar = document.createElement("div");
+  avatar.className = "dmchar-avatar";
+  if (c.avatarUrl) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
+  else avatar.textContent = "—";
+  const name = document.createElement("div");
+  name.className = "dmchar-name";
+  if (pregen) name.innerHTML = `${c.name}<div style="font-size:11px;opacity:0.55;">из заготовки «${pregen.name}»</div>`;
+  else name.textContent = c.name;
+  const sheetBtn = document.createElement("button");
+  sheetBtn.className = "icon-btn";
+  sheetBtn.innerHTML = icon("scroll", { size: 14 });
+  sheetBtn.title = "Лист персонажа";
+  sheetBtn.onclick = () => openFloatingWindow({ key: "char-" + c.id, title: c.name, url: `/character-sheet.html?id=${c.id}` });
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.innerHTML = icon("pencil", { size: 14 });
+  editBtn.title = "Имя / аватар";
+  editBtn.onclick = () => openDmCharEditForm(c);
+  row.append(handle, avatar, name, sheetBtn, editBtn);
+  if (pregen) {
+    const unassignBtn = document.createElement("button");
+    unassignBtn.className = "icon-btn";
+    unassignBtn.innerHTML = icon("chevron-left", { size: 14 });
+    unassignBtn.title = "Отвязать: удалить этого персонажа у игрока, заготовка вернётся в «Не назначенные»";
+    unassignBtn.onclick = async () => {
+      const who = c.accountUsername ? ` у ${c.accountUsername}` : "";
+      if (!(await showConfirm(`Отвязать «${c.name}»${who}? Персонаж будет удалён, заготовка «${pregen.name}» вернётся в «Не назначенные».`, { title: "Отвязать персонажа", okLabel: "Отвязать", danger: true }))) return;
+      try {
+        await releasePregen(pregen.id);
+        await renderDmCharacters();
+      } catch (err) {
+        showAlert("Не удалось отвязать: " + err.message);
+      }
+    };
+    row.append(unassignBtn);
+  }
+  return row;
+}
+
+// renderDmCharacters — панель «Персонажи»: сверху ещё не назначенные заготовки
+// (пул мира, см. internal/domain/pregen.go) + кнопка «Создать», ниже —
+// назначенные персонажи, сгруппированные по игрокам. Одна заготовка при
+// назначении превращается в обычного персонажа игрока (Claim), поэтому в
+// верхнем блоке остаются только свободные.
 async function renderDmCharacters() {
+  let pregens = [];
   try {
-    dmCharacters = await fetchAdminCharacters();
+    [dmCharacters, pregens] = await Promise.all([fetchAdminCharacters(), fetchAdminPregens().catch(() => [])]);
   } catch (err) {
     dmCharactersList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
     return;
   }
   closeDmCharEditForm();
   dmCharactersList.innerHTML = "";
-  await renderDmPregenSection();
+
+  const charById = new Map(dmCharacters.map((c) => [c.id, c]));
+  const pregenForChar = new Map(); // id персонажа игрока -> заготовка, из которой он создан
+  const pool = []; // заготовки для блока «Не назначенные»
+  for (const p of pregens) {
+    if (p.claimedBy && p.claimedCharacterId && charById.has(p.claimedCharacterId)) pregenForChar.set(p.claimedCharacterId, p);
+    else pool.push(p); // свободна, либо игрок удалил взятого персонажа
+  }
+
+  // ── Не назначенные ──
+  const poolHead = document.createElement("div");
+  poolHead.className = "dmchar-section";
+  poolHead.textContent = "Не назначенные персонажи";
+  dmCharactersList.appendChild(poolHead);
+
+  const addRow = document.createElement("div");
+  addRow.className = "dmchar-row dmchar-row--pregen";
+  const addBtn = document.createElement("button");
+  addBtn.className = "tool-btn";
+  addBtn.style.cssText = "width:100%;justify-content:center;gap:6px;";
+  addBtn.innerHTML = icon("plus", { size: 14 }) + "<span>Создать персонажа</span>";
+  addBtn.title = "Завести заготовку заранее — потом назначить игроку";
+  addBtn.onclick = createPregenFlow;
+  addRow.appendChild(addBtn);
+  dmCharactersList.appendChild(addRow);
+
+  if (pool.length) {
+    for (const p of pool) dmCharactersList.appendChild(pregenPoolRow(p));
+  } else {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.style.cssText = "margin:2px 2px 8px;font-size:11px;";
+    hint.textContent = "Свободных заготовок нет.";
+    dmCharactersList.appendChild(hint);
+  }
+
+  // ── Назначенные ──
+  const assignedHead = document.createElement("div");
+  assignedHead.className = "dmchar-section";
+  assignedHead.textContent = "Назначенные персонажи";
+  dmCharactersList.appendChild(assignedHead);
+
   if (dmCharacters.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "hint";
-    empty.textContent = "Персонажей у игроков пока нет — они заводят их сами или берут готового из пула выше.";
-    dmCharactersList.appendChild(empty);
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.style.cssText = "margin:2px 2px 4px;font-size:11px;";
+    hint.textContent = "Пока никому не назначено — назначь заготовку выше или игроки заведут своих.";
+    dmCharactersList.appendChild(hint);
     return;
   }
+
   const byAccount = new Map();
   for (const c of dmCharacters) {
     if (!byAccount.has(c.accountUsername)) byAccount.set(c.accountUsername, []);
@@ -1830,44 +2435,9 @@ async function renderDmCharacters() {
   for (const [username, chars] of byAccount) {
     const group = document.createElement("div");
     group.className = "dmchar-owner-group";
-    group.textContent = username;
+    group.textContent = username || "без аккаунта";
     dmCharactersList.appendChild(group);
-    for (const c of chars) {
-      const row = document.createElement("div");
-      row.className = "dmchar-row";
-      row.draggable = true;
-      row.title = "Перетащи на карту, чтобы поставить токен";
-      // vtt:tokenContextMenu и остальной drag внутри канваса используют
-      // свои DOM-обработчики — свой тип данных не пересекается с ними, и
-      // preventDefault на dragover (см. ниже) не даёт браузеру попытаться
-      // "открыть" перетаскиваемый текст как ссылку/файл.
-      row.addEventListener("dragstart", (e) => {
-        e.dataTransfer.setData("application/x-beacon-character", c.id);
-        e.dataTransfer.effectAllowed = "copy";
-      });
-      const handle = document.createElement("span");
-      handle.className = "drag-handle";
-      handle.innerHTML = icon("grip-vertical", { size: 14 });
-      const avatar = document.createElement("div");
-      avatar.className = "dmchar-avatar";
-      if (c.avatarUrl) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
-      else avatar.textContent = "—";
-      const name = document.createElement("div");
-      name.className = "dmchar-name";
-      name.textContent = c.name;
-      const sheetBtn = document.createElement("button");
-      sheetBtn.className = "icon-btn";
-      sheetBtn.innerHTML = icon("scroll", { size: 14 });
-      sheetBtn.title = "Лист персонажа";
-      sheetBtn.onclick = () => openFloatingWindow({ key: "char-" + c.id, title: c.name, url: `/character-sheet.html?id=${c.id}` });
-      const editBtn = document.createElement("button");
-      editBtn.className = "icon-btn";
-      editBtn.innerHTML = icon("pencil", { size: 14 });
-      editBtn.title = "Имя / аватар";
-      editBtn.onclick = () => openDmCharEditForm(c);
-      row.append(handle, avatar, name, sheetBtn, editBtn);
-      dmCharactersList.appendChild(row);
-    }
+    for (const c of chars) dmCharactersList.appendChild(assignedCharRow(c, pregenForChar.get(c.id)));
   }
 }
 onPanelOpen("characters", renderDmCharacters);
@@ -1892,7 +2462,17 @@ document.getElementById("dmCharEditSaveBtn").onclick = async () => {
     return;
   }
   try {
-    await updateAdminCharacter(dmCharEditingId, name, dmCharPendingAvatarUrl);
+    if (dmCharEditPregen) {
+      // Полная перезапись пре-гена — лист и метку модуля не трогаем.
+      await updateAdminPregen(dmCharEditingId, {
+        name,
+        avatarUrl: dmCharPendingAvatarUrl,
+        foundryModuleId: dmCharEditPregen.source || "",
+        sheet: dmCharEditPregen.sheet,
+      });
+    } else {
+      await updateAdminCharacter(dmCharEditingId, name, dmCharPendingAvatarUrl);
+    }
     await renderDmCharacters();
   } catch (err) {
     dmCharEditMsg.textContent = err.message;
@@ -2912,6 +3492,9 @@ document.addEventListener("vtt:hubState", (e) => {
 
 initItemPicker(document.getElementById("lootHubPicker"), {
   onPick: (item, qty) => vtt.send({ type: "hub_add_item", itemId: item.id, quantity: qty }),
+  // Вшитый каталог прячем, пока в "Настройках" не включён показ встроенных
+  // карточек (см. showBuiltinCardsToggle) — геттер, чекбокс синкается сервером.
+  excludeBuiltin: () => !document.getElementById("showBuiltinCardsToggle").checked,
 });
 
 onPanelOpen("loot", renderLootHub);
@@ -3011,6 +3594,28 @@ document.addEventListener("vtt:combatState", (e) => {
 });
 combatHighlightActiveToggle.onchange = () => {
   vtt.send({ type: "set_highlight_active_token", highlightActiveToken: combatHighlightActiveToggle.checked });
+};
+
+// showBuiltinCardsToggle / hideLightMarkersToggle — тот же приём: общие тумблеры
+// стола, значение приходит внутри "combat_state" (см. domain.CombatState.
+// ShowBuiltinCards / HideLightMarkers, service.combatPayload). showBuiltinCards
+// правит дерево справочника и пикеры (compendium-menu.js, combat-panel.js,
+// status-palette.js, item-picker хаба лута ниже); hideLightMarkers долетает до
+// слоя токенов через vtt/index.js (см. vtt:combatState там).
+const showBuiltinCardsToggle = document.getElementById("showBuiltinCardsToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  showBuiltinCardsToggle.checked = !!e.detail.showBuiltinCards;
+});
+showBuiltinCardsToggle.onchange = () => {
+  vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
+};
+
+const hideLightMarkersToggle = document.getElementById("hideLightMarkersToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  hideLightMarkersToggle.checked = e.detail.hideLightMarkers !== false;
+});
+hideLightMarkersToggle.onchange = () => {
+  vtt.send({ type: "set_hide_light_markers", hideLightMarkers: hideLightMarkersToggle.checked });
 };
 
 // "🗗 Открыть в окне" — тот же приём, что у журнала (openJournalWindow): вся

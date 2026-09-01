@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/quota"
 )
 
 // knownKinds — подпапки, которые реально изолируются от общей "плоской"
@@ -37,12 +38,15 @@ var knownKinds = map[string]bool{
 type Store struct {
 	rootDir   string
 	urlPrefix string
+	// quota — квота этого мира (см. internal/quota). nil — без ограничений:
+	// так собираются тесты и установки, где квоты не заданы.
+	quota *quota.World
 }
 
 // NewStore создаёт хранилище ассетов с файлами в rootDir, раздаваемыми по
-// urlPrefix.
-func NewStore(rootDir, urlPrefix string) *Store {
-	return &Store{rootDir: rootDir, urlPrefix: urlPrefix}
+// urlPrefix. q — квота мира; nil означает «без ограничений».
+func NewStore(rootDir, urlPrefix string, q *quota.World) *Store {
+	return &Store{rootDir: rootDir, urlPrefix: urlPrefix, quota: q}
 }
 
 // EnsureDirs создаёт rootDir и все известные подпапки (maps/tokens/audio/…)
@@ -114,15 +118,26 @@ func (s *Store) Save(ctx context.Context, kind, folder, filename string, r io.Re
 	// добавленным числовым префиксом, ".."/"/" в нём быть не может; dir
 	// собран из kind (проверен knownKinds) и folder, прогнанного через
 	// sanitizeFolder выше (отклоняет "."/".."/пустые сегменты).
-	dst, err := os.Create(filepath.Join(dir, safeName))
+	full := filepath.Join(dir, safeName)
+	//nolint:gosec // G304: см. обоснование выше — safeName это
+	// filepath.Base с числовым префиксом, dir собран из проверенного kind и
+	// прогнанного через sanitizeFolder folder.
+	dst, err := os.Create(full)
 	if err != nil {
 		return "", err
 	}
 	defer dst.Close()
 
-	if _, err := io.Copy(dst, r); err != nil {
+	// Пишем под присмотром квоты: она обрывает копирование, как только
+	// место кончилось, а не после того, как файл целиком лёг на диск.
+	written, err := s.quota.CopyLimited(dst, r)
+	if err != nil {
+		// Недописанный файл не оставляем — ни на диске, ни в счётчике.
+		_ = dst.Close()
+		_ = os.Remove(full)
 		return "", err
 	}
+	s.quota.Add(written)
 	return urlPrefix + urlFolder + safeName, nil
 }
 
@@ -234,7 +249,13 @@ func (s *Store) DeleteFolder(ctx context.Context, kind, folder string) error {
 	if folder == "" {
 		return fmt.Errorf("нельзя удалить корневую папку")
 	}
-	return os.RemoveAll(filepath.Join(baseDir, filepath.FromSlash(folder)))
+	target := filepath.Join(baseDir, filepath.FromSlash(folder))
+	freed, _ := quota.DirSize(target) // ошибку игнорируем: не смогли посчитать — счётчик поправит пересчёт
+	if err := os.RemoveAll(target); err != nil {
+		return err
+	}
+	s.quota.Sub(freed)
+	return nil
 }
 
 // DeleteAsset implements repository.AssetRepository. assetURL — публичный
@@ -255,5 +276,13 @@ func (s *Store) DeleteAsset(ctx context.Context, kind, assetURL string) error {
 	if full != cleanDir && !strings.HasPrefix(full, cleanDir+string(os.PathSeparator)) {
 		return fmt.Errorf("некорректный url ассета")
 	}
-	return os.Remove(full)
+	var freed int64
+	if info, statErr := os.Stat(full); statErr == nil {
+		freed = info.Size()
+	}
+	if err := os.Remove(full); err != nil {
+		return err
+	}
+	s.quota.Sub(freed)
+	return nil
 }

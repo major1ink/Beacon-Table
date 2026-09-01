@@ -20,9 +20,9 @@
 // при любой расстановке токенов и источников света.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeVisionPlan, computeVisionPlanWithFallback, QUANTUM_LADDER } from "../src/vtt/vision-plan.js";
-import { computeVisibilityPolygon } from "../src/geometry.js";
-import { unionAll } from "../src/vtt/light-geometry.js";
+import { computeVisionPlan, computeVisionPlanWithFallback, QUANTUM_LADDER, LIGHT_STEPS } from "../src/vtt/vision-plan.js";
+import { computeVisibilityPolygon, weldWalls, wallBlocksLight } from "../src/geometry.js";
+import { unionAll, subtractNested, differenceMulti, quantizePoints, gridUnitsToWorld } from "../src/vtt/light-geometry.js";
 import { manorWalls, manorWorld, manorGrid } from "./fixtures/walls-manor.js";
 
 const WORKING_QUANTUM = QUANTUM_LADDER[0];
@@ -398,4 +398,135 @@ test("рабочий квант запоминается между кадрам
   const { quantum } = computeVisionPlanWithFallback(makeScene([{ x: 800, y: 800 }]), false, memo);
   assert.equal(quantum, QUANTUM_LADDER[1], "запомненный квант не был опробован первым");
   assert.equal(memo.quantum, QUANTUM_LADDER[1]);
+});
+
+// ---- разность вложенных полос (subtractNested) ----
+//
+// Кольца затухания — это разность двух СОСЕДНИХ полос света, а соседние
+// полосы вложены друг в друга построением (тот же источник, те же стены,
+// меньше радиус). Именно на такой паре честная булева разность и
+// разваливалась чаще всего: половина границы у полос совпадает точка-в-точку
+// по стенам, а пары точно коллинеарных налегающих рёбер — худший вход для
+// заметающей прямой. Поэтому там теперь subtractNested (light-geometry.js),
+// которая новых рёбер не рождает вовсе, и тесты ниже стерегут именно её.
+
+// manorBands — те же полосы света, что строит computeLightLayer: k=0 — полный
+// тусклый радиус, k=LIGHT_STEPS — ярко освещённое ядро. Повторены здесь
+// намеренно: тесту нужны сами полосы, а наружу computeLightLayer отдаёт уже
+// готовые кольца.
+function manorBands(lights, quantum) {
+  const walls = weldWalls(manorWalls.filter(wallBlocksLight));
+  const bands = [];
+  for (let k = 0; k <= LIGHT_STEPS; k++) {
+    const polys = lights
+      .map((t) => {
+        const dim = gridUnitsToWorld(manorGrid, t.dim);
+        const bright = gridUnitsToWorld(manorGrid, t.bright);
+        const radius = dim - (dim - bright) * (k / LIGHT_STEPS);
+        return quantizePoints(computeVisibilityPolygon(t.x, t.y, radius, walls), quantum);
+      })
+      .filter((p) => p.length >= 3);
+    bands.push(unionAll(polys));
+  }
+  return bands;
+}
+
+// randomLights — источники с ШИРОКИМИ радиусами: чем дальше достаёт свет, тем
+// больше стен он огибает и тем больше у соседних полос общей, обрезанной
+// одной и той же стеной, границы. Ровно на этом библиотека и спотыкается.
+function randomLights(rnd, count) {
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    out.push({ x: rnd() * manorWorld.w, y: rnd() * manorWorld.h, dim: 40 + rnd() * 60, bright: 10 + rnd() * 20 });
+  }
+  return out;
+}
+
+function ringArea(ring) {
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return Math.abs(a / 2);
+}
+
+function multiArea(multi) {
+  let a = 0;
+  for (const poly of multi) {
+    for (let i = 0; i < poly.length; i++) a += i === 0 ? ringArea(poly[i]) : -ringArea(poly[i]);
+  }
+  return a;
+}
+
+test("честная булева разность действительно падает на соседних полосах света", () => {
+  // Страховка на фикстуру, как и у теста про сырой рейкастинг выше: если
+  // падать перестанет, тесты ниже станут зелёными по причине «нечего ловить».
+  const rnd = makeRandom(20260901);
+  let failures = 0;
+  for (let i = 0; i < 60; i++) {
+    let bands;
+    try {
+      bands = manorBands(randomLights(rnd, 3 + Math.floor(rnd() * 4)), WORKING_QUANTUM);
+    } catch {
+      continue; // упало объединение — это про другой фикс (квантование), не про этот
+    }
+    for (let k = 0; k < LIGHT_STEPS; k++) {
+      try {
+        differenceMulti(bands[k], bands[k + 1]);
+      } catch {
+        failures++;
+      }
+    }
+  }
+  assert.ok(failures > 0, "фикстура больше не воспроизводит падения polygon-clipping на разности полос — обновите её реальной проблемной картой");
+});
+
+test("subtractNested не падает там, где падает булева разность, и даёт ту же площадь", () => {
+  const rnd = makeRandom(20260901);
+  let compared = 0;
+  for (let i = 0; i < 60; i++) {
+    let bands;
+    try {
+      bands = manorBands(randomLights(rnd, 3 + Math.floor(rnd() * 4)), WORKING_QUANTUM);
+    } catch {
+      continue;
+    }
+    for (let k = 0; k < LIGHT_STEPS; k++) {
+      const mine = subtractNested(bands[k], bands[k + 1]); // упасть не имеет права ВООБЩЕ
+      // Площадь разности вложенных фигур известна и без всякой библиотеки:
+      // сколько было света на шаге k минус сколько осталось на k+1. Это и
+      // есть главная проверка — она ловит и потерянную дыру (кольцо шире,
+      // чем должно), и лишнюю (кольцо съедено дважды).
+      const expected = multiArea(bands[k]) - multiArea(bands[k + 1]);
+      if (expected <= 1) continue; // полосы совпали — сравнивать нечего
+      const rel = Math.abs(multiArea(mine) - expected) / expected;
+      assert.ok(rel < 0.01, `площадь кольца разошлась с ожидаемой на ${(rel * 100).toFixed(1)}%`);
+      compared++;
+    }
+  }
+  assert.ok(compared > 100, "нечего было сравнивать — фикстура протухла");
+});
+
+test("широкие радиусы света считаются на рабочем кванте, без аварийной лестницы", () => {
+  // Боевой симптом был такой: на карте с развитой геометрией стен и широкими
+  // источниками падали ВСЕ кванты подряд, план не получался вовсе, и
+  // vision-fog.js оставлял на экране прошлый кадр — свет замирал, а в консоль
+  // каждый кадр сыпался один и тот же стек.
+  //
+  // Проверяем не просто «план получился», а «получился на ПЕРВОМ шаге
+  // лестницы»: лестница аварийная, каждый её лишний виток — это целый
+  // пересчёт в мусорку и заметно более грубая граница света. На этой же
+  // фикстуре до перехода на subtractNested до неё доходило 8 расстановок из
+  // 60 — то есть кольца затухания были ЕДИНСТВЕННОЙ причиной, по которой она
+  // вообще срабатывала.
+  const rnd = makeRandom(31337);
+  for (let i = 0; i < 60; i++) {
+    const tokens = [{ x: rnd() * manorWorld.w, y: rnd() * manorWorld.h }];
+    for (const l of randomLights(rnd, 3 + Math.floor(rnd() * 4))) {
+      tokens.push({ x: l.x, y: l.y, lightOnly: true, light: { enabled: true, bright: l.bright, dim: l.dim } });
+    }
+    const { plan, quantum, error } = computeVisionPlanWithFallback(makeScene(tokens, ""), false);
+    assert.ok(plan, `расчёт не прошёл ни на одном шаге QUANTUM_LADDER: ${error && error.message}`);
+    assert.equal(quantum, WORKING_QUANTUM, "рабочего кванта не хватило — расчёт свалился на аварийную лестницу");
+  }
 });

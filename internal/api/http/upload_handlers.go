@@ -33,7 +33,7 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	if !acc.IsAdmin() && !a.Companies.AccountInActiveWorld(acc) {
+	if !acc.IsGM() && !a.Companies.AccountInActiveWorld(acc) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -46,7 +46,7 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 	//nolint:gosec // G120: тело уже ограничено MaxBytesReader выше — gosec
 	// не умеет это распознавать (его taint-анализ ParseMultipartForm не
 	// знает про MaxBytesReader как санитайзер), см. github.com/securego/gosec.
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+	if err := r.ParseMultipartForm(multipartMemoryBudget); err != nil {
 		http.Error(w, "file too large", http.StatusBadRequest)
 		return
 	}
@@ -62,11 +62,16 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	url, err := world.Assets.Upload(r.Context(), acc, kind, folder, header.Filename, file)
 	if err != nil {
-		if errors.Is(err, domain.ErrForbidden) {
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
 			http.Error(w, "forbidden", http.StatusForbidden)
-			return
+		case errors.Is(err, domain.ErrNoSpace):
+			// 507: данные верные, не хватило места — сообщение с цифрами
+			// формирует quota, фронт показывает его как есть.
+			http.Error(w, err.Error(), http.StatusInsufficientStorage)
+		default:
+			http.Error(w, "save failed", http.StatusInternalServerError)
 		}
-		http.Error(w, "save failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -99,11 +104,21 @@ func (a *API) handleAssets(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
-	resp := make(map[string]any, len(files)+1)
+	resp := make(map[string]any, len(files)+2)
 	for kind, items := range files {
 		resp[kind] = items
 	}
 	resp["folders"] = folders
+	// Место под загрузками — чтобы ДМ видел запас заранее, а не упирался в
+	// «места нет» посреди игры. Без заданных квот блок не отдаётся вовсе.
+	if q := a.Companies.UploadQuota(world.Company); q.Limit() > 0 || q.TotalLimit() > 0 {
+		resp["storage"] = map[string]any{
+			"worldUsed":  q.Used(),
+			"worldLimit": q.Limit(),
+			"totalUsed":  q.TotalUsed(),
+			"totalLimit": q.TotalLimit(),
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }

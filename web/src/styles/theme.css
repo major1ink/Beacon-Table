@@ -84,6 +84,16 @@
 .rail-btn svg { display: block; }
 .rail-btn:hover { background: var(--surface); color: var(--text); }
 .rail-btn.active { background: var(--accent-bg); color: var(--accent); }
+/* Точка на иконке рейла — «здесь что-то ждёт тебя»: сейчас её ставит экран,
+   попросившийся на трансляцию (см. web/src/pages/dm.js), пока ДМ смотрит на
+   карту, а не в настройки. */
+.rail-btn.has-badge::after {
+  content: ""; position: absolute; top: 7px; right: 7px;
+  width: 8px; height: 8px; border-radius: 50%;
+  /* Не var(--danger): тот тёмно-бордовый под заливку кнопки, а точку в 8px
+     на тёмном рейле нужно заметить боковым зрением. */
+  background: #e74c3c;
+}
 
 /* ---- .icon-btn — маленькая квадратная кнопка-иконка (закрыть/действие) ---- */
 .icon-btn {

@@ -147,6 +147,16 @@ type ClientMsg struct {
 	// токен бойца, чей сейчас ход (см. domain.CombatState.HighlightActiveToken).
 	HighlightActiveToken *bool `json:"highlightActiveToken,omitempty"`
 
+	// ShowBuiltinCards — только для "set_show_builtin_cards": общий тумблер
+	// стола (раздел "Настройки"), показывать ли вшитый каталог "из коробки" в
+	// справочнике и пикерах (см. domain.CombatState.ShowBuiltinCards).
+	ShowBuiltinCards *bool `json:"showBuiltinCards,omitempty"`
+
+	// HideLightMarkers — только для "set_hide_light_markers": общий тумблер
+	// стола (раздел "Настройки"), прятать ли у ДМ лампочки токенов света вне
+	// раздела "Освещение" (см. domain.CombatState.HideLightMarkers).
+	HideLightMarkers *bool `json:"hideLightMarkers,omitempty"`
+
 	// ---- инвентарь/лут (см. domain.InventoryEntry, LootHub, CombatState.LootingEnabled) ----
 
 	// ItemID — только для "hub_add_item": какую карточку каталога (см.

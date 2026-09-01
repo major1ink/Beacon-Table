@@ -12,7 +12,7 @@ import (
 // internal/service/foundry.go, internal/foundry)
 
 func (a *API) handleFoundryInspect(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -35,7 +35,7 @@ func (a *API) handleFoundryInspect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleFoundryImport(w http.ResponseWriter, r *http.Request) {
-	acc, ok := a.requireAdminAccount(w, r)
+	acc, ok := a.requireOwner(w, r)
 	if !ok {
 		return
 	}
@@ -66,7 +66,7 @@ func (a *API) handleFoundryImport(w http.ResponseWriter, r *http.Request) {
 // handleFoundryModules — установленные пакеты Foundry VTT этого мира, для
 // раздела "Настройки" (см. service.FoundryService.Installed)
 func (a *API) handleFoundryModules(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -85,7 +85,7 @@ func (a *API) handleFoundryModules(w http.ResponseWriter, r *http.Request) {
 // пакетов (см. service.FoundryService.CheckUpdates): по кнопке "Проверить
 // обновления" в настройках
 func (a *API) handleFoundryModulesCheck(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -105,7 +105,7 @@ func (a *API) handleFoundryModulesCheck(w http.ResponseWriter, r *http.Request) 
 // раз в конце импорта, когда карточки существ уже заведены — почему это
 // отдельный шаг, а не часть импорта пака, разобрано там же.
 func (a *API) handleFoundryLinkSceneTokens(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -124,7 +124,7 @@ func (a *API) handleFoundryLinkSceneTokens(w http.ResponseWriter, r *http.Reques
 // саму запись об установке (см. service.FoundryService.Delete — там же
 // разбор, что именно сносится и почему сцены/плейлисты/заметки — нет).
 func (a *API) handleFoundryModuleDelete(w http.ResponseWriter, r *http.Request) {
-	acc, ok := a.requireAdminAccount(w, r)
+	acc, ok := a.requireOwner(w, r)
 	if !ok {
 		return
 	}

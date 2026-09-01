@@ -23,7 +23,7 @@
 // закрыто стеной — отдельного "радиуса зрения" сверху нет).
 import { computeVisibilityPolygon, weldWalls, pointInPolygon, wallBlocksSight, wallBlocksLight } from "../geometry.js";
 import { worldSize } from "./camera.js";
-import { unionAll, intersectMulti, differenceMulti, unionMulti, worldRect, gridUnitsToWorld, quantizePoints } from "./light-geometry.js";
+import { unionAll, intersectMulti, differenceMulti, subtractNested, unionMulti, worldRect, gridUnitsToWorld, quantizePoints } from "./light-geometry.js";
 
 export const SIGHT_MARGIN = 50; // запас поверх диагонали карты — чисто чтобы raycasting не срезал луч точно на границе
 
@@ -259,9 +259,22 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
   // rings — те же кольца затухания, что посчитал слой света, но обрезанные
   // обзором. level (0 — край тусклого света, 1 — яркий свет) переводит в
   // прозрачность уже vision-fog.js: план не знает про альфы и цвета.
+  //
+  // Каждое кольцо обрезается ОТДЕЛЬНО и падение одного не роняет весь кадр:
+  // кольца — это поволока затухания, украшение поверх уже посчитанного
+  // revealDim, и потерять одно из них означает ровно то, что этот поясок
+  // покажется чуть ярче, чем должен. Раньше исключение отсюда роняло весь
+  // план шёл в мусор, лестница квантов пересчитывала ВСЁ с нуля, а если не
+  // помогала и она — свет замирал на прошлом кадре целиком. Несоразмерная
+  // цена за градиент.
   const rings = [];
   for (const { level, multi } of ringMultis) {
-    const reveal = intersectMulti(visionMulti, multi);
+    let reveal = null;
+    try {
+      reveal = intersectMulti(visionMulti, multi);
+    } catch {
+      continue; // см. выше — кольцо не нарисуется, туман войны от этого не пострадает
+    }
     if (reveal.length) rings.push({ level, multi: reveal });
   }
 
@@ -450,9 +463,15 @@ export function computeLightLayer(scene, quantum, tokens, w, h) {
   // Само ярко освещённое ядро (bands[LIGHT_STEPS]) в список не попадает —
   // ему отвечает level 1, то есть полностью прозрачная накладка: рисовать
   // нечего.
+  //
+  // Разность здесь — subtractNested, а не differenceMulti: соседние полосы
+  // вложены друг в друга построением (тот же источник, те же стены, меньше
+  // радиус), а на такой паре честная булева разность и разваливалась чаще
+  // всего — половина границы у полос совпадает точка-в-точку по стенам.
+  // Полное обоснование и замеры — у самой subtractNested в light-geometry.js.
   const ringMultis = [];
   for (let k = 0; k < LIGHT_STEPS; k++) {
-    const multi = differenceMulti(bands[k], bands[k + 1]);
+    const multi = subtractNested(bands[k], bands[k + 1]);
     if (multi.length) ringMultis.push({ level: k / LIGHT_STEPS, multi });
   }
 

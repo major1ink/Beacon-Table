@@ -68,9 +68,10 @@ func NewAdminService(accounts repository.AccountRepository, sessions repository.
 	return &adminService{accounts: accounts, sessions: sessions, characters: characters, companyID: companyID}
 }
 
-// ListAccounts — только аккаунты ЭТОЙ компании (не всего сервера — admin
-// сам компании не принадлежит и в этот список не попадает, см.
-// domain.Account.CompanyID).
+// ListAccounts — игроки ЭТОЙ компании плюс все аккаунты ДМ. ДМ глобальны
+// (CompanyID == "", см. domain.Account.CompanyID) и не принадлежат ни одному
+// миру, но управлять ими (завести второго ДМ, сменить пароль, удалить) нужно
+// из панели любого мира — поэтому они в списке всегда.
 func (s *adminService) ListAccounts(ctx context.Context) ([]*domain.Account, error) {
 	all, err := s.accounts.List(ctx)
 	if err != nil {
@@ -78,7 +79,7 @@ func (s *adminService) ListAccounts(ctx context.Context) ([]*domain.Account, err
 	}
 	out := make([]*domain.Account, 0, len(all))
 	for _, a := range all {
-		if a.CompanyID == s.companyID {
+		if a.CompanyID == s.companyID || a.Role == domain.AccountRoleAdmin {
 			out = append(out, a)
 		}
 	}
@@ -105,10 +106,9 @@ func (s *adminService) CreateAccount(ctx context.Context, username, password, ro
 	if err != nil {
 		return nil, err
 	}
-	// Аккаунт с ролью admin ДМ через эту панель не заводит (единственный
-	// admin — "dm", см. AuthService.SeedAdmin) — но если когда-нибудь
-	// заведёт, не привязываем его к компании, тем же принципом, что и у
-	// seed-admin'а (см. domain.Account.CompanyID).
+	// Аккаунт ДМ (role admin) не привязываем к миру — он глобален и ведёт
+	// любой мир, тем же принципом, что и seed-admin "dm" (см.
+	// domain.Account.CompanyID). Несколько ДМ — поддерживаемый сценарий.
 	companyID := s.companyID
 	if role == domain.AccountRoleAdmin {
 		companyID = ""
@@ -120,23 +120,23 @@ func (s *adminService) CreateAccount(ctx context.Context, username, password, ro
 	return acc, nil
 }
 
-// requireOwnCompanyAccount — защитная проверка перед любой мутацией чужого
-// аккаунта: id должен принадлежать ИМЕННО этой компании (s.companyID) — не
-// позволяет ДМ, зайдя в мир А, случайным/угаданным id задеть аккаунт игрока
-// из мира Б.
-func (s *adminService) requireOwnCompanyAccount(ctx context.Context, id string) error {
+// requireManageableAccount — защитная проверка перед любой мутацией чужого
+// аккаунта: цель — либо игрок ЭТОЙ компании (не даёт ДМ, зайдя в мир А,
+// случайным/угаданным id задеть игрока мира Б), либо аккаунт ДМ (глобален,
+// управляется из любого мира).
+func (s *adminService) requireManageableAccount(ctx context.Context, id string) error {
 	acc, err := s.accounts.ByID(ctx, id)
 	if err != nil {
 		return err
 	}
-	if acc.CompanyID != s.companyID {
+	if acc.Role != domain.AccountRoleAdmin && acc.CompanyID != s.companyID {
 		return domain.ErrNotFound
 	}
 	return nil
 }
 
 func (s *adminService) ApproveAccount(ctx context.Context, id string) error {
-	if err := s.requireOwnCompanyAccount(ctx, id); err != nil {
+	if err := s.requireManageableAccount(ctx, id); err != nil {
 		return err
 	}
 	return s.accounts.Approve(ctx, id)
@@ -146,14 +146,34 @@ func (s *adminService) DeleteAccount(ctx context.Context, requestingAdminID, id 
 	if requestingAdminID == id {
 		return domain.ErrForbidden
 	}
-	if err := s.requireOwnCompanyAccount(ctx, id); err != nil {
+	if err := s.requireManageableAccount(ctx, id); err != nil {
 		return err
+	}
+	// Последний аккаунт ДМ удалить нельзя — иначе в мир некому будет войти.
+	target, err := s.accounts.ByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if target.Role == domain.AccountRoleAdmin {
+		all, err := s.accounts.List(ctx)
+		if err != nil {
+			return err
+		}
+		admins := 0
+		for _, a := range all {
+			if a.Role == domain.AccountRoleAdmin {
+				admins++
+			}
+		}
+		if admins <= 1 {
+			return &domain.ValidationError{Msg: "нельзя удалить последний аккаунт ДМ"}
+		}
 	}
 	return s.accounts.Delete(ctx, id)
 }
 
 func (s *adminService) ResetPassword(ctx context.Context, id, newPassword string) error {
-	if err := s.requireOwnCompanyAccount(ctx, id); err != nil {
+	if err := s.requireManageableAccount(ctx, id); err != nil {
 		return err
 	}
 	if err := validatePassword(newPassword); err != nil {

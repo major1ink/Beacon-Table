@@ -29,6 +29,21 @@ type AuthService interface {
 	Logout(ctx context.Context, token string) error
 	AccountBySession(ctx context.Context, token string) (*domain.Account, error)
 	ChangeOwnPassword(ctx context.Context, accountID, oldPassword, newPassword string) error
+	// CreateGuest заводит гостя публичного демо: активный аккаунт с ролью
+	// role, привязанный к демо-миру, и сразу открытую сессию. Пароля у
+	// гостя нет по смыслу — войти повторно этим логином нельзя, только
+	// завести нового гостя.
+	//
+	// role — domain.AccountRoleDemo (гость за ширмой) либо
+	// domain.AccountRoleDemoPlayer (гость-игрок); любая другая роль
+	// отвергается: раздавать по нажатию кнопки права владельца сервера
+	// нельзя даже по ошибке вызывающего.
+	//
+	// maxGuests ограничивает число живых гостей ОБЕИХ ролей: аккаунт
+	// заводится без всякой проверки со стороны человека, и без предела один
+	// скрипт набьёт базу за минуту. domain.ErrConflict — гостей уже слишком
+	// много.
+	CreateGuest(ctx context.Context, companyID, role string, maxGuests int) (token string, account *domain.Account, err error)
 }
 
 // authService — полностью глобальный сервис: аккаунты/сессии не привязаны
@@ -122,6 +137,64 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	}
 	if acc.Status == domain.AccountStatusPending {
 		return "", nil, domain.ErrForbidden
+	}
+	token := newSessionToken()
+	if err := s.sessions.Create(ctx, token, acc.ID); err != nil {
+		return "", nil, err
+	}
+	return token, acc, nil
+}
+
+// guestPrefix/guestPlayerPrefix — по ним гостевые аккаунты отличаются в
+// списке аккаунтов у владельца сервера (считаются они по роли, см. ниже).
+// Разные префиксы у двух ролей — чтобы в списке было видно не только «это
+// гость», но и с какой стороны ширмы он сидел.
+const (
+	guestPrefix       = "гость-"
+	guestPlayerPrefix = "гость-игрок-"
+)
+
+func (s *authService) CreateGuest(ctx context.Context, companyID, role string, maxGuests int) (string, *domain.Account, error) {
+	if companyID == "" {
+		return "", nil, &domain.ValidationError{Msg: "демо-мир не запущен"}
+	}
+	prefix := guestPrefix
+	switch role {
+	case domain.AccountRoleDemo:
+	case domain.AccountRoleDemoPlayer:
+		prefix = guestPlayerPrefix
+	default:
+		return "", nil, &domain.ValidationError{Msg: "неизвестная роль гостя демо"}
+	}
+	if maxGuests > 0 {
+		all, err := s.accounts.List(ctx)
+		if err != nil {
+			return "", nil, err
+		}
+		live := 0
+		for _, acc := range all {
+			if acc.IsDemo() {
+				live++
+			}
+		}
+		if live >= maxGuests {
+			return "", nil, domain.ErrConflict
+		}
+	}
+
+	// Пароль случайный и нигде не показывается: гость входит по сессии,
+	// которую получает прямо сейчас. Заводить аккаунт без пароля нельзя —
+	// пустой хеш совпал бы с пустым вводом на форме входа.
+	hash, err := hashPassword(randomHex(32))
+	if err != nil {
+		return "", nil, err
+	}
+	acc := &domain.Account{
+		ID: newID(), Username: prefix + randomHex(4), PasswordHash: hash,
+		Role: role, Status: domain.AccountStatusActive, CompanyID: companyID,
+	}
+	if err := s.accounts.Create(ctx, acc); err != nil {
+		return "", nil, err
 	}
 	token := newSessionToken()
 	if err := s.sessions.Create(ctx, token, acc.ID); err != nil {

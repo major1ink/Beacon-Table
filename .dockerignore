@@ -1,0 +1,12 @@
+.git
+.github
+.task
+data
+uploads
+web/node_modules
+web/dist
+graft
+docs
+*.exe
+beacon-table
+beacon.conf

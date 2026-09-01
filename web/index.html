@@ -62,6 +62,40 @@
       color: #fff; font-size: 14px; cursor: pointer; transition: background .12s ease;
     }
     button[type="submit"]:hover { background: var(--green-hover); }
+    /* Экран демо-сервера. Здесь вход по паролю — редкое действие (аккаунт
+       есть только у владельца стола), а обычный посетитель пришёл нажать
+       одну из двух больших кнопок и посмотреть стол. Поэтому на демо форма
+       входа спрятана за ссылкой внизу, а карточки ролей занимают её место —
+       см. web/src/pages/index.js. На обычной установке этого блока нет
+       вовсе, и экран остаётся прежним. */
+    #box.demo { width: 340px; }
+    .demo-lead { font-size: 12.5px; line-height: 1.5; color: var(--text-dim); margin-bottom: 16px; }
+    .demo-card {
+      display: block; width: 100%; text-align: left; margin-bottom: 10px; cursor: pointer;
+      padding: 12px 14px; border-radius: var(--radius); font: inherit;
+      background: var(--accent-bg); border: 1px solid var(--accent); color: var(--text);
+      transition: background .12s ease, border-color .12s ease, transform .12s ease;
+    }
+    .demo-card:hover { background: var(--accent); transform: translateY(-1px); }
+    .demo-card:hover .demo-card-note { color: rgba(255, 255, 255, 0.85); }
+    .demo-card:hover .demo-card-title { color: #fff; }
+    .demo-card:disabled { opacity: 0.6; cursor: default; transform: none; }
+    .demo-card-title { display: block; font-size: 15px; font-weight: 600; color: var(--accent); margin-bottom: 3px; }
+    .demo-card-note { display: block; font-size: 11.5px; line-height: 1.45; color: var(--text-dim); }
+    .demo-note { font-size: 11px; color: var(--text-dim); line-height: 1.45; margin-top: 8px; }
+    /* Ссылка «У меня есть аккаунт»: именно ссылка, а не кнопка — на демо это
+       путь для одного человека из тысячи посетителей. */
+    .link-btn {
+      display: block; width: 100%; margin-top: 14px; padding: 6px 0; border: none; background: none;
+      color: var(--text-dim); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline;
+      text-underline-offset: 3px; transition: color .12s ease;
+    }
+    .link-btn:hover { color: var(--text); }
+    /* Раскрытая на демо форма входа отделяется от карточек ролей чертой —
+       иначе «Логин» читается как продолжение подписи про сброс стола. */
+    #box.demo #authBlock { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .auth-hint { font-size: 11.5px; color: var(--text-dim); margin-bottom: 12px; }
+
     .msg { font-size: 12px; margin-top: 10px; min-height: 14px; }
     .msg.error { color: #e74c3c; }
     .msg.ok { color: var(--green-bright); }
@@ -82,28 +116,55 @@
       <button id="worldWaitLogout" type="button" style="width:100%; padding:10px; border:none; border-radius:var(--radius); background:var(--surface); color:var(--text); font-size:14px; cursor:pointer;">Выйти</button>
     </div>
 
-    <div id="tabs">
-      <button id="tabLoginBtn" class="active">Вход</button>
-      <button id="tabRegisterBtn">Регистрация</button>
+    <!-- Главный экран демо-сервера: две роли вместо формы входа.
+         Показывается только когда /api/demo отвечает enabled=true. -->
+    <div id="demoHero" style="display:none">
+      <div class="demo-lead">Публичное демо — стол с готовой картой. Заходите без регистрации: выберите, с какой стороны ширмы сесть.</div>
+      <button type="button" id="demoDmBtn" class="demo-card">
+        <span class="demo-card-title">Я ведущий</span>
+        <span class="demo-card-note">Карта целиком: двигайте токены, рисуйте стены и двери, ставьте свет, кидайте кубы, водите бой.</span>
+      </button>
+      <button type="button" id="demoPlayerBtn" class="demo-card">
+        <span class="demo-card-title">Я игрок</span>
+        <span class="demo-card-note">Персонаж и фишка на карте: стол своими глазами — туман войны, обзор из-за стен, свет факела.</span>
+      </button>
+      <div id="demoMsg" class="msg"></div>
+      <div class="demo-note">Стол один на всех: другие гости за ним прямо сейчас. Периодически сбрасывается к эталону — наигранное не сохранится.</div>
+      <button type="button" id="showAuthBtn" class="link-btn">У меня есть аккаунт</button>
     </div>
 
-    <form id="loginForm" class="active">
-      <label for="loginUsername">Логин</label>
-      <input type="text" id="loginUsername" autocomplete="username" required />
-      <label for="loginPassword">Пароль</label>
-      <input type="password" id="loginPassword" autocomplete="current-password" required />
-      <button type="submit">Войти</button>
-      <div id="loginMsg" class="msg"></div>
-    </form>
+    <!-- authBlock скрыт до ответа /api/demo (см. web/src/pages/index.js):
+         на демо-сервере его место занимает demoHero, и показывать форму
+         входа, чтобы через миг её спрятать, — хуже, чем показать её на
+         полкадра позже. -->
+    <div id="authBlock" style="display:none">
+      <!-- Подпись только для демо-сервера: там форма входа нужна одному
+           человеку, и стоит сказать вслух, кому именно. -->
+      <div id="authHint" class="auth-hint" style="display:none">Вход по паролю — для владельца стола.</div>
 
-    <form id="registerForm">
-      <label for="regUsername">Логин</label>
-      <input type="text" id="regUsername" autocomplete="username" required />
-      <label for="regPassword">Пароль</label>
-      <input type="password" id="regPassword" autocomplete="new-password" required />
-      <button type="submit">Зарегистрироваться</button>
-      <div id="registerMsg" class="msg"></div>
-    </form>
+      <div id="tabs">
+        <button id="tabLoginBtn" class="active">Вход</button>
+        <button id="tabRegisterBtn">Регистрация</button>
+      </div>
+
+      <form id="loginForm" class="active">
+        <label for="loginUsername">Логин</label>
+        <input type="text" id="loginUsername" autocomplete="username" required />
+        <label for="loginPassword">Пароль</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required />
+        <button type="submit">Войти</button>
+        <div id="loginMsg" class="msg"></div>
+      </form>
+
+      <form id="registerForm">
+        <label for="regUsername">Логин</label>
+        <input type="text" id="regUsername" autocomplete="username" required />
+        <label for="regPassword">Пароль</label>
+        <input type="password" id="regPassword" autocomplete="new-password" required />
+        <button type="submit">Зарегистрироваться</button>
+        <div id="registerMsg" class="msg"></div>
+      </form>
+    </div>
   </div>
 
   <div id="appVersion"></div>

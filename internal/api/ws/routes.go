@@ -2,11 +2,98 @@ package ws
 
 import (
 	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
 
 	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
 	"beacon-table/internal/service"
 )
+
+// Gateway — все живые WS-подключения стола. Нужен ровно для одного:
+// закрыть их при остановке сервера. http.Server.Shutdown этого не сделает —
+// после апгрейда соединение hijacked, сервер его больше не отслеживает, и
+// без Gateway оно просто обрывалось бы на выходе процесса, а браузер видел
+// бы разрыв TCP вместо внятного «сервер перезапускается».
+type Gateway struct {
+	// upgrader держит проверку Origin (см. origin.go) — она зависит от
+	// настроек запуска, поэтому живёт здесь, а не в пакетной переменной.
+	upgrader websocket.Upgrader
+
+	// guests — уборщик гостей демо; nil в обычной установке (см. Options).
+	guests *app.GuestKeeper
+
+	mu    sync.Mutex
+	conns map[*websocket.Conn]struct{}
+	// closing — сервер уже останавливается: новые подключения принимать
+	// поздно, иначе соединение, проскочившее между CloseAll и выходом
+	// процесса, снова повисло бы необорванным.
+	closing bool
+}
+
+func newGateway(opts Options) *Gateway {
+	return &Gateway{
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool { return checkOrigin(r, opts) },
+		},
+		conns:  map[*websocket.Conn]struct{}{},
+		guests: opts.Guests,
+	}
+}
+
+// guestPresence отмечает, что гость демо сидит за столом, и возвращает
+// «он отключился» — вызывать по завершении serveWs (см. app.GuestKeeper.Online).
+// Для всех остальных — пустышка: живой аккаунт уборщик не трогает, и держать
+// по нему счётчик незачем.
+func (g *Gateway) guestPresence(acc *domain.Account) func() {
+	if !acc.IsDemo() {
+		return func() {}
+	}
+	return g.guests.Online(acc.ID)
+}
+
+// track берёт соединение под присмотр. false — сервер уже останавливается,
+// вызывающему остаётся закрыть соединение и уйти.
+func (g *Gateway) track(conn *websocket.Conn) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closing {
+		return false
+	}
+	g.conns[conn] = struct{}{}
+	return true
+}
+
+func (g *Gateway) untrack(conn *websocket.Conn) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.conns, conn)
+}
+
+// CloseAll вежливо прощается со всеми экранами: код 1012 «сервис
+// перезапускается» — тот самый случай, для которого он в стандарте и
+// заведён. Браузер получает закрытие сразу, а не по таймауту мёртвого
+// соединения. Ошибки записи игнорируются намеренно: половина соединений на
+// этом этапе может быть уже мертва, и делать с этим всё равно нечего —
+// соединение закрывается следом в любом случае.
+func (g *Gateway) CloseAll() {
+	g.mu.Lock()
+	g.closing = true
+	conns := make([]*websocket.Conn, 0, len(g.conns))
+	for conn := range g.conns {
+		conns = append(conns, conn)
+	}
+	g.conns = map[*websocket.Conn]struct{}{}
+	g.mu.Unlock()
+
+	bye := websocket.FormatCloseMessage(websocket.CloseServiceRestart, "сервер перезапускается")
+	for _, conn := range conns {
+		_ = conn.WriteControl(websocket.CloseMessage, bye, time.Now().Add(time.Second))
+		_ = conn.Close()
+	}
+}
 
 // RegisterRoutes навешивает /ws/dm, /ws/view, /ws/player на mux. Роль и
 // личность резолвятся из cookie-сессии (см. auth.AccountBySession), а не из
@@ -17,10 +104,11 @@ import (
 // один раз при регистрации маршрутов), потому что Room целиком меняется при
 // переключении мира (см. app.CompanyManager.Launch) — если сейчас ничего не
 // запущено, отвечаем 503, а не паникуем на nil.
-func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.AuthService) {
+func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.AuthService, broadcast service.BroadcastService, opts Options) *Gateway {
+	gw := newGateway(opts)
 	mux.HandleFunc("/ws/dm", func(w http.ResponseWriter, r *http.Request) {
 		acc, err := sessionAccount(auth, r)
-		if err != nil || !acc.IsActive() || !acc.IsAdmin() {
+		if err != nil || !acc.IsActive() || !acc.IsGM() {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -29,22 +117,32 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
-		serveWs(world.Room, w, r, domain.RoleDM, acc.ID, acc.Username)
+		defer gw.guestPresence(acc)()
+		serveWs(gw, world.Room, w, r, domain.RoleDM, acc.ID, acc.Username)
 	})
-	// /ws/view — без авторизации: зритель (TV/проектор на локальном
-	// доверенном экране, см. README) — всегда видит тот мир, что сейчас
-	// запущен на сервере, безотносительно какого-либо аккаунта.
+	// /ws/view — зритель (ТВ/проектор): аккаунта у него нет по устройству
+	// сценария, вместо него — ключ трансляции, выданный ДМ (см.
+	// service.BroadcastService). Раньше канал был открыт вообще всем, что на
+	// локальном доверенном экране безобидно, а на публичном адресе означало,
+	// что стол ДМ в реальном времени видит любой, кто знает адрес сервера.
+	//
+	// Аккаунт тоже пускаем: ДМ должен иметь возможность открыть трансляцию
+	// у себя и убедиться, что на экране в комнате видно то же самое.
 	mux.HandleFunc("/ws/view", func(w http.ResponseWriter, r *http.Request) {
+		if !viewerAllowed(auth, broadcast, r) {
+			http.Error(w, "нужна ссылка трансляции от ДМ", http.StatusForbidden)
+			return
+		}
 		world := mgr.Current()
 		if world == nil {
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
-		serveWs(world.Room, w, r, domain.RoleTV, "", "")
+		serveWs(gw, world.Room, w, r, domain.RoleTV, "", "")
 	})
 	mux.HandleFunc("/ws/player", func(w http.ResponseWriter, r *http.Request) {
 		acc, err := sessionAccount(auth, r)
-		if err != nil || !acc.IsActive() || acc.Role != domain.AccountRolePlayer {
+		if err != nil || !acc.IsActive() || !acc.IsPlayer() {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -57,8 +155,26 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
-		serveWs(world.Room, w, r, domain.RolePlayer, acc.ID, acc.Username)
+		defer gw.guestPresence(acc)()
+		serveWs(gw, world.Room, w, r, domain.RolePlayer, acc.ID, acc.Username)
 	})
+	return gw
+}
+
+// viewerAllowed — то же правило, что и у api/http для /uploads/ (см.
+// API.viewerAllowed): любой активный аккаунт либо телевизор с ключом
+// трансляции. Ключ берём из cookie, а если её нет — из адреса: страница
+// трансляции открывает WebSocket сама и ключ приложить может, даже когда
+// cookie до встроенного браузера приставки не доехала.
+func viewerAllowed(auth service.AuthService, broadcast service.BroadcastService, r *http.Request) bool {
+	if acc, err := sessionAccount(auth, r); err == nil && acc.IsActive() {
+		return true
+	}
+	key := r.URL.Query().Get(domain.BroadcastKeyParam)
+	if c, err := r.Cookie(domain.BroadcastCookieName); err == nil && c.Value != "" {
+		key = c.Value
+	}
+	return broadcast.Valid(r.Context(), key)
 }
 
 func sessionAccount(auth service.AuthService, r *http.Request) (*domain.Account, error) {

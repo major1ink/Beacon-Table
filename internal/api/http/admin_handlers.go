@@ -13,7 +13,7 @@ import (
 // internal/service/admin.go: adminService.companyID) ----
 
 func (a *API) handleAdminAccountsList(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -39,7 +39,7 @@ func (a *API) handleAdminAccountsList(w http.ResponseWriter, r *http.Request) {
 // без ожидания подтверждения (в отличие от саморегистрации). Привязывается
 // к тому миру, в котором сейчас находится ДМ (см. adminService.companyID).
 func (a *API) handleAdminAccountCreate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -68,7 +68,7 @@ func (a *API) handleAdminAccountCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleAdminAccountApprove(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -83,7 +83,7 @@ func (a *API) handleAdminAccountApprove(w http.ResponseWriter, r *http.Request) 
 }
 
 func (a *API) handleAdminAccountDelete(w http.ResponseWriter, r *http.Request) {
-	admin, ok := a.requireAdminAccount(w, r)
+	admin, ok := a.requireOwner(w, r)
 	if !ok {
 		return
 	}
@@ -93,11 +93,15 @@ func (a *API) handleAdminAccountDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	if err := world.Admin.DeleteAccount(r.Context(), admin.ID, id); err != nil {
-		if errors.Is(err, domain.ErrForbidden) {
+		var verr *domain.ValidationError
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
 			writeErr(w, http.StatusBadRequest, "нельзя удалить свой собственный аккаунт")
-			return
+		case errors.As(err, &verr):
+			writeErr(w, http.StatusBadRequest, verr.Msg)
+		default:
+			writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		}
-		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
 	// Персонажи аккаунта ушли каскадом (FK characters), а пул-записи
@@ -111,7 +115,7 @@ func (a *API) handleAdminAccountDelete(w http.ResponseWriter, r *http.Request) {
 // старого (в отличие от handleChangeOwnPassword). Тоже сносит все сессии
 // аккаунта.
 func (a *API) handleAdminAccountPassword(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -142,7 +146,7 @@ func (a *API) handleAdminAccountPassword(w http.ResponseWriter, r *http.Request)
 // OwnerID/CharacterID/Label/Image, см. web/src/pages/dm.js), а не
 // назначает владельца задним числом через контекстное меню токена.
 func (a *API) handleAdminCharactersList(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -169,7 +173,7 @@ func (a *API) handleAdminCharactersList(w http.ResponseWriter, r *http.Request) 
 // сам решает по своей роли, какой из двух эндпоинтов дёрнуть на чтение и на
 // сохранение, см. web/src/pages/character-sheet.js: isAdminView).
 func (a *API) handleAdminCharacterGet(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -196,7 +200,7 @@ func (a *API) handleAdminCharacterGet(w http.ResponseWriter, r *http.Request) {
 // (панель "Персонажи" в dm.html, кнопка ✎), не только своего — в отличие от
 // handleCharacterUpdate, привязанного к accountID сессии.
 func (a *API) handleAdminCharacterUpdate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
@@ -228,7 +232,7 @@ func (a *API) handleAdminCharacterUpdate(w http.ResponseWriter, r *http.Request)
 // (character-sheet.html в режиме ДМ — там же полноценно редактирует, не
 // только смотрит, см. web/src/pages/character-sheet.js).
 func (a *API) handleAdminCharacterSheetUpdate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)

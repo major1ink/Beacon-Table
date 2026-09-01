@@ -17,17 +17,44 @@ import (
 // всегда сначала нужно получить world через requireWorld.
 type API struct {
 	Auth      service.AuthService
+	Broadcast service.BroadcastService
 	Companies *app.CompanyManager
+	// SecureCookies — сервер стоит за HTTPS-прокси (--behind-proxy), значит
+	// cookie можно и нужно помечать Secure: браузер перестанет отправлять их
+	// по незашифрованному соединению. На голом HTTP флаг оставляют
+	// выключенным — иначе cookie не долетит обратно и войти будет нельзя.
+	SecureCookies bool
 	// Version — версия сервера (см. cmd/beacon-table/version.go), отдаётся
 	// как есть по GET /api/version; сюда, а не в service-слой, потому что
 	// это не бизнес-логика, а факт про сам процесс/сборку.
 	Version string
+	// Health — чем проверять живость по /healthz (база). nil — проверка
+	// пропускается и ручка отвечает «ok» по факту того, что процесс жив.
+	Health Pinger
+	// Settings — форма настроек в разделе «Настройки» у ДМ. nil — раздел
+	// недоступен (например, в тестах).
+	Settings SettingsStore
+	// DemoMode — сервер работает публичной витриной: доступен гостевой вход
+	// (см. demo_handlers.go). В обычной установке выключен.
+	DemoMode bool
+	// Guests — уборщик гостевых аккаунтов демо (см. app.GuestKeeper). nil в
+	// обычной установке: гостей там не бывает, и все обращения к нему —
+	// пустышки.
+	Guests *app.GuestKeeper
+	// loginGuard — защита /api/login и /api/register от перебора (см.
+	// loginguard.go). Транспортный уровень: считает по IP из запроса,
+	// service-слою про такое знать незачем.
+	loginGuard *loginGuard
 }
 
-// NewAPI собирает REST-хендлеры поверх Auth (глобален) и Companies
-// (переключаемый набор сервисов текущего мира).
-func NewAPI(auth service.AuthService, companies *app.CompanyManager, version string) *API {
-	return &API{Auth: auth, Companies: companies, Version: version}
+// NewAPI собирает REST-хендлеры поверх Auth и Broadcast (оба глобальны) и
+// Companies (переключаемый набор сервисов текущего мира).
+func NewAPI(auth service.AuthService, broadcast service.BroadcastService, companies *app.CompanyManager, version string, secureCookies bool, health Pinger) *API {
+	return &API{
+		Auth: auth, Broadcast: broadcast, Companies: companies,
+		Version: version, SecureCookies: secureCookies, Health: health,
+		loginGuard: newLoginGuard(),
+	}
 }
 
 // RegisterRoutes навешивает все /api/*, /upload и /assets хендлеры на mux.
@@ -39,12 +66,41 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/me", a.handleMe)
 	mux.HandleFunc("PUT /api/me/password", a.handleChangeOwnPassword)
 	mux.HandleFunc("GET /api/version", a.handleVersion)
+	// /healthz вне /api/ — это не часть API стола, а точка для мониторинга,
+	// systemd и docker healthcheck.
+	mux.HandleFunc("GET /healthz", a.handleHealth)
+
+	// Настройки сервера глазами ДМ — см. settings_handlers.go.
+	// Публичное демо: витрина, куда пускают без регистрации (см. demo_handlers.go).
+	mux.HandleFunc("GET /api/demo", a.handleDemoStatus)
+	mux.HandleFunc("POST /api/demo/guest", a.handleDemoGuest)
+
+	mux.HandleFunc("GET /api/settings", a.handleSettingsList)
+	mux.HandleFunc("PUT /api/settings", a.handleSettingsSave)
+
+	// Трансляция: ссылку выдаёт и перевыпускает ДМ, проверку доступа дёргает
+	// сама страница трансляции — ей аккаунт не нужен (см. broadcast_handlers.go).
+	mux.HandleFunc("GET /api/broadcast/link", a.handleBroadcastLink)
+	mux.HandleFunc("POST /api/broadcast/link/rotate", a.handleBroadcastRotate)
+	mux.HandleFunc("GET /api/broadcast/access", a.handleBroadcastAccess)
+	// Заявка экрана, которому ссылку вбить некуда: создаёт и опрашивает сам
+	// экран без авторизации, отвечает на неё ДМ.
+	mux.HandleFunc("POST /api/broadcast/requests", a.handleBroadcastRequestCreate)
+	mux.HandleFunc("GET /api/broadcast/requests/{id}", a.handleBroadcastRequestState)
+	mux.HandleFunc("GET /api/broadcast/requests", a.handleBroadcastRequestList)
+	mux.HandleFunc("POST /api/broadcast/requests/{id}/approve", a.handleBroadcastRequestApprove)
+	mux.HandleFunc("POST /api/broadcast/requests/{id}/reject", a.handleBroadcastRequestReject)
 
 	// Миры (компании) — управляет только ДМ, см. company_handlers.go.
 	mux.HandleFunc("GET /api/companies", a.handleCompaniesList)
 	mux.HandleFunc("POST /api/companies", a.handleCompanyCreate)
 	mux.HandleFunc("POST /api/companies/{id}/launch", a.handleCompanyLaunch)
+	mux.HandleFunc("POST /api/companies/stop", a.handleCompanyStop)
 	mux.HandleFunc("DELETE /api/companies/{id}", a.handleCompanyDelete)
+	// Экспорт мира в .beacon-world.zip и импорт из него (создаёт новый мир) —
+	// см. company_handlers.go / app.CompanyManager.ExportWorld/ImportWorld.
+	mux.HandleFunc("GET /api/companies/{id}/export", a.handleCompanyExport)
+	mux.HandleFunc("POST /api/companies/import", a.handleCompanyImport)
 
 	mux.HandleFunc("GET /api/characters", a.handleCharactersList)
 	mux.HandleFunc("POST /api/characters", a.handleCharacterCreate)
