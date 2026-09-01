@@ -1,4 +1,6 @@
-// Плашка «связь со столом потеряна».
+// Плавающие плашки поверх канваса: «связь со столом потеряна» и текстовые
+// объявления сервера (сейчас единственный источник вторых — предупреждение
+// демо-стола о скором сбросе, см. cmd/beacon-table/demo.go: demoResetter).
 //
 // Переподключение (см. ws-reconnect.js) само по себе молчаливо, и это его
 // худшая черта: пока оно идёт, карта на экране выглядит живой, кнопки
@@ -11,6 +13,11 @@
 // нужна одинаковая на всех трёх экранах стола (dm.html, player.html,
 // broadcast.html), а держать один и тот же <div> в трёх файлах — верный
 // способ однажды поправить его в двух.
+//
+// Два независимых элемента, не один переиспользуемый: у связи и у
+// объявлений сервера разные поводы появиться и разные таймеры скрытия —
+// если бы они делили один <div>, объявление посреди обрыва связи стёрло бы
+// собой её статус (или наоборот).
 
 // showAfterMs — не мигать на каждом чихе. Короткий обрыв (переключение
 // вышки на телефоне, перезапуск сервера) переживается за секунду-другую, и
@@ -21,9 +28,15 @@ const showAfterMs = 3000;
 // плашку совсем.
 const hideAfterMs = 2000;
 
+// noticeHideAfterMs — сколько держать объявление сервера на экране. Не
+// статус, который снимается сам по факту события (как «связь
+// восстановлена»), поэтому гасим по таймеру — с запасом, чтобы успеть
+// дочитать даже на телефоне вполглаза.
+const noticeHideAfterMs = 20000;
+
 const css = `
-#connBanner {
-  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+#connBanner, #tableNotice {
+  position: fixed; left: 50%; transform: translateX(-50%);
   z-index: 60; display: none; align-items: center; gap: 8px;
   padding: 7px 14px; border-radius: 999px;
   background: rgba(10, 10, 14, 0.88); color: #eee;
@@ -31,14 +44,20 @@ const css = `
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
   pointer-events: none;
+  max-width: min(90vw, 480px);
 }
-#connBanner.open { display: flex; }
+#connBanner { top: 12px; }
+/* Ниже плашки связи — если обе выпадут разом (не должны, но не обязаны
+   друг другу мешать), не накладываются друг на друга. */
+#tableNotice { top: 54px; }
+#connBanner.open, #tableNotice.open { display: flex; }
 #connBanner.ok { color: #9be29b; }
 #connBanner .dot {
   width: 7px; height: 7px; border-radius: 50%; background: #e2a33b;
   animation: connBannerPulse 1.1s ease-in-out infinite;
 }
 #connBanner.ok .dot { background: #6ec06e; animation: none; }
+#tableNotice .dot { width: 7px; height: 7px; border-radius: 50%; background: #6ea8e2; }
 @keyframes connBannerPulse { 50% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) {
   #connBanner .dot { animation: none; }
@@ -48,6 +67,9 @@ const css = `
 let el = null;
 let showTimer = null;
 let hideTimer = null;
+
+let noticeEl = null;
+let noticeHideTimer = null;
 
 function ensure() {
   if (el) return el;
@@ -71,6 +93,24 @@ function show(text, ok) {
 
 function hide() {
   el?.classList.remove("open");
+}
+
+function ensureNotice() {
+  ensure(); // тот же <style> обслуживает оба элемента
+  if (noticeEl) return noticeEl;
+  noticeEl = document.createElement("div");
+  noticeEl.id = "tableNotice";
+  noticeEl.innerHTML = '<span class="dot"></span><span id="tableNoticeText"></span>';
+  document.body.appendChild(noticeEl);
+  return noticeEl;
+}
+
+function showNotice(text) {
+  const node = ensureNotice();
+  node.querySelector("#tableNoticeText").textContent = text;
+  node.classList.add("open");
+  clearTimeout(noticeHideTimer);
+  noticeHideTimer = setTimeout(() => node.classList.remove("open"), noticeHideAfterMs);
 }
 
 // initConnectionBanner подписывается на события, которые шлёт vtt/net.js.
@@ -98,4 +138,9 @@ export function initConnectionBanner() {
     clearTimeout(hideTimer);
     hide();
   });
+
+  // table_notice от комнаты (см. internal/service/room.go: Announce) —
+  // текст для человека, а не служебное «перечитай список»: показываем как
+  // есть, никакой обработки.
+  document.addEventListener("vtt:tableNotice", (e) => showNotice(e.detail.text));
 }

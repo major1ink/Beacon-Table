@@ -124,6 +124,11 @@ export function createNet(ctx, audio) {
       // ДМ, импорт Foundry — см. RoomService.NotifyPlaylistsChanged): панель
       // "Плейлисты" (pages/dm.js) сама перечитает список по этому событию.
       document.dispatchEvent(new CustomEvent("vtt:playlistsChanged"));
+    } else if (data.type === "table_notice") {
+      // Текст сервера для всех за столом (см. Room.Announce) — сейчас
+      // только предупреждение демо о скором сбросе. connection-banner.js
+      // уже подписан и сам решает, как долго его показывать.
+      document.dispatchEvent(new CustomEvent("vtt:tableNotice", { detail: data }));
     }
   }
 

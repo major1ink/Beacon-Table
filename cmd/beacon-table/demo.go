@@ -27,29 +27,82 @@ type demoResetter struct {
 	accounts  repository.AccountRepository
 	worldZip  string
 	interval  time.Duration
+	// warnBefore — та же demoResetWarnBefore, полем, а не константой напрямую
+	// в Run: тесты в этом же пакете держат её короче (guests_test.go делает
+	// то же самое с GuestKeeper.idle), не дожидаясь настоящих минут.
+	warnBefore time.Duration
 }
 
 func newDemoResetter(companies *app.CompanyManager, accounts repository.AccountRepository, worldZip string, interval time.Duration) *demoResetter {
-	return &demoResetter{companies: companies, accounts: accounts, worldZip: worldZip, interval: interval}
+	return &demoResetter{
+		companies: companies, accounts: accounts, worldZip: worldZip, interval: interval,
+		warnBefore: demoResetWarnBefore,
+	}
 }
 
-// Run сбрасывает стол по расписанию, пока не отменят ctx.
+// demoResetWarnBefore — за сколько до сброса предупредить тех, кто сейчас
+// за столом (см. Announce ниже). Раньше сброс просто обрывал партию без
+// единого слова — с точки зрения игрока это выглядело как обрыв связи,
+// неотличимый от настоящего сбоя сети. Не настройка — как и у guestIdle
+// (см. internal/app/guests.go), это цифра, которую владелец демо решает
+// один раз, а не то, что нужно объяснять в конфиге каждому.
+const demoResetWarnBefore = 2 * time.Minute
+
+// Run предупреждает и сбрасывает стол по расписанию, пока не отменят ctx.
+//
+// Таймеры, а не один Ticker на d.interval: предупреждение и сам сброс —
+// две разные точки одного и того же цикла (за d.warnBefore до конца и в
+// конце), и только последовательные NewTimer держат их в фазе друг с
+// другом без независимого дрейфа, которым страдали бы два параллельных
+// Ticker с разными периодами.
 func (d *demoResetter) Run(ctx context.Context) {
-	t := time.NewTicker(d.interval)
-	defer t.Stop()
 	for {
-		select {
-		case <-ctx.Done():
+		if !sleepCtx(ctx, d.interval-d.warnBefore) {
 			return
-		case <-t.C:
-			if err := d.Reset(ctx); err != nil {
-				if ctx.Err() != nil {
-					return // остановка сервера
-				}
-				slog.Error("не удалось сбросить демо-стол", "err", err)
+		}
+		d.warn()
+
+		if !sleepCtx(ctx, d.warnBefore) {
+			return
+		}
+		if err := d.Reset(ctx); err != nil {
+			if ctx.Err() != nil {
+				return // остановка сервера
 			}
+			slog.Error("не удалось сбросить демо-стол", "err", err)
 		}
 	}
+}
+
+// sleepCtx ждёт d или отмену ctx — false, если проснулись из-за неё
+// (вызывающему остаётся сразу выйти, не начиная следующий шаг).
+// Неположительный d (интервал короче warnBefore, обычно только в тестах с
+// укороченным расписанием) таймер не пугает — сработает почти сразу, просто
+// без реальной паузы.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// warn — предупреждение всем сидящим за столом. Мимо стола предупреждать
+// некого: между сбросами мир всегда запущен (Reset поднимает следующий
+// раньше, чем сносит прежний), но защищаемся на случай гонки с остановкой
+// сервера — тогда Current() на мгновение отдаёт nil.
+func (d *demoResetter) warn() {
+	world := d.companies.Current()
+	if world == nil {
+		return
+	}
+	world.Room.Announce(fmt.Sprintf(
+		"Демо-стол сбросится к исходному состоянию через %d мин — если что-то важное, доиграйте или сохраните сейчас.",
+		int(d.warnBefore.Minutes()),
+	))
 }
 
 // Reset поднимает свежий стол из эталона и убирает старый вместе с гостями.

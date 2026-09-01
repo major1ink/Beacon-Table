@@ -79,6 +79,7 @@ func (f *fakeRoom) SpawnPlayerToken(context.Context, string, string, string, str
 	return false, nil
 }
 func (f *fakeRoom) RemoveOwnerTokens(context.Context, string) (int, error) { return 0, nil }
+func (f *fakeRoom) Announce(string)                                        {}
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil

@@ -61,6 +61,11 @@ type RoomService interface {
 	// столом больше нет: гость демо ушёл или его убрал уборщик по
 	// бездействию (см. room_guest.go, app.GuestKeeper).
 	RemoveOwnerTokens(ctx context.Context, ownerID string) (int, error)
+	// Announce — текстовое сообщение всем сидящим за столом прямо сейчас,
+	// мимо state сцены. Нужен публичному демо: предупредить о скором сбросе
+	// стола к эталону
+	// (см. cmd/beacon-table/demo.go: demoResetter).
+	Announce(text string)
 }
 
 type inboundMsg struct {
@@ -146,8 +151,13 @@ type Room struct {
 	// NotifyPlaylistsChanged: admin-CRUD плейлистов и импорт Foundry) — тот
 	// же принцип и те же свойства, что journalChanged выше.
 	playlistsChanged chan struct{}
-	dirty            bool            // есть хоть одна несохранённая мутация с последнего флаша
-	dirtyScenes      map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
+	// announce — текстовое сообщение всем за столом мимо клиента (см.
+	// Announce): сейчас единственный отправитель — demoResetter
+	// (cmd/beacon-table/demo.go), предупреждающий за пару минут до сброса
+	// демо-стола к эталону. Тот же принцип и свойства, что journalChanged.
+	announce    chan string
+	dirty       bool            // есть хоть одна несохранённая мутация с последнего флаша
+	dirtyScenes map[string]bool // какие именно сцены мутировали — флашим на диск только их файлы, а не всю библиотеку
 
 	// combat — трекер инициативы всего стола (см. domain.CombatState), не
 	// привязан к конкретной сцене — переживает switch_scene. combatDirty —
@@ -226,6 +236,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 
 		characterSheetChanged: make(chan string, 32),
 		playlistsChanged:      make(chan struct{}, 4),
+		announce:              make(chan string, 4),
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
 		hub:                   hub,
@@ -660,6 +671,9 @@ func (r *Room) run() {
 
 		case <-r.playlistsChanged:
 			r.broadcastPlaylistsChanged()
+
+		case text := <-r.announce:
+			r.broadcastAnnounce(text)
 
 		case <-ticker.C:
 			r.flushIfDirty()
@@ -1114,6 +1128,30 @@ func (r *Room) broadcastPlaylistsChanged() {
 		if c.Role() == domain.RoleDM {
 			c.Send(payload)
 		}
+	}
+}
+
+// Announce — текстовое сообщение всем сидящим за столом прямо сейчас, мимо
+// state сцены (эфемерно, как fx: не пишется в снапшот и не ждёт свежих
+// подключений — тот, кто зайдёт после, этого сообщения уже не увидит).
+// Единственный вызывающий — demoResetter (cmd/beacon-table/demo.go),
+// предупреждающий за пару минут до сброса демо-стола к эталону: без этого
+// человек посреди партии узнавал бы о сбросе по факту разрыва соединения.
+func (r *Room) Announce(text string) {
+	select {
+	case r.announce <- text:
+	default:
+	}
+}
+
+// broadcastAnnounce — уже внутри горутины run(). Всем ролям разом (ДМ,
+// игрокам, TV): в отличие от playlists_changed это не служебное «перечитай
+// список», а сообщение ДЛЯ ЧЕЛОВЕКА — прочитать его может кто угодно за
+// столом, а не только тот, у кого открыта конкретная панель.
+func (r *Room) broadcastAnnounce(text string) {
+	payload := map[string]any{"type": "table_notice", "text": text}
+	for c := range r.clients {
+		c.Send(payload)
 	}
 }
 
