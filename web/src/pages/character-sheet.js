@@ -23,6 +23,7 @@ import {
   fetchPregen,
   updateAdminPregen,
 } from "../api.js";
+import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -2313,7 +2314,6 @@ window.beaconFlush = async () => {
 // ==================== dice rolls ====================
 
 function connectRollSocket() {
-  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   // /ws/player требует роль "player" (см. internal/api/ws/routes.go) — ДМ
   // туда просто не пустят, поэтому в режиме ДМ бросок идёт через /ws/dm
   // (авторизован ролью admin из той же cookie сессии). Сервер разрешает DM
@@ -2331,9 +2331,12 @@ function connectRollSocket() {
   if (!rollLog && !isEmbedded()) {
     rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
   }
-  rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
-  rollWS.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
+  // Сокет с переподключением — см. web/src/ws-reconnect.js. Листу это нужнее
+  // прочих окон: им же приезжают хиты, правленные ДМ в трекере, и лут из
+  // хаба. После обрыва цифры на бланке молча расходились бы с тем, что
+  // видит стол, до перезагрузки страницы.
+  rollWS = openSocket(isAdminView ? "/ws/dm" : "/ws/player", {
+    onMessage: (data) => {
     if (data.type === "roll_result") rollLog?.push(data);
     // Наложенные состояния этого персонажа (см. domain.AppliedStatus)
     // приезжают тем же сокетом в combat_state — сервер уже свёл их с токена
@@ -2373,17 +2376,18 @@ function connectRollSocket() {
       // обновлены, а увидит их бланк при следующем переключении режима.
       if (mode === "view") refreshView();
     }
-  };
+    },
+  });
 }
 
 function sendRoll(formula, label) {
-  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
+  if (!rollWS) return;
   // characterId — сервер сам подставит имя ПЕРСОНАЖА в общий лог вместо
   // логина игрока/роли "ДМ" сокета (см. room.go: handleRollDice/rollerName),
   // раз бросок сделан именно с его листа. Так лог всегда называет того, кто
   // за столом реально кидал кубик — даже когда открыто несколько листов
   // подряд или ДМ бросает за чужого персонажа.
-  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label, characterId: charId }));
+  rollWS.send({ type: "roll_dice", formula, label, characterId: charId });
 }
 
 // isEmbedded — лист открыт ВНУТРИ страницы стола: боковым доком

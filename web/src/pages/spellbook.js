@@ -9,6 +9,7 @@
 // web/src/spell-import.js (чистая функция, без побочных эффектов), этот файл
 // только вызывает её и мержит результат в текущую карточку.
 import { fetchMe, fetchSpell, createSpell, updateSpell, deleteSpell, fetchConditions } from "../api.js";
+import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
@@ -523,18 +524,20 @@ window.addEventListener("beforeunload", () => {
 
 function connectRollSocket() {
   if (!rollLog) rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
-  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-  rollWS = new WebSocket(`${scheme}//${location.host}${isAdminView ? "/ws/dm" : "/ws/player"}`);
-  rollWS.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") rollLog.push(data);
-  };
+  // Сокет с переподключением (см. web/src/ws-reconnect.js): без него обрыв
+  // связи выглядел бы как «кубик перестал кидаться», без единого признака
+  // на экране — сюда приходят только ответы на броски, и заметить нечего.
+  rollWS = openSocket(isAdminView ? "/ws/dm" : "/ws/player", {
+    onMessage: (data) => {
+      if (data.type === "roll_result") rollLog.push(data);
+    },
+  });
 }
 
 function sendRoll(formula, label) {
-  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
+  if (!rollWS) return;
   const fullLabel = spell && spell.name ? `${spell.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
-  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
+  rollWS.send({ type: "roll_dice", formula, label: fullLabel });
 }
 
 // ==================== boot ====================

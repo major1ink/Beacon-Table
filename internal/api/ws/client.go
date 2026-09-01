@@ -9,11 +9,22 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/service"
+)
+
+const (
+	maxClientFrame = 1 << 20
+	writeWait = 10 * time.Second
+)
+
+var (
+	pongWait = 60 * time.Second
+	pingEvery = 15 * time.Second
 )
 
 // Client — одно WS-подключение; реализация service.RoomClient для
@@ -77,14 +88,34 @@ func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *ht
 }
 
 func (c *Client) writeLoop() {
-	defer c.conn.Close()
-	for v := range c.out {
-		b, err := json.Marshal(v)
-		if err != nil {
-			continue
-		}
-		if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {
-			return
+	ping := time.NewTicker(pingEvery)
+	defer func() {
+		ping.Stop()
+		c.conn.Close()
+	}()
+	for {
+		select {
+		case v, ok := <-c.out:
+			if !ok {
+				_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+				_ = c.conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				return
+			}
+			b, err := json.Marshal(v)
+			if err != nil {
+				continue
+			}
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {
+				return
+			}
+
+		case <-ping.C:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -94,11 +125,19 @@ func (c *Client) readLoop() {
 		c.room.Leave(c)
 		c.conn.Close()
 	}()
+
+	c.conn.SetReadLimit(maxClientFrame)
+	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+
 	for {
 		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
 			return
 		}
+		_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		msg, err := service.DecodeClientMsg(raw)
 		if err != nil {
 			log.Println("bad message:", err)

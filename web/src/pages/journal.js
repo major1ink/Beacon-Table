@@ -23,6 +23,7 @@ import {
   renameJournalFolder,
   deleteJournalFolder,
 } from "../api.js";
+import { openSocket } from "../ws-reconnect.js";
 import { renderNoteHtml, wireWikiLinks, scrollToHeading } from "../notes/markdown.js";
 import { mountHeadingNav } from "../notes/heading-nav.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
@@ -682,14 +683,15 @@ accessOverlay.addEventListener("mousedown", (e) => {
 // relayJournalShow в internal/service/room.go).
 showBtn.onclick = () => {
   if (!current) return;
-  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) {
-    // Молчать тут нельзя: снаружи оборванная связь со столом выглядит ровно
-    // как «кнопка не работает».
+  // Молчать тут нельзя: снаружи оборванная связь со столом выглядит ровно
+  // как «кнопка не работает». Про перезагрузку страницы больше не просим —
+  // сокет переподключается сам (см. web/src/ws-reconnect.js), надо только
+  // подождать.
+  if (!rollWS?.send({ type: "show_journal", id: current.id, label: current.title })) {
     msgEl.className = "";
-    msgEl.textContent = "Нет связи со столом — обнови страницу и попробуй снова.";
+    msgEl.textContent = "Нет связи со столом — идёт переподключение, попробуй через несколько секунд.";
     return;
   }
-  rollWS.send(JSON.stringify({ type: "show_journal", id: current.id, label: current.title }));
   msgEl.className = "ok";
   msgEl.textContent = "Показываю…"; // окончательный ответ придёт в journal_shown_ack
 };
@@ -731,12 +733,10 @@ function imgShowUrl(img) {
 }
 
 function sendShowImage(url) {
-  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) {
+  if (!rollWS?.send(url ? { type: "show_image", imageUrl: url } : { type: "hide_image" })) {
     msgEl.className = "";
-    msgEl.textContent = "Нет связи со столом — обнови страницу и попробуй снова.";
-    return;
+    msgEl.textContent = "Нет связи со столом — идёт переподключение, попробуй через несколько секунд.";
   }
-  rollWS.send(JSON.stringify(url ? { type: "show_image", imageUrl: url } : { type: "hide_image" }));
 }
 
 // wireShowcaseImages — оборачивает каждую <img> в тексте записи span'ом с
@@ -785,10 +785,11 @@ function refreshShowcaseButtons() {
 let rollWS = null;
 
 function connectRollSocket() {
-  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-  rollWS = new WebSocket(`${scheme}//${location.host}${isDM ? "/ws/dm" : "/ws/player"}`);
-  rollWS.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
+  // Сокет с переподключением — см. web/src/ws-reconnect.js. Здесь он нужен
+  // не только для кубиков: «Показать игрокам» ходит тем же каналом, и после
+  // обрыва кнопка честно говорила бы «нет связи» до перезагрузки страницы.
+  rollWS = openSocket(isDM ? "/ws/dm" : "/ws/player", {
+    onMessage: (data) => {
     if (data.type === "journal_changed") {
       onJournalChanged(data.id);
       return;
@@ -816,7 +817,8 @@ function connectRollSocket() {
     const mod = data.modifier ? (data.modifier > 0 ? "+" + data.modifier : String(data.modifier)) : "";
     msgEl.className = "ok";
     msgEl.textContent = `${data.formula} → [${(data.rolls || []).join(", ")}]${mod} = ${data.total}`;
-  };
+    },
+  });
 }
 
 // ---- живое обновление ----
@@ -855,9 +857,9 @@ function onJournalChanged(id) {
 }
 
 function sendRoll(formula, label) {
-  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
+  if (!rollWS) return;
   const title = current && current.title;
-  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label }));
+  rollWS.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
 }
 
 // ---- ссылки внутри текста ----

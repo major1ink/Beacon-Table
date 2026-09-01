@@ -1,5 +1,7 @@
 import { DEFAULT_WORLD_W, DEFAULT_WORLD_H } from "./camera.js";
 import { diffAndMarkDirty } from "./dirty.js";
+import { openSocket } from "../ws-reconnect.js";
+import { initConnectionBanner } from "../connection-banner.js";
 
 // WS-подключение + диспетчер сообщений — перенос ws.onmessage из
 // static/js/app.js. Протокол и набор кастомных DOM-событий (vtt:*) не
@@ -8,11 +10,16 @@ import { diffAndMarkDirty } from "./dirty.js";
 // предыдущей (diffAndMarkDirty) и просим ctx.render() обновить только
 // реально изменившиеся слои Pixi (см. dirty.js — корневой фикс краша).
 //
-// protocol-aware: если страницу отдают по HTTPS (реверс-прокси для доступа
-// через интернет, см. README), WS обязан идти по wss:// — иначе браузер
-// блокирует его как mixed content. Никаких query-параметров — браузер сам
-// прикладывает cookie сессии (beacon_session) к WS-хендшейку на том же
-// origin, роль и личность сервер резолвит из неё.
+// Соединение держит ws-reconnect.js: адрес, wss:// на https-странице,
+// переподключение после обрыва и разбор «сессия кончилась или сеть пропала»
+// — всё там. Никаких query-параметров — браузер сам прикладывает cookie
+// сессии (beacon_session) к WS-хендшейку на том же origin, роль и личность
+// сервер резолвит из неё.
+//
+// Переподключение здесь не требует ни строчки дополнительно: комната шлёт
+// полный snapshot каждому вошедшему, а обработчик ниже и так умеет
+// применять его поверх текущей сцены через diffAndMarkDirty — ровно тем же
+// путём, что и первый snapshot при загрузке страницы.
 export function createNet(ctx, audio) {
   ctx.scene = {
     width: DEFAULT_WORLD_W,
@@ -33,24 +40,26 @@ export function createNet(ctx, audio) {
   // одного и того же трека/видео.
   ctx.now = () => Date.now() + ctx.clockOffsetMs;
 
-  const wsScheme = location.protocol === "https:" ? "wss:" : "ws:";
   const wsPath = ctx.isDM ? "/ws/dm" : ctx.isPlayer ? "/ws/player" : "/ws/view";
-  const ws = new WebSocket(`${wsScheme}//${location.host}${wsPath}`);
 
-  // Пока не пришёл первый snapshot — соединение либо ещё устанавливается,
-  // либо было отвергнуто сервером (сессия истекла/роль не подходит). Сервер
-  // отвечает http.Error ДО апгрейда до WS, браузер видит это просто как
-  // неудавшийся хендшейк — dm.html/player.html показывают понятное сообщение
-  // по событию vtt:authFailed.
-  let gotSnapshot = false;
-  ws.onclose = () => {
-    if (!gotSnapshot) document.dispatchEvent(new CustomEvent("vtt:authFailed"));
-  };
+  // Пока идёт переподключение, стол на экране выглядит живым, а команды
+  // уходят в никуда — плашка говорит об этом вслух (см. connection-banner.js).
+  initConnectionBanner();
 
-  ws.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
+  const conn = openSocket(wsPath, {
+    // Сессия кончилась (истекла, ДМ удалил аккаунт, гостя демо убрал
+    // уборщик) — dm.html/player.html показывают по этому событию понятное
+    // сообщение и уводят на экран входа.
+    onAuthFailed: () => document.dispatchEvent(new CustomEvent("vtt:authFailed")),
+    onDrop: () => document.dispatchEvent(new CustomEvent("vtt:connectionLost")),
+    onOpen: ({ first }) => {
+      if (!first) document.dispatchEvent(new CustomEvent("vtt:connectionRestored"));
+    },
+    onMessage,
+  });
+
+  function onMessage(data) {
     if (data.type === "snapshot") {
-      gotSnapshot = true;
       if (typeof data.serverNow === "number") ctx.clockOffsetMs = data.serverNow - Date.now();
       const nextScene = data.scene;
       if (!nextScene.walls) nextScene.walls = {};
@@ -116,12 +125,9 @@ export function createNet(ctx, audio) {
       // "Плейлисты" (pages/dm.js) сама перечитает список по этому событию.
       document.dispatchEvent(new CustomEvent("vtt:playlistsChanged"));
     }
-  };
-
-  function send(msg) {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   }
-  ctx.send = send;
 
-  return { ws, send };
+  ctx.send = conn.send;
+
+  return { send: conn.send, conn };
 }

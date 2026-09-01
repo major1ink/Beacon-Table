@@ -10,6 +10,7 @@
 // не нужны вообще, только сообщения "combat_state" в одну сторону и команды
 // трекера в другую.
 import { fetchMe } from "../api.js";
+import { openSocket } from "../ws-reconnect.js";
 import { initCombatPanel } from "../combat-panel.js";
 import { isGM } from "../roles.js";
 
@@ -20,31 +21,22 @@ import { isGM } from "../roles.js";
     return;
   }
 
-  const wsScheme = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${wsScheme}//${location.host}/ws/dm`);
-
-  // gotAny — пришло ли хоть одно сообщение: если соединение закрылось раньше
-  // первого сообщения, это отказ на этапе хендшейка (сессия истекла/не ДМ),
-  // а не обрыв уже рабочего сокета — тот же приём, что gotSnapshot в
-  // web/src/vtt/net.js.
-  let gotAny = false;
-  ws.onclose = () => {
-    if (!gotAny) document.getElementById("authFailedOverlay").classList.add("open");
-  };
-  ws.onmessage = (ev) => {
-    gotAny = true;
-    const data = JSON.parse(ev.data);
-    if (data.type === "combat_state") {
-      document.dispatchEvent(new CustomEvent("vtt:combatState", { detail: data }));
-    }
-    // snapshot/scene_list/player_list/roll_result/... — эта страница их не
-    // рендерит, молча игнорируем (тот же сокет несёт все типы сообщений
-    // комнаты, фильтрация только на приёме, не на подписке).
-  };
-
-  function send(msg) {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-  }
+  // Соединение с переподключением — см. web/src/ws-reconnect.js. Отдельная
+  // страница (окно/iframe) не имеет доступа к сокету основного стола,
+  // поэтому свой; состояние боя досылается сервером каждому вошедшему, так
+  // что после обрыва трекер догоняет сам.
+  const conn = openSocket("/ws/dm", {
+    onAuthFailed: () => document.getElementById("authFailedOverlay").classList.add("open"),
+    onMessage: (data) => {
+      if (data.type === "combat_state") {
+        document.dispatchEvent(new CustomEvent("vtt:combatState", { detail: data }));
+      }
+      // snapshot/scene_list/player_list/roll_result/... — эта страница их не
+      // рендерит, молча игнорируем (тот же сокет несёт все типы сообщений
+      // комнаты, фильтрация только на приёме, не на подписке).
+    },
+  });
+  const send = conn.send;
 
   initCombatPanel({
     send,

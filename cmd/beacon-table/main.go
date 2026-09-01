@@ -157,7 +157,7 @@ func main() {
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota)
 	api.DemoMode = cfg.DemoMode
-	// Уборщик гостей — только в демо-режиме 
+	// Уборщик гостей — только в демо-режиме
 	var guests *app.GuestKeeper
 	if cfg.DemoMode {
 		guests = app.NewGuestKeeper(companies, accountRepo)

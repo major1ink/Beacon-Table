@@ -8,6 +8,7 @@
 // величина — модификатор характеристики (та же формула, что и в
 // character-sheet.js: floor((score-10)/2)).
 import { fetchMe, fetchMonster, createMonster, updateMonster, deleteMonster, uploadFile } from "../api.js";
+import { openSocket } from "../ws-reconnect.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -646,18 +647,20 @@ window.addEventListener("beforeunload", () => {
 
 function connectRollSocket() {
   if (!rollLog) rollLog = createRollLog(document.getElementById("rollLogWrap"), { layout: "strip" });
-  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-  rollWS = new WebSocket(`${scheme}//${location.host}/ws/dm`);
-  rollWS.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
-    if (data.type === "roll_result") rollLog.push(data);
-  };
+  // Сокет с переподключением (см. web/src/ws-reconnect.js): без него обрыв
+  // связи выглядел бы как «кубик перестал кидаться», без единого признака
+  // на экране — сюда приходят только ответы на броски, и заметить нечего.
+  rollWS = openSocket("/ws/dm", {
+    onMessage: (data) => {
+      if (data.type === "roll_result") rollLog.push(data);
+    },
+  });
 }
 
 function sendRoll(formula, label) {
-  if (!rollWS || rollWS.readyState !== WebSocket.OPEN) return;
+  if (!rollWS) return;
   const fullLabel = monster && monster.name ? `${monster.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
-  rollWS.send(JSON.stringify({ type: "roll_dice", formula, label: fullLabel }));
+  rollWS.send({ type: "roll_dice", formula, label: fullLabel });
 }
 
 // ==================== boot ====================
