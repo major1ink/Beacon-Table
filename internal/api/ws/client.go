@@ -19,11 +19,11 @@ import (
 
 const (
 	maxClientFrame = 1 << 20
-	writeWait = 10 * time.Second
+	writeWait      = 10 * time.Second
 )
 
 var (
-	pongWait = 60 * time.Second
+	pongWait  = 60 * time.Second
 	pingEvery = 15 * time.Second
 )
 

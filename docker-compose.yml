@@ -1,5 +1,16 @@
 # Запуск одной командой: docker compose up -d
 #
+# Этот файл — сервер В ИНТЕРНЕТЕ (VPS с публичным IP): Caddy впереди,
+# HTTPS обязателен, сам стол снаружи не виден вообще — только через Caddy.
+# Единственное, что нужно сделать перед запуском: вписать домен и почту в
+# deploy/Caddyfile.example (домен должен уже указывать A/AAAA-записью на
+# этот сервер).
+#
+# Другой сценарий — стол ТОЛЬКО в домашней/локальной сети, без выхода в
+# интернет и без домена. Тогда Caddy не нужен: закомментируйте его блок
+# ниже и раскомментируйте "ports:" у beacon-table — подробности и почему
+# по умолчанию не так в README, раздел «Запуск в Docker».
+#
 # Настройки — через environment ниже либо через файл: раскомментируйте
 # env_file и положите рядом beacon.conf (формат тот же, что и у файла,
 # который приложение создаёт рядом с собой при первом запуске).
@@ -9,14 +20,21 @@ services:
     # Готовый образ вместо сборки из исходников:
     # image: ghcr.io/major1ink/beacon-table:latest
     restart: unless-stopped
-    ports:
-      # Порт наружу. С прокси-сервисом ниже закройте его от внешней сети,
-      # оставив доступ только контейнеру Caddy: "127.0.0.1:8080:8080".
-      - "8080:8080"
+    # Порт наружу НЕ публикуется — только Caddy ниже может достучаться до
+    # этого контейнера, по имени сервиса внутри docker-сети. Так проще не
+    # ошибиться: снаружи просто нет порта, который можно случайно открыть
+    # в обход файрвола (Docker сам правит iptables и обычно не считается с
+    # ufw/firewalld — самая частая причина "я же закрыл порт, а стол всё
+    # равно виден всем").
+    #
+    # Только для домашней сети без Caddy (см. шапку файла) — раскомментируйте:
+    # ports:
+    #   - "8080:8080"
     environment:
-      # Стол за HTTPS-прокси — включает Secure у cookie. Без прокси (просто
-      # локальная сеть) оставьте false, иначе войти не получится.
-      BEACON_BEHIND_PROXY: "false"
+      # Стол за HTTPS-прокси (Caddy ниже) — включает Secure у cookie. Без
+      # прокси (только локальная сеть) поставьте false, иначе войти не
+      # получится: браузер не станет хранить Secure-cookie на голом http.
+      BEACON_BEHIND_PROXY: "true"
     # env_file:
     #   - beacon.conf
     volumes:
@@ -25,25 +43,25 @@ services:
       # Карты, токены, аудио.
       - beacon-uploads:/uploads
 
-  # HTTPS-прокси. Раскомментируйте весь блок, впишите домен и почту в
-  # deploy/Caddyfile.example, и поставьте выше BEACON_BEHIND_PROXY: "true"
-  # и порт "127.0.0.1:8080:8080".
-  # caddy:
-  #   image: caddy:2-alpine
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #     - "443:443/udp"
-  #   volumes:
-  #     - ./deploy/Caddyfile.example:/etc/caddy/Caddyfile:ro
-  #     - caddy-data:/data
-  #     - caddy-config:/config
-  #   depends_on:
-  #     - beacon-table
+  # HTTPS-прокси: сам получает сертификат Let's Encrypt и продлевает его —
+  # от вас нужен только домен (см. шапку файла). Не нужен только для
+  # домашней сети без интернета — тогда закомментируйте весь этот блок.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - beacon-table
 
 volumes:
   beacon-data:
   beacon-uploads:
-  # caddy-data:
-  # caddy-config:
+  caddy-data:
+  caddy-config:

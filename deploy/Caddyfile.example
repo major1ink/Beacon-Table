@@ -4,15 +4,23 @@
 # только домен, направленный A/AAAA-записью на этот сервер, и открытые порты
 # 80 и 443.
 #
+# ---- Docker (см. docker-compose.yml — этот файл там уже подключён) ----
+#
+#   впишите свой домен и почту вместо примеров ниже, затем:
+#   docker compose up -d
+#
+# ---- без Docker, службой systemd рядом с Caddy на самом сервере ----
+#
 #   sudo apt install caddy           # или https://caddyserver.com/docs/install
 #   sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile
-#   # впишите свой домен и почту вместо примеров ниже
+#   # впишите свой домен и почту, И замените reverse_proxy ниже на 127.0.0.1:8080
 #   sudo systemctl reload caddy
 #
 # Beacon Table при этом должен:
 #   - слушать только localhost:  BEACON_ADDR=127.0.0.1:8080
 #   - знать, что он за HTTPS:     BEACON_BEHIND_PROXY=true
-# (см. beacon.conf / README, раздел «Настройка»).
+# (см. beacon.conf / README, раздел «Настройка»; в docker-compose.yml оба
+# уже выставлены как надо).
 
 table.example.com {
 	# Почта для уведомлений Let's Encrypt об истечении сертификата.
@@ -25,8 +33,11 @@ table.example.com {
 	# WebSocket (стол, трансляция) Caddy проксирует сам, ничего настраивать
 	# не нужно — в отличие от nginx.
 	#
-	# В docker-compose замените адрес на имя сервиса: beacon-table:8080
-	reverse_proxy 127.0.0.1:8080
+	# beacon-table:8080 — имя сервиса из docker-compose.yml, Caddy достаёт
+	# его по нему внутри docker-сети (порт наружу нигде не публикуется —
+	# так безопаснее по умолчанию, см. комментарий в docker-compose.yml).
+	# Без Docker (Caddy службой прямо на сервере) замените на 127.0.0.1:8080.
+	reverse_proxy beacon-table:8080
 
 	# Потолок на тело запроса: чуть больше самой крупной легальной загрузки —
 	# импорта мира (.zip до 1 ГБ, см. maxWorldImportSize). Карты/токены/аудио

@@ -73,6 +73,31 @@ fetchMe().then((me) => {
   if (me) redirectByRole(me);
 });
 
+// enterWithSession — уводит со страницы, только убедившись, что сессия
+// реально прижилась в браузере. POST /login и POST /demo/guest возвращают
+// аккаунт в теле ответа даже тогда, когда cookie сессии браузер не сохранил
+// (самый частый случай — BEACON_BEHIND_PROXY=true без настоящего HTTPS
+// снаружи: cookie приходит с пометкой Secure, и на голом http её просто не
+// запишут). Без этой проверки редирект на worlds.html/player.html случался
+// бы всё равно, а там fetchMe() падал молча — человек видел, как экран
+// мигнул и снова стал формой входа, без единого объяснения.
+//
+// Возвращает true, если увели дальше — вызывающему это нужно, чтобы понять,
+// возвращать ли кнопки в рабочее состояние.
+async function enterWithSession(msgEl) {
+  const me = await fetchMe();
+  if (!me) {
+    msgEl.textContent =
+      "Вход выполнен, но сессия не сохранилась в браузере. Обычно это значит, " +
+      "что сервер настроен на HTTPS-прокси (BEACON_BEHIND_PROXY), а снаружи нет " +
+      "настоящего HTTPS — обратитесь к тому, кто ставил стол.";
+    msgEl.className = "msg error";
+    return false;
+  }
+  redirectByRole(me);
+  return true;
+}
+
 document.getElementById("worldWaitLogout").onclick = async () => {
   await apiLogout();
   location.reload();
@@ -84,11 +109,11 @@ loginForm.addEventListener("submit", async (e) => {
   loginMsg.textContent = "";
   loginMsg.className = "msg";
   try {
-    const me = await apiLogin(
+    await apiLogin(
       document.getElementById("loginUsername").value.trim(),
       document.getElementById("loginPassword").value
     );
-    redirectByRole(me);
+    await enterWithSession(loginMsg);
   } catch (err) {
     loginMsg.textContent = err.message;
     loginMsg.className = "msg error";
@@ -145,7 +170,11 @@ function demoEntry(btn, role) {
     demoDmBtn.disabled = true;
     demoPlayerBtn.disabled = true;
     try {
-      redirectByRole(await enterDemo(role));
+      await enterDemo(role);
+      if (!(await enterWithSession(demoMsg))) {
+        demoDmBtn.disabled = false;
+        demoPlayerBtn.disabled = false;
+      }
     } catch (err) {
       demoMsg.textContent = err.message;
       demoMsg.className = "msg error";

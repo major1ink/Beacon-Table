@@ -30,9 +30,27 @@ func testKeeper(t *testing.T, accs ...*domain.Account) (*GuestKeeper, *memory.Ac
 		worlds:   emptyWorlds{},
 		accounts: accounts,
 		idle:     time.Minute,
-		seen:     map[string]time.Time{},
-		online:   map[string]int{},
+		noShow:   10 * time.Second,
+		guests:   map[string]*guestState{},
 	}, accounts
+}
+
+// sat — гость посидел за столом и ушёл ago назад: сокет открывал (значит
+// ему полагается полный idle), сейчас не подключён.
+func sat(keeper *GuestKeeper, id string, ago time.Duration) {
+	keeper.mu.Lock()
+	defer keeper.mu.Unlock()
+	now := time.Now()
+	keeper.guests[id] = &guestState{created: now.Add(-ago), seen: now.Add(-ago), joined: true}
+}
+
+// created — аккаунт гостя завёлся ago назад, и с тех пор он за столом не
+// появлялся: ровно то, что оставляет после себя curl по /api/demo/guest.
+func created(keeper *GuestKeeper, id string, ago time.Duration) {
+	keeper.mu.Lock()
+	defer keeper.mu.Unlock()
+	now := time.Now()
+	keeper.guests[id] = &guestState{created: now.Add(-ago), seen: now.Add(-ago)}
 }
 
 func account(id, role string) *domain.Account {
@@ -52,7 +70,7 @@ func alive(t *testing.T, accounts *memory.AccountStore, id string) bool {
 // вкладку гость освобождает место, не дожидаясь сброса демо-стола.
 func TestSweepRemovesSilentGuest(t *testing.T) {
 	keeper, accounts := testKeeper(t, account("guest", domain.AccountRoleDemo))
-	keeper.seen["guest"] = time.Now().Add(-2 * time.Minute)
+	sat(keeper, "guest", 2*time.Minute)
 
 	if got := keeper.Sweep(context.Background()); got != 1 {
 		t.Fatalf("убрано %d гостей, ожидался 1", got)
@@ -67,8 +85,8 @@ func TestSweepRemovesSilentGuest(t *testing.T) {
 // нельзя, сколько бы времени ни прошло с последней отметки.
 func TestSweepKeepsGuestAtTheTable(t *testing.T) {
 	keeper, accounts := testKeeper(t, account("guest", domain.AccountRoleDemo))
+	sat(keeper, "guest", time.Hour) // за столом был давно и с тех пор молчит
 	offline := keeper.Online("guest")
-	keeper.seen["guest"] = time.Now().Add(-time.Hour)
 
 	if got := keeper.Sweep(context.Background()); got != 0 {
 		t.Fatalf("убрано %d гостей, ожидалось 0", got)
@@ -84,7 +102,7 @@ func TestSweepKeepsGuestAtTheTable(t *testing.T) {
 		t.Fatalf("убрано %d гостей сразу после отключения, ожидалось 0", got)
 	}
 
-	keeper.seen["guest"] = time.Now().Add(-2 * time.Minute)
+	sat(keeper, "guest", 2*time.Minute)
 	if got := keeper.Sweep(context.Background()); got != 1 {
 		t.Fatalf("убрано %d гостей после тишины, ожидался 1", got)
 	}
@@ -99,7 +117,7 @@ func TestSweepSparesLiveAccounts(t *testing.T) {
 		account("guest", domain.AccountRoleDemoPlayer),
 	)
 	for _, id := range []string{"dm", "player", "guest"} {
-		keeper.seen[id] = time.Now().Add(-time.Hour)
+		sat(keeper, id, time.Hour)
 	}
 
 	if got := keeper.Sweep(context.Background()); got != 1 {
@@ -114,7 +132,7 @@ func TestSweepSparesLiveAccounts(t *testing.T) {
 
 // TestSweepGivesUnknownGuestGrace — сервер перезапустился и растерял отметки
 // присутствия. Первый же обход не должен вымести всех, кто в этот момент за
-// столом: незнакомцу даётся тот же срок, что и всем.
+// столом: незнакомцу заводится отметка и даётся срок, а не приговор на месте.
 func TestSweepGivesUnknownGuestGrace(t *testing.T) {
 	keeper, accounts := testKeeper(t, account("guest", domain.AccountRoleDemo))
 
@@ -125,7 +143,7 @@ func TestSweepGivesUnknownGuestGrace(t *testing.T) {
 		t.Fatal("гостя убрали, не дав ему ни минуты")
 	}
 
-	keeper.seen["guest"] = time.Now().Add(-2 * time.Minute)
+	sat(keeper, "guest", 2*time.Minute)
 	if got := keeper.Sweep(context.Background()); got != 1 {
 		t.Fatalf("убрано %d гостей после срока, ожидался 1", got)
 	}
@@ -168,14 +186,70 @@ func TestKeeperNilIsHarmless(t *testing.T) {
 // каждого, кто когда-либо заходил.
 func TestDropStrangersForgetsGoneGuests(t *testing.T) {
 	keeper, _ := testKeeper(t)
-	keeper.seen["ушедший"] = time.Now()
-	keeper.online["ушедший"] = 1
+	sat(keeper, "ушедший", 0)
 
 	keeper.Sweep(context.Background())
 
 	keeper.mu.Lock()
 	defer keeper.mu.Unlock()
-	if len(keeper.seen) != 0 || len(keeper.online) != 0 {
-		t.Errorf("в таблице остались отметки: seen=%v online=%v", keeper.seen, keeper.online)
+	if len(keeper.guests) != 0 {
+		t.Errorf("в таблице остались отметки: %v", keeper.guests)
+	}
+}
+
+// TestSweepRemovesNoShowGuest — гость, чей аккаунт завёлся, но за стол так и
+// не сел. Живой человек открывает сокет через секунду после входа; кто не
+// сделал этого за noShow — это строчка curl по /api/demo/guest, и держать
+// под неё место наравне с настоящим посетителем незачем.
+func TestSweepRemovesNoShowGuest(t *testing.T) {
+	keeper, accounts := testKeeper(t, account("guest", domain.AccountRoleDemo))
+
+	// Только что заведённого не трогаем: человек ещё идёт со страницы входа
+	// на стол.
+	created(keeper, "guest", 2*time.Second)
+	if got := keeper.Sweep(context.Background()); got != 0 {
+		t.Fatalf("убрано %d гостей сразу после входа, ожидалось 0", got)
+	}
+
+	created(keeper, "guest", 30*time.Second)
+	if got := keeper.Sweep(context.Background()); got != 1 {
+		t.Fatalf("убрано %d так и не пришедших гостей, ожидался 1", got)
+	}
+	if alive(t, accounts, "guest") {
+		t.Error("гость, не открывший стол, остался в базе")
+	}
+}
+
+// TestNoShowClockRunsFromCreation — срок для не пришедшего отсчитывается от
+// ЗАВЕДЕНИЯ аккаунта, а не от последней активности. Иначе скрипт, изредка
+// дёргающий любую ручку с этой сессией, продлевал бы себе место бесконечно,
+// ни разу не открыв стол.
+func TestNoShowClockRunsFromCreation(t *testing.T) {
+	keeper, accounts := testKeeper(t, account("guest", domain.AccountRoleDemo))
+	created(keeper, "guest", 30*time.Second)
+
+	keeper.Touch("guest") // «я ещё тут» — но за столом по-прежнему не был
+
+	if got := keeper.Sweep(context.Background()); got != 1 {
+		t.Fatalf("убрано %d гостей, ожидался 1", got)
+	}
+	if alive(t, accounts, "guest") {
+		t.Error("постукивание в API продлило место тому, кто за стол не садился")
+	}
+}
+
+// TestJoinedGuestKeepsFullIdle — обратная сторона: короткий срок не должен
+// доставаться тому, кто за столом побывал. Человек отошёл за чаем — ему
+// полагается полный idle с момента ухода, а не две минуты.
+func TestJoinedGuestKeepsFullIdle(t *testing.T) {
+	keeper, accounts := testKeeper(t, account("guest", domain.AccountRoleDemo))
+	// Дольше noShow, но много меньше idle.
+	sat(keeper, "guest", 30*time.Second)
+
+	if got := keeper.Sweep(context.Background()); got != 0 {
+		t.Fatalf("убрано %d гостей, ожидалось 0", got)
+	}
+	if !alive(t, accounts, "guest") {
+		t.Error("отошедшему гостю дали срок как не пришедшему")
 	}
 }
