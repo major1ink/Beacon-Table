@@ -1,4 +1,6 @@
-FROM golang:1.25-alpine AS build
+# syntax=docker/dockerfile:1
+
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -6,7 +8,11 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/beacon-table ./cmd/beacon-table
+ARG VERSION=dev
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/beacon-table ./cmd/beacon-table
 
 FROM alpine:3.20
 # Сертификаты нужны для исходящих запросов: импорт модулей Foundry по https.
