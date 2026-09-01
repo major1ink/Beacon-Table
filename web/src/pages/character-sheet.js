@@ -33,6 +33,7 @@ import { showAlert, openModal } from "../modal.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { createRollLog } from "../roll-log.js";
+import { isGM, isPlayer } from "../roles.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -2430,7 +2431,7 @@ function currentPregenId() {
 
 (async function boot() {
   me = await fetchMe();
-  if (!me || (me.role !== "player" && me.role !== "admin")) {
+  if (!me || (!isPlayer(me.role) && !isGM(me.role))) {
     location.href = "/";
     return;
   }
@@ -2449,7 +2450,7 @@ function currentPregenId() {
     // ДМ открыл заготовку из пула — полноценная правка листа (шаблон
     // скопируется игроку при «Назначить»). Инвентарь и броски заготовке
     // недоступны — записи characters ещё нет.
-    if (me.role === "admin") {
+    if (isGM(me.role)) {
       isPregenAdmin = true;
       pregenEditId = pregenId;
       document.getElementById("charTitle").textContent = character.name;
@@ -2489,7 +2490,7 @@ function currentPregenId() {
     document.getElementById("loadingHint").textContent = "Не указан id персонажа (?id=...).";
     return;
   }
-  isAdminView = me.role === "admin";
+  isAdminView = isGM(me.role);
   try {
     character = isAdminView ? await fetchAdminCharacter(charId) : await fetchCharacter(charId);
   } catch (err) {

@@ -126,7 +126,7 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 	})
 	mux.HandleFunc("/ws/player", func(w http.ResponseWriter, r *http.Request) {
 		acc, err := sessionAccount(auth, r)
-		if err != nil || !acc.IsActive() || acc.Role != domain.AccountRolePlayer {
+		if err != nil || !acc.IsActive() || !acc.IsPlayer() {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

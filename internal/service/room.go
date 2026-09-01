@@ -53,6 +53,10 @@ type RoomService interface {
 	// панель "Плейлисты" (см. web/src/pages/dm.js) должна перечитать список
 	// сама, без ручной перезагрузки страницы.
 	NotifyPlaylistsChanged()
+	// SpawnPlayerToken ставит на активную сцену токен персонажа игрока —
+	// нужен входу в публичное демо игроком, где ДМ-а, который перетащил бы
+	// фишку на карту, может не быть вовсе (см. room_guest.go).
+	SpawnPlayerToken(ctx context.Context, ownerID, characterID, label, image string) (bool, error)
 }
 
 type inboundMsg struct {
@@ -115,6 +119,10 @@ type Room struct {
 	// актёрами (см. LinkTokensToMonsters): свой канал по той же причине, что
 	// и importScenes — это не команда клиента и роль по ней не проверяется.
 	linkTokens chan linkTokensReq
+	// spawnToken — «поставь токен этому игроку» из HTTP-хендлера (см.
+	// room_guest.go: SpawnPlayerToken): свой канал по той же причине, что и
+	// importScenes — это не команда клиента и роль по ней не проверяется.
+	spawnToken chan spawnTokenReq
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -204,6 +212,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		shutdown:       make(chan chan struct{}),
 		importScenes:   make(chan importScenesReq),
 		linkTokens:     make(chan linkTokensReq),
+		spawnToken:     make(chan spawnTokenReq),
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
@@ -627,6 +636,9 @@ func (r *Room) run() {
 
 		case req := <-r.linkTokens:
 			req.reply <- r.linkTokensToMonsters(req.monsterByActor)
+
+		case req := <-r.spawnToken:
+			req.reply <- r.spawnPlayerToken(req)
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)

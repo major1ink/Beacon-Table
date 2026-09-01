@@ -11,10 +11,11 @@
 // трекера в другую.
 import { fetchMe } from "../api.js";
 import { initCombatPanel } from "../combat-panel.js";
+import { isGM } from "../roles.js";
 
 (async function boot() {
   const me = await fetchMe();
-  if (!me || me.role !== "admin") {
+  if (!me || !isGM(me.role)) {
     location.href = "/";
     return;
   }

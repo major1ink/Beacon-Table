@@ -1,0 +1,1 @@
+function n(e){return e==="admin"||e==="demo"}function r(e){return e==="player"||e==="demo_player"}function a(e){return e==="demo"||e==="demo_player"}function t(e){return e==="admin"}function u(e){switch(e){case"admin":return"ДМ";case"demo":return"Гость (ДМ)";case"demo_player":return"Гость (игрок)";default:return"Игрок"}}export{a,r as b,t as c,n as i,u as r};

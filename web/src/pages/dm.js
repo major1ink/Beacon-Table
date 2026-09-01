@@ -62,6 +62,7 @@ import { icon } from "../icons.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
+import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabel } from "../roles.js";
 
 // ================= сессия ДМ =================
 // /ws/dm, /upload, /assets проверяют cookie сессии на сервере
@@ -75,11 +76,11 @@ let vtt;
 let isDemoGuest = false;
 (async function boot() {
   const me = await fetchMe();
-  if (!me || (me.role !== "admin" && me.role !== "demo")) {
+  if (!me || !isGM(me.role)) {
     location.href = "/";
     return;
   }
-  isDemoGuest = me.role === "demo";
+  isDemoGuest = isDemoRole(me.role);
   if (isDemoGuest) hideOwnerOnlyUI();
   document.getElementById("dmUsername").textContent = me.username;
   // Всё остальное в этом файле — обычные top-level обработчики
@@ -1490,7 +1491,7 @@ async function renderAccounts() {
   for (const a of accs) {
     const row = document.createElement("div");
     row.className = "account-row";
-    const roleLabel = a.role === "admin" ? "ДМ" : "Игрок";
+    const roleLabel = accountRoleLabel(a.role);
     row.innerHTML = `
       <div class="account-top">
         <span class="account-name">${a.username}</span>
@@ -2260,7 +2261,7 @@ function pregenPoolRow(p) {
 async function assignPregenFlow(pregen) {
   let accounts = [];
   try {
-    accounts = (await fetchAdminAccounts()).filter((a) => a.role === "player" && a.status === "active");
+    accounts = (await fetchAdminAccounts()).filter((a) => isPlayer(a.role) && a.status === "active");
   } catch (err) {
     showAlert("Не удалось загрузить список игроков: " + err.message);
     return;

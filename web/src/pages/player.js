@@ -23,6 +23,7 @@ import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { isPlayer } from "../roles.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
 // БОКОВОЙ КОЛОНКЕ слева от карты (см. sheet-dock.js): за столом лист держат
@@ -108,7 +109,7 @@ let vtt = null;
 
 (async function boot() {
   me = await fetchMe();
-  if (!me || me.role !== "player") {
+  if (!me || !isPlayer(me.role)) {
     location.href = "/";
     return;
   }

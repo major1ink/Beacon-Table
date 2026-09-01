@@ -99,8 +99,11 @@ export async function fetchDemoStatus() {
     return { enabled: false };
   }
 }
-export async function enterDemo() {
-  return apiFetch("/api/demo/guest", { method: "POST" });
+// enterDemo — role: "dm" (гость садится за ширму) или "player" (гость
+// садится игроком: сервер выдаёт ему персонажа и ставит токен на карту, см.
+// internal/api/http/demo_handlers.go).
+export async function enterDemo(role) {
+  return apiFetch("/api/demo/guest", { method: "POST", body: JSON.stringify({ role }) });
 }
 
 // ---- настройки сервера (раздел «Настройки» у ДМ) ----

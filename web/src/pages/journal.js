@@ -30,6 +30,7 @@ import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { showConfirm, showPrompt } from "../modal.js";
+import { isGM } from "../roles.js";
 
 const treeEl = document.getElementById("tree");
 const searchEl = document.getElementById("search");
@@ -900,7 +901,7 @@ async function guard(fn) {
     location.href = "/";
     return;
   }
-  isDM = me.role === "admin";
+  isDM = isGM(me.role);
   connectRollSocket();
   try {
     members = await fetchJournalMembers();

@@ -30,14 +30,20 @@ type AuthService interface {
 	AccountBySession(ctx context.Context, token string) (*domain.Account, error)
 	ChangeOwnPassword(ctx context.Context, accountID, oldPassword, newPassword string) error
 	// CreateGuest заводит гостя публичного демо: активный аккаунт с ролью
-	// domain.AccountRoleDemo, привязанный к демо-миру, и сразу открытую
-	// сессию. Пароля у гостя нет по смыслу — войти повторно этим логином
-	// нельзя, только завести нового гостя.
+	// role, привязанный к демо-миру, и сразу открытую сессию. Пароля у
+	// гостя нет по смыслу — войти повторно этим логином нельзя, только
+	// завести нового гостя.
 	//
-	// maxGuests ограничивает число живых гостей: аккаунт заводится без
-	// всякой проверки со стороны человека, и без предела один скрипт набьёт
-	// базу за минуту. domain.ErrConflict — гостей уже слишком много.
-	CreateGuest(ctx context.Context, companyID string, maxGuests int) (token string, account *domain.Account, err error)
+	// role — domain.AccountRoleDemo (гость за ширмой) либо
+	// domain.AccountRoleDemoPlayer (гость-игрок); любая другая роль
+	// отвергается: раздавать по нажатию кнопки права владельца сервера
+	// нельзя даже по ошибке вызывающего.
+	//
+	// maxGuests ограничивает число живых гостей ОБЕИХ ролей: аккаунт
+	// заводится без всякой проверки со стороны человека, и без предела один
+	// скрипт набьёт базу за минуту. domain.ErrConflict — гостей уже слишком
+	// много.
+	CreateGuest(ctx context.Context, companyID, role string, maxGuests int) (token string, account *domain.Account, err error)
 }
 
 // authService — полностью глобальный сервис: аккаунты/сессии не привязаны
@@ -139,13 +145,26 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	return token, acc, nil
 }
 
-// guestPrefix — по нему гостевые аккаунты и считаются, и отличаются в списке
-// аккаунтов у владельца сервера.
-const guestPrefix = "гость-"
+// guestPrefix/guestPlayerPrefix — по ним гостевые аккаунты отличаются в
+// списке аккаунтов у владельца сервера (считаются они по роли, см. ниже).
+// Разные префиксы у двух ролей — чтобы в списке было видно не только «это
+// гость», но и с какой стороны ширмы он сидел.
+const (
+	guestPrefix       = "гость-"
+	guestPlayerPrefix = "гость-игрок-"
+)
 
-func (s *authService) CreateGuest(ctx context.Context, companyID string, maxGuests int) (string, *domain.Account, error) {
+func (s *authService) CreateGuest(ctx context.Context, companyID, role string, maxGuests int) (string, *domain.Account, error) {
 	if companyID == "" {
 		return "", nil, &domain.ValidationError{Msg: "демо-мир не запущен"}
+	}
+	prefix := guestPrefix
+	switch role {
+	case domain.AccountRoleDemo:
+	case domain.AccountRoleDemoPlayer:
+		prefix = guestPlayerPrefix
+	default:
+		return "", nil, &domain.ValidationError{Msg: "неизвестная роль гостя демо"}
 	}
 	if maxGuests > 0 {
 		all, err := s.accounts.List(ctx)
@@ -154,7 +173,7 @@ func (s *authService) CreateGuest(ctx context.Context, companyID string, maxGues
 		}
 		live := 0
 		for _, acc := range all {
-			if acc.Role == domain.AccountRoleDemo {
+			if acc.IsDemo() {
 				live++
 			}
 		}
@@ -171,8 +190,8 @@ func (s *authService) CreateGuest(ctx context.Context, companyID string, maxGues
 		return "", nil, err
 	}
 	acc := &domain.Account{
-		ID: newID(), Username: guestPrefix + randomHex(4), PasswordHash: hash,
-		Role: domain.AccountRoleDemo, Status: domain.AccountStatusActive, CompanyID: companyID,
+		ID: newID(), Username: prefix + randomHex(4), PasswordHash: hash,
+		Role: role, Status: domain.AccountStatusActive, CompanyID: companyID,
 	}
 	if err := s.accounts.Create(ctx, acc); err != nil {
 		return "", nil, err

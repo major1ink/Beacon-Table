@@ -16,6 +16,7 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
+import { isGM } from "../roles.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -616,7 +617,7 @@ function currentId() {
     location.href = "/";
     return;
   }
-  isAdminView = me.role === "admin";
+  isAdminView = isGM(me.role);
   spellId = currentId();
   if (!spellId) {
     document.getElementById("loadingHint").textContent = "Не указан id заклинания (?id=...).";

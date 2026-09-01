@@ -17,6 +17,7 @@ import { wireCatalogLinks } from "../catalog-links.js";
 import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
+import { isGM } from "../roles.js";
 
 // ==================== state ====================
 
@@ -481,7 +482,7 @@ function currentId() {
     location.href = "/";
     return;
   }
-  isAdminView = me.role === "admin";
+  isAdminView = isGM(me.role);
   itemId = currentId();
   if (!itemId) {
     document.getElementById("loadingHint").textContent = "Не указан id предмета (?id=...).";

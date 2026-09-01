@@ -19,7 +19,7 @@ func TestCreateGuestOpensSession(t *testing.T) {
 	sessions := memory.NewSessionStore(accounts)
 	auth := service.NewAuthService(accounts, sessions)
 
-	token, acc, err := auth.CreateGuest(ctx, "world-1", 10)
+	token, acc, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemo, 10)
 	if err != nil {
 		t.Fatalf("CreateGuest: %v", err)
 	}
@@ -67,6 +67,71 @@ func TestGuestRoleSeparatesTableFromServer(t *testing.T) {
 	if player.IsGM() || player.IsOwner() {
 		t.Error("игрок получил лишние права")
 	}
+
+	// Гость-игрок — вторая половина демо: он должен быть ИМЕННО игроком, а
+	// не тихо получить права ведущего (см. domain.AccountRoleDemoPlayer).
+	guestPlayer := &domain.Account{Role: domain.AccountRoleDemoPlayer}
+	if guestPlayer.IsGM() || guestPlayer.IsOwner() {
+		t.Error("гость-игрок получил права ДМ — демо игрока показывало бы карту целиком")
+	}
+	if !guestPlayer.IsPlayer() {
+		t.Error("гость-игрок не считается игроком — его не пустят на /ws/player")
+	}
+	if !guestPlayer.IsDemo() {
+		t.Error("гость-игрок не считается гостем — он не попадёт под предел числа гостей")
+	}
+}
+
+// TestCreateGuestPlayerRole — вход в демо игроком заводит аккаунт игрока,
+// отличимый в списке аккаунтов от гостя за ширмой.
+func TestCreateGuestPlayerRole(t *testing.T) {
+	ctx := context.Background()
+	accounts := memory.NewAccountStore()
+	auth := service.NewAuthService(accounts, memory.NewSessionStore(accounts))
+
+	_, acc, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemoPlayer, 10)
+	if err != nil {
+		t.Fatalf("CreateGuest: %v", err)
+	}
+	if acc.Role != domain.AccountRoleDemoPlayer {
+		t.Fatalf("роль %q, ожидалась demo_player", acc.Role)
+	}
+	if !strings.HasPrefix(acc.Username, "гость-игрок-") {
+		t.Fatalf("логин %q — по нему не отличить гостя-игрока в списке аккаунтов", acc.Username)
+	}
+}
+
+// TestCreateGuestRejectsForeignRole — роль приходит из тела запроса, и
+// раздавать по кнопке что-то кроме двух гостевых ролей нельзя даже по
+// ошибке вызывающего.
+func TestCreateGuestRejectsForeignRole(t *testing.T) {
+	ctx := context.Background()
+	accounts := memory.NewAccountStore()
+	auth := service.NewAuthService(accounts, memory.NewSessionStore(accounts))
+
+	for _, role := range []string{domain.AccountRoleAdmin, domain.AccountRolePlayer, "", "хозяин"} {
+		if _, _, err := auth.CreateGuest(ctx, "world-1", role, 10); err == nil {
+			t.Errorf("гость заведён с ролью %q", role)
+		}
+	}
+}
+
+// TestGuestLimitCountsBothRoles — предел общий: иначе скрипт набил бы базу
+// через ту роль, которую забыли посчитать.
+func TestGuestLimitCountsBothRoles(t *testing.T) {
+	ctx := context.Background()
+	accounts := memory.NewAccountStore()
+	auth := service.NewAuthService(accounts, memory.NewSessionStore(accounts))
+
+	if _, _, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemo, 2); err != nil {
+		t.Fatalf("гость-ДМ: %v", err)
+	}
+	if _, _, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemoPlayer, 2); err != nil {
+		t.Fatalf("гость-игрок: %v", err)
+	}
+	if _, _, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemoPlayer, 2); err == nil {
+		t.Fatal("гость сверх общего предела заведён")
+	}
 }
 
 // TestCreateGuestRespectsLimit — гостей заводят без всякого участия
@@ -77,11 +142,11 @@ func TestCreateGuestRespectsLimit(t *testing.T) {
 	auth := service.NewAuthService(accounts, memory.NewSessionStore(accounts))
 
 	for i := 0; i < 3; i++ {
-		if _, _, err := auth.CreateGuest(ctx, "world-1", 3); err != nil {
+		if _, _, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemo, 3); err != nil {
 			t.Fatalf("гость %d: %v", i+1, err)
 		}
 	}
-	if _, _, err := auth.CreateGuest(ctx, "world-1", 3); err == nil {
+	if _, _, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemo, 3); err == nil {
 		t.Fatal("гость сверх предела заведён")
 	}
 }
@@ -91,7 +156,7 @@ func TestCreateGuestNeedsWorld(t *testing.T) {
 	accounts := memory.NewAccountStore()
 	auth := service.NewAuthService(accounts, memory.NewSessionStore(accounts))
 
-	if _, _, err := auth.CreateGuest(context.Background(), "", 10); err == nil {
+	if _, _, err := auth.CreateGuest(context.Background(), "", domain.AccountRoleDemo, 10); err == nil {
 		t.Fatal("гость заведён без запущенного мира")
 	}
 }
@@ -103,7 +168,7 @@ func TestGuestCannotLogInByPassword(t *testing.T) {
 	accounts := memory.NewAccountStore()
 	auth := service.NewAuthService(accounts, memory.NewSessionStore(accounts))
 
-	_, acc, err := auth.CreateGuest(ctx, "world-1", 10)
+	_, acc, err := auth.CreateGuest(ctx, "world-1", domain.AccountRoleDemo, 10)
 	if err != nil {
 		t.Fatalf("CreateGuest: %v", err)
 	}

@@ -75,6 +75,9 @@ func (f *fakeRoom) Shutdown()                             {}
 func (f *fakeRoom) NotifyJournalChanged(string)           {}
 func (f *fakeRoom) NotifyCharacterSheetChanged(string)    {}
 func (f *fakeRoom) NotifyPlaylistsChanged()               {}
+func (f *fakeRoom) SpawnPlayerToken(context.Context, string, string, string, string) (bool, error) {
+	return false, nil
+}
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil

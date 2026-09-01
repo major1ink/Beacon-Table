@@ -16,6 +16,7 @@ import { icon } from "../icons.js";
 import { initItemPicker } from "../item-picker.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
+import { isGM } from "../roles.js";
 
 const ABILITIES = [
   { key: "str", label: "Сил" },
@@ -746,7 +747,7 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
-  if (!me || me.role !== "admin") {
+  if (!me || !isGM(me.role)) {
     location.href = "/";
     return;
   }
