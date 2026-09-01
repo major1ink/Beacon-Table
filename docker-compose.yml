@@ -16,9 +16,10 @@
 # который приложение создаёт рядом с собой при первом запуске).
 services:
   beacon-table:
-    build: .
-    # Готовый образ вместо сборки из исходников:
-    # image: ghcr.io/major1ink/beacon-table:latest
+    image: ghcr.io/major1ink/beacon-table:latest
+    # Сборка из исходников вместо готового образа — например, свой форк или
+    # правка перед мёрджем:
+    # build: .
     restart: unless-stopped
     # Потолок памяти — та же страховка и то же число, что у MemoryMax в
     # deploy/beacon-table.service (см. его комментарий там): не гарантия

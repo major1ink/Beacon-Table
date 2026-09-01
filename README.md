@@ -324,11 +324,11 @@ cp -r data uploads /где-то/бэкап-перед-обновлением/   
 sudo systemctl start beacon-table
 ```
 
-**Docker Compose:** если стол запущен через закомментированный по умолчанию
-`image:` (см. «Запуск в Docker» выше) — `docker compose pull && docker compose up -d`.
-Через активный по умолчанию `build: .` — подтяните новые исходники и
+**Docker Compose:** по умолчанию стол запущен через готовый образ —
+`docker compose pull && docker compose up -d`. Если переключили на сборку
+из исходников (`build: .`, см. «Запуск в Docker» выше) — подтяните их и
 пересоберите: `git pull && docker compose up -d --build`. Тома `beacon-data`/
-`beacon-uploads` пересборка не трогает.
+`beacon-uploads` ни то, ни другое не трогает.
 
 **Из исходников:** `git pull`, затем `task build` (или `go build -o beacon-table ./cmd/beacon-table`),
 перезапустите тем же способом, каким обычно запускаете.
