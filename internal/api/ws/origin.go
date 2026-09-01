@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"beacon-table/internal/app"
 )
 
 // Options — политика приёма WS-подключений.
@@ -18,6 +20,11 @@ type Options struct {
 	// (nginx без proxy_set_header Host) — иначе сервер видит вместо имени
 	// сайта что-то своё и отвергает собственные же страницы.
 	AllowedOrigins []string
+	// Guests — уборщик гостей публичного демо (см. app.GuestKeeper). Ему
+	// нужно знать, что гость сейчас за столом: тот может час смотреть, как
+	// водит ДМ, не сделав ни одного HTTP-запроса, и по одним только запросам
+	// выглядел бы ушедшим. nil в обычной установке.
+	Guests *app.GuestKeeper
 }
 
 // checkOrigin — та самая проверка, которой раньше не было: до неё upgrader

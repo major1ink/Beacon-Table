@@ -10,7 +10,7 @@ import (
 	"beacon-table/internal/domain"
 )
 
-// maxDemoGuests — сколько гостей демо живёт одновременно (обеих ролей
+// maxDemoGuests — сколько гостей демо живёт ОДНОВРЕМЕННО (обеих ролей
 // вместе). Аккаунт заводится по одному нажатию, без всякого участия
 // человека, поэтому предел нужен: иначе один скрипт набьёт базу за минуту.
 // Отвечаем 429, а не молча перестаём пускать.
@@ -67,6 +67,11 @@ func (a *API) handleDemoGuest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "не удалось открыть демо")
 		return
 	}
+
+	// Отметка присутствия — сразу: до первого запроса от нового гостя может
+	// пройти секунда-другая, и уборщик не должен успеть счесть его молчащим
+	// (см. app.GuestKeeper).
+	a.Guests.Touch(acc.ID)
 
 	if role == domain.AccountRoleDemoPlayer {
 		a.seatDemoPlayer(r, world, acc)

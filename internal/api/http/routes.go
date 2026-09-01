@@ -37,6 +37,10 @@ type API struct {
 	// DemoMode — сервер работает публичной витриной: доступен гостевой вход
 	// (см. demo_handlers.go). В обычной установке выключен.
 	DemoMode bool
+	// Guests — уборщик гостевых аккаунтов демо (см. app.GuestKeeper). nil в
+	// обычной установке: гостей там не бывает, и все обращения к нему —
+	// пустышки.
+	Guests *app.GuestKeeper
 	// loginGuard — защита /api/login и /api/register от перебора (см.
 	// loginguard.go). Транспортный уровень: считает по IP из запроса,
 	// service-слою про такое знать незачем.

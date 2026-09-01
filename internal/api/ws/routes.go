@@ -22,6 +22,9 @@ type Gateway struct {
 	// настроек запуска, поэтому живёт здесь, а не в пакетной переменной.
 	upgrader websocket.Upgrader
 
+	// guests — уборщик гостей демо; nil в обычной установке (см. Options).
+	guests *app.GuestKeeper
+
 	mu    sync.Mutex
 	conns map[*websocket.Conn]struct{}
 	// closing — сервер уже останавливается: новые подключения принимать
@@ -35,8 +38,20 @@ func newGateway(opts Options) *Gateway {
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return checkOrigin(r, opts) },
 		},
-		conns: map[*websocket.Conn]struct{}{},
+		conns:  map[*websocket.Conn]struct{}{},
+		guests: opts.Guests,
 	}
+}
+
+// guestPresence отмечает, что гость демо сидит за столом, и возвращает
+// «он отключился» — вызывать по завершении serveWs (см. app.GuestKeeper.Online).
+// Для всех остальных — пустышка: живой аккаунт уборщик не трогает, и держать
+// по нему счётчик незачем.
+func (g *Gateway) guestPresence(acc *domain.Account) func() {
+	if !acc.IsDemo() {
+		return func() {}
+	}
+	return g.guests.Online(acc.ID)
 }
 
 // track берёт соединение под присмотр. false — сервер уже останавливается,
@@ -102,6 +117,7 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
+		defer gw.guestPresence(acc)()
 		serveWs(gw, world.Room, w, r, domain.RoleDM, acc.ID, acc.Username)
 	})
 	// /ws/view — зритель (ТВ/проектор): аккаунта у него нет по устройству
@@ -139,6 +155,7 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 			http.Error(w, "world not running", http.StatusServiceUnavailable)
 			return
 		}
+		defer gw.guestPresence(acc)()
 		serveWs(gw, world.Room, w, r, domain.RolePlayer, acc.ID, acc.Username)
 	})
 	return gw

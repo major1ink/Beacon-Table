@@ -2,17 +2,21 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository/memory"
 	"beacon-table/internal/service"
 )
 
-// ownerGateAPI — API с сессиями владельца и гостя демо.
-func ownerGateAPI(t *testing.T) *API {
+// ownerGateAPI — API с сессиями владельца и гостя демо. Хранилище аккаунтов
+// возвращается вторым: проверять «гостя больше нет» больше негде — сессии к
+// этому моменту тоже удалены.
+func ownerGateAPI(t *testing.T) (*API, *memory.AccountStore) {
 	t.Helper()
 	ctx := context.Background()
 	accounts := memory.NewAccountStore()
@@ -34,7 +38,14 @@ func ownerGateAPI(t *testing.T) *API {
 			t.Fatalf("сессия %s: %v", a.id, err)
 		}
 	}
-	return &API{Auth: service.NewAuthService(accounts, sessions), DemoMode: true}
+	return &API{
+		Auth:     service.NewAuthService(accounts, sessions),
+		DemoMode: true,
+		// Без менеджера миров: уборщику здесь нужно убрать аккаунт, а фишки и
+		// заготовки живут в мире и проверяются там (см. app.GuestKeeper,
+		// service.TestRemoveOwnerTokens).
+		Guests: app.NewGuestKeeper(nil, accounts),
+	}, accounts
 }
 
 func gateCode(t *testing.T, token string, gate func(http.ResponseWriter, *http.Request) (*domain.Account, bool)) int {
@@ -57,7 +68,7 @@ func gateCode(t *testing.T, token string, gate func(http.ResponseWriter, *http.R
 // Что игрок не ДМ и не владелец, проверяет TestGuestRoleSeparatesTableFromServer
 // на уровне domain.
 func TestOwnerGateBlocksDemoGuest(t *testing.T) {
-	api := ownerGateAPI(t)
+	api, _ := ownerGateAPI(t)
 
 	// Стол: и владелец, и гость.
 	if code := gateCode(t, "sess-owner", api.requireAdminAccount); code != http.StatusOK {
@@ -97,7 +108,7 @@ func TestDemoStatusReflectsMode(t *testing.T) {
 // TestDemoGuestRefusedWhenModeOff — на обычной установке гостевой вход не
 // работает, даже если кто-то дёрнет ручку напрямую.
 func TestDemoGuestRefusedWhenModeOff(t *testing.T) {
-	api := ownerGateAPI(t)
+	api, _ := ownerGateAPI(t)
 	api.DemoMode = false
 
 	req := httptest.NewRequest(http.MethodPost, "/api/demo/guest", nil)
@@ -106,5 +117,44 @@ func TestDemoGuestRefusedWhenModeOff(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("код %d, ожидался 404 — на обычном сервере такой ручки как бы нет", rec.Code)
+	}
+}
+
+// TestLogoutRemovesDemoGuest — «Выйти» у гостя означает не «до завтра», а
+// «меня тут не было»: аккаунт-однодневка исчезает целиком, освобождая место
+// за столом сразу, а не через уборку по бездействию (см. app.GuestKeeper).
+//
+// Порядок внутри хендлера здесь и проверяется: аккаунт надо достать ДО
+// закрытия сессии — после неё по cookie уже никого не найти, и гость висел
+// бы до уборщика.
+func TestLogoutRemovesDemoGuest(t *testing.T) {
+	api, accounts := ownerGateAPI(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/logout", nil)
+	req.AddCookie(&http.Cookie{Name: domain.SessionCookieName, Value: "sess-guest"})
+	rec := httptest.NewRecorder()
+	api.handleLogout(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("выход ответил %d, ожидался 200", rec.Code)
+	}
+	if _, err := accounts.ByID(context.Background(), "guest"); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("гость остался в базе после выхода: %v", err)
+	}
+}
+
+// TestLogoutKeepsOwnerAccount — тот же хендлер у владельца сервера закрывает
+// одну сессию и не более: перепутать здесь роли означало бы стереть админа
+// стола по нажатию «Выйти».
+func TestLogoutKeepsOwnerAccount(t *testing.T) {
+	api, accounts := ownerGateAPI(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/logout", nil)
+	req.AddCookie(&http.Cookie{Name: domain.SessionCookieName, Value: "sess-owner"})
+	rec := httptest.NewRecorder()
+	api.handleLogout(rec, req)
+
+	if _, err := accounts.ByID(context.Background(), "owner"); err != nil {
+		t.Errorf("выход стёр аккаунт владельца: %v", err)
 	}
 }

@@ -168,3 +168,61 @@ func (r *Room) spotTaken(x, y, cell float64) bool {
 	}
 	return false
 }
+
+// ---- уход гостя ----
+//
+// Обратная сторона SpawnPlayerToken: фишку гостю ставит сервер, значит и
+// убирать её со стола — тоже ему. Гость демо не «выходит из игры» в том
+// смысле, в каком это делает игрок постоянного стола: его аккаунт исчезает
+// целиком (см. app.GuestKeeper), и оставшаяся на карте фишка ничьей не
+// становится — она просто мешает следующим.
+
+// dropTokensReq — заявка на уборку фишек ушедшего, см. RemoveOwnerTokens.
+type dropTokensReq struct {
+	ownerID string
+	reply   chan int
+}
+
+// RemoveOwnerTokens убирает со ВСЕХ сцен комнаты фишки, принадлежащие
+// ownerID, и раздаёт обновление оставшимся за столом. Возвращает, сколько
+// убрал.
+//
+// По всем сценам, а не только по активной, по той же причине, что и
+// dropDuplicateCharacterTokens: гость мог отметиться на карте, которую ДМ
+// с тех пор переключил, — иначе фишка всплыла бы при возврате на неё.
+func (r *Room) RemoveOwnerTokens(ctx context.Context, ownerID string) (int, error) {
+	if ownerID == "" {
+		return 0, nil
+	}
+	reply := make(chan int, 1)
+	select {
+	case r.dropTokens <- dropTokensReq{ownerID: ownerID, reply: reply}:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	select {
+	case removed := <-reply:
+		return removed, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+// removeOwnerTokens — тело RemoveOwnerTokens уже внутри горутины комнаты.
+func (r *Room) removeOwnerTokens(ownerID string) int {
+	removed := 0
+	for sceneID, s := range r.scenes {
+		for id, t := range s.Tokens {
+			if t.OwnerID != ownerID {
+				continue
+			}
+			delete(s.Tokens, id)
+			r.markDirty(sceneID)
+			removed++
+		}
+	}
+	if removed > 0 {
+		r.broadcastAll()
+	}
+	return removed
+}

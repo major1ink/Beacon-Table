@@ -57,6 +57,10 @@ type RoomService interface {
 	// нужен входу в публичное демо игроком, где ДМ-а, который перетащил бы
 	// фишку на карту, может не быть вовсе (см. room_guest.go).
 	SpawnPlayerToken(ctx context.Context, ownerID, characterID, label, image string) (bool, error)
+	// RemoveOwnerTokens убирает со всех сцен фишки игрока, которого за
+	// столом больше нет: гость демо ушёл или его убрал уборщик по
+	// бездействию (см. room_guest.go, app.GuestKeeper).
+	RemoveOwnerTokens(ctx context.Context, ownerID string) (int, error)
 }
 
 type inboundMsg struct {
@@ -123,6 +127,10 @@ type Room struct {
 	// room_guest.go: SpawnPlayerToken): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
 	spawnToken chan spawnTokenReq
+	// dropTokens — «убери фишки этого игрока» из HTTP-хендлера (см.
+	// room_guest.go: RemoveOwnerTokens): свой канал по той же причине, что и
+	// spawnToken выше — это не команда клиента и роль по ней не проверяется.
+	dropTokens chan dropTokensReq
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -213,6 +221,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		importScenes:   make(chan importScenesReq),
 		linkTokens:     make(chan linkTokensReq),
 		spawnToken:     make(chan spawnTokenReq),
+		dropTokens:     make(chan dropTokensReq),
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
@@ -639,6 +648,9 @@ func (r *Room) run() {
 
 		case req := <-r.spawnToken:
 			req.reply <- r.spawnPlayerToken(req)
+
+		case req := <-r.dropTokens:
+			req.reply <- r.removeOwnerTokens(req.ownerID)
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)

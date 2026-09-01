@@ -81,7 +81,16 @@ func (a *API) sessionAccount(r *http.Request) (*domain.Account, error) {
 	if err != nil {
 		return nil, domain.ErrNotFound
 	}
-	return a.Auth.AccountBySession(r.Context(), c.Value)
+	acc, err := a.Auth.AccountBySession(r.Context(), c.Value)
+	// Единственная точка, через которую cookie превращается в аккаунт, — она
+	// же и место, где видно «гость ещё здесь». Отсюда, а не из requireAccount:
+	// картинки карты идут мимо него (см. viewerAllowed), а разглядывание
+	// карты — ровно то присутствие, за которое гостя не должно вынести (см.
+	// app.GuestKeeper).
+	if err == nil && acc.IsDemo() {
+		a.Guests.Touch(acc.ID)
+	}
+	return acc, err
 }
 
 // requireAccount — общий гейт для большинства /api/* эндпоинтов, кроме

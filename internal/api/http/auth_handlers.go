@@ -147,9 +147,28 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.meResponseJSON(acc, chars))
 }
 
+// handleLogout — «Выйти». Для обычного аккаунта это закрытие ОДНОЙ сессии:
+// человек вернётся тем же логином, и его персонажи, заметки и фишка на карте
+// ждут его на месте.
+//
+// Гость публичного демо возвращаться некуда и незачем: логина у него нет
+// (пароль случайный и никому не показан, см. service.CreateGuest), а стол
+// один на всех. Поэтому «Выйти» уносит его целиком — вместе с фишкой,
+// персонажем и местом в очереди, которое иначе держалось бы до уборки по
+// бездействию (см. app.GuestKeeper).
 func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// Аккаунт достаём ДО Logout: после удаления сессии по cookie уже никого
+	// не найти, и гость остался бы висеть до уборщика.
+	acc, accErr := a.sessionAccount(r)
 	if c, err := r.Cookie(domain.SessionCookieName); err == nil {
 		_ = a.Auth.Logout(r.Context(), c.Value)
+	}
+	if accErr == nil && acc.IsDemo() {
+		if err := a.Guests.Release(r.Context(), acc); err != nil {
+			// Выходу это не мешает: cookie уже погашена, сессии больше нет.
+			// Аккаунт подберёт Sweep — он и так ищет замолчавших.
+			slog.Warn("не удалось убрать гостя на выходе", "гость", acc.Username, "err", err)
+		}
 	}
 	a.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

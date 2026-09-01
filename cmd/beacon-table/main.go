@@ -157,6 +157,12 @@ func main() {
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota)
 	api.DemoMode = cfg.DemoMode
+	// Уборщик гостей — только в демо-режиме 
+	var guests *app.GuestKeeper
+	if cfg.DemoMode {
+		guests = app.NewGuestKeeper(companies, accountRepo)
+		api.Guests = guests
+	}
 
 	mux.Handle("GET /broadcast.html", api.BroadcastEntry(static))
 
@@ -174,6 +180,7 @@ func main() {
 	gateway := apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc, apiws.Options{
 		BehindProxy:    cfg.BehindProxy,
 		AllowedOrigins: cfg.AllowedOrigins,
+		Guests:         guests,
 	})
 
 	sigCh := make(chan os.Signal, 1)
@@ -204,6 +211,10 @@ func main() {
 			fatal("не удалось поднять демо-стол из эталона", "эталон", cfg.DemoWorld, "err", err)
 		}
 		go demo.Run(bgCtx)
+		// Уборка ушедших гостей — отдельно от сброса стола и много чаще:
+		// сброс возвращает мир к эталону раз в несколько часов, а место в
+		// очереди должно освобождаться сразу за человеком (см. app.GuestKeeper).
+		go guests.Run(bgCtx)
 		slog.Info("демо-режим включён",
 			"эталон", cfg.DemoWorld, "сброс каждые", cfg.DemoReset.String())
 	}

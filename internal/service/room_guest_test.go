@@ -114,3 +114,58 @@ func TestSpawnPlayerTokenReplacesOwnToken(t *testing.T) {
 		t.Fatalf("у персонажа %d токенов, ожидали 1", mine)
 	}
 }
+
+// TestRemoveOwnerTokens — обратная сторона входа: фишку гостю поставил
+// сервер, он же должен её и убрать, когда гостя за столом не стало (см.
+// app.GuestKeeper). Иначе демо-карта за день зарастает фишками ушедших.
+func TestRemoveOwnerTokens(t *testing.T) {
+	r := testRoom()
+	// Вторая сцена: гость мог отметиться на карте, которую ДМ с тех пор
+	// переключил, — уборка обязана дойти и туда.
+	other := domain.NewScene("scene-2", "Соседняя")
+	other.Tokens["tok-far"] = &domain.Token{ID: "tok-far", OwnerID: "guest-1"}
+	r.scenes["scene-2"] = other
+
+	r.spawnPlayerToken(spawnReq("guest-1", "char-1"))
+	r.spawnPlayerToken(spawnReq("guest-2", "char-2"))
+	r.dirtyScenes = map[string]bool{}
+
+	if got := r.removeOwnerTokens("guest-1"); got != 2 {
+		t.Fatalf("убрано %d фишек, ожидалось 2", got)
+	}
+	for _, s := range r.scenes {
+		for _, tok := range s.Tokens {
+			if tok.OwnerID == "guest-1" {
+				t.Errorf("фишка ушедшего осталась на сцене: %+v", tok)
+			}
+		}
+	}
+	findToken(t, r, "guest-2") // сосед не пострадал
+	for _, id := range []string{"scene-1", "scene-2"} {
+		if !r.dirtyScenes[id] {
+			t.Errorf("сцена %s не помечена грязной — фишка вернётся после рестарта", id)
+		}
+	}
+
+	// Гость без единой фишки (вошёл ведущим и ничего не ставил) — не повод
+	// помечать сцены грязными и рассылать обновление.
+	r.dirtyScenes = map[string]bool{}
+	if got := r.removeOwnerTokens("guest-3"); got != 0 {
+		t.Errorf("убрано %d фишек у гостя без фишек", got)
+	}
+	if len(r.dirtyScenes) != 0 {
+		t.Errorf("сцены помечены грязными на пустой уборке: %v", r.dirtyScenes)
+	}
+}
+
+// TestRemoveOwnerTokensSparesMonsters — гость-ведущий за сеанс наставил
+// монстров; у них владельца нет, и уборка ушедшего не должна их задеть.
+func TestRemoveOwnerTokensSparesMonsters(t *testing.T) {
+	r := testRoom()
+	r.spawnPlayerToken(spawnReq("guest-1", "char-1"))
+
+	r.removeOwnerTokens("guest-1")
+	if _, ok := r.scene.Tokens["tok-1"]; !ok {
+		t.Error("токен без владельца (гоблин ДМ) убран вместе с гостем")
+	}
+}
