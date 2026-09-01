@@ -47,5 +47,17 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/beacon-table
 
+# Потолок памяти — не гарантия против самого тяжёлого легального импорта
+# мира (тот читается в память целиком, до 1 ГБ на файл, см.
+# maxWorldImportSize в internal/api/http/company_handlers.go), а страховка
+# от того, что процесс займёт весь VPS: обычный простой стол укладывается
+# в десятки МБ. MemoryHigh — мягкое давление (ядро начинает поджимать
+# процесс раньше), MemoryMax — жёсткий предел, после него OOM-killer
+# прибьёт службу целиком, прервав игру у всех за столом; лучше редкое
+# торможение под MemoryHigh, чем это. На VPS меньше 2 ГБ или для миров с
+# особо тяжёлыми импортами поднимите оба значения.
+MemoryHigh=1G
+MemoryMax=2G
+
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,61 @@
+# Обратный прокси с HTTPS для Beacon Table — вариант для тех, у кого на
+# сервере уже стоит nginx (если это первая настройка с нуля, проще взять
+# deploy/Caddyfile.example: Caddy сам получает и продлевает сертификат,
+# nginx этого не умеет и требует отдельно certbot).
+#
+#   sudo apt install nginx certbot python3-certbot-nginx
+#   sudo cp deploy/nginx.conf.example /etc/nginx/sites-available/beacon-table
+#   # впишите свой домен вместо примера ниже
+#   sudo ln -s /etc/nginx/sites-available/beacon-table /etc/nginx/sites-enabled/
+#   sudo certbot --nginx -d table.example.com   # сам допишет ssl_certificate и redirect с :80
+#   sudo systemctl reload nginx
+#
+# Beacon Table при этом должен:
+#   - слушать только localhost:  BEACON_ADDR=127.0.0.1:8080
+#   - знать, что он за HTTPS:     BEACON_BEHIND_PROXY=true
+# (см. beacon.conf / README, раздел «Настройка»).
+#
+# В отличие от Caddy, nginx НЕ проксирует WebSocket по умолчанию — без
+# явного "Upgrade"/"Connection" ниже стол открывается (снапшот сцены
+# приходит по обычному HTTP), но живой WS-канал (/ws/dm, /ws/player,
+# /ws/view) не устанавливается: движения токенов, чат костей и трансляция
+# просто не работают, без единой ошибки в браузере, кроме "не удаётся
+# подключиться к столу".
+
+server {
+	listen 80;
+	server_name table.example.com;
+
+	# certbot допишет сюда 443 + ssl_certificate при первом запуске выше;
+	# до этого момента отдаём как есть по http — сертификата ещё нет.
+
+	# Порог на тело запроса: чуть больше самой крупной легальной загрузки —
+	# импорта мира (.zip до 1 ГБ, см. maxWorldImportSize в
+	# internal/api/http/company_handlers.go). Карты/токены/аудио (до 200 МБ)
+	# укладываются с запасом. Всё, что меньше, приложение ограничивает само
+	# по каждому маршруту — этот порог только страхует от совсем огромных
+	# тел, которые иначе legли бы всей своей тяжестью на nginx ещё до того,
+	# как до них дойдёт очередь приложения.
+	client_max_body_size 1100m;
+
+	location / {
+		proxy_pass http://127.0.0.1:8080;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+
+		# WebSocket — без этих двух заголовков nginx проксирует его как
+		# обычный HTTP-запрос, апгрейд не проходит (см. предупреждение
+		# выше). Работает для ЛЮБОГО пути на этом сервере (совпадает с "/"),
+		# отдельно прописывать /ws/* не нужно.
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection "upgrade";
+
+		# WS-соединение стола держится, пока открыта вкладка — часами.
+		# Дефолтный таймаут nginx (60с простоя) обрубил бы его посреди
+		# тихой сцены без единого сообщения; сервер и так шлёт ping каждые
+		# 15с (см. internal/api/ws/client.go), так что 90с — запас, а не
+		# ожидание в чистом виде.
+		proxy_read_timeout 90s;
+	}
+}

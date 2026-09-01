@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,5 +222,48 @@ func TestLoadConfigRejectsBrokenValues(t *testing.T) {
 	}
 	if _, _, err := loadConfig(nil); err == nil {
 		t.Fatal("строка без «=» принята")
+	}
+}
+
+// TestLoadConfigVersionFlag — --version печатает версию и просит main()
+// молча выйти (errShowVersion), тем же путём, что и --help (flag.ErrHelp):
+// без этого «flag provided but not defined: -version» валило бы программу
+// с ошибкой вместо ответа на самый частый вопрос при разборе бага.
+func TestLoadConfigVersionFlag(t *testing.T) {
+	withWorkDir(t)
+
+	old := version
+	version = "9.9.9-test"
+	t.Cleanup(func() { version = old })
+
+	stdout := captureStdout(t)
+	_, _, err := loadConfig([]string{"--version"})
+	got := stdout()
+
+	if !errors.Is(err, errShowVersion) {
+		t.Fatalf("err = %v, ожидался errShowVersion", err)
+	}
+	if !strings.Contains(got, "9.9.9-test") {
+		t.Fatalf("вывод %q не содержит версию", got)
+	}
+}
+
+// captureStdout подменяет os.Stdout на время теста и возвращает функцию,
+// отдающую всё, что туда успели напечатать.
+func captureStdout(t *testing.T) func() string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = orig })
+
+	return func() string {
+		_ = w.Close()
+		var buf strings.Builder
+		_, _ = io.Copy(&buf, r)
+		return buf.String()
 	}
 }

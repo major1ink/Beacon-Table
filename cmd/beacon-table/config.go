@@ -454,8 +454,14 @@ func bindFlags(cfg *Config, args []string) error {
 	worldQuota := fs.String("uploads-world-quota", quota.FormatFlag(cfg.UploadsWorldQuota), "предел на загрузки одного мира, например 5GB (0 — без предела)")
 	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")
 	fs.String("config", "", "путь к файлу настроек (по умолчанию "+configFileName+" рядом с программой)")
+	showVersion := fs.Bool("version", false, "напечатать версию и выйти")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if *showVersion {
+		printVersion()
+		return errShowVersion
 	}
 	// Запоминаем, что задано флагом: флаг перебивает файл, и форма настроек
 	// не должна делать вид, что запись в файл на это повлияет.

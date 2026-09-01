@@ -168,7 +168,7 @@ func (a *API) handleCompanyImport(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxWorldImportSize)
 	//nolint:gosec // G120: тело уже ограничено MaxBytesReader выше
-	if err := r.ParseMultipartForm(maxWorldImportSize); err != nil {
+	if err := r.ParseMultipartForm(multipartMemoryBudget); err != nil {
 		writeErr(w, http.StatusBadRequest, "файл слишком большой")
 		return
 	}

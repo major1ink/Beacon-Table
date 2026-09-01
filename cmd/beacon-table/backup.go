@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"flag"
 	"log"
 	"log/slog"
 
@@ -26,6 +28,9 @@ func backupOptions(cfg Config, db *sql.DB) backup.Options {
 func runBackupCommand(args []string) {
 	cfg, _, err := loadConfig(args)
 	if err != nil {
+		if errors.Is(err, flag.ErrHelp) || errors.Is(err, errShowVersion) {
+			return
+		}
 		log.Fatal(err) // журнал ещё не настроен — печатаем как есть
 	}
 	setupLogging(cfg)

@@ -19,6 +19,19 @@ const maxAPIBody = 1 << 20
 // /upload лежит вне /api/ и под этот middleware не попадает вовсе.
 const bigBodyAPIPath = "/api/companies/import"
 
+// multipartMemoryBudget — второй аргумент http.Request.ParseMultipartForm:
+// сколько тела запроса разбирать В ПАМЯТИ, остальное уходит во временный
+// файл на диске. На предел размера НЕ влияет — тот уже поставлен отдельно,
+// http.MaxBytesReader'ом перед вызовом (см. upload_handlers.go/
+// company_handlers.go). Раньше сюда передавали сам предел размера (200 МБ у
+// /upload, 1 ГБ у импорта мира) — это значило «держать в RAM почти весь
+// файл целиком», а не «столько-то на диск и точка», и обесценивало любой
+// потолок памяти процесса (см. deploy/beacon-table.service: MemoryMax,
+// docker-compose.yml: mem_limit) — тот убивал бы службу ровно на легальной
+// крупной загрузке. 32 МБ с запасом хватает на форму с обычными полями и
+// маленькими файлами (аватар, значок), не разбираясь в диск зря.
+const multipartMemoryBudget = 32 << 20
+
 // LimitAPIBodies оборачивает весь mux: тело запроса к /api/* читается не
 // дальше maxAPIBody. Слишком длинный Content-Length отсекается сразу, тело
 // без него (chunked) — на чтении в хендлере.

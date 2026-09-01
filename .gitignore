@@ -3,7 +3,7 @@
 /beacon-table
 /uploads
 /data
-/beacon.conf
+beacon.conf
 /web/node_modules
 /dist
 /.task
