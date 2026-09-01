@@ -26,7 +26,7 @@ func characterListJSON(chars []*domain.Character) []map[string]string {
 // сообщение вместо списка персонажей).
 func (a *API) myCharacters(ctx context.Context, acc *domain.Account) ([]*domain.Character, error) {
 	world := a.Companies.Current()
-	if world == nil || (!acc.IsAdmin() && acc.CompanyID != world.Company.ID) {
+	if world == nil || (!acc.IsGM() && acc.CompanyID != world.Company.ID) {
 		return nil, nil
 	}
 	return world.Characters.List(ctx, acc.ID)
@@ -46,7 +46,7 @@ func (a *API) meResponseJSON(acc *domain.Account, chars []*domain.Character) map
 		"mustChangePassword": acc.MustChangePassword,
 		"characters":         characterListJSON(chars),
 	}
-	if acc.IsAdmin() {
+	if acc.IsGM() {
 		return resp
 	}
 	world := a.Companies.Current()

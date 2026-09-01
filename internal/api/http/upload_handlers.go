@@ -33,7 +33,7 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	if !acc.IsAdmin() && !a.Companies.AccountInActiveWorld(acc) {
+	if !acc.IsGM() && !a.Companies.AccountInActiveWorld(acc) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

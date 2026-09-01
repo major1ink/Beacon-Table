@@ -34,6 +34,9 @@ type API struct {
 	// Settings — форма настроек в разделе «Настройки» у ДМ. nil — раздел
 	// недоступен (например, в тестах).
 	Settings SettingsStore
+	// DemoMode — сервер работает публичной витриной: доступен гостевой вход
+	// (см. demo_handlers.go). В обычной установке выключен.
+	DemoMode bool
 	// loginGuard — защита /api/login и /api/register от перебора (см.
 	// loginguard.go). Транспортный уровень: считает по IP из запроса,
 	// service-слою про такое знать незачем.
@@ -64,6 +67,10 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", a.handleHealth)
 
 	// Настройки сервера глазами ДМ — см. settings_handlers.go.
+	// Публичное демо: витрина, куда пускают без регистрации (см. demo_handlers.go).
+	mux.HandleFunc("GET /api/demo", a.handleDemoStatus)
+	mux.HandleFunc("POST /api/demo/guest", a.handleDemoGuest)
+
 	mux.HandleFunc("GET /api/settings", a.handleSettingsList)
 	mux.HandleFunc("PUT /api/settings", a.handleSettingsSave)
 

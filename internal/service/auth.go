@@ -29,6 +29,15 @@ type AuthService interface {
 	Logout(ctx context.Context, token string) error
 	AccountBySession(ctx context.Context, token string) (*domain.Account, error)
 	ChangeOwnPassword(ctx context.Context, accountID, oldPassword, newPassword string) error
+	// CreateGuest заводит гостя публичного демо: активный аккаунт с ролью
+	// domain.AccountRoleDemo, привязанный к демо-миру, и сразу открытую
+	// сессию. Пароля у гостя нет по смыслу — войти повторно этим логином
+	// нельзя, только завести нового гостя.
+	//
+	// maxGuests ограничивает число живых гостей: аккаунт заводится без
+	// всякой проверки со стороны человека, и без предела один скрипт набьёт
+	// базу за минуту. domain.ErrConflict — гостей уже слишком много.
+	CreateGuest(ctx context.Context, companyID string, maxGuests int) (token string, account *domain.Account, err error)
 }
 
 // authService — полностью глобальный сервис: аккаунты/сессии не привязаны
@@ -122,6 +131,51 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	}
 	if acc.Status == domain.AccountStatusPending {
 		return "", nil, domain.ErrForbidden
+	}
+	token := newSessionToken()
+	if err := s.sessions.Create(ctx, token, acc.ID); err != nil {
+		return "", nil, err
+	}
+	return token, acc, nil
+}
+
+// guestPrefix — по нему гостевые аккаунты и считаются, и отличаются в списке
+// аккаунтов у владельца сервера.
+const guestPrefix = "гость-"
+
+func (s *authService) CreateGuest(ctx context.Context, companyID string, maxGuests int) (string, *domain.Account, error) {
+	if companyID == "" {
+		return "", nil, &domain.ValidationError{Msg: "демо-мир не запущен"}
+	}
+	if maxGuests > 0 {
+		all, err := s.accounts.List(ctx)
+		if err != nil {
+			return "", nil, err
+		}
+		live := 0
+		for _, acc := range all {
+			if acc.Role == domain.AccountRoleDemo {
+				live++
+			}
+		}
+		if live >= maxGuests {
+			return "", nil, domain.ErrConflict
+		}
+	}
+
+	// Пароль случайный и нигде не показывается: гость входит по сессии,
+	// которую получает прямо сейчас. Заводить аккаунт без пароля нельзя —
+	// пустой хеш совпал бы с пустым вводом на форме входа.
+	hash, err := hashPassword(randomHex(32))
+	if err != nil {
+		return "", nil, err
+	}
+	acc := &domain.Account{
+		ID: newID(), Username: guestPrefix + randomHex(4), PasswordHash: hash,
+		Role: domain.AccountRoleDemo, Status: domain.AccountStatusActive, CompanyID: companyID,
+	}
+	if err := s.accounts.Create(ctx, acc); err != nil {
+		return "", nil, err
 	}
 	token := newSessionToken()
 	if err := s.sessions.Create(ctx, token, acc.ID); err != nil {

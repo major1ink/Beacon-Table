@@ -90,6 +90,19 @@ export async function fetchVersion() {
   return apiFetch("/api/version");
 }
 
+// ---- публичное демо ----
+// Включён ли демо-режим (кнопка «Посмотреть демо» на входе) и вход гостем.
+export async function fetchDemoStatus() {
+  try {
+    return await apiFetch("/api/demo");
+  } catch {
+    return { enabled: false };
+  }
+}
+export async function enterDemo() {
+  return apiFetch("/api/demo/guest", { method: "POST" });
+}
+
 // ---- настройки сервера (раздел «Настройки» у ДМ) ----
 // Список полей с их значениями, источником и признаком «можно ли менять
 // отсюда» (см. internal/api/http/settings_handlers.go).

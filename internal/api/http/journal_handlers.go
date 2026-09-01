@@ -27,7 +27,7 @@ func notifyJournal(world *app.ActiveWorld, id string) {
 }
 
 func journalViewer(acc *domain.Account) domain.JournalViewer {
-	return domain.JournalViewer{ID: acc.ID, Name: acc.Username, IsDM: acc.IsAdmin()}
+	return domain.JournalViewer{ID: acc.ID, Name: acc.Username, IsDM: acc.IsGM()}
 }
 
 // journalJSON — запись как её видит ЭТОТ аккаунт. Кроме самих полей записи

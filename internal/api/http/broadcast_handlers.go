@@ -50,7 +50,7 @@ func broadcastKey(r *http.Request) string {
 // location.origin — сервер за обратным прокси своего внешнего имени не знает
 // и угадывать его по заголовкам не должен.
 func (a *API) handleBroadcastLink(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	key, err := a.Broadcast.Key(r.Context())
@@ -69,7 +69,7 @@ func (a *API) handleBroadcastLink(w http.ResponseWriter, r *http.Request) {
 // доступ немедленно — это и есть способ отозвать трансляцию, если ссылка
 // ушла не туда.
 func (a *API) handleBroadcastRotate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	key, err := a.Broadcast.Rotate(r.Context())
@@ -186,7 +186,7 @@ func (a *API) handleBroadcastRequestState(w http.ResponseWriter, r *http.Request
 // экраны, ждущие ответа. Код каждой заявки ДМ сверяет с тем, что горит на
 // самом экране — иначе «Пустить» рискует пустить не тот браузер.
 func (a *API) handleBroadcastRequestList(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	pending := a.Broadcast.PendingRequests()
@@ -205,7 +205,7 @@ func (a *API) handleBroadcastRequestList(w http.ResponseWriter, r *http.Request)
 // handleBroadcastRequestApprove — POST /api/broadcast/requests/{id}/approve
 // (только ДМ): пустить экран.
 func (a *API) handleBroadcastRequestApprove(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	if err := a.Broadcast.ApproveRequest(r.Context(), r.PathValue("id")); err != nil {
@@ -222,7 +222,7 @@ func (a *API) handleBroadcastRequestApprove(w http.ResponseWriter, r *http.Reque
 // handleBroadcastRequestReject — POST /api/broadcast/requests/{id}/reject
 // (только ДМ): отказать экрану.
 func (a *API) handleBroadcastRequestReject(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	if err := a.Broadcast.RejectRequest(r.PathValue("id")); err != nil {

@@ -83,6 +83,19 @@ type Config struct {
 	// там, где места и так вдоволь.
 	UploadsQuota      int64
 	UploadsWorldQuota int64
+
+	// ---- публичное демо ----
+	// DemoMode — сервер работает витриной: на странице входа появляется
+	// «Посмотреть демо», гость получает права ДМ ВНУТРИ стола (см.
+	// domain.AccountRoleDemo), но не может распоряжаться сервером. Стол один
+	// на всех, как на demo.foundryvtt.com: посетители видят друг друга.
+	DemoMode bool
+	// DemoWorld — .zip эталонного мира (см. экспорт мира). К нему стол
+	// возвращается при сбросе; без него сбрасывать не из чего.
+	DemoWorld string
+	// DemoReset — как часто возвращать стол к эталону вместе с чисткой
+	// гостевых аккаунтов.
+	DemoReset time.Duration
 }
 
 func defaultConfig() Config {
@@ -96,6 +109,7 @@ func defaultConfig() Config {
 		BackupKeep:     7,
 		LogLevel:       "info",
 		LogFormat:      "text",
+		DemoReset:      3 * time.Hour,
 	}
 }
 
@@ -129,6 +143,10 @@ const (
 
 	envUploadsQuota      = "BEACON_UPLOADS_QUOTA"
 	envUploadsWorldQuota = "BEACON_UPLOADS_WORLD_QUOTA"
+
+	envDemoMode  = "BEACON_DEMO_MODE"
+	envDemoWorld = "BEACON_DEMO_WORLD"
+	envDemoReset = "BEACON_DEMO_RESET"
 	// envConfig — где лежит файл конфига, если не там, где его ищут по
 	// умолчанию (см. findConfigFile).
 	envConfig = "BEACON_CONFIG"
@@ -267,6 +285,7 @@ func envValues() map[string]string {
 		envBackupEnabled, envBackupDir, envBackupInterval, envBackupKeep,
 		envLogLevel, envLogFormat,
 		envUploadsQuota, envUploadsWorldQuota,
+		envDemoMode, envDemoWorld, envDemoReset,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			values[key] = v
@@ -367,6 +386,23 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 		}
 		*q.dst = n
 	}
+	if v, ok := values[envDemoMode]; ok && v != "" {
+		b, err := strconv.ParseBool(unquote(v))
+		if err != nil {
+			return fmt.Errorf("%s в %s: %q — ожидалось true или false", envDemoMode, source, v)
+		}
+		cfg.DemoMode = b
+	}
+	if v, ok := values[envDemoWorld]; ok && v != "" {
+		cfg.DemoWorld = unquote(v)
+	}
+	if v, ok := values[envDemoReset]; ok && v != "" {
+		d, err := time.ParseDuration(unquote(v))
+		if err != nil || d <= 0 {
+			return fmt.Errorf("%s в %s: %q — ожидалась длительность вроде 3h", envDemoReset, source, v)
+		}
+		cfg.DemoReset = d
+	}
 	return nil
 }
 
@@ -408,6 +444,9 @@ func bindFlags(cfg *Config, args []string) error {
 	fs.IntVar(&cfg.BackupKeep, "backup-keep", cfg.BackupKeep, "сколько последних архивов хранить")
 	fs.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "подробность журнала: debug, info, warn, error")
 	fs.StringVar(&cfg.LogFormat, "log-format", cfg.LogFormat, "формат журнала: text или json")
+	fs.BoolVar(&cfg.DemoMode, "demo", cfg.DemoMode, "режим публичного демо: гостевой вход с правами ДМ внутри стола")
+	fs.StringVar(&cfg.DemoWorld, "demo-world", cfg.DemoWorld, "путь к .zip эталонного мира для демо")
+	fs.DurationVar(&cfg.DemoReset, "demo-reset", cfg.DemoReset, "как часто возвращать демо-стол к эталону")
 	uploadsQuota := fs.String("uploads-quota", quota.FormatFlag(cfg.UploadsQuota), "предел на весь каталог загрузок, например 20GB (0 — без предела)")
 	worldQuota := fs.String("uploads-world-quota", quota.FormatFlag(cfg.UploadsWorldQuota), "предел на загрузки одного мира, например 5GB (0 — без предела)")
 	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")

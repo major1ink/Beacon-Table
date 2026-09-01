@@ -1,6 +1,6 @@
 // Перенос inline-скрипта static/index.html — механически, логика не
 // менялась, только глобальные вызовы app.js заменены на import из api.js.
-import { fetchMe, apiLogin, apiRegister, apiLogout, fetchVersion } from "../api.js";
+import { fetchMe, apiLogin, apiRegister, apiLogout, fetchVersion, fetchDemoStatus, enterDemo } from "../api.js";
 
 // Версия сервера в углу экрана (см. cmd/beacon-table/version.go): тег релиза
 // у сборок GoReleaser, иначе short commit hash. Тянем сразу при загрузке, а не
@@ -52,6 +52,12 @@ function showWorldWait(me) {
 // авторизации" по аналогии с Foundry Setup. Игрок — на player.html, только
 // если его мир сейчас реально запущен, иначе остаётся здесь (см. showWorldWait).
 function redirectByRole(me) {
+  // Гостя демо ведём прямо на стол: миров он не выбирает — стол на демо
+  // один, и списка миров у него всё равно нет прав открыть.
+  if (me.role === "demo") {
+    location.href = "/dm.html";
+    return;
+  }
   if (me.role === "admin") {
     location.href = "/worlds.html";
     return;
@@ -87,6 +93,30 @@ loginForm.addEventListener("submit", async (e) => {
     loginMsg.className = "msg error";
   }
 });
+
+// ---- вход в демо ----
+// Кнопка есть только на демо-сервере: на обычной установке /api/demo
+// отвечает enabled=false, и блок не показывается вовсе.
+const demoBlock = document.getElementById("demoBlock");
+const demoBtn = document.getElementById("demoBtn");
+const demoMsg = document.getElementById("demoMsg");
+
+fetchDemoStatus().then(({ enabled }) => {
+  if (enabled) demoBlock.style.display = "";
+});
+
+demoBtn.onclick = async () => {
+  demoMsg.textContent = "";
+  demoMsg.className = "msg";
+  demoBtn.disabled = true;
+  try {
+    redirectByRole(await enterDemo());
+  } catch (err) {
+    demoMsg.textContent = err.message;
+    demoMsg.className = "msg error";
+    demoBtn.disabled = false;
+  }
+};
 
 const registerMsg = document.getElementById("registerMsg");
 registerForm.addEventListener("submit", async (e) => {

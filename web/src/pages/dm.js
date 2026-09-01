@@ -68,12 +68,19 @@ import { mountCompendiumMenu } from "../compendium-menu.js";
 // (internal/api/http, internal/api/ws). Если сессии нет или роль не admin —
 // сразу уводим на страницу входа, до всякой попытки подключиться по WS.
 let vtt;
+// isDemoGuest — гость публичного демо. Стол ведёт наравне с ДМ, но сервером
+// не распоряжается (см. domain.AccountRoleDemo), поэтому кнопки, которые
+// всё равно получат 403, ему не показываем: неработающая кнопка хуже, чем
+// её отсутствие.
+let isDemoGuest = false;
 (async function boot() {
   const me = await fetchMe();
-  if (!me || me.role !== "admin") {
+  if (!me || (me.role !== "admin" && me.role !== "demo")) {
     location.href = "/";
     return;
   }
+  isDemoGuest = me.role === "demo";
+  if (isDemoGuest) hideOwnerOnlyUI();
   document.getElementById("dmUsername").textContent = me.username;
   // Всё остальное в этом файле — обычные top-level обработчики
   // (onclick/addEventListener), выполняются один раз при загрузке страницы
@@ -104,7 +111,9 @@ let vtt;
   // (пользователь кликает по только что открытым спискам/карточкам, это не
   // "мимо"), только своей кнопкой ✕ в шапке.
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
-  mountCompendiumMenu(compendiumPanel, { role: "dm" });
+  // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
+  // и пункт меню ему показывать незачем.
+  mountCompendiumMenu(compendiumPanel, { role: "dm", canImport: !isDemoGuest });
   // Оверлей «Показать игрокам» — на экране ДМ это предпросмотр того, что
   // видят игроки, плюс кнопка «✕» (шлёт hide_image всем, см.
   // web/src/showcase-overlay.js). Раздел рейла «Показ» — ниже по файлу.
@@ -144,15 +153,28 @@ function openJournalWindow(entryId, section) {
 
 document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
+// hideOwnerOnlyUI — убрать со стола то, что доступно только хозяину сервера:
+// список миров, вкладки «Трансляция» и «Сервер» в настройках. Права на
+// сервере проверяет он сам (см. requireOwner), здесь — только внешний вид.
+function hideOwnerOnlyUI() {
+  document.getElementById("worldsBtn")?.remove();
+  // «Модули» тоже: список пакетов и импорт — за requireOwner, гость увидел
+  // бы пустую вкладку с ошибкой.
+  for (const tab of ["cast", "server", "modules"]) {
+    document.querySelector(`.set-tabs [data-settab="${tab}"]`)?.remove();
+    document.querySelector(`[data-settab-panel="${tab}"]`)?.remove();
+  }
+}
+
 // worldsBtn — уйти со стола в список миров. Явно гасим мир (stopActiveWorld):
 // стол закрывается, игроки отключаются, рестарт сервера не поднимет мир сам —
 // ДМ вернётся и выберет мир заново. Единственное место, где стол снимается;
 // сам заход на worlds.html его не трогает.
-document.getElementById("worldsBtn").onclick = async () => {
+document.getElementById("worldsBtn")?.addEventListener("click", async () => {
   if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;
   await stopActiveWorld().catch(() => {});
   location.href = "/worlds.html";
-};
+});
 
 // ================= выезжающая панель: реестр "открыть → подгрузить данные" =================
 // Разделы "Аккаунты"/"Плейлисты"/"Настроить сцену" регистрируют сюда коллбэк

@@ -93,7 +93,7 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 	gw := newGateway(opts)
 	mux.HandleFunc("/ws/dm", func(w http.ResponseWriter, r *http.Request) {
 		acc, err := sessionAccount(auth, r)
-		if err != nil || !acc.IsActive() || !acc.IsAdmin() {
+		if err != nil || !acc.IsActive() || !acc.IsGM() {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

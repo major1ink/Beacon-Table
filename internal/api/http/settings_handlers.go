@@ -46,7 +46,7 @@ type SettingsStore interface {
 
 // handleSettingsList — GET /api/settings (только ДМ).
 func (a *API) handleSettingsList(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	if a.Settings == nil {
@@ -61,7 +61,7 @@ func (a *API) handleSettingsList(w http.ResponseWriter, r *http.Request) {
 // стороне SettingsStore: полагаться на то, что форма не пришлёт лишнего,
 // нельзя.
 func (a *API) handleSettingsSave(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	if a.Settings == nil {

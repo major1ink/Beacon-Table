@@ -22,7 +22,7 @@ const maxWorldImportSize = 1 << 30
 // worlds.html, аналог Foundry Setup ----
 
 func (a *API) handleCompaniesList(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	companies, err := a.Companies.List(r.Context())
@@ -53,7 +53,7 @@ func (a *API) handleCompaniesList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleCompanyCreate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	var req struct{ Name, System string }
@@ -79,7 +79,7 @@ func (a *API) handleCompanyCreate(w http.ResponseWriter, r *http.Request) {
 // новый). Синхронный — ответ уходит только после того, как новый мир
 // реально поднялся.
 func (a *API) handleCompanyLaunch(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	if err := a.Companies.Launch(r.Context(), r.PathValue("id")); err != nil {
@@ -94,7 +94,7 @@ func (a *API) handleCompanyLaunch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleCompanyDelete(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	// force=1 — снести мир вместе с аккаунтами игроков, их персонажами и
@@ -121,7 +121,7 @@ func (a *API) handleCompanyDelete(w http.ResponseWriter, r *http.Request) {
 // app.CompanyManager.Deactivate). ДМ вызывает при возврате на worlds.html:
 // стол пустеет, игроки отваливаются до следующего Launch.
 func (a *API) handleCompanyStop(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	if err := a.Companies.Deactivate(r.Context()); err != nil {
@@ -136,7 +136,7 @@ func (a *API) handleCompanyStop(w http.ResponseWriter, r *http.Request) {
 // библиотеки, плейлисты, преген-персонажи, загрузки. С ?accounts=1 —
 // дополнительно аккаунты игроков и их персонажи.
 func (a *API) handleCompanyExport(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	c, err := a.Companies.CompanyByID(r.Context(), r.PathValue("id"))
@@ -163,7 +163,7 @@ func (a *API) handleCompanyExport(w http.ResponseWriter, r *http.Request) {
 // (multipart, поле "file") и создаёт из него новый мир (см.
 // app.CompanyManager.ImportWorld). Запускать мир ДМ должен сам на /worlds.html.
 func (a *API) handleCompanyImport(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	if _, ok := a.requireOwner(w, r); !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxWorldImportSize)

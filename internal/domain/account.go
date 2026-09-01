@@ -8,6 +8,11 @@ import "time"
 const (
 	AccountRoleAdmin  = "admin"
 	AccountRolePlayer = "player"
+	// AccountRoleDemo — гость публичного демо: за столом может всё то же,
+	// что и ДМ (сцены, освещение, бестиарий, журнал), но сервером не
+	// распоряжается — ни аккаунтами, ни мирами, ни настройками. Заводится
+	// только когда сервер запущен в демо-режиме (см. Config.DemoMode).
+	AccountRoleDemo = "demo"
 
 	AccountStatusActive  = "active"
 	AccountStatusPending = "pending"
@@ -48,8 +53,21 @@ type Account struct {
 // (прошёл модерацию ДМ).
 func (a *Account) IsActive() bool { return a.Status == AccountStatusActive }
 
-// IsAdmin — единственный admin-аккаунт стола (ДМ).
-func (a *Account) IsAdmin() bool { return a.Role == AccountRoleAdmin }
+// IsGM — ведёт стол: настоящий ДМ или гость демо. Всё, что касается игры —
+// сцены, токены, освещение, бестиарий, журнал, плейлисты — доступно обоим.
+func (a *Account) IsGM() bool {
+	return a.Role == AccountRoleAdmin || a.Role == AccountRoleDemo
+}
+
+// IsOwner — хозяин сервера. От IsGM отличается тем, что можно делать вне
+// игры: заводить аккаунты, создавать и удалять миры, править настройки
+// сервера, выдавать ключ трансляции, тянуть модули из интернета. Гость демо
+// этого не может — иначе публичное демо означало бы «возьмите мой сервер».
+func (a *Account) IsOwner() bool { return a.Role == AccountRoleAdmin }
+
+// IsDemo — гость демо. Нужен там, где поведение отличается не правами, а
+// смыслом: например, гостя не ведут на экран выбора мира.
+func (a *Account) IsDemo() bool { return a.Role == AccountRoleDemo }
 
 // Character — персонаж игрока: имя + аватар/токен-арт (управляются из
 // player.html, панель "Мои персонажи") плюс структурированный лист

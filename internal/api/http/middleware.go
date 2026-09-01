@@ -99,7 +99,7 @@ func (a *API) requireAccount(w http.ResponseWriter, r *http.Request) (*domain.Ac
 		writeErr(w, http.StatusUnauthorized, "не авторизован")
 		return nil, false
 	}
-	if !acc.IsAdmin() && !a.Companies.AccountInActiveWorld(acc) {
+	if !acc.IsGM() && !a.Companies.AccountInActiveWorld(acc) {
 		writeErr(w, http.StatusForbidden, "твой мир сейчас не запущен ДМ")
 		return nil, false
 	}
@@ -126,13 +126,35 @@ func (a *API) viewerAllowed(r *http.Request) bool {
 	return a.Broadcast.Valid(r.Context(), broadcastKey(r))
 }
 
+// requireAdminAccount — гейт всего, что относится к ведению стола: сцены,
+// бестиарий, журнал, плейлисты, готовые персонажи. Пускает и настоящего ДМ,
+// и гостя публичного демо: за столом им можно одно и то же.
 func (a *API) requireAdminAccount(w http.ResponseWriter, r *http.Request) (*domain.Account, bool) {
 	acc, ok := a.requireAccount(w, r)
 	if !ok {
 		return nil, false
 	}
-	if !acc.IsAdmin() {
+	if !acc.IsGM() {
 		writeErr(w, http.StatusForbidden, "только для ДМ")
+		return nil, false
+	}
+	return acc, true
+}
+
+// requireOwner — гейт всего, что относится к серверу, а не к игре: аккаунты,
+// миры, настройки, ключ трансляции, импорт модулей из интернета.
+//
+// Гостя демо сюда не пускаем. Иначе публичное демо означало бы «возьмите мой
+// сервер»: гость с правами ДМ мог бы удалить чужие миры, переписать
+// beacon.conf, завести себе постоянный аккаунт или заставить сервер ходить
+// по ссылкам в интернет.
+func (a *API) requireOwner(w http.ResponseWriter, r *http.Request) (*domain.Account, bool) {
+	acc, ok := a.requireAccount(w, r)
+	if !ok {
+		return nil, false
+	}
+	if !acc.IsOwner() {
+		writeErr(w, http.StatusForbidden, "это может только владелец сервера")
 		return nil, false
 	}
 	return acc, true

@@ -142,6 +142,28 @@ var configEntries = []configEntry{
 		kind: "size", appliesNow: true,
 	},
 	{
+		group: `# Публичное демо: витрина, куда пускают без регистрации. Гость получает
+# права ДМ ВНУТРИ стола (двигать токены, ставить свет, править бестиарий),
+# но не может распоряжаться сервером — ни аккаунтами, ни мирами, ни этими
+# настройками. Стол один на всех: посетители видят друг друга.
+#
+# BEACON_DEMO_WORLD — .zip мира (кнопка «⬇» на экране миров), к которому
+# стол возвращается при сбросе. Без него демо не поднимется.`,
+		key: envDemoMode, example: "false",
+		section: "Публичное демо", title: "Демо-режим", hint: "Гостевой вход без регистрации. Включается только при запуске.",
+		kind: "bool", readOnly: true,
+	},
+	{
+		key: envDemoWorld, example: "demo-world.zip",
+		section: "Публичное демо", title: "Эталонный мир демо", hint: "Архив .zip, к которому возвращается стол.",
+		kind: "text", readOnly: true,
+	},
+	{
+		key: envDemoReset, example: "3h",
+		section: "Публичное демо", title: "Как часто сбрасывать демо", hint: "Стол возвращается к эталону, гости удаляются.",
+		kind: "duration", readOnly: true,
+	},
+	{
 		key: envUploadsWorldQuota, example: "5GB",
 		section: "Место под загрузки", title: "Место под загрузки — на мир", hint: "Например 5GB. Пусто или 0 — без ограничения.",
 		kind: "size", appliesNow: true,

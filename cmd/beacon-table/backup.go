@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"log/slog"
 
 	"beacon-table/internal/backup"
 	"beacon-table/internal/repository/sqlite"
@@ -25,18 +26,19 @@ func backupOptions(cfg Config, db *sql.DB) backup.Options {
 func runBackupCommand(args []string) {
 	cfg, _, err := loadConfig(args)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // журнал ещё не настроен — печатаем как есть
 	}
+	setupLogging(cfg)
+
 	db, err := sqlite.Open(cfg.DBPath())
 	if err != nil {
-		log.Fatal("не удалось открыть базу:", err)
+		fatal("не удалось открыть базу", "путь", cfg.DBPath(), "err", err)
 	}
 	defer db.Close()
 
 	path, err := backup.Once(context.Background(), backupOptions(cfg, db))
 	if err != nil {
-		log.Fatal("бэкап не удался: ", err)
+		fatal("бэкап не удался", "err", err)
 	}
-	//nolint:gosec // G706: путь собран из конфига и метки времени, не из сети.
-	log.Println("бэкап готов:", path)
+	slog.Info("бэкап готов", "path", path)
 }

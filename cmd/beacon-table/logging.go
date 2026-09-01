@@ -32,6 +32,17 @@ func setupLogging(cfg Config) *slog.LevelVar {
 	return level
 }
 
+// fatal — сообщить о неустранимой ошибке старта и выйти.
+//
+// Не log.Fatal: стандартный log идёт через slog-мост записями уровня info,
+// и при BEACON_LOG_LEVEL=warn сообщение о том, почему сервер не поднялся,
+// молча исчезало — оставался только код возврата 1. Ошибка, из-за которой
+// процесс завершается, должна быть видна при любом уровне журнала.
+func fatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	os.Exit(1)
+}
+
 func parseLevel(name string) slog.Level {
 	switch name {
 	case "debug":

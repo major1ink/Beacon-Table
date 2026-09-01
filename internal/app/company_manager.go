@@ -415,7 +415,7 @@ func (m *CompanyManager) looksLikeLegacyInstall(ctx context.Context) (bool, erro
 		return false, err
 	}
 	for _, a := range accs {
-		if !a.IsAdmin() {
+		if !a.IsGM() {
 			return true, nil
 		}
 	}

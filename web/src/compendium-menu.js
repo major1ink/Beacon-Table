@@ -123,7 +123,7 @@ function foundryImportNode() {
 // включён общий тумблер стола "Показывать встроенные карточки" (см.
 // domain.CombatState.ShowBuiltinCards) — значение приходит в combat_state и
 // тем же событием "vtt:combatState" перестраивает дерево на лету.
-export function mountCompendiumMenu(panelEl, { role }) {
+export function mountCompendiumMenu(panelEl, { role, canImport = true }) {
   panelEl.classList.add("compendium-tree");
 
   const header = document.createElement("div");
@@ -147,7 +147,7 @@ export function mountCompendiumMenu(panelEl, { role }) {
     treeWrap.innerHTML = "";
     if (showBuiltin) treeWrap.appendChild(buildRoot(true, "Beacon Table", role, true));
     treeWrap.appendChild(buildRoot(false, "Пользовательские", role, !showBuiltin));
-    if (role === "dm") treeWrap.appendChild(foundryImportNode());
+    if (role === "dm" && canImport) treeWrap.appendChild(foundryImportNode());
   }
   renderTree();
 
