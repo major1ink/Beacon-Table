@@ -75,6 +75,23 @@ type Config struct {
 	// LogFormat — "text" (по умолчанию, читается глазами) или "json" для
 	// систем сбора логов.
 	LogFormat string
+	// LogFile — куда дублировать журнал. Пусто — <DataDir>/beacon.log,
+	// "off" — не писать в файл вовсе (в контейнере и под systemd журнал
+	// собирают снаружи, второй экземпляр в файле там лишний).
+	//
+	// Файл журнала есть всегда, а не только когда его попросили: при
+	// запуске двойным кликом окна консоли нет — весь вывод уходит в никуда
+	// (в Linux в journald сеанса, в Windows в закрывшееся окно), и человеку
+	// негде взять ни временный пароль ДМ, ни причину, по которой сервер не
+	// поднялся.
+	LogFile string
+
+	// ---- запуск за своим компьютером ----
+	// OpenBrowser — открывать ли стол в браузере сразу после старта:
+	// "auto" (по умолчанию), "true" или "false". auto — открывать, когда
+	// это похоже на домашний запуск: есть графический сеанс, и это не демо
+	// и не сервер за прокси.
+	OpenBrowser string
 
 	// ---- место под загрузками ----
 	// UploadsQuota — предел на весь каталог загрузок, UploadsWorldQuota — на
@@ -112,8 +129,29 @@ func defaultConfig() Config {
 		BackupKeep:     7,
 		LogLevel:       "info",
 		LogFormat:      "text",
+		OpenBrowser:    "auto",
 		DemoReset:      3 * time.Hour,
 	}
+}
+
+// logOff — значения BEACON_LOG_FILE, выключающие файл журнала.
+func logOff(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "off", "no", "none", "-", "false":
+		return true
+	}
+	return false
+}
+
+// LogPath — файл журнала с учётом значения по умолчанию. Пусто — не писать.
+func (c Config) LogPath() string {
+	if logOff(c.LogFile) {
+		return ""
+	}
+	if c.LogFile != "" {
+		return c.LogFile
+	}
+	return filepath.Join(c.DataDir, "beacon.log")
 }
 
 // BackupPath — куда пишутся архивы с учётом значения по умолчанию.
@@ -143,6 +181,9 @@ const (
 
 	envLogLevel  = "BEACON_LOG_LEVEL"
 	envLogFormat = "BEACON_LOG_FORMAT"
+	envLogFile   = "BEACON_LOG_FILE"
+
+	envOpenBrowser = "BEACON_OPEN_BROWSER"
 
 	envUploadsQuota      = "BEACON_UPLOADS_QUOTA"
 	envUploadsWorldQuota = "BEACON_UPLOADS_WORLD_QUOTA"
@@ -286,7 +327,8 @@ func envValues() map[string]string {
 	for _, key := range []string{
 		envAddr, envDataDir, envUploadsDir, envBehindProxy, envAllowedOrigins,
 		envBackupEnabled, envBackupDir, envBackupInterval, envBackupKeep,
-		envLogLevel, envLogFormat,
+		envLogLevel, envLogFormat, envLogFile,
+		envOpenBrowser,
 		envUploadsQuota, envUploadsWorldQuota,
 		envDemoMode, envDemoWorld, envDemoReset,
 	} {
@@ -372,6 +414,16 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 		}
 		cfg.LogFormat = format
 	}
+	if v, ok := values[envLogFile]; ok && v != "" {
+		cfg.LogFile = unquote(v)
+	}
+	if v, ok := values[envOpenBrowser]; ok && v != "" {
+		mode, err := parseOpenBrowser(unquote(v))
+		if err != nil {
+			return fmt.Errorf("%s в %s: %q — ожидалось auto, true или false", envOpenBrowser, source, v)
+		}
+		cfg.OpenBrowser = mode
+	}
 	for _, q := range []struct {
 		key string
 		dst *int64
@@ -407,6 +459,22 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 		cfg.DemoReset = d
 	}
 	return nil
+}
+
+// parseOpenBrowser приводит значение к auto/true/false. Кроме них принимает
+// всё, что понимает strconv.ParseBool (1/0/yes нет, но on/off людям в голову
+// приходит реже, чем true/false) — иначе настройка-переключатель отличалась
+// бы от соседних булевых по строгости без всякой причины.
+func parseOpenBrowser(v string) (string, error) {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "auto" {
+		return "auto", nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatBool(b), nil
 }
 
 func validLogLevel(v string) bool {
@@ -447,6 +515,8 @@ func bindFlags(cfg *Config, args []string) error {
 	fs.IntVar(&cfg.BackupKeep, "backup-keep", cfg.BackupKeep, "сколько последних архивов хранить")
 	fs.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "подробность журнала: debug, info, warn, error")
 	fs.StringVar(&cfg.LogFormat, "log-format", cfg.LogFormat, "формат журнала: text или json")
+	fs.StringVar(&cfg.LogFile, "log-file", cfg.LogFile, "файл журнала (по умолчанию <data>/beacon.log, off — не писать)")
+	openBrowser := fs.String("open-browser", cfg.OpenBrowser, "открыть стол в браузере после запуска: auto, true, false")
 	fs.BoolVar(&cfg.DemoMode, "demo", cfg.DemoMode, "режим публичного демо: гостевой вход с правами ДМ внутри стола")
 	fs.StringVar(&cfg.DemoWorld, "demo-world", cfg.DemoWorld, "путь к .zip эталонного мира для демо")
 	fs.DurationVar(&cfg.DemoReset, "demo-reset", cfg.DemoReset, "как часто возвращать демо-стол к эталону")
@@ -470,7 +540,8 @@ func bindFlags(cfg *Config, args []string) error {
 		"behind-proxy": envBehindProxy, "allowed-origins": envAllowedOrigins,
 		"backup": envBackupEnabled, "backup-dir": envBackupDir,
 		"backup-interval": envBackupInterval, "backup-keep": envBackupKeep,
-		"log-level": envLogLevel, "log-format": envLogFormat,
+		"log-level": envLogLevel, "log-format": envLogFormat, "log-file": envLogFile,
+		"open-browser":  envOpenBrowser,
 		"uploads-quota": envUploadsQuota, "uploads-world-quota": envUploadsWorldQuota,
 	}
 	fs.Visit(func(f *flag.Flag) {
@@ -490,7 +561,11 @@ func bindFlags(cfg *Config, args []string) error {
 	if cfg.LogFormat != "text" && cfg.LogFormat != "json" {
 		return fmt.Errorf("--log-format %q: ожидалось text или json", cfg.LogFormat)
 	}
-	var err error
+	mode, err := parseOpenBrowser(*openBrowser)
+	if err != nil {
+		return fmt.Errorf("--open-browser %q: ожидалось auto, true или false", *openBrowser)
+	}
+	cfg.OpenBrowser = mode
 	if cfg.UploadsQuota, err = quota.ParseSize(*uploadsQuota); err != nil {
 		return fmt.Errorf("--uploads-quota %q: ожидался размер вроде 20GB", *uploadsQuota)
 	}

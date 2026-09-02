@@ -16,8 +16,15 @@ import (
 // зная, например, какой длины должен быть пароль.
 type AuthService interface {
 	// SeedAdmin создаёт (или пересоздаёт временный пароль) единственный
-	// admin-аккаунт стола при старте сервера.
-	SeedAdmin(ctx context.Context) error
+	// admin-аккаунт стола при старте сервера. Возвращает выданный временный
+	// пароль — пустую строку, если ДМ уже сменил его на свой и трогать
+	// нечего.
+	//
+	// Пароль возвращается, а не только печатается в журнал: при запуске
+	// двойным кликом журнала на экране нет, и композиционный корень кладёт
+	// пароль туда, где человек его найдёт (см. cmd/beacon-table: файл
+	// dm-password.txt и подсказка на странице входа с этого же компьютера).
+	SeedAdmin(ctx context.Context) (string, error)
 	// Register — companyID обязателен: саморегистрация привязывает игрока к
 	// тому миру, что запущен на сервере в момент отправки формы (см.
 	// api/http/auth_handlers.go: handleRegister резолвит его через
@@ -62,46 +69,52 @@ func NewAuthService(accounts repository.AccountRepository, sessions repository.S
 	return &authService{accounts: accounts, sessions: sessions}
 }
 
-const seedAdminUsername = "dm"
+// SeedAdminUsername — логин единственного admin-аккаунта стола. Экспортирован
+// ради того, кто показывает временный пароль человеку (см. cmd/beacon-table:
+// firstrun.go): логин и пароль всегда идут парой, и вторая половина пары не
+// должна быть строковой константой в двух местах сразу.
+const SeedAdminUsername = "dm"
+
+const seedAdminUsername = SeedAdminUsername
 
 // SeedAdmin создаёт единственный admin-аккаунт ("dm") при самом первом
 // запуске. Если он уже есть, но ДМ так и не залогинился и не сменил
 // временный пароль (MustChangePassword всё ещё true) — выпускает и печатает
 // НОВЫЙ пароль при каждом старте, чтобы не зависеть от того, что лог с
 // прошлого запуска кто-то сохранил.
-func (s *authService) SeedAdmin(ctx context.Context) error {
+func (s *authService) SeedAdmin(ctx context.Context) (string, error) {
 	acc, err := s.accounts.ByUsername(ctx, seedAdminUsername)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
-		return err
+		return "", err
 	}
 	if err == nil {
 		if !acc.MustChangePassword {
-			return nil // ДМ уже сменил пароль на свой — ничего не трогаем
+			return "", nil // ДМ уже сменил пароль на свой — ничего не трогаем
 		}
 		plain := generatePassword()
 		hash, herr := hashPassword(plain)
 		if herr != nil {
-			return herr
+			return "", herr
 		}
 		if err := s.accounts.SetPassword(ctx, acc.ID, hash, true); err != nil {
-			return err
+			return "", err
 		}
 		log.Printf("ДМ ещё не сменил временный пароль. Логин: %s  Пароль: %s", seedAdminUsername, plain)
-		return nil
+		return plain, nil
 	}
 	plain := generatePassword()
 	hash, herr := hashPassword(plain)
 	if herr != nil {
-		return herr
+		return "", herr
 	}
 	if err := s.accounts.Create(ctx, &domain.Account{
 		ID: newID(), Username: seedAdminUsername, PasswordHash: hash,
 		Role: domain.AccountRoleAdmin, Status: domain.AccountStatusActive, MustChangePassword: true,
 	}); err != nil {
-		return err
+		return "", err
 	}
 	log.Printf("Создан аккаунт ДМ. Логин: %s  Пароль: %s", seedAdminUsername, plain)
-	return nil
+	return plain, nil
 }
 
 // Register — открытая форма, но аккаунт неактивен, пока ДМ не одобрит его в

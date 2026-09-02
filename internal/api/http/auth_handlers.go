@@ -224,6 +224,10 @@ func (a *API) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// Временный пароль ДМ больше не действует — убираем подсказку на
+	// странице входа и файл с паролем рядом с программой (см.
+	// localhost_handlers.go).
+	a.clearFirstRun(acc.Username)
 	a.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

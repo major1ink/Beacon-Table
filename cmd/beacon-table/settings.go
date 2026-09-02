@@ -106,6 +106,13 @@ func currentValue(cfg Config, key string) string {
 		return cfg.LogLevel
 	case envLogFormat:
 		return cfg.LogFormat
+	case envLogFile:
+		if p := cfg.LogPath(); p != "" {
+			return p
+		}
+		return "off"
+	case envOpenBrowser:
+		return cfg.OpenBrowser
 	case envUploadsQuota:
 		return quota.FormatCompact(cfg.UploadsQuota)
 	case envUploadsWorldQuota:
@@ -142,6 +149,10 @@ func validateSetting(key, value string) error {
 	case envLogFormat:
 		if v := strings.ToLower(value); v != "text" && v != "json" {
 			return fmt.Errorf("ожидалось text или json")
+		}
+	case envOpenBrowser:
+		if _, err := parseOpenBrowser(value); err != nil {
+			return fmt.Errorf("ожидалось auto, true или false")
 		}
 	case envUploadsQuota, envUploadsWorldQuota:
 		if _, err := quota.ParseSize(value); err != nil {

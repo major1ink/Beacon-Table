@@ -56,6 +56,7 @@ import {
   fetchFoundryModules,
   checkFoundryModuleUpdates,
   deleteFoundryModule,
+  shutdownServer,
 } from "../api.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
@@ -159,6 +160,10 @@ document.getElementById("journalBtn").onclick = () => openJournalWindow();
 // сервере проверяет он сам (см. requireOwner), здесь — только внешний вид.
 function hideOwnerOnlyUI() {
   document.getElementById("worldsBtn")?.remove();
+  // Выключение сервера — тем более: гость демо распоряжается столом, но не
+  // машиной, на которой тот стоит (на сервере это же закрыто, см.
+  // handleShutdown: в демо-режиме отказ).
+  document.getElementById("railShutdownBtn")?.remove();
   // «Модули» тоже: список пакетов и импорт — за requireOwner, гость увидел
   // бы пустую вкладку с ошибкой.
   for (const tab of ["cast", "server", "modules"]) {
@@ -1687,7 +1692,7 @@ function settingField(setting) {
 // SETTINGS_GROUP_ORDER — порядок групп в форме. То, что можно менять, идёт
 // сверху; пути и порт — в конец, они только для чтения, и упираться в них
 // первым делом незачем.
-const SETTINGS_GROUP_ORDER = ["Доступ", "Резервное копирование", "Журнал", "Место под загрузки", "Пути и порт"];
+const SETTINGS_GROUP_ORDER = ["Доступ", "Запуск", "Резервное копирование", "Журнал", "Место под загрузки", "Пути и порт"];
 
 // SETTINGS_GROUP_NOTES — пояснение на всю группу. Пишем его один раз сверху,
 // а не пометкой под каждым полем: под четырьмя строками подряд одно и то же
@@ -1774,6 +1779,54 @@ serverSettingsSaveBtn.onclick = async () => {
     serverSettingsSaveBtn.disabled = false;
   }
 };
+
+// ---- выключение сервера ----
+// Кнопка, а не Ctrl+C: программу запускают двойным кликом по файлу, и
+// консоли, в которой можно было бы попрощаться, у ДМ нет. Через неё уходит
+// обычное завершение — мир сохраняется, база закрывается (см.
+// internal/api/http: handleShutdown).
+//
+// Кнопок две, и обе ведут сюда: в рейле (заканчивают игру со стола, а не с
+// экрана выбора миров — туда за вечер можно не зайти ни разу) и в
+// «Настройки → Сервер», рядом с прочими настройками сервера.
+async function confirmShutdown(btn) {
+  const ok = await showConfirm("Выключить сервер?", {
+    title: "Выключить сервер",
+    okLabel: "Выключить",
+    danger: true,
+    hint: "Мир сохранится, но стол закроется у всех — и у игроков, и на экране трансляции. Чтобы играть дальше, программу нужно будет запустить заново на том компьютере, где она стоит.",
+  });
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    await shutdownServer();
+    showServerStopped();
+  } catch (e) {
+    btn.disabled = false;
+    showAlert(e.message || "не удалось выключить сервер");
+  }
+}
+
+// ?. — у гостя демо этих кнопок нет вовсе: hideOwnerOnlyUI убирает и рейловую,
+// и всю вкладку «Сервер» вместе с её кнопкой.
+for (const id of ["shutdownBtn", "railShutdownBtn"]) {
+  const btn = document.getElementById(id);
+  if (btn) btn.onclick = () => confirmShutdown(btn);
+}
+
+// showServerStopped — заслонка на весь экран вместо стола: дальше страница
+// всё равно нерабочая (сервера нет), а браузер без объяснения показал бы
+// обрывы запросов и баннер потерянной связи.
+function showServerStopped() {
+  const veil = document.createElement("div");
+  veil.style.cssText =
+    "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;" +
+    "background:rgba(10,10,14,0.92);color:var(--text);font-size:15px;text-align:center;padding:24px;";
+  veil.innerHTML =
+    "<div><div style='font-size:17px;font-weight:600;margin-bottom:8px'>Сервер остановлен</div>" +
+    "<div style='opacity:0.7;font-size:13px;line-height:1.5'>Мир сохранён. Вкладку можно закрыть — стол снова откроется, когда программу запустят заново.</div></div>";
+  document.body.appendChild(veil);
+}
 
 // ---- ссылка на трансляцию (раздел "Настройки") ----
 // Адрес с ключом, по которому телевизор получает доступ к столу без аккаунта

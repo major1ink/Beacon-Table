@@ -3,7 +3,7 @@
 // поднят на сервере (см. internal/app.CompanyManager — активен ровно один).
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
-import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion } from "../api.js";
+import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
 
 // Версия сервера в углу — как на экране входа (index.js). Молча пусто при ошибке.
@@ -125,6 +125,66 @@ document.getElementById("logoutBtn").onclick = async () => {
   location.href = "/";
 };
 
+// ---- выключение сервера ----
+// Программу чаще всего запускают двойным кликом по файлу — консоли, где
+// можно нажать Ctrl+C, у ДМ нет, а снятие процесса из диспетчера задач рвёт
+// сохранение мира. Кнопка здесь, на первом же экране после входа: чтобы
+// закончить вечер, не нужно заходить в мир (см. internal/api/http:
+// handleShutdown).
+const shutdownBtn = document.getElementById("shutdownBtn");
+shutdownBtn.onclick = async () => {
+  const ok = await showConfirm("Выключить сервер?", {
+    title: "Выключить сервер",
+    okLabel: "Выключить",
+    danger: true,
+    hint: "Мир сохранится, но стол закроется у всех — и у игроков, и на экране трансляции. Чтобы играть дальше, программу нужно будет запустить заново на том компьютере, где она стоит.",
+  });
+  if (!ok) return;
+  shutdownBtn.disabled = true;
+  try {
+    await shutdownServer();
+    document.getElementById("page").innerHTML =
+      "<h1 style='font-size:20px;margin:0 0 8px'>Сервер остановлен</h1>" +
+      "<div style='opacity:0.7;font-size:13px;line-height:1.5'>Мир сохранён. Окно можно закрыть — стол снова откроется, когда программу запустят заново.</div>";
+  } catch (err) {
+    shutdownBtn.disabled = false;
+    showAlert(err.message || "не удалось выключить сервер");
+  }
+};
+
+// ---- свой пароль вместо временного ----
+// Временный пароль ДМ перевыпускается при КАЖДОМ запуске, пока свой не
+// задан (см. service.AuthService.SeedAdmin): без этой формы человек, у
+// которого нет консоли, каждый раз ходил бы за новым паролем в файл рядом с
+// программой. Смена сносит все сессии, включая текущую, — поэтому сразу
+// уводим на форму входа.
+const passwordBox = document.getElementById("passwordBox");
+const passwordForm = document.getElementById("passwordForm");
+const passwordMsg = document.getElementById("passwordMsg");
+
+passwordForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  passwordMsg.textContent = "";
+  passwordMsg.className = "msg";
+  const btn = passwordForm.querySelector("button");
+  btn.disabled = true;
+  try {
+    await apiChangeOwnPassword(
+      document.getElementById("curPassword").value,
+      document.getElementById("newPassword").value
+    );
+    passwordMsg.textContent = "Пароль сохранён. Войдите с ним заново…";
+    passwordMsg.className = "msg ok";
+    setTimeout(() => {
+      location.href = "/";
+    }, 1200);
+  } catch (err) {
+    passwordMsg.textContent = err.message;
+    passwordMsg.className = "msg error";
+    btn.disabled = false;
+  }
+});
+
 // askExportOptions — диалог перед скачиванием: с аккаунтами игроков или без.
 function askExportOptions() {
   let cb = null;
@@ -203,5 +263,6 @@ fetchMe().then((me) => {
     location.href = "/";
     return;
   }
+  if (me.mustChangePassword) passwordBox.style.display = "";
   render();
 });

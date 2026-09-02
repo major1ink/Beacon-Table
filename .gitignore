@@ -1,5 +1,6 @@
 .claude
 *.exe
+*.txt
 /beacon-table
 /uploads
 /data

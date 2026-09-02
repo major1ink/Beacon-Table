@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"sync"
 
 	"beacon-table/internal/app"
 	"beacon-table/internal/service"
@@ -41,10 +42,20 @@ type API struct {
 	// обычной установке: гостей там не бывает, и все обращения к нему —
 	// пустышки.
 	Guests *app.GuestKeeper
+	// Shutdown — остановить сервер (кнопка «Выключить сервер» у ДМ, см.
+	// localhost_handlers.go). nil — выключение отсюда недоступно (тесты,
+	// демо): API сам процессом не распоряжается, только дёргает то, что ему
+	// дал композиционный корень.
+	Shutdown func()
 	// loginGuard — защита /api/login и /api/register от перебора (см.
 	// loginguard.go). Транспортный уровень: считает по IP из запроса,
 	// service-слою про такое знать незачем.
 	loginGuard *loginGuard
+	// firstRun — временный пароль ДМ этого запуска и мьютекс к нему: его
+	// читает страница входа с этого же компьютера, а стирает смена пароля
+	// (см. localhost_handlers.go).
+	firstRunMu sync.Mutex
+	firstRun   *FirstRun
 }
 
 // NewAPI собирает REST-хендлеры поверх Auth и Broadcast (оба глобальны) и
@@ -66,6 +77,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/me", a.handleMe)
 	mux.HandleFunc("PUT /api/me/password", a.handleChangeOwnPassword)
 	mux.HandleFunc("GET /api/version", a.handleVersion)
+	// Подсказка с временным паролем ДМ — только для страницы входа,
+	// открытой на самом сервере (см. localhost_handlers.go).
+	mux.HandleFunc("GET /api/first-run", a.handleFirstRun)
 	// /healthz вне /api/ — это не часть API стола, а точка для мониторинга,
 	// systemd и docker healthcheck.
 	mux.HandleFunc("GET /healthz", a.handleHealth)
@@ -122,6 +136,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/characters/{id}/inventory", a.handleCharacterInventoryList)
 	mux.HandleFunc("PUT /api/characters/{id}/inventory/{entryId}", a.handleCharacterInventoryUpdate)
 	mux.HandleFunc("DELETE /api/characters/{id}/inventory/{entryId}", a.handleCharacterInventoryDelete)
+
+	// Выключение сервера кнопкой у ДМ — см. localhost_handlers.go.
+	mux.HandleFunc("POST /api/admin/shutdown", a.handleShutdown)
 
 	mux.HandleFunc("GET /api/admin/accounts", a.handleAdminAccountsList)
 	mux.HandleFunc("POST /api/admin/accounts", a.handleAdminAccountCreate)

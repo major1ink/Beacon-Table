@@ -88,6 +88,33 @@
     .msg { font-size: 12px; margin-top: 10px; min-height: 14px; }
     .msg.error { color: #e74c3c; }
     .msg.ok { color: var(--green-bright); }
+
+    #headerActions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+    #shutdownBtn {
+      background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px;
+      padding: 6px 10px; border-radius: var(--radius); transition: background .12s ease, color .12s ease;
+    }
+    #shutdownBtn:hover { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+
+    /* Блок смены временного пароля — заметный, но не пугающий: это первое,
+       что стоит сделать, а не ошибка. */
+    #passwordBox {
+      border: 1px solid var(--accent); border-radius: var(--radius); padding: 14px; margin-bottom: 18px;
+      background: var(--accent-bg);
+    }
+    #passwordBox h2 { font-size: 13px; margin: 0 0 6px; font-weight: 600; }
+    .pwd-hint { font-size: 12px; opacity: 0.75; margin: 0 0 10px; line-height: 1.45; }
+    #passwordForm { display: flex; gap: 8px; flex-wrap: wrap; }
+    #passwordForm input {
+      flex: 1 1 140px; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      border-radius: var(--radius); padding: 9px 10px; font-size: 13px; font: inherit;
+    }
+    #passwordForm input:focus { outline: none; border-color: var(--accent); }
+    #passwordForm button {
+      flex: 0 0 auto; border: none; border-radius: var(--radius); background: var(--green); color: #fff;
+      font-size: 13px; font-weight: 600; padding: 9px 14px; cursor: pointer;
+    }
+    #passwordForm button:disabled { opacity: 0.6; cursor: default; }
   </style>
 </head>
 <body>
@@ -99,8 +126,26 @@
         <h1>Миры</h1>
         <div id="subtitle">выбери мир, чтобы продолжить — на столе может быть запущен только один</div>
       </div>
-      <button id="logoutBtn">Выйти</button>
+      <div id="headerActions">
+        <button id="logoutBtn">Выйти</button>
+        <button id="shutdownBtn" title="Остановить программу: мир сохранится, стол закроется у всех">Выключить сервер</button>
+      </div>
     </header>
+
+    <!-- Смена временного пароля ДМ. Показывается, пока пароль временный
+         (GET /api/me: mustChangePassword) — он перевыпускается при КАЖДОМ
+         запуске программы, и пока свой не задан, входить каждый раз
+         приходится по новому. См. web/src/pages/worlds.js. -->
+    <section id="passwordBox" style="display:none">
+      <h2>Задайте свой пароль</h2>
+      <p class="pwd-hint">Сейчас вы вошли по временному паролю — он выдаётся заново при каждом запуске программы. Свой пароль задаётся один раз и работает всегда.</p>
+      <form id="passwordForm">
+        <input type="password" id="curPassword" placeholder="Временный пароль" autocomplete="current-password" required />
+        <input type="password" id="newPassword" placeholder="Новый пароль" autocomplete="new-password" required />
+        <button type="submit">Сохранить</button>
+      </form>
+      <div id="passwordMsg" class="msg"></div>
+    </section>
 
     <div id="list"><div id="emptyMsg">Загрузка…</div></div>
 

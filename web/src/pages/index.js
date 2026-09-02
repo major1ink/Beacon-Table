@@ -1,6 +1,6 @@
 // Перенос inline-скрипта static/index.html — механически, логика не
 // менялась, только глобальные вызовы app.js заменены на import из api.js.
-import { fetchMe, apiLogin, apiRegister, apiLogout, fetchVersion, fetchDemoStatus, enterDemo } from "../api.js";
+import { fetchMe, apiLogin, apiRegister, apiLogout, fetchVersion, fetchDemoStatus, enterDemo, fetchFirstRun } from "../api.js";
 import { isOwner, isPlayer } from "../roles.js";
 
 // Версия сервера в углу экрана (см. cmd/beacon-table/version.go): тег релиза
@@ -185,6 +185,33 @@ function demoEntry(btn, role) {
 }
 demoEntry(demoDmBtn, "dm");
 demoEntry(demoPlayerBtn, "player");
+
+// ---- первый запуск за этим же компьютером ----
+// Временный пароль ДМ печатается в журнал, но при запуске двойным кликом
+// журнала на экране нет. Сервер отдаёт пароль только на запрос с этой же
+// машины и только пока пароль временный (см. internal/api/http:
+// handleFirstRun) — то есть тому, кто и так может прочитать его в файле
+// dm-password.txt рядом с программой. Подставляем в форму: после
+// автоматически открытого браузера человеку остаётся нажать «Войти».
+fetchFirstRun().then((creds) => {
+  if (!creds) return;
+  document.getElementById("loginUsername").value = creds.username;
+  document.getElementById("loginPassword").value = creds.password;
+  const hint = document.getElementById("firstRunHint");
+  hint.innerHTML =
+    "Первый запуск: вход ведущего уже подставлен — логин <b>" +
+    escapeHtml(creds.username) +
+    "</b>, пароль <b>" +
+    escapeHtml(creds.password) +
+    "</b>. Нажмите «Войти» и задайте свой пароль: временный выдаётся заново при каждом запуске программы.";
+  hint.style.display = "";
+});
+
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
 
 const registerMsg = document.getElementById("registerMsg");
 registerForm.addEventListener("submit", async (e) => {

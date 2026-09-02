@@ -119,6 +119,27 @@ export async function saveServerSettings(values) {
   return apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(values) });
 }
 
+// shutdownServer — выключить сервер (только ДМ). Единственный способ
+// закончить по-человечески для того, кто запустил программу двойным кликом:
+// консоли, где нажать Ctrl+C, у него нет (см. internal/api/http:
+// handleShutdown).
+export async function shutdownServer() {
+  return apiFetch("/api/admin/shutdown", { method: "POST" });
+}
+
+// ---- первый запуск ----
+// fetchFirstRun — временный пароль ДМ, если сервер запущен на ЭТОМ же
+// компьютере и пароль ещё не сменили (см. internal/api/http:
+// handleFirstRun). Иначе null: 204 без тела, ошибку тоже глотаем — форма
+// входа должна работать в любом случае.
+export async function fetchFirstRun() {
+  try {
+    return await apiFetch("/api/first-run");
+  } catch {
+    return null;
+  }
+}
+
 // ---- трансляция (ТВ/проектор) ----
 // Ссылка с ключом, по которой экран в комнате получает доступ к столу без
 // аккаунта (см. internal/service/broadcast.go). Сервер отдаёт только путь —

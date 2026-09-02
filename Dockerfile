@@ -23,7 +23,8 @@ COPY --from=build /out/beacon-table /usr/local/bin/beacon-table
 
 ENV BEACON_DATA_DIR=/data \
     BEACON_UPLOADS_DIR=/uploads \
-    BEACON_ADDR=:8080
+    BEACON_ADDR=:8080 \
+    BEACON_LOG_FILE=off
 RUN mkdir -p /data /uploads && chown beacon:beacon /data /uploads
 VOLUME ["/data", "/uploads"]
 

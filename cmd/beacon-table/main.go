@@ -11,11 +11,13 @@ import (
 	"io/fs"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -75,11 +77,26 @@ func main() {
 		log.Fatal(err) // журнал ещё не настроен — печатаем как есть
 	}
 
-	logLevel := setupLogging(cfg)
+	// Каталог данных создаём до настройки журнала: файл журнала по умолчанию
+	// лежит именно в нём, а без журнала не видно и остальных ошибок старта.
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		fatal("не удалось создать каталог данных", "путь", cfg.DataDir, "err", err)
+	}
+
+	logLevel, logPath := setupLogging(cfg)
 	settingsFile = configFile
 
 	version := serverVersion()
 	log.Println("Beacon Table версия:", version)
+	if logPath != "" {
+		// Печатаем первым делом: если сервер дальше не поднимется, человеку,
+		// запустившему программу двойным кликом, нужно знать, куда смотреть.
+		//
+		//nolint:gosec // G706: путь пришёл из настроек запуска, не по сети —
+		// подставить в него перевод строки может только тот, кто и так
+		// запускает процесс (ср. строку про файл настроек выше).
+		log.Println("журнал пишется в файл:", logPath)
+	}
 	if configFile != "" {
 		//nolint:gosec // G706: путь пришёл из аргументов запуска/окружения,
 		// не по сети — подставить в него перевод строки может только тот,
@@ -97,8 +114,15 @@ func main() {
 		}
 	}
 
-	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
-		fatal("не удалось создать каталог данных", "путь", cfg.DataDir, "err", err)
+	// Адрес занимаем до всего остального: если порт занят (обычно — прошлой
+	// копией, которую запустили двойным кликом и не увидели), то мы всё
+	// равно не поднимемся, а по дороге успели бы перевыпустить временный
+	// пароль ДМ и обесценить тот, с которым уже работает живая копия.
+	ln, err := net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		fatal("не удалось занять адрес",
+			"адрес", cfg.Addr, "err", err,
+			"что делать", "скорее всего Beacon Table уже запущен — откройте "+browserURL(cfg.Addr)+" или закройте прошлую копию; либо смените BEACON_ADDR в beacon.conf")
 	}
 
 	db, err := sqlite.Open(cfg.DBPath())
@@ -139,7 +163,8 @@ func main() {
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
 	broadcastSvc := service.NewBroadcastService(stateRepo)
-	if err := authSvc.SeedAdmin(ctx); err != nil {
+	tempPassword, err := authSvc.SeedAdmin(ctx)
+	if err != nil {
 		fatal("не удалось создать или проверить аккаунт ДМ", "err", err)
 	}
 	if err := companies.Bootstrap(ctx); err != nil {
@@ -160,6 +185,14 @@ func main() {
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota)
 	api.DemoMode = cfg.DemoMode
+	// Временный пароль ДМ: кладём его туда, где человек найдёт его без
+	// консоли — в файл рядом с настройками и в подсказку на странице входа,
+	// открытой на этом же компьютере (см. firstrun.go).
+	if tempPassword != "" {
+		setupFirstRun(api, cfg, configFile, tempPassword)
+	} else {
+		removeFirstRunFile(cfg, configFile)
+	}
 	// Уборщик гостей — только в демо-режиме
 	var guests *app.GuestKeeper
 	if cfg.DemoMode {
@@ -185,6 +218,14 @@ func main() {
 		AllowedOrigins: cfg.AllowedOrigins,
 		Guests:         guests,
 	})
+
+	// stopCh — просьба остановиться изнутри: кнопка «Выключить сервер» у ДМ
+	// (см. internal/api/http: handleShutdown). Тому, кто запустил программу
+	// двойным кликом, Ctrl+C нажимать негде, а снятие процесса из
+	// диспетчера задач — обрыв на середине сохранения мира.
+	stopCh := make(chan struct{})
+	var stopOnce sync.Once
+	api.Shutdown = func() { stopOnce.Do(func() { close(stopCh) }) }
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -234,14 +275,21 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fatal("не удалось слушать адрес", "адрес", cfg.Addr, "err", err)
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fatal("сервер остановился с ошибкой", "адрес", cfg.Addr, "err", err)
 		}
 	}()
 	log.Println("Beacon Table сервер запущен на", cfg.Addr)
 	printAccessURLs(cfg.Addr)
 
-	<-sigCh
+	if shouldOpenBrowser(cfg) {
+		openBrowser(browserURL(cfg.Addr))
+	}
+
+	select {
+	case <-sigCh:
+	case <-stopCh:
+	}
 	stopBackground()
 	shutdown(srv, gateway, companies, db)
 }

@@ -22,6 +22,10 @@ WorkingDirectory=/var/lib/beacon-table
 EnvironmentFile=/etc/beacon-table/beacon.conf
 Environment=BEACON_DATA_DIR=/var/lib/beacon-table/data
 Environment=BEACON_UPLOADS_DIR=/var/lib/beacon-table/uploads
+# Журнал службы собирает journald со стандартного вывода — файл в каталоге
+# данных здесь лишний (по умолчанию он есть: программу чаще запускают на
+# домашнем компьютере, где консоли нет вовсе).
+Environment=BEACON_LOG_FILE=off
 ExecStart=/usr/local/bin/beacon-table
 Restart=on-failure
 RestartSec=5s
