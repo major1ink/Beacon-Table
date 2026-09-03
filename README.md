@@ -16,6 +16,7 @@
   <a href="https://beacontable.ru/">Сайт</a> ·
   <a href="https://github.com/major1ink/Beacon-Table/releases/latest">Скачать</a> ·
   <a href="https://github.com/major1ink/Beacon-Table/wiki">Документация</a> ·
+  <a href="https://beacontable.ru/roadmap.html">Роадмап</a> ·
   <a href="#english-summary">English summary</a>
 </p>
 
@@ -232,6 +233,8 @@ docker compose up -d
 
 Есть идея, чего не хватает для игры, — тоже пишите.
 
+Что уже запланировано и над чем идёт работа — на [странице роадмапа](https://beacontable.ru/roadmap.html).
+
 Если хочется покопаться в коде или что-нибудь добавить, порядок работы над проектом описан в [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 И да, особенно интересно узнать, как Beacon Table ведёт себя **в настоящей игре**. На своём компьютере можно проверить далеко не всё.
@@ -261,6 +264,8 @@ It ships as a single binary. Download it, run it, and the table is ready in your
 No mandatory cloud service, account or subscription.
 
 **Live demo:** <https://demo.beacontable.ru/>
+
+**Roadmap:** <https://beacontable.ru/roadmap.html>
 
 The demo is shared and can be joined without signing up. You can enter as a guest DM or a guest player. The game itself is fully usable; server-owner features such as Foundry VTT imports, accounts, worlds and settings are disabled. The demo resets to its reference state every 30 minutes, so changes made there are not permanent.
 
