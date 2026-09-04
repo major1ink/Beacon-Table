@@ -9,7 +9,7 @@
 // второй источник правды о правах тут не заводится.
 import { icon } from "./icons.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "./modal.js";
-import { fetchBoards, createBoard, renameBoard, setBoardAccess, deleteBoard, fetchJournalMembers } from "./api.js";
+import { fetchBoards, createBoard, renameBoard, setBoardAccess, deleteBoard, importBoard, fetchJournalMembers } from "./api.js";
 import { openFloatingWindow } from "./floating-window.js";
 
 // ACCESS_LEVELS — те же четыре уровня, что у журнала (domain.JournalAccess),
@@ -116,14 +116,47 @@ export function createBoardList(mount) {
   addBtn.className = "board-add";
   addBtn.innerHTML = `${icon("plus", { size: 14 })} Новая доска`;
 
+  // Импорт — скрытый input и кнопка рядом с «Новой доской»: файл
+  // .excalidraw.md из ваулта Obsidian переносится целиком, вместе с
+  // элементами, цветами и всем, чего мы ещё не умеем рисовать (см.
+  // internal/excalidraw — незнакомое сохраняется нетронутым).
+  const importInput = document.createElement("input");
+  importInput.type = "file";
+  importInput.accept = ".md,.excalidraw";
+  importInput.multiple = true;
+  importInput.style.display = "none";
+
+  const importBtn = document.createElement("button");
+  importBtn.type = "button";
+  importBtn.className = "board-add board-import";
+  importBtn.innerHTML = `${icon("upload", { size: 14 })} Импорт из Excalidraw`;
+  importBtn.onclick = () => importInput.click();
+
   const listEl = document.createElement("div");
   listEl.className = "board-items";
 
   const hint = document.createElement("p");
   hint.className = "draw-hint";
-  hint.textContent = "Доска — бесконечный холст рядом с заметками. Открытая всем за столом видна всем, закрытая — только тебе и ДМ.";
+  hint.textContent =
+    "Доска — бесконечный холст рядом с заметками. Открытая всем за столом видна всем, закрытая — только тебе и ДМ. Импорт принимает файлы плагина Excalidraw из ваулта Obsidian.";
 
-  mount.append(addBtn, listEl, hint);
+  importInput.onchange = async () => {
+    const files = [...importInput.files];
+    importInput.value = ""; // иначе повторный выбор того же файла не сработает
+    if (!files.length) return;
+    const failed = [];
+    for (const file of files) {
+      try {
+        await importBoard(file);
+      } catch (err) {
+        failed.push(`${file.name}: ${(err && err.message) || "ошибка"}`);
+      }
+    }
+    await refresh();
+    if (failed.length) showAlert("Не импортировалось:\n" + failed.join("\n"));
+  };
+
+  mount.append(addBtn, importBtn, importInput, listEl, hint);
 
   async function refresh() {
     let boards = [];

@@ -21,6 +21,7 @@ import (
 	"io"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/excalidraw"
 )
 
 // CompanyRepository — CRUD миров/компаний (domain.Company) плюс
@@ -242,7 +243,13 @@ type BoardRepository interface {
 	Get(ctx context.Context, id string) (*domain.Board, error)
 	// Create кладёт доску целиком (id/имя/автор/права уже заполнены
 	// вызывающим); domain.ErrConflict, если файл с таким id уже есть.
-	Create(ctx context.Context, b *domain.Board) error
+	// doc — начальный холст; nil означает пустую доску (excalidraw.NewDocument).
+	Create(ctx context.Context, b *domain.Board, doc *excalidraw.Document) error
+	// Scene — холст доски. Отдельно от Get: списку досок рисунки не нужны, а
+	// разбирать их ради списка — лишняя работа на каждый файл.
+	Scene(ctx context.Context, id string) (*excalidraw.Document, error)
+	// SetScene заменяет холст, не трогая шапку; false — доски нет.
+	SetScene(ctx context.Context, id string, doc *excalidraw.Document) (bool, error)
 	// Rename меняет ТОЛЬКО имя, не трогая тело файла; false — доски нет.
 	Rename(ctx context.Context, id, name string) (bool, error)
 	// SetAccess меняет ТОЛЬКО раздачу прав; false — доски нет. Отдельно от

@@ -2,11 +2,14 @@
 // .md-файлов на диске (dataDir/boards/<id>.md): атомарная запись (tmp +
 // rename), никакого индекса — список собирается обходом каталога.
 //
-// Формат — тот же, что у журнала (см. internal/repository/journalfile): шапка
-// front matter между "---", дальше тело файла. В шапке всё, кроме самого
-// холста: имя доски, автор и раздача прав (см. domain.Board).
+// Формат — файл плагина Excalidraw для Obsidian (см. internal/excalidraw):
+// шапка front matter, дальше разделы «# Excalidraw Data» / «## Text Elements»
+// / «## Embedded Files» и сам холст блоком ```json. В шапке к служебным
+// ключам плагина дописаны наши: имя доски, автор и раздача прав.
 //
 //	---
+//	excalidraw-plugin: parsed
+//	tags: [excalidraw]
 //	name: Схема расследования
 //	owner: 6f1c…
 //	ownerName: Гвен
@@ -15,17 +18,17 @@
 //	  a41b…: observer
 //	---
 //
-// Тело сейчас пустое: элементы холста заводятся отдельной задачей вместе с
-// решением про формат плагина Excalidraw для Obsidian. Файл при этом уже
-// сегодня остаётся нормальной markdown-заметкой, которую ваулт открывает и
-// показывает — то есть выбранный формат заведомо не придётся ломать ради
-// совместимости, только дополнять телом.
+// То есть файл доски не «похож на» файл Excalidraw, а им и является: ваулт
+// открывает его редактором рисунка, а импорт чужого .excalidraw.md сводится
+// к дописыванию наших ключей в шапку. Плагин про лишние ключи не спотыкается
+// — frontmatter в Obsidian открытый.
 //
-// Разбор шапки написан здесь заново, а не переиспользован из journalfile, по
-// той же причине, по какой там продублирована sanitizeFolder: пакеты
-// репозиториев ничего друг о друге не знают, а шапки эти вот-вот разойдутся —
-// у доски появится тело в формате Excalidraw, у записи журнала останется
-// markdown.
+// Рисунок пишется НЕсжатым, хотя плагин обычно жмёт: так файл по-человечески
+// диффится и в git, и в ваулте, а читать плагин умеет оба вида.
+//
+// Разбор шапки написан здесь, а не переиспользован из journalfile, по той же
+// причине, по какой там продублирована sanitizeFolder: пакеты репозиториев
+// ничего друг о друге не знают, и шапки у них уже разные.
 package boardfile
 
 import (
@@ -39,6 +42,7 @@ import (
 	"strings"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/excalidraw"
 )
 
 // Store реализует repository.BoardRepository.
@@ -73,27 +77,13 @@ type meta struct {
 	Access    map[string]domain.JournalAccess
 }
 
-// splitFrontMatter разбирает файл на шапку и тело. Файл без шапки (создан
-// руками в ваулте) — это не ошибка: доска без автора с правами по умолчанию.
-func splitFrontMatter(raw string) (meta, string) {
+// readMeta вытаскивает наши ключи из шапки. Чужие ключи (плагина, Obsidian)
+// просто игнорируются — за их сохранность отвечает не эта функция, а то, что
+// шапку мы собираем заново целиком и служебные ключи плагина пишем сами.
+func readMeta(frontmatter string) meta {
 	m := meta{Default: domain.JournalNone, Access: map[string]domain.JournalAccess{}}
-	rest := strings.TrimPrefix(raw, "\ufeff") // BOM от редактора не должен прятать шапку
-	if !strings.HasPrefix(rest, "---\n") && !strings.HasPrefix(rest, "---\r\n") {
-		return m, raw
-	}
-	lines := strings.Split(rest, "\n")
-	end := -1
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
-			end = i
-			break
-		}
-	}
-	if end < 0 {
-		return m, raw // незакрытая шапка — считаем, что её нет, тело не теряем
-	}
 	inAccess := false
-	for _, line := range lines[1:end] {
+	for _, line := range strings.Split(frontmatter, "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
@@ -126,8 +116,7 @@ func splitFrontMatter(raw string) (meta, string) {
 			inAccess = true
 		}
 	}
-	body := strings.Join(lines[end+1:], "\n")
-	return m, body
+	return m
 }
 
 // oneLine — значение шапки не должно разъехаться на несколько строк и
@@ -138,9 +127,13 @@ func oneLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func withFrontMatter(m meta, body string) string {
+// frontMatter собирает шапку БЕЗ разделителей «---»: служебные ключи плагина
+// плюс наши. Именно первые заставляют Obsidian открыть файл редактором
+// рисунка, а не как обычную заметку.
+func frontMatter(m meta) string {
 	var b strings.Builder
-	b.WriteString("---\n")
+	b.WriteString("excalidraw-plugin: parsed\n")
+	b.WriteString("tags: [excalidraw]\n")
 	b.WriteString("name: " + oneLine(m.Name) + "\n")
 	if m.OwnerID != "" {
 		b.WriteString("owner: " + oneLine(m.OwnerID) + "\n")
@@ -168,27 +161,7 @@ func withFrontMatter(m meta, body string) string {
 			b.WriteString("  " + oneLine(id) + ": " + string(level) + "\n")
 		}
 	}
-	b.WriteString("---\n")
-	b.WriteString(body)
 	return b.String()
-}
-
-func boardFrom(id, raw string) *domain.Board {
-	m, _ := splitFrontMatter(raw)
-	name := strings.TrimSpace(m.Name)
-	if name == "" {
-		name = "Без названия"
-	}
-	return &domain.Board{
-		ID:   id,
-		Name: name,
-		Sharing: domain.Sharing{
-			OwnerID:   m.OwnerID,
-			OwnerName: m.OwnerName,
-			Default:   m.Default,
-			Access:    m.Access,
-		},
-	}
 }
 
 // ---- repository.BoardRepository ----
@@ -206,8 +179,7 @@ func (s *Store) List(ctx context.Context) ([]*domain.Board, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
-		id := strings.TrimSuffix(e.Name(), ".md")
-		b, err := s.Get(ctx, id)
+		b, err := s.Get(ctx, strings.TrimSuffix(e.Name(), ".md"))
 		if err != nil {
 			continue // битый или исчезнувший файл не должен ронять весь список
 		}
@@ -223,56 +195,75 @@ func (s *Store) List(ctx context.Context) ([]*domain.Board, error) {
 }
 
 func (s *Store) Get(ctx context.Context, id string) (*domain.Board, error) {
-	p := s.path(id)
-	raw, err := os.ReadFile(p)
+	b, _, err := s.load(id)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, domain.ErrNotFound
-		}
 		return nil, err
 	}
-	b := boardFrom(id, string(raw))
-	if info, err := os.Stat(p); err == nil {
-		b.UpdatedAt = info.ModTime()
+	if b == nil {
+		return nil, domain.ErrNotFound
 	}
 	return b, nil
 }
 
-func (s *Store) Create(ctx context.Context, b *domain.Board) error {
+// Scene — холст доски. Отдельно от Get: список досок не должен тащить с диска
+// и разбирать рисунки, которые ему не нужны.
+func (s *Store) Scene(ctx context.Context, id string) (*excalidraw.Document, error) {
+	b, doc, err := s.load(id)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, domain.ErrNotFound
+	}
+	return doc, nil
+}
+
+func (s *Store) Create(ctx context.Context, b *domain.Board, doc *excalidraw.Document) error {
 	if _, err := os.Stat(s.path(b.ID)); err == nil {
 		return domain.ErrConflict
 	}
-	return s.save(b, "")
+	if doc == nil {
+		doc = excalidraw.NewDocument()
+	}
+	return s.save(b, doc)
 }
 
-// Rename и SetAccess меняют ТОЛЬКО шапку, тело файла переписывается как есть.
-// Отдельные методы, а не общий Update: тело — это холст, который вот-вот
-// начнёт автосейвиться при рисовании, и класть в тот же запрос ещё и права
-// значило бы гонять их туда-сюда на каждый штрих (а гонка двух окон —
-// затирать только что выданный доступ). Та же причина, что у журнала.
+// Rename и SetAccess меняют ТОЛЬКО шапку, рисунок переписывается как есть.
+// Отдельные методы, а не общий Update: холст автосейвится при рисовании, и
+// класть в тот же запрос ещё и права значило бы гонять их туда-сюда на
+// каждый штрих (а гонка двух окон — затирать только что выданный доступ).
 func (s *Store) Rename(ctx context.Context, id, name string) (bool, error) {
-	b, body, err := s.load(id)
-	if err != nil {
+	b, doc, err := s.load(id)
+	if err != nil || b == nil {
 		return false, err
 	}
-	if b == nil {
-		return false, nil
-	}
 	b.Name = name
-	return true, s.save(b, body)
+	return true, s.save(b, doc)
 }
 
 func (s *Store) SetAccess(ctx context.Context, id string, def domain.JournalAccess, access map[string]domain.JournalAccess) (bool, error) {
-	b, body, err := s.load(id)
-	if err != nil {
+	b, doc, err := s.load(id)
+	if err != nil || b == nil {
 		return false, err
-	}
-	if b == nil {
-		return false, nil
 	}
 	b.Default = def
 	b.Access = access
-	return true, s.save(b, body)
+	return true, s.save(b, doc)
+}
+
+// SetScene заменяет холст, не трогая шапку.
+func (s *Store) SetScene(ctx context.Context, id string, doc *excalidraw.Document) (bool, error) {
+	b, old, err := s.load(id)
+	if err != nil || b == nil {
+		return false, err
+	}
+	// Картинки ваулта («## Embedded Files») переносим со старого документа,
+	// если новый их не принёс: они связаны с fileId элементов, и потерять
+	// связь означает показать вместо картинки пустоту.
+	if len(doc.EmbeddedFiles) == 0 && old != nil {
+		doc.EmbeddedFiles = old.EmbeddedFiles
+	}
+	return true, s.save(b, doc)
 }
 
 func (s *Store) Delete(ctx context.Context, id string) error {
@@ -285,23 +276,76 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// load — доска вместе с нетронутым телом файла: правки шапки не должны
-// зависеть от того, понимаем ли мы уже содержимое холста.
-func (s *Store) load(id string) (*domain.Board, string, error) {
-	raw, err := os.ReadFile(s.path(id))
+// load — доска и её холст. Файл, который не разбирается как рисунок (доска
+// создана до появления холста, или её испортили руками), возвращается с
+// пустым документом, а не ошибкой: метаданные читаются из шапки и работают,
+// а рисунок начнётся с чистого листа. Терять из-за одного битого файла всю
+// доску вместе с правами незачем.
+func (s *Store) load(id string) (*domain.Board, *excalidraw.Document, error) {
+	p := s.path(id)
+	raw, err := os.ReadFile(p)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, "", nil
+			return nil, nil, nil
 		}
-		return nil, "", err
+		return nil, nil, err
 	}
-	_, body := splitFrontMatter(string(raw))
-	return boardFrom(id, string(raw)), body, nil
+
+	doc, parseErr := excalidraw.ParseDocument(string(raw))
+	var fm string
+	if parseErr == nil {
+		fm = doc.Frontmatter
+	} else {
+		doc = excalidraw.NewDocument()
+		fm = rawFrontMatter(string(raw))
+	}
+
+	m := readMeta(fm)
+	name := strings.TrimSpace(m.Name)
+	if name == "" {
+		name = "Без названия"
+	}
+	b := &domain.Board{
+		ID:   id,
+		Name: name,
+		Sharing: domain.Sharing{
+			OwnerID:   m.OwnerID,
+			OwnerName: m.OwnerName,
+			Default:   m.Default,
+			Access:    m.Access,
+		},
+	}
+	if info, err := os.Stat(p); err == nil {
+		b.UpdatedAt = info.ModTime()
+	}
+	return b, doc, nil
 }
 
-func (s *Store) save(b *domain.Board, body string) error {
+// rawFrontMatter — шапка файла, который не разобрался как рисунок. Нужна
+// ровно затем, чтобы у такой доски всё равно нашлись имя и права.
+func rawFrontMatter(raw string) string {
+	if !strings.HasPrefix(raw, "---\n") && !strings.HasPrefix(raw, "---\r\n") {
+		return ""
+	}
+	lines := strings.Split(raw, "\n")
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			return strings.Join(lines[1:i], "\n")
+		}
+	}
+	return ""
+}
+
+func (s *Store) save(b *domain.Board, doc *excalidraw.Document) error {
+	if doc == nil {
+		doc = excalidraw.NewDocument()
+	}
 	m := meta{Name: b.Name, OwnerID: b.OwnerID, OwnerName: b.OwnerName, Default: b.Default, Access: b.Access}
-	return writeAtomic(s.path(b.ID), withFrontMatter(m, body))
+	content, err := doc.Markdown(frontMatter(m))
+	if err != nil {
+		return err
+	}
+	return writeAtomic(s.path(b.ID), content)
 }
 
 // writeAtomic — запись через временный файл рядом и rename: оборванная на

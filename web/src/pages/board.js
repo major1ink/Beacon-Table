@@ -1,16 +1,13 @@
 // pages/board.js — страница одной доски: бесконечный холст.
 //
-// Первая ветка Фазы 2 («доска как объект стола»): холст пока ПУСТОЙ — на нём
-// есть камера, сетка-ориентир и права, но нет элементов. Формат хранения
-// элементов решается вместе с совместимостью с плагином Excalidraw для
-// Obsidian, и рисовать здесь раньше этого решения значило бы записать на диск
-// формат, который придётся выбрасывать.
+// Страница открывает доску по ссылке, показывает её имя и твои права и
+// рисует холст в формате Excalidraw (см. internal/excalidraw и
+// board/render.js — что именно рисуется, а что показывается заглушкой).
 //
-// Из этого следует, что делает страница сегодня: открывает доску по ссылке,
-// показывает её имя и твои права на неё и даёт по холсту ездить. Всё это —
-// то, что не изменится от выбора формата.
+// Своих инструментов рисования тут пока нет: доска умеет показать
+// импортированное и по нему ездить. Правка — следующая ветка.
 import { Application, Container, Graphics } from "pixi.js";
-import { fetchBoard } from "../api.js";
+import { fetchBoard, fetchBoardScene } from "../api.js";
 import {
   createBoardCamera,
   applyBoardCamera,
@@ -18,6 +15,7 @@ import {
   zoomBoardAt,
   fitBoard,
 } from "../board/camera.js";
+import { renderScene } from "../board/render.js";
 
 const canvas = document.getElementById("board");
 const wrap = document.getElementById("canvasWrap");
@@ -196,10 +194,11 @@ document.getElementById("zoomOutBtn").onclick = () => {
   zoomBoardAt(camera, screenW() / 2, screenH() / 2, 1 / 1.3, screenW(), screenH());
   render();
 };
+// contentBounds — габариты нарисованного; «Сброс» вписывает именно их, а на
+// пустой доске возвращает в начало координат (см. fitBoard).
+let contentBounds = null;
 document.getElementById("zoomResetBtn").onclick = () => {
-  // Элементов пока нет, поэтому «вписать всё» = вернуться в начало координат
-  // (см. fitBoard). Когда элементы появятся, сюда поедут их границы.
-  fitBoard(camera, null, screenW(), screenH());
+  fitBoard(camera, contentBounds, screenW(), screenH());
   render();
 };
 
@@ -219,7 +218,20 @@ async function load() {
     // canEdit приходит уже посчитанным сервером — клиент права не
     // пересчитывает (см. boardJSON в internal/api/http/board_handlers.go).
     readonlyBadge.classList.toggle("on", !board.canEdit);
-    statusEl.textContent = "Холст пустой. Рисование появится следующей веткой.";
+
+    const scene = await fetchBoardScene(boardId);
+    const bounds = renderScene(world, scene);
+    const count = (scene.elements || []).filter((e) => e && !e.isDeleted).length;
+    if (count === 0) {
+      statusEl.textContent = "Холст пустой. Импортируй доску из Excalidraw или дождись инструментов рисования.";
+    } else {
+      statusEl.textContent = "";
+      // Открываем сразу по содержимому: на бесконечном холсте начало
+      // координат может оказаться далеко от того, что на доске нарисовано.
+      fitBoard(camera, bounds, screenW(), screenH());
+      contentBounds = bounds;
+    }
+    render();
   } catch (err) {
     statusEl.textContent = err && err.message ? err.message : "Не удалось открыть доску.";
   }

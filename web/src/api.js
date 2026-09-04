@@ -404,6 +404,23 @@ export async function setBoardAccess(id, def, access) {
 export async function deleteBoard(id) {
   return apiFetch(`/api/boards/${id}`, { method: "DELETE" });
 }
+// fetchBoardScene — сам холст доски в формате Excalidraw (см.
+// internal/excalidraw). Отдельным запросом от fetchBoard: список и шапку
+// читают часто, рисунок — только когда доску открыли.
+export async function fetchBoardScene(id) {
+  return apiFetch(`/api/boards/${id}/scene`);
+}
+// importBoard — доска из файла Excalidraw: .excalidraw.md из ваулта Obsidian
+// либо голый .excalidraw. Имя необязательно: без него сервер возьмёт имя
+// файла. Не через apiFetch — тут multipart, а не JSON.
+export async function importBoard(file, name) {
+  const form = new FormData();
+  form.append("file", file);
+  if (name) form.append("name", name);
+  const res = await fetch("/api/boards/import", { method: "POST", body: form });
+  if (!res.ok) throw new Error((await res.text()) || "не удалось импортировать доску");
+  return res.json();
+}
 
 export async function fetchJournalFolders() {
   return apiFetch("/api/journal-folders");

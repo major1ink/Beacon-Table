@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/excalidraw"
 	"beacon-table/internal/repository"
 )
 
@@ -16,6 +17,14 @@ const maxBoardName = 120
 // единицы-десятки (схема расследования, связи NPC, наброски карты), тысяча —
 // признак не работы, а зациклившегося клиента.
 const maxBoardsPerTable = 200
+
+// maxBoardImportBytes / maxBoardElements — пределы импорта. Не правило, а
+// защита от того, чтобы одним файлом положить стол: самый большой файл в
+// живом ваулте, на котором это проверялось, — 90 КБ и 154 элемента.
+const (
+	maxBoardImportBytes = 16 << 20 // 16 МБ: с вшитыми картинками файл бывает толстым
+	maxBoardElements    = 20000
+)
 
 // BoardService — доски стола: бесконечные холсты рядом с заметками, каждый со
 // своим автором и раздачей прав (см. domain.Board). Доска с открытым
@@ -34,6 +43,12 @@ type BoardService interface {
 	Get(ctx context.Context, v domain.JournalViewer, id string) (*domain.Board, error)
 	// Create заводит доску от лица viewer'а: он становится её автором.
 	Create(ctx context.Context, v domain.JournalViewer, draft BoardDraft) (*domain.Board, error)
+	// Import заводит доску из файла Excalidraw (.excalidraw.md из ваулта
+	// Obsidian либо голый .excalidraw). Права — как у Create: импортирующий
+	// становится автором, доска заводится закрытой.
+	Import(ctx context.Context, v domain.JournalViewer, name string, raw []byte) (*domain.Board, error)
+	// Scene — холст доски; нужен уровень чтения.
+	Scene(ctx context.Context, v domain.JournalViewer, id string) (*excalidraw.Document, error)
 	// Rename — только автор и ДМ (см. domain.Sharing.CanManage).
 	Rename(ctx context.Context, v domain.JournalViewer, id, name string) (*domain.Board, error)
 	// SetAccess переписывает раздачу прав — только автор и ДМ.
@@ -98,6 +113,11 @@ func (s *boardService) Get(ctx context.Context, v domain.JournalViewer, id strin
 }
 
 func (s *boardService) Create(ctx context.Context, v domain.JournalViewer, draft BoardDraft) (*domain.Board, error) {
+	return s.create(ctx, v, draft, nil)
+}
+
+// create — общее тело Create и Import: разница только в начальном холсте.
+func (s *boardService) create(ctx context.Context, v domain.JournalViewer, draft BoardDraft, doc *excalidraw.Document) (*domain.Board, error) {
 	name, err := validateBoardName(draft.Name)
 	if err != nil {
 		return nil, err
@@ -123,10 +143,45 @@ func (s *boardService) Create(ctx context.Context, v domain.JournalViewer, draft
 			Access:    access,
 		},
 	}
-	if err := s.boards.Create(ctx, b); err != nil {
+	if err := s.boards.Create(ctx, b, doc); err != nil {
 		return nil, err
 	}
 	return s.boards.Get(ctx, b.ID)
+}
+
+// Import — доска из чужого файла Excalidraw. Отличается от Create ровно
+// одним: холст берётся не пустой, а из файла. Имя, если его не задали,
+// берётся из имени файла — так импорт десятка досок не требует придумывать
+// названия заново.
+func (s *boardService) Import(ctx context.Context, v domain.JournalViewer, name string, raw []byte) (*domain.Board, error) {
+	if len(raw) > maxBoardImportBytes {
+		return nil, &domain.ValidationError{Msg: "файл слишком большой"}
+	}
+	doc, err := excalidraw.ParseDocument(string(raw))
+	if err != nil {
+		// Ошибка разбора — это сообщение пользователю («в файле нет блока
+		// рисунка»), а не внутренний сбой: он выбрал не тот файл.
+		return nil, &domain.ValidationError{Msg: err.Error()}
+	}
+	if len(doc.Scene.Elements) > maxBoardElements {
+		return nil, &domain.ValidationError{Msg: "на доске слишком много элементов"}
+	}
+	return s.create(ctx, v, BoardDraft{Name: name, Default: domain.JournalNone}, doc)
+}
+
+func (s *boardService) Scene(ctx context.Context, v domain.JournalViewer, id string) (*excalidraw.Document, error) {
+	b, err := s.boards.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !b.CanSee(v) {
+		return nil, domain.ErrNotFound
+	}
+	if !b.CanRead(v) {
+		// «Только название» — видит доску в списке, но не её содержимое.
+		return nil, domain.ErrForbidden
+	}
+	return s.boards.Scene(ctx, id)
 }
 
 // manageable — «доска существует и viewer вправе ею распоряжаться», общая

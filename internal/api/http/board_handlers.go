@@ -3,12 +3,18 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/service"
 )
+
+// maxBoardUpload — потолок тела запроса на импорт доски
+const maxBoardUpload = 16 << 20
 
 // ---- доски стола (см. internal/service/boards.go,
 // internal/repository/boardfile) ----
@@ -116,6 +122,80 @@ func (a *API) handleBoardCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, boardJSON(b, v))
+}
+
+// handleBoardImport — доска из файла Excalidraw: .excalidraw.md из ваулта
+// Obsidian либо голый .excalidraw. Имя берётся из поля формы, а если его нет
+// — из имени файла.
+func (a *API) handleBoardImport(w http.ResponseWriter, r *http.Request) {
+	acc, ok := a.requireAccount(w, r)
+	if !ok {
+		return
+	}
+	world, ok := a.requireWorld(w)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBoardUpload)
+	//nolint:gosec // G120: тело уже ограничено MaxBytesReader выше
+	if err := r.ParseMultipartForm(multipartMemoryBudget); err != nil {
+		writeErr(w, http.StatusBadRequest, "файл слишком большой")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "нет файла")
+		return
+	}
+	defer file.Close()
+
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "не удалось прочитать файл")
+		return
+	}
+
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" && header != nil {
+		name = boardNameFromFile(header.Filename)
+	}
+
+	v := journalViewer(acc)
+	b, err := world.Boards.Import(r.Context(), v, name, raw)
+	if err != nil {
+		writeBoardErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, boardJSON(b, v))
+}
+
+// boardNameFromFile — «Сессия 55.excalidraw.md» -> «Сессия 55». Обрезаются
+// оба расширения: у плагина файл называется именно так, и оставлять
+// «.excalidraw» в названии доски незачем.
+func boardNameFromFile(filename string) string {
+	name := path.Base(strings.ReplaceAll(filename, "\\", "/"))
+	name = strings.TrimSuffix(name, ".md")
+	name = strings.TrimSuffix(name, ".excalidraw")
+	return strings.TrimSpace(name)
+}
+
+// handleBoardScene — сам холст доски. Отдельно от handleBoardGet: список и
+// шапку клиент читает часто, а рисунок — только когда доску открыли.
+func (a *API) handleBoardScene(w http.ResponseWriter, r *http.Request) {
+	acc, ok := a.requireAccount(w, r)
+	if !ok {
+		return
+	}
+	world, ok := a.requireWorld(w)
+	if !ok {
+		return
+	}
+	doc, err := world.Boards.Scene(r.Context(), journalViewer(acc), r.PathValue("id"))
+	if err != nil {
+		writeBoardErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, doc.Scene)
 }
 
 func (a *API) handleBoardGet(w http.ResponseWriter, r *http.Request) {

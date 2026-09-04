@@ -182,7 +182,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// у них общий с журналом — GET /api/journal/members.
 	mux.HandleFunc("GET /api/boards", a.handleBoardList)
 	mux.HandleFunc("POST /api/boards", a.handleBoardCreate)
+	mux.HandleFunc("POST /api/boards/import", a.handleBoardImport)
 	mux.HandleFunc("GET /api/boards/{id}", a.handleBoardGet)
+	mux.HandleFunc("GET /api/boards/{id}/scene", a.handleBoardScene)
 	mux.HandleFunc("PUT /api/boards/{id}/name", a.handleBoardRename)
 	mux.HandleFunc("PUT /api/boards/{id}/access", a.handleBoardAccess)
 	mux.HandleFunc("DELETE /api/boards/{id}", a.handleBoardDelete)
