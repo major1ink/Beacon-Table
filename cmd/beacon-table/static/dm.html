@@ -152,6 +152,10 @@
     .primary-btn { width: 100%; background: var(--accent); font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .primary-btn:hover { background: #6a5ae0; }
     .section-divider { height: 1px; background: var(--border); margin: 4px 0; }
+    /* Сама панель инструмента "Пометки" живёт в web/src/draw-options.js
+       (общая с игроком), тут — только её раскрытие под выбранным инструментом. */
+    #drawOptions { display: none; }
+    #drawOptions.open { display: flex; }
 
     .light-field { display: none; align-items: center; justify-content: space-between; }
     .light-field.visible { display: flex; }
@@ -838,26 +842,26 @@
     }
     #authFailedOverlay.open { display: flex; }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BUxzr7mC.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CPJobl3H.js">
+  <script type="module" crossorigin src="/assets/dm-ZNxTSmML.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BLGxeeZC.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-g49pjxWl.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-VL3zpNr8.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-BT6eF0L5.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-DTLhUKXc.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-BFT27p9H.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CWmM-yLd.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BPyGSLZg.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-C4uR71_H.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-DhtNCyHJ.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-MNsEkEK0.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-CIWxIQ39.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CaDDN8A2.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-BCQ6Ex8N.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-4FSWw15w.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-DLwz-ekY.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-DOh16NRy.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-D2Ueqjkf.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-BWzjUmfx.css">
+  <link rel="stylesheet" crossorigin href="/assets/api-BWGmEiye.css">
 </head>
 <body>
   <div id="appBody">
@@ -949,11 +953,14 @@
           <button id="buildingBtn" class="tool-btn" title="Клик — перетащить вершину контура. Ctrl+клик — нарисовать новое здание"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11L12 4l8 7"/><path d="M6 10v10h12V10"/><rect x="10" y="14" width="4" height="6"/></svg> Здание</button>
           <button id="fogBtn" class="tool-btn" title="Клик/протяжка — перетащить точку или фигуру тумана. Ctrl+протяжка — нарисовать новую фигуру"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01.4-8 5.5 5.5 0 0110.4 1A3.5 3.5 0 0117 16H7z"/><line x1="5" y1="19" x2="19" y2="19"/></svg> Туман</button>
           <button id="rulerBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg> Линейка</button>
+          <button id="drawBtn" class="tool-btn" title="Быстрые пометки поверх карты: стрелка, круг, подпись. Видны всем за столом и на экране трансляции; стереть одну — ластиком или ПКМ по ней"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 9.5-9.5a2.1 2.1 0 00-3-3L5 16l-1 4z"/><path d="M14.5 5.5l4 4"/></svg> Пометки</button>
+          <div id="drawOptions"></div>
           <div class="section-divider"></div>
           <p class="hint">ЛКМ таскает токены и точки стен/зданий (двигаются сразу все стены её угла) · ПКМ на токене — меню/удалить · средняя кнопка — пан · колесо — зум.</p>
           <p class="hint" data-hint-tool="wall">Стены рисуются цепочкой: Ctrl+клик — начать новую стену, клик — точка, клик — следующий сегмент от неё; Esc/двойной клик/ПКМ — закончить рисование. Точки рядом друг с другом прилипают, образуя ровный угол. ЛКМ таскает вершину · ПКМ на точке стены — меню "удалить точку" · ПКМ на самой стене — удалить её целиком.</p>
           <p class="hint" data-hint-tool="building">Здание — та же цепочка, но обязательно замкнутая: Ctrl+клик — начать новое, клик рядом со стартовой точкой (она увеличивается, когда точек уже достаточно) замыкает контур и сохраняет здание; Esc/двойной клик/ПКМ до замыкания — отмена без сохранения. Замкнутое здание скрывает у игроков всё, что внутри контура, непрозрачной "крышей" — снимается целиком, как только внутрь заходит видимый токен; ПКМ внутри контура — удалить здание.</p>
           <p class="hint" data-hint-tool="fog">Туман — Ctrl+протяжка рисует новую фигуру; клик/протяжка на точке или фигуре — переместить её; ПКМ на фигуре — меню/удалить.</p>
+          <p class="hint" data-hint-tool="draw">Пометки — ЛКМ и тяни (для текста просто клик). Стереть одну: «Ластик» (клик или протяжка по ней) либо ПКМ прямо по пометке; «Очистить слой» сносит всё сразу. Наведи курсор на пометку — покажет, кто её нарисовал. Видны всем за столом и на трансляции, живут вместе со сценой. Кому разрешено рисовать и показывать ли пометки игроков — в «Настройках».</p>
           <p class="hint" data-hint-tool="ruler">Линейка — ЛКМ и тяни, отпустил — замер исчезает; расстояние в единицах текущей сетки (см. настройки сцены → сетка).</p>
         </div>
       </section>
@@ -1132,6 +1139,14 @@
               <div class="field-block">
                 <div class="checkbox-row"><label><input type="checkbox" id="lootingEnabledToggle" /> Разрешить лутить убитых монстров</label></div>
                 <p class="hint">Пока выключено, пункт «Лутить» на мёртвых токенах доступен только ДМ.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="playerDrawingToggle" /> Разрешить игрокам рисовать пометки</label></div>
+                <p class="hint">Игрок рисует и стирает только свои пометки; ДМ — любые.</p>
+              </div>
+              <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" id="hidePlayerDrawingsToggle" /> Скрыть пометки игроков</label></div>
+                <p class="hint">Убирает с карты всё, что нарисовали игроки, не стирая — снял галочку, и пометки вернулись.</p>
               </div>
               <div class="field-block">
                 <div class="checkbox-row"><label><input type="checkbox" id="combatHighlightActiveToggle" /> Подсвечивать токен активного хода</label></div>

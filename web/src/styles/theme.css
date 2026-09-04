@@ -417,3 +417,38 @@
 .roll-op { color: var(--text-dim); }
 .roll-eq { margin-left: 2px; color: var(--text-dim); }
 .roll-eq b { color: var(--text); font-size: 13px; }
+
+/* ---- панель инструмента «Пометки» (см. web/src/draw-options.js) ----
+   Общая и для рейл-панели ДМ, и для всплывашки в топбаре игрока: набор
+   инструментов у ролей одинаковый, отличается только место, куда панель
+   смонтирована. */
+.draw-options { display: flex; flex-direction: column; gap: 9px; }
+.draw-field { display: flex; flex-direction: column; gap: 5px; }
+.draw-field-label { font-size: 11px; color: var(--text-dim); }
+.draw-shapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.draw-shape {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 4px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text-dim);
+  font: inherit; font-size: 11px; line-height: 1.15; text-align: center; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.draw-shape:hover { background: var(--surface-hover); color: var(--text); }
+.draw-shape.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.draw-shape-glyph { font-size: 13px; line-height: 1; }
+.draw-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+.draw-swatch {
+  width: 22px; height: 22px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; box-shadow: 0 0 0 1px var(--border) inset;
+}
+.draw-swatch.active { border-color: #fff; }
+/* «Свой цвет» — пометка рисуется цветом участника (см. colorForAuthor),
+   поэтому у образца не один цвет, а вся палитра разом. */
+.draw-swatch--auto { background: linear-gradient(135deg, #5dd0ff, #7ee081, #ffb454); }
+.draw-options input[type="range"] { width: 100%; }
+.draw-clear {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text-dim); font: inherit; font-size: 12px; cursor: pointer;
+}
+.draw-clear:hover { background: var(--danger); border-color: var(--danger-hover); color: #fff; }

@@ -434,6 +434,18 @@ func (r *Room) run() {
 				// не просто "разрешено/нет" целиком по типу сообщения.
 				r.handleToggleDoor(im.from, im.msg)
 				continue
+			// Пометки — своя ветка, а не applyMutation: нужен отправитель
+			// (сервер сам проставляет автора и не даёт игроку тронуть чужое,
+			// см. room_drawings.go).
+			case "add_drawing":
+				r.handleAddDrawing(im.from, im.msg)
+				continue
+			case "remove_drawing":
+				r.handleRemoveDrawing(im.from, im.msg)
+				continue
+			case "clear_drawings":
+				r.handleClearDrawings()
+				continue
 			case "set_door_lock":
 				// ДМ-only (authorize не пускает игрока), но своя ветка —
 				// нужно перевести Locked в конкретное DoorState, а не просто
@@ -587,6 +599,16 @@ func (r *Room) run() {
 			case "set_hide_light_markers":
 				if im.msg.HideLightMarkers != nil {
 					r.handleSetHideLightMarkers(*im.msg.HideLightMarkers)
+				}
+				continue
+			case "set_player_drawing_enabled":
+				if im.msg.PlayerDrawingEnabled != nil {
+					r.handleSetPlayerDrawingEnabled(*im.msg.PlayerDrawingEnabled)
+				}
+				continue
+			case "set_hide_player_drawings":
+				if im.msg.HidePlayerDrawings != nil {
+					r.handleSetHidePlayerDrawings(*im.msg.HidePlayerDrawings)
 				}
 				continue
 			// revive_token — вкладка "Убитые" трекера (см. combatPayload:
@@ -798,6 +820,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 		Walls:         r.scene.Walls,
 		FogAreas:      r.scene.FogAreas,
 		Buildings:     r.scene.Buildings,
+		Drawings:      r.scene.Drawings,
 	}
 }
 
@@ -912,7 +935,8 @@ func (r *Room) broadcastPlayerList() {
 
 // authorize — права по типу сообщения и роли отправителя. DM может всё; TV
 // не может ничего (чистый зритель); игрок — только двигать СВОИ токены,
-// кидать кубы и открывать/закрывать двери (см. handleToggleDoor — секретные и
+// кидать кубы, рисовать свои пометки (см. room_drawings.go) и открывать/
+// закрывать двери (см. handleToggleDoor — секретные и
 // запертые для игрока дополнительно отбрасывает уже сам обработчик, тут
 // только "тип сообщения вообще разрешён этой роли"), остальное (создание/
 // удаление/скрытие токенов, стены, окна, замки дверей, туман, сцены) —
@@ -925,7 +949,13 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 	case domain.RolePlayer:
 		return msgType == "move_own_token" || msgType == "roll_dice" ||
 			msgType == "hub_take_item" || msgType == "loot_take_item" ||
-			msgType == "toggle_door"
+			msgType == "toggle_door" ||
+			// Пометки на карте — единственная правка САМОЙ сцены, доступная
+			// игроку. Тумблер стола (CombatState.PlayerDrawingEnabled) и
+			// владение конкретным элементом проверяются отдельно, уже внутри
+			// canDrawingWrite (см. room_drawings.go) — тут только "тип
+			// сообщения вообще разрешён этой роли".
+			msgType == "add_drawing" || msgType == "remove_drawing"
 	default: // RoleTV
 		return false
 	}
@@ -1937,6 +1967,10 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
 		// включено (прятать), см. domain.CombatState.HideLightMarkers.
 		"hideLightMarkers": r.combat.HideLightMarkers == nil || *r.combat.HideLightMarkers,
+		// Слой пометок (см. room_drawings.go) — оба тумблера общие для стола
+		// и едут тем же каналом, что и остальные настройки.
+		"playerDrawingEnabled": r.combat.PlayerDrawingEnabled,
+		"hidePlayerDrawings":   r.combat.HidePlayerDrawings,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()

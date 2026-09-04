@@ -13,6 +13,7 @@ import { setCardOpener } from "../combatant-card.js";
 import { openSheetDock } from "../sheet-dock.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
+import { createDrawOptions } from "../draw-options.js";
 import {
   fetchMe,
   apiLogout,
@@ -565,6 +566,7 @@ document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(n
 const wallBtn = document.getElementById("wallBtn");
 const buildingBtn = document.getElementById("buildingBtn");
 const fogBtn = document.getElementById("fogBtn");
+const drawBtn = document.getElementById("drawBtn");
 const rulerBtn = document.getElementById("rulerBtn");
 
 function toggleTool(name) {
@@ -575,18 +577,36 @@ function toggleTool(name) {
 wallBtn.dataset.tool = "wall";
 buildingBtn.dataset.tool = "building";
 fogBtn.dataset.tool = "fog";
+drawBtn.dataset.tool = "draw";
 rulerBtn.dataset.tool = "ruler";
 wallBtn.onclick = () => toggleTool("wall");
 buildingBtn.onclick = () => toggleTool("building");
 fogBtn.onclick = () => toggleTool("fog");
+drawBtn.onclick = () => toggleTool("draw");
 rulerBtn.onclick = () => toggleTool("ruler");
+
+// ================= опции инструмента "Пометки" =================
+// Саму панель (фигура/цвет/толщина/ластик) строит общий с игроком компонент
+// — см. web/src/draw-options.js. Здесь только монтаж и кнопка очистки: она
+// у ДМ и только у ДМ (сервер очистку от игрока не примет, см. Room.authorize).
+const drawOptions = document.getElementById("drawOptions");
+createDrawOptions(drawOptions, {
+  onClear: async () => {
+    if (!(await showConfirm("Стереть со сцены все пометки — и свои, и игроков?", { title: "Очистить слой", okLabel: "Очистить", danger: true }))) return;
+    vtt.send({ type: "clear_drawings" });
+  },
+});
 
 const gridEditDone = document.getElementById("gridEditDone");
 document.addEventListener("vtt:toolChanged", (e) => {
   wallBtn.classList.toggle("active", e.detail === "wall");
   buildingBtn.classList.toggle("active", e.detail === "building");
   fogBtn.classList.toggle("active", e.detail === "fog");
+  drawBtn.classList.toggle("active", e.detail === "draw");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
+  // Опции рисования (фигура/цвет/толщина) — только под своим инструментом,
+  // как gridEditDone ниже: вне его они просто занимали бы место в панели.
+  drawOptions.classList.toggle("open", e.detail === "draw");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
   // подсказка в панели "Инструменты" — только для выбранного инструмента (см. dm.html:data-hint-tool)
   // "" тут не сработает — .hint[data-hint-tool]{display:none} в <style> и
@@ -3661,6 +3681,28 @@ document.addEventListener("vtt:combatState", (e) => {
 });
 showBuiltinCardsToggle.onchange = () => {
   vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
+};
+
+// playerDrawingToggle / hidePlayerDrawingsToggle — тот же приём: общие
+// тумблеры стола, значение приходит внутри "combat_state" (см.
+// domain.CombatState.PlayerDrawingEnabled / HidePlayerDrawings,
+// service.combatPayload). Первый решает, принимает ли сервер пометки от
+// игроков вообще (internal/service/room_drawings.go: canDrawingWrite),
+// второй — показывать ли уже нарисованное ими (web/src/vtt/layers/drawings.js).
+const playerDrawingToggle = document.getElementById("playerDrawingToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  playerDrawingToggle.checked = !!e.detail.playerDrawingEnabled;
+});
+playerDrawingToggle.onchange = () => {
+  vtt.send({ type: "set_player_drawing_enabled", playerDrawingEnabled: playerDrawingToggle.checked });
+};
+
+const hidePlayerDrawingsToggle = document.getElementById("hidePlayerDrawingsToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  hidePlayerDrawingsToggle.checked = !!e.detail.hidePlayerDrawings;
+});
+hidePlayerDrawingsToggle.onchange = () => {
+  vtt.send({ type: "set_hide_player_drawings", hidePlayerDrawings: hidePlayerDrawingsToggle.checked });
 };
 
 const hideLightMarkersToggle = document.getElementById("hideLightMarkersToggle");

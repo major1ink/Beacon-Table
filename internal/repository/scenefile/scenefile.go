@@ -375,7 +375,7 @@ func (s *Store) backupToMigrations(srcPath string) error {
 // этом формате вообще" — иначе неудачную миграцию было бы не отличить от
 // легитимной пустой сцены.
 func hasContent(s *domain.SceneState) bool {
-	return s.MapURL != "" || len(s.Tokens) > 0 || len(s.NoteMarkers) > 0 || len(s.Walls) > 0 || len(s.FogAreas) > 0 || len(s.Buildings) > 0
+	return s.MapURL != "" || len(s.Tokens) > 0 || len(s.NoteMarkers) > 0 || len(s.Walls) > 0 || len(s.FogAreas) > 0 || len(s.Buildings) > 0 || len(s.Drawings) > 0
 }
 
 // sanitizeScene защищает от nil-карт внутри сцены (если в файле их не было —
@@ -400,6 +400,9 @@ func sanitizeScene(s *domain.SceneState) {
 	}
 	if s.Buildings == nil {
 		s.Buildings = make(map[string]*domain.Building)
+	}
+	if s.Drawings == nil {
+		s.Drawings = make(map[string]*domain.Drawing)
 	}
 	if s.Width <= 0 {
 		s.Width = 1280

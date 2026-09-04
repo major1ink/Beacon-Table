@@ -14,6 +14,7 @@ import {
   buildingVertexNear,
   noteMarkerAt,
   gridHandleCell,
+  drawingAt,
   formatDistance,
   formatDistanceValue,
   unitsToWorldDistance,
@@ -23,7 +24,9 @@ import {
 import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
 import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
+import { paintDrawing, DRAWING_DEFAULT_WIDTH, DRAWING_DEFAULT_TEXT_SIZE, DRAWING_TEXT_SIZE_FACTOR } from "./layers/drawings.js";
 import { fetchCharacter, fetchMonster } from "../api.js";
+import { showPrompt } from "../modal.js";
 
 // EDGE_HIT_PX — порог (в экранных px) для попадания в край "ручки"
 // редактора сетки (см. tool "grid-edit" ниже): ближе к краю квадрата — это
@@ -104,13 +107,13 @@ export function createInteraction(ctx) {
   );
 
   let panning = null;
-  canvas.addEventListener("mousedown", (e) => {
+  canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 1) return;
     e.preventDefault();
     const { sx, sy } = canvasPos(e, canvas);
     panning = { sx, sy, camX: ctx.camera.x, camY: ctx.camera.y };
   });
-  window.addEventListener("mousemove", (e) => {
+  window.addEventListener("pointermove", (e) => {
     if (!panning) return;
     const { sx, sy } = canvasPos(e, canvas);
     const { scale } = getTransform(screenW(), screenH(), ctx.scene, ctx.camera);
@@ -118,9 +121,74 @@ export function createInteraction(ctx) {
     ctx.camera.y = panning.camY - (sy - panning.sy) / scale;
     applyCameraAndRender();
   });
-  window.addEventListener("mouseup", (e) => {
+  window.addEventListener("pointerup", (e) => {
     if (e.button === 1) panning = null;
   });
+
+  // ---- планшет: один палец — инструмент, два пальца — камера ----
+  // Все обработчики карты ниже слушают pointer-события, а не mouse: у мыши
+  // это ровно те же клики с теми же полями (button/shiftKey/clientX-Y), а
+  // палец и стилус начинают работать заодно — без второй копии логики. То,
+  // чего у мыши нет и что поэтому живёт только здесь: жест двумя пальцами
+  // (пан + пинч-зум) вместо средней кнопки и колеса.
+  //
+  // touch-action:none обязателен — иначе браузер забирает себе прокрутку и
+  // масштабирование страницы, и pointermove до нас просто не долетает.
+  canvas.style.touchAction = "none";
+
+  const touchPoints = new Map(); // pointerId -> {sx, sy}
+  let pinch = null; // {dist, cx, cy} предыдущего кадра жеста
+
+  // ctx.touchPanning — «сейчас на канвасе два пальца». Ролевые обработчики
+  // ниже по нему выходят из своих жестов: второй палец на экране означает
+  // «я двигаю карту», а не «я продолжаю рисовать первым».
+  ctx.touchPanning = false;
+
+  function pinchFrame() {
+    const [a, b] = [...touchPoints.values()];
+    return { dist: Math.hypot(a.sx - b.sx, a.sy - b.sy) || 1, cx: (a.sx + b.sx) / 2, cy: (a.sy + b.sy) / 2 };
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    const { sx, sy } = canvasPos(e, canvas);
+    touchPoints.set(e.pointerId, { sx, sy });
+    if (touchPoints.size !== 2) return;
+    ctx.touchPanning = true;
+    // Первый палец уже мог начать рисовать/тащить токен — этот жест
+    // отменяется целиком, без коммита на сервер (см. слушатели
+    // "vtt:cancelGesture" в ролевых ветках ниже).
+    document.dispatchEvent(new CustomEvent("vtt:cancelGesture"));
+    pinch = pinchFrame();
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!touchPoints.has(e.pointerId)) return;
+    const { sx, sy } = canvasPos(e, canvas);
+    touchPoints.set(e.pointerId, { sx, sy });
+    if (!pinch || touchPoints.size < 2) return;
+    const now = pinchFrame();
+    // Зум — вокруг середины между пальцами (щипок «на месте» не уводит
+    // карту), пан — на смещение самой середины.
+    zoomAt(ctx.camera, now.cx, now.cy, now.dist / pinch.dist, screenW(), screenH(), ctx.scene);
+    const { scale } = getTransform(screenW(), screenH(), ctx.scene, ctx.camera);
+    ctx.camera.x -= (now.cx - pinch.cx) / scale;
+    ctx.camera.y -= (now.cy - pinch.cy) / scale;
+    pinch = now;
+    applyCameraAndRender();
+  });
+
+  function endTouchPoint(e) {
+    if (!touchPoints.has(e.pointerId)) return;
+    touchPoints.delete(e.pointerId);
+    if (touchPoints.size < 2) pinch = null;
+    // Флаг снимается, только когда с экрана ушли ВСЕ пальцы: иначе
+    // оставшийся после щипка палец тут же продолжил бы рисовать линию от
+    // того места, где его застало окончание жеста.
+    if (touchPoints.size === 0) ctx.touchPanning = false;
+  }
+  window.addEventListener("pointerup", endTouchPoint);
+  window.addEventListener("pointercancel", endTouchPoint);
 
   document.addEventListener("vtt:zoomBy", (e) => {
     zoomAt(ctx.camera, screenW() / 2, screenH() / 2, e.detail, screenW(), screenH(), ctx.scene);
@@ -159,6 +227,152 @@ export function createInteraction(ctx) {
   // оба сценария в обеих ролевых ветках ниже.
   const rulerLine = createRulerLine(ctx);
   const distanceLabel = createDistanceLabel(ctx);
+
+  // ---- слой пометок (см. layers/drawings.js) — общий для ДМ и игрока ----
+  // Инструмент один и тот же в обеих ролях, отличаются только права: ДМ
+  // рисует всегда и стирает что угодно, игрок — пока ДМ включил тумблер
+  // стола и только своё (сервер проверяет это ещё раз, см.
+  // internal/service/room_drawings.go: canDrawingWrite).
+  //
+  // drawSettings — что сейчас выбрано в панели инструментов (форма, цвет,
+  // толщина); панель шлёт "vtt:drawSettings", как тулбар шлёт "vtt:setTool".
+  // Пустой цвет означает «цвет участника» (layers/drawings.js:
+  // colorForAuthor) — его и подставит слой при отрисовке.
+  const drawSettings = { shape: "free", color: "", width: 0 };
+  document.addEventListener("vtt:drawSettings", (e) => Object.assign(drawSettings, e.detail || {}));
+
+  // drawStroke — жест, который прямо сейчас в руке: {kind, points}. На
+  // сервер не уходит ничего, пока жест не закончен, — в отличие от стен
+  // (там каждый сегмент коммитится сразу): незавершённая пометка не имеет
+  // смысла ни для кого, кроме того, кто её ведёт, тот же принцип, что у
+  // контура здания.
+  let drawStroke = null;
+  // erasing — идёт протяжка ластиком (см. SHAPES в draw-options.js): не
+  // "фигура", а режим, поэтому отдельный флаг, а не drawStroke.
+  let erasing = false;
+
+  // drawWidth — что уедет в Drawing.Width. У линий это толщина как есть, у
+  // подписи то же поле означает кегль (см. DRAWING_TEXT_SIZE_FACTOR).
+  function drawWidth() {
+    if (drawSettings.shape === "text") {
+      return drawSettings.width > 0 ? drawSettings.width * DRAWING_TEXT_SIZE_FACTOR : DRAWING_DEFAULT_TEXT_SIZE;
+    }
+    return drawSettings.width > 0 ? drawSettings.width : DRAWING_DEFAULT_WIDTH;
+  }
+
+  // ownDrawing — элемент, который эта роль вправе стереть (см. фильтр
+  // drawingAt): у ДМ — любой, у игрока — только свой.
+  function ownDrawing(d) {
+    return ctx.isDM || d.authorId === ctx.playerId;
+  }
+
+  function sendDrawing(kind, points, text) {
+    ctx.send({
+      type: "add_drawing",
+      drawing: {
+        id: "dr-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+        kind,
+        points,
+        text: text || "",
+        color: drawSettings.color || "",
+        width: drawWidth(),
+      },
+    });
+  }
+
+  function paintDrawPreview() {
+    preview.clear();
+    if (!drawStroke) return;
+    paintDrawing(preview, { ...drawStroke, color: drawSettings.color || "", width: drawWidth() });
+  }
+
+  // placeDrawingText — подпись ставится не протяжкой, а одним кликом: текст
+  // спрашиваем модалкой уже ПОСЛЕ выбора места, чтобы не держать открытое
+  // поле ввода поверх карты, пока целишься.
+  async function placeDrawingText(x, y) {
+    const text = await showPrompt("Текст подписи", { title: "Подпись на карте", placeholder: "здесь ловушка" });
+    if (text === null || !text.trim()) return;
+    sendDrawing("text", [{ x, y }], text.trim());
+  }
+
+  function beginDraw(x, y) {
+    if (drawSettings.shape === "eraser") {
+      // Ластик стирает и по клику, и протяжкой — держим жест до pointerup,
+      // чтобы можно было провести по нескольким пометкам разом.
+      erasing = true;
+      eraseDrawingAt(x, y);
+      return;
+    }
+    if (drawSettings.shape === "text") {
+      placeDrawingText(x, y);
+      return;
+    }
+    // free копит точки по ходу жеста, остальные формы всегда двухточечные —
+    // вторая точка едет за курсором до отпускания.
+    drawStroke = { kind: drawSettings.shape, points: drawSettings.shape === "free" ? [{ x, y }] : [{ x, y }, { x, y }] };
+  }
+
+  function moveDraw(x, y) {
+    if (erasing) {
+      eraseDrawingAt(x, y);
+      return;
+    }
+    if (!drawStroke) return;
+    if (drawStroke.kind === "free") {
+      // Прореживание: точки ближе 4 мировых px не добавляют форме ничего,
+      // но раздувают элемент и трафик (см. maxDrawingPoints на сервере).
+      const last = drawStroke.points[drawStroke.points.length - 1];
+      if (Math.hypot(x - last.x, y - last.y) < 4) return;
+      drawStroke.points.push({ x, y });
+    } else {
+      drawStroke.points[1] = { x, y };
+    }
+    paintDrawPreview();
+  }
+
+  function endDraw() {
+    const stroke = drawStroke;
+    drawStroke = null;
+    erasing = false;
+    preview.clear();
+    if (!stroke) return;
+    const pts = stroke.points;
+    if (stroke.kind === "free") {
+      if (pts.length >= 2) sendDrawing("free", pts);
+      return;
+    }
+    // Клик без протяжки — не фигура нулевого размера, а промах: молча ничего
+    // не создаём (тот же порог, что у резиновой рамки выделения).
+    if (Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) < 4) return;
+    sendDrawing(stroke.kind, pts);
+  }
+
+  function cancelDraw() {
+    erasing = false;
+    if (!drawStroke) return;
+    drawStroke = null;
+    preview.clear();
+  }
+
+  // eraseDrawingAt — стереть пометку под точкой: инструментом «Ластик» или
+  // ПКМ (та же идиома, что ПКМ по фигуре тумана/зданию). Возвращает true,
+  // если что-то нашлось, — вызывающий по этому решает, показывать ли своё
+  // контекстное меню.
+  //
+  // Удаляем СРАЗУ и локально, не дожидаясь снапшота: без этого протяжка
+  // ластиком слала бы "remove_drawing" с одним и тем же id на каждый шаг
+  // (пометка ещё лежит в ctx.scene, пока не пришёл ответ сервера), а под
+  // курсором она продолжала бы висеть до конца круга по сети. Тот же приём
+  // локальной мутации, что и у splitWallAt выше.
+  function eraseDrawingAt(x, y) {
+    const id = drawingAt(x, y, ctx.scene.drawings || {}, ctx.world.scale.x || 1, 8, ownDrawing);
+    if (!id) return false;
+    delete ctx.scene.drawings[id];
+    ctx.dirty.drawings = true;
+    ctx.render();
+    ctx.send({ type: "remove_drawing", id });
+    return true;
+  }
 
   // ---- лимит скорости в бою — общий и для ДМ, и для игрока ----
   // Раньше это было заведено только в ветке ctx.isPlayer (свой токен, свой
@@ -254,7 +468,7 @@ export function createInteraction(ctx) {
 
   if (ctx.isDM) {
     // Единый активный инструмент вместо трёх независимых булевых флагов.
-    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'grid-edit' | 'ruler'
+    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'draw' | 'grid-edit' | 'ruler'
     // ctx.tool — зеркало локальной `tool` наружу: layers/walls.js,
     // layers/manual-fog.js и layers/buildings.js читают его, чтобы решить,
     // рисовать ли кружки-ручки на вершинах (см. setTool ниже — точки
@@ -383,6 +597,7 @@ export function createInteraction(ctx) {
       draggingBuildingPoint = null;
       buildingChain = null;
       fogPath = null;
+      cancelDraw();
       gridDragStart = null;
       marquee = null;
       rulerFrom = null;
@@ -411,6 +626,30 @@ export function createInteraction(ctx) {
       document.dispatchEvent(new CustomEvent("vtt:toolChanged", { detail: tool }));
     }
     document.addEventListener("vtt:setTool", (e) => setTool(e.detail));
+
+    // Второй палец на планшете — жест камеры, а не инструмента (см.
+    // ctx.touchPanning выше): всё, что было в руке, отменяется без коммита
+    // на сервер, ровно как по Escape.
+    document.addEventListener("vtt:cancelGesture", () => {
+      cancelDraw();
+      wallChainLast = null;
+      wallDragFrom = null;
+      draggingWallPoint = null;
+      draggingFogVertex = null;
+      draggingFogArea = null;
+      draggingBuildingPoint = null;
+      buildingChain = null;
+      fogPath = null;
+      gridDragStart = null;
+      marquee = null;
+      rulerFrom = null;
+      dragTokenId = null;
+      dragNoteMarkerId = null;
+      groupDragOrigins = null;
+      rulerLine.clear();
+      distanceLabel.hide();
+      preview.clear();
+    });
 
     // sendAddWall — один сегмент цепочки стен (см. tool "wall" ниже).
     function sendAddWall(from, to) {
@@ -523,9 +762,15 @@ export function createInteraction(ctx) {
       return { edge: "bottom" };
     }
 
-    canvas.addEventListener("mousedown", (e) => {
+    canvas.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return; // только ЛКМ — пан на средней, ПКМ на удаление/меню
+      if (ctx.touchPanning) return; // на экране два пальца — это жест камеры, не инструмента
       const { x, y } = mousePos(e);
+
+      if (tool === "draw") {
+        beginDraw(x, y);
+        return;
+      }
 
       // Стены/здания/туман редактируются ИСКЛЮЧИТЕЛЬНО в своём инструменте
       // (см. layers/walls.js, layers/manual-fog.js, layers/buildings.js —
@@ -692,9 +937,26 @@ export function createInteraction(ctx) {
       }
     });
 
-    canvas.addEventListener("mousemove", (e) => {
+    canvas.addEventListener("pointermove", (e) => {
+      if (ctx.touchPanning) return;
       const { x, y } = mousePos(e);
       const scale = ctx.world.scale.x || 1;
+
+      if (tool === "draw") {
+        if (drawStroke || erasing) {
+          moveDraw(x, y);
+          return;
+        }
+        // Пока ничего не рисуем — подпись под курсором говорит, чья это
+        // пометка (требование «мастер видит, кто что нарисовал»). Своя
+        // отдельная плашка не нужна: distanceLabel в инструменте "Рисование"
+        // всё равно свободна (линейка и драг токена — другие инструменты).
+        const hoverId = drawingAt(x, y, ctx.scene.drawings || {}, scale, 8);
+        const hovered = hoverId ? ctx.scene.drawings[hoverId] : null;
+        if (hovered) distanceLabel.show(x, y, hovered.authorName || "ДМ");
+        else distanceLabel.hide();
+        return;
+      }
 
       if (marquee) {
         marquee.x = x;
@@ -976,7 +1238,13 @@ export function createInteraction(ctx) {
       }
     });
 
-    canvas.addEventListener("mouseup", (e) => {
+    canvas.addEventListener("pointerup", (e) => {
+      if (ctx.touchPanning) return;
+      if (tool === "draw") {
+        endDraw();
+        return;
+      }
+
       if (marquee) {
         const rx0 = Math.min(marquee.x0, marquee.x);
         const ry0 = Math.min(marquee.y0, marquee.y);
@@ -1127,6 +1395,7 @@ export function createInteraction(ctx) {
         rulerLine.clear();
         distanceLabel.hide();
       }
+      cancelDraw();
       if (marquee) {
         marquee = null;
         preview.clear();
@@ -1242,6 +1511,17 @@ export function createInteraction(ctx) {
       if (tool === "building" && buildingChain) {
         buildingChain = null;
         preview.clear();
+        return;
+      }
+      if (tool === "draw") {
+        // ПКМ в инструменте рисования — стереть пометку под курсором (та же
+        // идиома, что ПКМ по фигуре тумана/зданию); незаконченный жест ПКМ
+        // просто отменяет.
+        if (drawStroke) {
+          cancelDraw();
+          return;
+        }
+        eraseDrawingAt(x, y);
         return;
       }
 
@@ -1483,6 +1763,11 @@ export function createInteraction(ctx) {
     // линейка). dragStart — позиция токена на mousedown, общая точка отсчёта
     // и для подсказки дистанции, и для лимита скорости ниже.
     let rulerActive = false;
+    // drawActive — инструмент «Пометки» (кнопка в топбаре player.html).
+    // Сам факт нажатой кнопки не даёт права рисовать: тумблер стола может
+    // выключиться посреди сессии, поэтому право проверяется на каждый жест
+    // (canPlayerDraw), а не один раз при переключении инструмента.
+    let drawActive = false;
     let rulerFrom = null;
     // dragStart/dragLastPos/dragTraveled — "одометр" перемещения токена за
     // текущий жест (см. geometry.trackMovementStep): dragStart — позиция на
@@ -1502,18 +1787,43 @@ export function createInteraction(ctx) {
     // internal/domain/character_sheet.go), и лимит применяется только в свой
     // ход активного боя.
 
-    // Единственный ДМ-инструмент, доступный игроку, — линейка; событие то
-    // же самое ("vtt:setTool"), что дёргает кнопка в топбаре player.html.
+    // Инструменты, доступные игроку, — линейка и рисование пометок; событие
+    // то же самое ("vtt:setTool"), что дёргает кнопка в топбаре player.html.
     document.addEventListener("vtt:setTool", (e) => {
       rulerActive = e.detail === "ruler";
+      drawActive = e.detail === "draw";
       rulerFrom = null;
+      cancelDraw();
       rulerLine.clear();
       distanceLabel.hide();
     });
 
-    canvas.addEventListener("mousedown", (e) => {
+    // Второй палец на планшете — жест камеры (см. ctx.touchPanning выше).
+    document.addEventListener("vtt:cancelGesture", () => {
+      cancelDraw();
+      rulerFrom = null;
+      dragTokenId = null;
+      rulerLine.clear();
+      distanceLabel.hide();
+    });
+
+    // canPlayerDraw — включил ли ДМ игрокам рисование (тумблер стола, см.
+    // domain.CombatState.PlayerDrawingEnabled). Сервер проверяет это же
+    // условие сам (room_drawings.go: canDrawingWrite) — тут проверка только
+    // чтобы не гонять заведомо отбрасываемые сообщения и не показывать
+    // превью того, что всё равно не сохранится.
+    function canPlayerDraw() {
+      return !!(ctx.combat && ctx.combat.playerDrawingEnabled);
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
+      if (ctx.touchPanning) return;
       const { x, y } = mousePos(e);
+      if (drawActive) {
+        if (canPlayerDraw()) beginDraw(x, y);
+        return;
+      }
       if (rulerActive) {
         rulerFrom = { x, y };
         return;
@@ -1550,8 +1860,14 @@ export function createInteraction(ctx) {
       }
     });
 
-    canvas.addEventListener("mousemove", (e) => {
+    canvas.addEventListener("pointermove", (e) => {
+      if (ctx.touchPanning) return;
       const { x, y } = mousePos(e);
+
+      if (drawActive) {
+        moveDraw(x, y);
+        return;
+      }
 
       if (rulerActive && rulerFrom) {
         const to = { x, y };
@@ -1615,7 +1931,12 @@ export function createInteraction(ctx) {
       ctx.send({ type: "move_own_token", token: { id: t.id, x: t.x, y: t.y } });
     });
 
-    canvas.addEventListener("mouseup", () => {
+    canvas.addEventListener("pointerup", () => {
+      if (ctx.touchPanning) return;
+      if (drawActive) {
+        endDraw();
+        return;
+      }
       if (rulerActive) {
         rulerFrom = null;
         rulerLine.clear();
@@ -1638,6 +1959,14 @@ export function createInteraction(ctx) {
     // ничего не делаем на любом другом ПКМ, вместо полноценного меню.
     canvas.addEventListener("contextmenu", (e) => {
       const { x, y } = mousePos(e);
+      if (drawActive) {
+        // В инструменте пометок ПКМ стирает СВОЮ пометку (чужие не ловятся
+        // фильтром ownDrawing, и сервер их всё равно не отдаст стереть).
+        e.preventDefault();
+        if (drawStroke) cancelDraw();
+        else eraseDrawingAt(x, y);
+        return;
+      }
       // Ищем сразу ТРУП С ДОБЫЧЕЙ, а не "любой токен, а потом посмотрим":
       // мародёрствуют обычно стоя прямо на теле, и хит-тест "первый
       // попавшийся" отдавал бы токен того, кто на нём стоит (см. тот же

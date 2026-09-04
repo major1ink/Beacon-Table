@@ -16,6 +16,7 @@ import { createWindowsLayer } from "./layers/windows.js";
 import { createVisionFogLayer } from "./layers/vision-fog.js";
 import { createBuildingsLayer } from "./layers/buildings.js";
 import { createManualFogLayer } from "./layers/manual-fog.js";
+import { createDrawingsLayer } from "./layers/drawings.js";
 import { createFxLayer } from "./layers/fx.js";
 import { installVideoUploaderFix } from "./gl-video-uploader.js";
 
@@ -143,6 +144,10 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   // верхний слой тьмы, имеет последнее слово.
   const buildings = createBuildingsLayer(ctx);
   const manualFog = createManualFogLayer(ctx);
+  // drawings — ПОВЕРХ всей тьмы (см. layers/drawings.js): пометка это не
+  // содержимое карты, а то, что участники показывают друг другу прямо
+  // сейчас, — стрелка «обходим слева» бесполезна, если её съедает туман.
+  const drawings = createDrawingsLayer(ctx);
   const fx = createFxLayer(ctx);
   world.addChild(
     background.container,
@@ -155,11 +160,12 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
     visionFog.container,
     buildings.container,
     manualFog.container,
+    drawings.container,
     fx.container
   );
   ctx.spawnFx = fx.spawnFx;
 
-  const layers = [background, grid, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, fx];
+  const layers = [background, grid, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, drawings, fx];
 
   // render — вызывается на каждый WS-снапшот и на каждое локальное
   // взаимодействие (драг токена/камера/инструменты ДМ), НЕ на каждый кадр
@@ -180,6 +186,7 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
     ctx.dirty.walls = false;
     ctx.dirty.buildings = false;
     ctx.dirty.manualFog = false;
+    ctx.dirty.drawings = false;
     ctx.dirty.grid = false;
     ctx.dirty.background = false;
   };

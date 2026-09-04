@@ -23,6 +23,7 @@ import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { createDrawOptions } from "../draw-options.js";
 import { isPlayer } from "../roles.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
@@ -201,12 +202,42 @@ document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(n
 // — ЛКМ-драг по карте показывает линию и расстояние в формате текущей
 // сцены, отпустил — замер исчезает.
 const rulerBtn = document.getElementById("rulerBtn");
-let rulerOn = false;
-rulerBtn.onclick = () => {
-  rulerOn = !rulerOn;
-  rulerBtn.classList.toggle("active", rulerOn);
-  document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: rulerOn ? "ruler" : "select" }));
-};
+const drawBtn = document.getElementById("drawBtn");
+const drawOptions = document.getElementById("drawOptions");
+// Один активный инструмент на двоих, как в тулбаре ДМ: включил линейку —
+// пометки выключились, и наоборот.
+let playerTool = "select";
+
+function setPlayerTool(name) {
+  playerTool = name;
+  rulerBtn.classList.toggle("active", name === "ruler");
+  drawBtn.classList.toggle("active", name === "draw");
+  drawOptions.classList.toggle("open", name === "draw");
+  document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: name }));
+}
+
+rulerBtn.onclick = () => setPlayerTool(playerTool === "ruler" ? "select" : "ruler");
+
+// ================= "Пометки" =================
+// Второй инструмент карты, доступный игроку (см. web/src/vtt/interaction.js:
+// ветка ctx.isPlayer). Панель — тот же компонент, что и в рейл-панели ДМ
+// (draw-options.js): фигуры, цвета, толщина, ластик. Без кнопки «Очистить
+// слой» — она стирает и чужое, сервер её от игрока не примет.
+const drawPanel = createDrawOptions(drawOptions);
+drawBtn.onclick = () => setPlayerTool(playerTool === "draw" ? "select" : "draw");
+
+// Кнопка появляется, только пока ДМ держит тумблер стола включённым (см.
+// domain.CombatState.PlayerDrawingEnabled): выключил посреди сессии —
+// инструмент сам возвращается в "Выбор", чтобы игрок не рисовал в пустоту
+// (сервер такие сообщения всё равно отбрасывает).
+document.addEventListener("vtt:combatState", (e) => {
+  const allowed = !!e.detail.playerDrawingEnabled;
+  drawBtn.classList.toggle("is-hidden", !allowed);
+  if (!allowed && playerTool === "draw") {
+    setPlayerTool("select");
+    drawPanel.reset();
+  }
+});
 
 // ================= "Настройки" =================
 // Пока единственное поле — версия сервера (short commit hash, см.
