@@ -178,6 +178,15 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/journal/{id}/folder", a.handleJournalMove)
 	mux.HandleFunc("DELETE /api/journal/{id}", a.handleJournalDelete)
 
+	// Доски стола (см. board_handlers.go). Список аккаунтов для раздачи прав
+	// у них общий с журналом — GET /api/journal/members.
+	mux.HandleFunc("GET /api/boards", a.handleBoardList)
+	mux.HandleFunc("POST /api/boards", a.handleBoardCreate)
+	mux.HandleFunc("GET /api/boards/{id}", a.handleBoardGet)
+	mux.HandleFunc("PUT /api/boards/{id}/name", a.handleBoardRename)
+	mux.HandleFunc("PUT /api/boards/{id}/access", a.handleBoardAccess)
+	mux.HandleFunc("DELETE /api/boards/{id}", a.handleBoardDelete)
+
 	mux.HandleFunc("GET /api/journal-folders", a.handleJournalFoldersList)
 	mux.HandleFunc("POST /api/journal-folders", a.handleJournalFolderCreate)
 	mux.HandleFunc("PUT /api/journal-folders", a.handleJournalFolderRename)

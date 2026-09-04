@@ -40,6 +40,8 @@ const PATHS = {
   play: '<polygon points="6 4 20 12 6 20 6 4"/>',
   pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
   headphones: '<path d="M4 15v-3a8 8 0 0116 0v3"/><rect x="2.5" y="14" width="4" height="6" rx="1.5"/><rect x="17.5" y="14" width="4" height="6" rx="1.5"/>',
+  // board — доска-холст: рамка со стикерами внутри (см. board-list.js).
+  board: '<rect x="3" y="4" width="18" height="16" rx="2"/><rect x="6" y="7.5" width="5" height="4" rx="1"/><rect x="13" y="7.5" width="5" height="7" rx="1"/><rect x="6" y="14" width="5" height="3" rx="1"/>',
   pencil: '<path d="M4 20l1-4.5L16 4.5 19.5 8 8.5 19 4 20z"/><line x1="14.2" y1="6.3" x2="17.7" y2="9.8"/>',
   "external-link": '<path d="M9 4H4v16h16v-5"/><path d="M13 4h7v7"/><line x1="10" y1="14" x2="20" y2="4"/>',
   check: '<polyline points="4 12 9 17 20 6"/>',

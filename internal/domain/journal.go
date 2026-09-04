@@ -22,22 +22,11 @@ type JournalEntry struct {
 	// Content — пусто в списке (List) и у того, кому досталось не больше
 	// JournalLimited: «видит, что запись есть, но не её текст».
 	Content string `json:"content,omitempty"`
-	// OwnerID — аккаунт автора; "" у записей, заведённых ДМ (у admin-аккаунта
-	// нет привязки к миру, см. Account.CompanyID — но по правам ему и так
-	// доступно всё, отдельный id тут ничего не решает).
-	OwnerID string `json:"ownerId,omitempty"`
-	// OwnerName — имя автора на момент создания, для показа в списке
-	// («кто это написал»). Снимок, а не ссылка: аккаунт могут удалить, а
-	// запись в журнале останется и должна остаться подписанной.
-	OwnerName string `json:"ownerName,omitempty"`
-	// Default — что достаётся всем, кому персонально ничего не выдано.
-	// Именно это поле делает запись частью ОБЩЕГО журнала: Default >=
-	// JournalObserver — её читает весь стол (см. JournalEntry.IsShared).
-	Default JournalAccess `json:"default"`
-	// Access — точечные выдачи: accountID -> уровень. Всегда непустой при
-	// сериализации в JSON (пустая map, а не null — клиенту проще).
-	Access    map[string]JournalAccess `json:"access"`
-	UpdatedAt time.Time                `json:"updatedAt"`
+	// Sharing — автор и раздача прав, общие с досками (см. domain/sharing.go).
+	// Встроен анонимно: в JSON поля остаются там же, где были (ownerId,
+	// ownerName, default, access), и формат API с файлами не меняется.
+	Sharing
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // JournalAccess — уровень доступа к записи журнала. Строки, а не числа (как
@@ -92,50 +81,4 @@ type JournalViewer struct {
 	// Name — имя аккаунта, попадает в OwnerName создаваемой им записи.
 	Name string
 	IsDM bool
-}
-
-// AccessFor — эффективный уровень доступа viewer'а к этой записи.
-func (e *JournalEntry) AccessFor(v JournalViewer) JournalAccess {
-	if v.IsDM {
-		return JournalOwner
-	}
-	if v.ID != "" && v.ID == e.OwnerID {
-		return JournalOwner
-	}
-	level := e.Default
-	if v.ID != "" {
-		if personal, ok := e.Access[v.ID]; ok && personal.AtLeast(level) {
-			level = personal
-		}
-	}
-	return level
-}
-
-// CanSee — попадает ли запись в список этого viewer'а (>= JournalLimited).
-func (e *JournalEntry) CanSee(v JournalViewer) bool {
-	return e.AccessFor(v).AtLeast(JournalLimited)
-}
-
-// CanRead — виден ли текст записи (>= JournalObserver).
-func (e *JournalEntry) CanRead(v JournalViewer) bool {
-	return e.AccessFor(v).AtLeast(JournalObserver)
-}
-
-// CanEdit — можно ли править текст (>= JournalOwner).
-func (e *JournalEntry) CanEdit(v JournalViewer) bool {
-	return e.AccessFor(v).AtLeast(JournalOwner)
-}
-
-// CanManage — можно ли раздавать права, переносить и удалять запись: только
-// автор и ДМ, даже если кому-то выдан JournalOwner (см. его комментарий).
-func (e *JournalEntry) CanManage(v JournalViewer) bool {
-	return v.IsDM || (v.ID != "" && v.ID == e.OwnerID)
-}
-
-// IsShared — запись «общего журнала»: её текст по умолчанию открыт всему
-// столу, без персональных выдач (см. Default). Именно так сделан общий
-// журнал — не отдельным хранилищем, а уровнем доступа по умолчанию, ровно
-// как в Foundry.
-func (e *JournalEntry) IsShared() bool {
-	return e.Default.AtLeast(JournalObserver)
 }

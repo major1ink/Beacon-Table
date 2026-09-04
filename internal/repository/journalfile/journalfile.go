@@ -247,14 +247,16 @@ func withFrontMatter(m meta, content string) string {
 func entryFrom(id, folder, raw string) *domain.JournalEntry {
 	m, content := splitFrontMatter(raw)
 	return &domain.JournalEntry{
-		ID:        id,
-		Title:     deriveTitle(content),
-		Folder:    folder,
-		Content:   content,
-		OwnerID:   m.OwnerID,
-		OwnerName: m.OwnerName,
-		Default:   m.Default,
-		Access:    m.Access,
+		ID:      id,
+		Title:   deriveTitle(content),
+		Folder:  folder,
+		Content: content,
+		Sharing: domain.Sharing{
+			OwnerID:   m.OwnerID,
+			OwnerName: m.OwnerName,
+			Default:   m.Default,
+			Access:    m.Access,
+		},
 	}
 }
 

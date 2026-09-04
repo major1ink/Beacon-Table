@@ -24,6 +24,7 @@ import { mountCompendiumMenu } from "../compendium-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createDrawOptions } from "../draw-options.js";
+import { createBoardList } from "../board-list.js";
 import { attachTooltip } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import { isPlayer } from "../roles.js";
@@ -201,6 +202,30 @@ const PLAYER_DRAW_HELP = {
       drawOptions.reset();
     }
   });
+  // Доски — тот же список, что у ДМ (см. board-list.js). Игрок заводит свои
+  // и видит те чужие, которые ему открыли: разбирается с этим сервер, панель
+  // одинаковая.
+  const boardsPanel = vtt.sideMenu.addIcon(icon("board", { size: 16 }), "Доски", {
+    width: 280,
+    sticky: true,
+    tip: PANEL_HELP.boards,
+    // Список перечитывается на открытии панели, а не подпиской: доски
+    // заводят редко, и держать ради этого ещё один канал незачем.
+    onToggle: (open) => {
+      if (open) boardList.refresh();
+    },
+  });
+  const boardList = createBoardList(boardsPanel);
+  const boardsClose = document.createElement("button");
+  boardsClose.type = "button";
+  boardsClose.className = "board-item-btn";
+  boardsClose.style.cssText = "position:absolute;right:8px;top:8px;";
+  boardsClose.title = "Закрыть";
+  boardsClose.innerHTML = icon("close", { size: 13 });
+  boardsClose.onclick = () => boardsPanel.close();
+  boardsPanel.style.position = "relative";
+  boardsPanel.appendChild(boardsClose);
+
   // Журнал стола — та же страница, что и у ДМ (см. web/journal.html):
   // игрок пишет туда свои заметки и сам решает, кому их видно и кому можно
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в

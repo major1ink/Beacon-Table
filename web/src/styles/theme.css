@@ -489,3 +489,31 @@
   font: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap;
   vertical-align: baseline;
 }
+
+/* ---- панель «Доски» (см. web/src/board-list.js) ----
+   Общая для ДМ и игрока, живёт в боковой колонке над канвасом. */
+.board-list { display: flex; flex-direction: column; gap: 8px; }
+.board-add {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--accent); color: #fff; font: inherit; font-size: 12px; cursor: pointer;
+}
+.board-add:hover { background: var(--accent-hover); }
+.board-items { display: flex; flex-direction: column; gap: 4px; }
+.board-item { display: flex; align-items: center; gap: 4px; }
+.board-open {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 9px; border: 1px solid transparent; border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+  text-align: left; cursor: pointer;
+}
+.board-open:hover { background: var(--surface-hover); }
+.board-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-item-meta { font-size: 10.5px; color: var(--text-dim); }
+.board-item-actions { flex: 0 0 auto; display: flex; gap: 2px; }
+.board-item-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; border: none; border-radius: var(--radius);
+  background: none; color: var(--text-dim); cursor: pointer;
+}
+.board-item-btn:hover { background: var(--surface-hover); color: var(--text); }

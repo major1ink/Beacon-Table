@@ -380,6 +380,31 @@ export async function deleteJournalEntry(id) {
   return apiFetch(`/api/journal/${id}`, { method: "DELETE" });
 }
 
+// ---- доски стола (ДМ и игроки) — web/board.html ----
+// Права те же, что у записей журнала, и теми же словами (см. domain.Sharing):
+// "default" — что достаётся всем за столом, "access" — точечные выдачи.
+// Доска с default >= "observer" — общая, с "none" — личная; досок сколько
+// угодно одновременно. Кому раздавать — тот же список, что у журнала
+// (fetchJournalMembers), отдельного эндпоинта нет.
+export async function fetchBoards() {
+  return apiFetch("/api/boards");
+}
+export async function fetchBoard(id) {
+  return apiFetch(`/api/boards/${id}`);
+}
+export async function createBoard({ name, def = "none", access = {} } = {}) {
+  return apiFetch("/api/boards", { method: "POST", body: JSON.stringify({ name, default: def, access }) });
+}
+export async function renameBoard(id, name) {
+  return apiFetch(`/api/boards/${id}/name`, { method: "PUT", body: JSON.stringify({ name }) });
+}
+export async function setBoardAccess(id, def, access) {
+  return apiFetch(`/api/boards/${id}/access`, { method: "PUT", body: JSON.stringify({ default: def, access }) });
+}
+export async function deleteBoard(id) {
+  return apiFetch(`/api/boards/${id}`, { method: "DELETE" });
+}
+
 export async function fetchJournalFolders() {
   return apiFetch("/api/journal-folders");
 }

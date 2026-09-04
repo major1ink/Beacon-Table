@@ -14,6 +14,7 @@ import { openSheetDock } from "../sheet-dock.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDrawOptions } from "../draw-options.js";
+import { createBoardList } from "../board-list.js";
 import { attachTooltip } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import {
@@ -156,6 +157,30 @@ let isDemoGuest = false;
     drawToolActive = e.detail === "draw";
     if (!drawToolActive) drawPanel.close();
   });
+
+  // Доски — бесконечные холсты рядом с заметками (см. board-list.js).
+  // sticky: открытая доска — это плавающее окно, и клик по нему не должен
+  // считаться «кликом мимо» и захлопывать список за спиной.
+  const boardsPanel = vtt.sideMenu.addIcon(icon("board", { size: 16 }), "Доски", {
+    width: 280,
+    sticky: true,
+    tip: PANEL_HELP.boards,
+    // Список перечитывается на открытии панели, а не подпиской: доски
+    // заводят редко, и держать ради этого ещё один канал незачем.
+    onToggle: (open) => {
+      if (open) boardList.refresh();
+    },
+  });
+  const boardList = createBoardList(boardsPanel);
+  const boardsClose = document.createElement("button");
+  boardsClose.type = "button";
+  boardsClose.className = "board-item-btn";
+  boardsClose.style.cssText = "position:absolute;right:8px;top:8px;";
+  boardsClose.title = "Закрыть";
+  boardsClose.innerHTML = icon("close", { size: 13 });
+  boardsClose.onclick = () => boardsPanel.close();
+  boardsPanel.style.position = "relative";
+  boardsPanel.appendChild(boardsClose);
 
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
   // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
