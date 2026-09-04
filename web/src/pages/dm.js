@@ -146,7 +146,7 @@ let isDemoGuest = false;
     },
   });
   const drawHint = document.createElement("p");
-  drawHint.className = "hint";
+  drawHint.className = "draw-hint";
   drawHint.textContent = "Наведи на фигуру — подскажет, каким жестом она рисуется. Наведи на пометку на карте — покажет, кто её нарисовал.";
   drawPanel.appendChild(drawHint);
   // Переключились на другой инструмент (или вышли из рисования по Esc) —

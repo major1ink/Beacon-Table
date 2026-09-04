@@ -447,6 +447,9 @@
    поэтому у образца не один цвет, а вся палитра разом. */
 .draw-swatch--auto { background: linear-gradient(135deg, #5dd0ff, #7ee081, #ffb454); }
 .draw-options input[type="range"] { width: 100%; }
+/* Подпись под панелью. Своя, а не общий .hint: тот объявлен только в
+   dm.html, а панель одна на обе роли — у игрока текст остался бы без стилей. */
+.draw-hint { margin: 2px 0 0; font-size: 11px; line-height: 1.35; color: var(--text-dim); }
 .draw-clear {
   display: flex; align-items: center; justify-content: center; gap: 7px;
   padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);

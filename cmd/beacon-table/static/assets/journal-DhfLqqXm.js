@@ -1,4 +1,4 @@
-import{m as Ne,l as Se,aN as Ie,aM as ae,b as Me,aO as Te,aK as ie,aL as $e,aP as He,aQ as Ae,aR as Re,aS as Fe,aT as Je,aU as Pe}from"./api-BciOZEr1.js";import{o as We}from"./ws-reconnect-BflqHKY6.js";import{s as _e,w as Oe,a as Ue,r as Ve}from"./markdown-CH_1mRWr.js";import{s as ze,b as F,i as I,a as Q}from"./modal-g49pjxWl.js";import{w as qe}from"./catalog-links-DEM2T-vb.js";import{e as De}from"./inline-rolls-DrPnKcfh.js";import{i as je}from"./roles-3liVsLzH.js";const Ke=`
+import{m as Ne,l as Se,aN as Ie,aM as ae,b as Me,aO as Te,aK as ie,aL as $e,aP as He,aQ as Ae,aR as Re,aS as Fe,aT as Je,aU as Pe}from"./api-DaoMOxZO.js";import{o as We}from"./ws-reconnect-BflqHKY6.js";import{s as _e,w as Oe,a as Ue,r as Ve}from"./markdown-CH_1mRWr.js";import{s as ze,b as F,i as I,a as Q}from"./modal-g49pjxWl.js";import{w as qe}from"./catalog-links-B_05hGz5.js";import{e as De}from"./inline-rolls-DrPnKcfh.js";import{i as je}from"./roles-3liVsLzH.js";const Ke=`
   position: fixed; z-index: 60; min-width: 200px; max-width: 340px;
   max-height: 60vh; overflow-y: auto; padding: 4px;
   background: var(--panel-bg, #1e1e22); color: var(--text, #eee);

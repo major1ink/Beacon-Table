@@ -110,6 +110,30 @@ let editingCharId = null; // null — форма создаёт нового; и
 // ниже), а не только внутри самого boot().
 let vtt = null;
 
+// drawPanel появляется только в boot(), когда есть vtt.sideMenu, а
+// переключатель инструментов нужен раньше — отсюда изменяемая ссылка.
+let drawPanel = null;
+// closingDrawPanel — панель закрываем МЫ, потому что уходим на другой
+// инструмент. Без этого флага закрытие дёргало бы свой onToggle, тот звал
+// бы setPlayerTool("select") посреди уже идущего setPlayerTool("ruler"), и
+// линейка включалась бы с погашенной кнопкой и сбитым playerTool.
+let closingDrawPanel = false;
+
+// PLAYER_DRAW_HELP — подсказка у игрока своя: про чужие пометки и про то,
+// что право рисовать выдаёт ДМ, ему знать полезнее, чем про «Настройки»,
+// которых у него нет.
+const PLAYER_DRAW_HELP = {
+  title: "Пометки",
+  summary: "Быстрые пометки поверх карты: стрелка, круг, подпись. Видны всем за столом.",
+  rows: [
+    ["Цвет", "твой собственный — за столом видно, чья пометка"],
+    ["Правка", "пока фигура не выбрана — тяни свои пометки"],
+    ["Рисование", "выбери фигуру в панели"],
+    ["Удаление", "«Ластик» или [ПКМ] по своей пометке"],
+    ["Чужие", "трогать нельзя — только свои"],
+  ],
+};
+
 (async function boot() {
   me = await fetchMe();
   if (!me || !isPlayer(me.role)) {
@@ -145,6 +169,38 @@ let vtt = null;
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
   mountCompendiumMenu(compendiumPanel, { role: "player" });
 
+  // Пометки — та же иконка и та же панель, что у ДМ (см. pages/dm.js и
+  // web/src/draw-options.js), только без кнопки «Очистить слой»: она стирает
+  // и чужое, сервер её от игрока всё равно не примет.
+  //
+  // Открытая панель = включённый инструмент, как у ДМ: закрыли её (своей
+  // иконкой, Esc, другой иконкой колонки) — вернулись в «Выбор».
+  drawPanel = vtt.sideMenu.addIcon(icon("pencil", { size: 16 }), "Пометки", {
+    width: 250,
+    keepOnCanvas: true,
+    tip: PLAYER_DRAW_HELP,
+    onToggle: (open) => {
+      if (!open && (closingDrawPanel || playerTool !== "draw")) return;
+      setPlayerTool(open ? "draw" : "select");
+    },
+  });
+  const drawOptions = createDrawOptions(drawPanel);
+  const drawHint = document.createElement("p");
+  drawHint.className = "draw-hint";
+  drawHint.textContent = "Наведи на фигуру — подскажет, каким жестом она рисуется.";
+  drawPanel.appendChild(drawHint);
+  // Иконки нет, пока ДМ не разрешил игрокам рисовать (см.
+  // domain.CombatState.PlayerDrawingEnabled): выключил посреди сессии —
+  // инструмент сам возвращается в «Выбор».
+  drawPanel.host.style.display = "none";
+  document.addEventListener("vtt:combatState", (e) => {
+    const allowed = !!e.detail.playerDrawingEnabled;
+    drawPanel.host.style.display = allowed ? "" : "none";
+    if (!allowed && playerTool === "draw") {
+      setPlayerTool("select");
+      drawOptions.reset();
+    }
+  });
   // Журнал стола — та же страница, что и у ДМ (см. web/journal.html):
   // игрок пишет туда свои заметки и сам решает, кому их видно и кому можно
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
@@ -198,62 +254,28 @@ document.getElementById("zoomInBtn").onclick = () => document.dispatchEvent(new 
 document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1 / 1.3 }));
 document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
 
-// ================= "Линейка" =================
-// Единственный "инструмент" карты, доступный игроку (см. web/src/vtt/
-// interaction.js: ветка ctx.isPlayer слушает то же "vtt:setTool", что и ДМ)
-// — ЛКМ-драг по карте показывает линию и расстояние в формате текущей
-// сцены, отпустил — замер исчезает.
+// ================= инструменты карты =================
+// Линейка живёт в топбаре, пометки — иконкой в боковой колонке над канвасом
+// (как у ДМ, см. pages/dm.js: там панель тоже уехала из общего списка в
+// быстрый доступ). Инструмент один на двоих: включил линейку — пометки
+// выключились, и наоборот.
 const rulerBtn = document.getElementById("rulerBtn");
-const drawBtn = document.getElementById("drawBtn");
-const drawOptions = document.getElementById("drawOptions");
-// Один активный инструмент на двоих, как в тулбаре ДМ: включил линейку —
-// пометки выключились, и наоборот.
 let playerTool = "select";
-
 function setPlayerTool(name) {
   playerTool = name;
   rulerBtn.classList.toggle("active", name === "ruler");
-  drawBtn.classList.toggle("active", name === "draw");
-  drawOptions.classList.toggle("open", name === "draw");
+  // Панель пометок И ЕСТЬ включённый инструмент (см. её onToggle ниже):
+  // ушли на другой инструмент — закрываем её.
+  if (name !== "draw" && drawPanel) {
+    closingDrawPanel = true;
+    drawPanel.close();
+    closingDrawPanel = false;
+  }
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: name }));
 }
 
 rulerBtn.onclick = () => setPlayerTool(playerTool === "ruler" ? "select" : "ruler");
 attachTooltip(rulerBtn, TOOL_HELP.ruler);
-
-// ================= "Пометки" =================
-// Второй инструмент карты, доступный игроку (см. web/src/vtt/interaction.js:
-// ветка ctx.isPlayer). Панель — тот же компонент, что и в рейл-панели ДМ
-// (draw-options.js): фигуры, цвета, толщина, ластик. Без кнопки «Очистить
-// слой» — она стирает и чужое, сервер её от игрока не примет.
-const drawPanel = createDrawOptions(drawOptions);
-drawBtn.onclick = () => setPlayerTool(playerTool === "draw" ? "select" : "draw");
-// Подсказка у игрока своя: про чужие пометки и про то, что право рисовать
-// выдаёт ДМ, ему знать полезнее, чем про «Настройки», которых у него нет.
-attachTooltip(drawBtn, {
-  title: "Пометки",
-  summary: "Быстрые пометки поверх карты: стрелка, круг, подпись. Видны всем за столом.",
-  rows: [
-    ["Цвет", "твой собственный — за столом видно, чья пометка"],
-    ["Правка", "пока фигура не выбрана — тяни свои пометки"],
-    ["Рисование", "выбери фигуру в панели"],
-    ["Удаление", "«Ластик» или [ПКМ] по своей пометке"],
-    ["Чужие", "трогать нельзя — только свои"],
-  ],
-});
-
-// Кнопка появляется, только пока ДМ держит тумблер стола включённым (см.
-// domain.CombatState.PlayerDrawingEnabled): выключил посреди сессии —
-// инструмент сам возвращается в "Выбор", чтобы игрок не рисовал в пустоту
-// (сервер такие сообщения всё равно отбрасывает).
-document.addEventListener("vtt:combatState", (e) => {
-  const allowed = !!e.detail.playerDrawingEnabled;
-  drawBtn.classList.toggle("is-hidden", !allowed);
-  if (!allowed && playerTool === "draw") {
-    setPlayerTool("select");
-    drawPanel.reset();
-  }
-});
 
 // ================= "Настройки" =================
 // Пока единственное поле — версия сервера (short commit hash, см.

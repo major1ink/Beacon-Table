@@ -1,4 +1,4 @@
-import{b as S}from"./combatant-card-VL3zpNr8.js";import{i as M}from"./modal-g49pjxWl.js";import{b as H,S as F,r as O}from"./showcase-overlay-5aPX3foa.js";import{I as _}from"./compendium-taxonomy-BHoDJPfw.js";const D="beacon:sheetDockWidth",R=300,U=.72;let I=!1;function $(){if(I)return;I=!0;const n=document.createElement("style");n.textContent=`
+import{b as S}from"./combatant-card-VL3zpNr8.js";import{i as M}from"./modal-g49pjxWl.js";import{b as H,S as F,r as O}from"./showcase-overlay-BvXdUcYK.js";import{I as _}from"./compendium-taxonomy-BHoDJPfw.js";const D="beacon:sheetDockWidth",R=300,U=.72;let I=!1;function $(){if(I)return;I=!0;const n=document.createElement("style");n.textContent=`
     .sheet-dock {
       flex: 0 0 auto; position: relative; display: none; flex-direction: column;
       min-width: 0; background: var(--panel-bg, #1c1c25);

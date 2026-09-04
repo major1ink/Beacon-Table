@@ -136,6 +136,11 @@ export function createSideMenu(ctx) {
     wrap.append(btn, panel);
     column.appendChild(wrap);
     panel.close = closeOpen;
+    // host — обёртка иконки целиком. Нужна тем, кто прячет иконку по
+    // условию (у игрока «Пометки» появляются, только когда ДМ разрешил
+    // рисовать): спрятать одну кнопку мало — у колонки flex-gap, и от
+    // пустой обёртки остаётся дыра в ряду.
+    panel.host = wrap;
     return panel;
   }
 
