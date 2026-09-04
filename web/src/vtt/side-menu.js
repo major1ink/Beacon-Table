@@ -20,10 +20,24 @@ export function createSideMenu(ctx) {
   // посреди работы. Закрывается такая панель только своей кнопкой ✕ внутри
   // (см. compendium-menu.js), которая зовёт panel.close() — тот же closeOpen.
   let openPanelSticky = false;
+  // openPanelOnCanvas — панель "Пометки" (opts.keepOnCanvas, см. addIcon):
+  // канвас для неё не "мимо", а рабочая поверхность — первый же штрих
+  // захлопывал бы панель вместе с инструментом. От sticky отличается тем,
+  // что Esc и своя иконка её по-прежнему закрывают: инструмент надо уметь
+  // выключить, не целясь в крестик.
+  let openPanelOnCanvas = false;
+  // openPanelToggle — opts.onToggle текущей открытой панели (см. addIcon):
+  // её надо дёрнуть и при закрытии, а закрытие идёт общим closeOpen, который
+  // сам не знает, чью панель гасит.
+  let openPanelToggle = null;
   function closeOpen() {
     if (openPanel) openPanel.style.display = "none";
+    const toggle = openPanelToggle;
     openPanel = null;
     openPanelSticky = false;
+    openPanelOnCanvas = false;
+    openPanelToggle = null;
+    if (toggle) toggle(false);
   }
 
   // addIcon — заводит кнопку с иконкой + пустую панель рядом с ней (слева,
@@ -33,6 +47,10 @@ export function createSideMenu(ctx) {
   // по умолчанию — нужно панели "Справочник" (дереву категорий тесно).
   // opts.sticky — см. openPanelSticky выше; панель получает .close() — тот
   // же closeOpen, вызывающий код может дать свою кнопку ✕.
+  // opts.keepOnCanvas — см. openPanelOnCanvas выше.
+  // opts.onToggle(open) — панель открыли/закрыли. Нужно тем иконкам, что
+  // не просто показывают плашку, а ВКЛЮЧАЮТ режим на карте (сейчас —
+  // "Пометки": открыта панель значит выбран инструмент рисования).
   // iconButton — общая «стеклянная» круглая кнопка колонки; ею пользуются и
   // addIcon (кнопка + своя панель), и addButton (кнопка без панели).
   function iconButton(icon, title) {
@@ -78,6 +96,8 @@ export function createSideMenu(ctx) {
       panel.style.minWidth = opts.width + "px";
     }
     const sticky = !!(opts && opts.sticky);
+    const keepOnCanvas = !!(opts && opts.keepOnCanvas);
+    const onToggle = (opts && opts.onToggle) || null;
     btn.onclick = () => {
       if (openPanel === panel) {
         // sticky-панель по клику на свою же иконку не закрывается — только
@@ -89,6 +109,9 @@ export function createSideMenu(ctx) {
       panel.style.display = "flex";
       openPanel = panel;
       openPanelSticky = sticky;
+      openPanelOnCanvas = keepOnCanvas;
+      openPanelToggle = onToggle;
+      if (onToggle) onToggle(true);
     };
     wrap.append(btn, panel);
     column.appendChild(wrap);
@@ -97,7 +120,9 @@ export function createSideMenu(ctx) {
   }
 
   document.addEventListener("mousedown", (e) => {
-    if (openPanel && !openPanelSticky && !column.contains(e.target)) closeOpen();
+    if (!openPanel || openPanelSticky || column.contains(e.target)) return;
+    if (openPanelOnCanvas && e.target === ctx.canvas) return;
+    closeOpen();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !openPanelSticky) closeOpen();

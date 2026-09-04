@@ -113,6 +113,48 @@ let isDemoGuest = false;
   // плавающие окна web/catalog.html). sticky — не закрывается кликом мимо
   // (пользователь кликает по только что открытым спискам/карточкам, это не
   // "мимо"), только своей кнопкой ✕ в шапке.
+  // Пометки — та же колонка, что 🔊/🎲: инструмент нужен посреди боя, и
+  // лезть за ним в рейл-панель «Инструменты» каждый раз слишком долго.
+  // Панель — общий с игроком компонент (см. web/src/draw-options.js).
+  //
+  // Открытая панель И ЕСТЬ включённый инструмент: onToggle переключает
+  // "draw"/"select", поэтому отдельной кнопки-тумблера не нужно. keepOnCanvas
+  // — иначе первый же штрих по карте засчитался бы как «клик мимо» и
+  // захлопнул панель вместе с инструментом.
+  //
+  // drawToolActive — какой инструмент сейчас реально выбран. Без этой
+  // проверки закрытие панели всегда сбрасывало бы инструмент в "select", а
+  // закрывается она в том числе от переключения НА ДРУГОЙ инструмент (см.
+  // слушатель vtt:toolChanged ниже) — и только что выбранные «Стены»
+  // тут же сбрасывались бы обратно.
+  let drawToolActive = false;
+  const drawPanel = vtt.sideMenu.addIcon(icon("pencil", { size: 16 }), "Пометки", {
+    width: 250,
+    keepOnCanvas: true,
+    onToggle: (open) => {
+      if (!open && !drawToolActive) return;
+      document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: open ? "draw" : "select" }));
+    },
+  });
+  createDrawOptions(drawPanel, {
+    onClear: async () => {
+      if (!(await showConfirm("Стереть со сцены все пометки — и свои, и игроков?", { title: "Очистить слой", okLabel: "Очистить", danger: true }))) return;
+      vtt.send({ type: "clear_drawings" });
+    },
+  });
+  const drawHint = document.createElement("p");
+  drawHint.className = "hint";
+  drawHint.textContent =
+    "ЛКМ и тяни (для текста — просто клик). Стереть одну — «Ластик» или ПКМ по ней. Наведи курсор на пометку, чтобы увидеть, кто её нарисовал. Видны всем за столом и на трансляции. Кому разрешено рисовать — в «Настройках».";
+  drawPanel.appendChild(drawHint);
+  // Переключились на другой инструмент (или вышли из рисования по Esc) —
+  // панель закрывается сама, чтобы открытая плашка не врала про то, что
+  // сейчас в руке.
+  document.addEventListener("vtt:toolChanged", (e) => {
+    drawToolActive = e.detail === "draw";
+    if (!drawToolActive) drawPanel.close();
+  });
+
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
   // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
   // и пункт меню ему показывать незачем.
@@ -566,7 +608,6 @@ document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(n
 const wallBtn = document.getElementById("wallBtn");
 const buildingBtn = document.getElementById("buildingBtn");
 const fogBtn = document.getElementById("fogBtn");
-const drawBtn = document.getElementById("drawBtn");
 const rulerBtn = document.getElementById("rulerBtn");
 
 function toggleTool(name) {
@@ -577,36 +618,18 @@ function toggleTool(name) {
 wallBtn.dataset.tool = "wall";
 buildingBtn.dataset.tool = "building";
 fogBtn.dataset.tool = "fog";
-drawBtn.dataset.tool = "draw";
 rulerBtn.dataset.tool = "ruler";
 wallBtn.onclick = () => toggleTool("wall");
 buildingBtn.onclick = () => toggleTool("building");
 fogBtn.onclick = () => toggleTool("fog");
-drawBtn.onclick = () => toggleTool("draw");
 rulerBtn.onclick = () => toggleTool("ruler");
-
-// ================= опции инструмента "Пометки" =================
-// Саму панель (фигура/цвет/толщина/ластик) строит общий с игроком компонент
-// — см. web/src/draw-options.js. Здесь только монтаж и кнопка очистки: она
-// у ДМ и только у ДМ (сервер очистку от игрока не примет, см. Room.authorize).
-const drawOptions = document.getElementById("drawOptions");
-createDrawOptions(drawOptions, {
-  onClear: async () => {
-    if (!(await showConfirm("Стереть со сцены все пометки — и свои, и игроков?", { title: "Очистить слой", okLabel: "Очистить", danger: true }))) return;
-    vtt.send({ type: "clear_drawings" });
-  },
-});
 
 const gridEditDone = document.getElementById("gridEditDone");
 document.addEventListener("vtt:toolChanged", (e) => {
   wallBtn.classList.toggle("active", e.detail === "wall");
   buildingBtn.classList.toggle("active", e.detail === "building");
   fogBtn.classList.toggle("active", e.detail === "fog");
-  drawBtn.classList.toggle("active", e.detail === "draw");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
-  // Опции рисования (фигура/цвет/толщина) — только под своим инструментом,
-  // как gridEditDone ниже: вне его они просто занимали бы место в панели.
-  drawOptions.classList.toggle("open", e.detail === "draw");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
   // подсказка в панели "Инструменты" — только для выбранного инструмента (см. dm.html:data-hint-tool)
   // "" тут не сработает — .hint[data-hint-tool]{display:none} в <style> и
