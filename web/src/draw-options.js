@@ -11,19 +11,21 @@
 // drawSettings), тем же приёмом, каким тулбар сообщает инструмент через
 // "vtt:setTool".
 import { icon } from "./icons.js";
+import { attachTooltip } from "./tooltip.js";
+import { SHAPE_HELP } from "./tool-help.js";
 
 // SHAPES — то, чем можно рисовать. "eraser" — не форма, а режим стирания
 // (см. interaction.js: beginDraw), но живёт в том же ряду: для руки это
 // такой же выбор «чем я сейчас вожу по карте», и на планшете это
 // единственный способ стереть одну пометку — правой кнопки там нет.
 const SHAPES = [
-  { id: "free", label: "Кисть", glyph: "✏️", title: "Свободная кисть" },
-  { id: "line", label: "Линия", glyph: "╱", title: "Прямая линия" },
-  { id: "arrow", label: "Стрелка", glyph: "➜", title: "Стрелка — от начала протяжки к концу" },
-  { id: "rect", label: "Прямоугольник", glyph: "▭", title: "Прямоугольник по двум углам" },
-  { id: "circle", label: "Круг", glyph: "◯", title: "Круг от центра наружу" },
-  { id: "text", label: "Текст", glyph: "🅣", title: "Подпись — клик по карте, текст спросим в окне" },
-  { id: "eraser", label: "Ластик", glyph: "🩹", title: "Стереть пометку — клик или протяжка по ней" },
+  { id: "free", label: "Кисть", glyph: "✏️" },
+  { id: "line", label: "Линия", glyph: "╱" },
+  { id: "arrow", label: "Стрелка", glyph: "➜" },
+  { id: "rect", label: "Прямоугольник", glyph: "▭" },
+  { id: "circle", label: "Круг", glyph: "◯" },
+  { id: "text", label: "Текст", glyph: "🅣" },
+  { id: "eraser", label: "Ластик", glyph: "🩹" },
 ];
 
 // PALETTE — те же цвета, что и у участников в vtt/layers/drawings.js, плюс
@@ -60,9 +62,9 @@ export function createDrawOptions(mount, { onClear } = {}) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "draw-shape";
-    btn.title = shape.title;
     btn.innerHTML = `<span class="draw-shape-glyph">${shape.glyph}</span>${shape.label}`;
     btn.onclick = () => setShape(state.shape === shape.id ? "" : shape.id);
+    attachTooltip(btn, SHAPE_HELP[shape.id]);
     shapeBtns.set(shape.id, btn);
     shapesGrid.appendChild(btn);
   }
@@ -129,9 +131,13 @@ export function createDrawOptions(mount, { onClear } = {}) {
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "draw-clear";
-    clearBtn.title = "Стереть со сцены все пометки — и свои, и игроков";
     clearBtn.innerHTML = `${icon("trash", { size: 14 })} Очистить слой`;
     clearBtn.onclick = onClear;
+    attachTooltip(clearBtn, {
+      title: "Очистить слой",
+      summary: "Стирает со сцены ВСЕ пометки разом — и свои, и игроков. Спросит подтверждение.",
+      rows: [["Одну пометку", "«Ластик» или [ПКМ] по ней"]],
+    });
     mount.appendChild(clearBtn);
   }
 

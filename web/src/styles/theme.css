@@ -453,3 +453,36 @@
   background: var(--surface); color: var(--text-dim); font: inherit; font-size: 12px; cursor: pointer;
 }
 .draw-clear:hover { background: var(--danger); border-color: var(--danger-hover); color: #fff; }
+
+/* ---- всплывающая подсказка инструмента (см. web/src/tooltip.js) ----
+   Тёмная плашка сбоку от иконки: заголовок, необязательная строка-описание
+   и строки «метка: значение». Клавиши и кнопки мыши — чипами, чтобы жест
+   читался с одного взгляда, а не вычитывался из абзаца. */
+.bt-tip {
+  position: fixed; z-index: 60; display: none; max-width: 460px;
+  padding: 14px 16px; box-sizing: border-box;
+  background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  font-size: 13px; line-height: 1.45; color: var(--text);
+  pointer-events: none; /* подсказка не должна перехватывать курсор у карты */
+}
+.bt-tip.open { display: block; }
+.bt-tip-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.bt-tip-summary { color: var(--text-dim); margin-bottom: 8px; }
+/* Строка — обычный текстовый поток, а не flex: у flex-строки длинное
+   значение не переносится по словам, а целиком спрыгивает под метку,
+   оставляя её в одиночестве. */
+.bt-tip-row { margin-top: 5px; }
+.bt-tip-label { font-weight: 500; margin-right: 6px; }
+.bt-tip-value { color: var(--text-dim); }
+/* Чип клавиши — тот же приём, что у кубов в логе бросков (.roll-die):
+   моноширинный прямоугольник, читаемый как физическая клавиша. */
+.bt-tip-key {
+  display: inline-block; margin: 0 1px; padding: 1px 6px;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  vertical-align: baseline;
+}

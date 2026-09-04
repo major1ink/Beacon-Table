@@ -24,6 +24,8 @@ import { mountCompendiumMenu } from "../compendium-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createDrawOptions } from "../draw-options.js";
+import { attachTooltip } from "../tooltip.js";
+import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import { isPlayer } from "../roles.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
@@ -140,14 +142,14 @@ let vtt = null;
   // тот же sticky, см. комментарий там), первая иконка тут (игрок кубы
   // бросает через #diceDock снизу, не через sideMenu — у него это основной
   // инструмент, и он всегда на виду, а не за иконкой).
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
   mountCompendiumMenu(compendiumPanel, { role: "player" });
 
   // Журнал стола — та же страница, что и у ДМ (см. web/journal.html):
   // игрок пишет туда свои заметки и сам решает, кому их видно и кому можно
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
   // выезжающей плашке бокового меню.
-  vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow);
+  vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow, { tip: PANEL_HELP.journal });
 
   // Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
   // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
@@ -217,6 +219,7 @@ function setPlayerTool(name) {
 }
 
 rulerBtn.onclick = () => setPlayerTool(playerTool === "ruler" ? "select" : "ruler");
+attachTooltip(rulerBtn, TOOL_HELP.ruler);
 
 // ================= "Пометки" =================
 // Второй инструмент карты, доступный игроку (см. web/src/vtt/interaction.js:
@@ -225,6 +228,19 @@ rulerBtn.onclick = () => setPlayerTool(playerTool === "ruler" ? "select" : "rule
 // слой» — она стирает и чужое, сервер её от игрока не примет.
 const drawPanel = createDrawOptions(drawOptions);
 drawBtn.onclick = () => setPlayerTool(playerTool === "draw" ? "select" : "draw");
+// Подсказка у игрока своя: про чужие пометки и про то, что право рисовать
+// выдаёт ДМ, ему знать полезнее, чем про «Настройки», которых у него нет.
+attachTooltip(drawBtn, {
+  title: "Пометки",
+  summary: "Быстрые пометки поверх карты: стрелка, круг, подпись. Видны всем за столом.",
+  rows: [
+    ["Цвет", "твой собственный — за столом видно, чья пометка"],
+    ["Правка", "пока фигура не выбрана — тяни свои пометки"],
+    ["Рисование", "выбери фигуру в панели"],
+    ["Удаление", "«Ластик» или [ПКМ] по своей пометке"],
+    ["Чужие", "трогать нельзя — только свои"],
+  ],
+});
 
 // Кнопка появляется, только пока ДМ держит тумблер стола включённым (см.
 // domain.CombatState.PlayerDrawingEnabled): выключил посреди сессии —

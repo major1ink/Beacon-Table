@@ -6,6 +6,8 @@
 // захлопывалась). Открытие одной панели закрывает другую — тот же принцип,
 // что был у старых hover-иконок, просто без самого hover. Клик мимо колонки
 // или Esc закрывают текущую открытую.
+import { attachTooltip } from "../tooltip.js";
+
 export function createSideMenu(ctx) {
   const column = document.createElement("div");
   column.style.cssText = "position:fixed;z-index:41;display:flex;flex-direction:column;gap:8px;transform:translateY(-50%);";
@@ -56,6 +58,11 @@ export function createSideMenu(ctx) {
   // "Пометки": открыта панель значит выбран инструмент рисования).
   // iconButton — общая «стеклянная» круглая кнопка колонки; ею пользуются и
   // addIcon (кнопка + своя панель), и addButton (кнопка без панели).
+  // opts.tip — структурированная подсказка вместо нативного title (см.
+  // web/src/tooltip.js): у иконки колонки нет подписи, и одной строки
+  // системного тултипа мало, чтобы объяснить, что за ней. Вешает её не
+  // iconButton, а вызывающий: у иконки с панелью подсказка должна молчать,
+  // пока панель открыта (см. addIcon), и про это знает только он.
   function iconButton(icon, title) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -73,8 +80,9 @@ export function createSideMenu(ctx) {
   // стола, см. pages/player.js, открывается плавающим окном, а не выезжающей
   // плашкой). Открытую панель при этом закрываем — как и переход к любой
   // другой иконке колонки.
-  function addButton(icon, title, onClick) {
+  function addButton(icon, title, onClick, opts) {
     const btn = iconButton(icon, title);
+    if (opts && opts.tip) attachTooltip(btn, opts.tip);
     btn.onclick = () => {
       closeOpen();
       onClick();
@@ -116,6 +124,9 @@ export function createSideMenu(ctx) {
       openPanelToggle = onToggle;
       if (onToggle) onToggle(true);
     };
+    // Пока панель этой иконки открыта, подсказка про неё молчит: она
+    // выезжает в ту же сторону и накрывала бы собой ровно то, что описывает.
+    if (opts && opts.tip) attachTooltip(btn, () => (openPanel === panel ? null : opts.tip));
     wrap.append(btn, panel);
     column.appendChild(wrap);
     panel.close = closeOpen;

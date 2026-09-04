@@ -14,6 +14,8 @@ import { openSheetDock } from "../sheet-dock.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDrawOptions } from "../draw-options.js";
+import { attachTooltip } from "../tooltip.js";
+import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import {
   fetchMe,
   apiLogout,
@@ -101,7 +103,7 @@ let isDemoGuest = false;
   // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
   // формулы, "Бросить", см. dice.js); лог результатов — отдельный виджет
   // (roll-log.js) в плашке #diceLog сверху канваса (см. dm.html).
-  const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240 });
+  const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240, tip: PANEL_HELP.dice });
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
@@ -131,6 +133,7 @@ let isDemoGuest = false;
   const drawPanel = vtt.sideMenu.addIcon(icon("pencil", { size: 16 }), "Пометки", {
     width: 250,
     keepOnCanvas: true,
+    tip: TOOL_HELP.draw,
     onToggle: (open) => {
       if (!open && !drawToolActive) return;
       document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: open ? "draw" : "select" }));
@@ -144,8 +147,7 @@ let isDemoGuest = false;
   });
   const drawHint = document.createElement("p");
   drawHint.className = "hint";
-  drawHint.textContent =
-    "Выбрал фигуру — ЛКМ и тяни (для текста просто клик). Стереть одну — «Ластик» или ПКМ по ней. Наведи курсор на пометку, чтобы увидеть, кто её нарисовал. Пометки видны всем за столом и на трансляции, живут вместе со сценой. Кому разрешено рисовать — в «Настройках».";
+  drawHint.textContent = "Наведи на фигуру — подскажет, каким жестом она рисуется. Наведи на пометку на карте — покажет, кто её нарисовал.";
   drawPanel.appendChild(drawHint);
   // Переключились на другой инструмент (или вышли из рисования по Esc) —
   // панель закрывается сама, чтобы открытая плашка не врала про то, что
@@ -155,7 +157,7 @@ let isDemoGuest = false;
     if (!drawToolActive) drawPanel.close();
   });
 
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
   // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
   // и пункт меню ему показывать незачем.
   mountCompendiumMenu(compendiumPanel, { role: "dm", canImport: !isDemoGuest });
@@ -631,13 +633,15 @@ document.addEventListener("vtt:toolChanged", (e) => {
   fogBtn.classList.toggle("active", e.detail === "fog");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
-  // подсказка в панели "Инструменты" — только для выбранного инструмента (см. dm.html:data-hint-tool)
-  // "" тут не сработает — .hint[data-hint-tool]{display:none} в <style> и
-  // так победит пустую инлайн-строку, нужен явный display, отличный от none
-  document.querySelectorAll("[data-hint-tool]").forEach((el) => {
-    el.style.display = el.dataset.hintTool === e.detail ? "block" : "none";
-  });
 });
+
+// Всплывающие подсказки инструментов — вместо абзацев, которые раньше
+// лежали в самой панели и показывались по выбранному инструменту (см.
+// web/src/tooltip.js и tool-help.js: что инструмент делает и какими жестами).
+attachTooltip(wallBtn, TOOL_HELP.wall);
+attachTooltip(buildingBtn, TOOL_HELP.building);
+attachTooltip(fogBtn, TOOL_HELP.fog);
+attachTooltip(rulerBtn, TOOL_HELP.ruler);
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
   showSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
