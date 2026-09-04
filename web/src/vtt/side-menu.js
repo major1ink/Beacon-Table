@@ -6,7 +6,7 @@
 // захлопывалась). Открытие одной панели закрывает другую — тот же принцип,
 // что был у старых hover-иконок, просто без самого hover. Клик мимо колонки
 // или Esc закрывают текущую открытую.
-import { attachTooltip } from "../tooltip.js";
+import { attachTooltip, hideTooltip } from "../tooltip.js";
 
 export function createSideMenu(ctx) {
   const column = document.createElement("div");
@@ -118,6 +118,12 @@ export function createSideMenu(ctx) {
       }
       closeOpen();
       panel.style.display = "flex";
+      // Гасим подсказку явно, а не надеемся на глобальный mousedown-хук:
+      // порядок pointerenter и mousedown у синтезированного клика не
+      // гарантирован, и подсказка успевала остаться висеть поверх только
+      // что открытой панели — ровно та каша, из-за которой она и молчит,
+      // пока панель открыта.
+      hideTooltip();
       openPanel = panel;
       openPanelSticky = sticky;
       openPanelOnCanvas = keepOnCanvas;

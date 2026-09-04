@@ -11,7 +11,7 @@
 // drawSettings), тем же приёмом, каким тулбар сообщает инструмент через
 // "vtt:setTool".
 import { icon } from "./icons.js";
-import { attachTooltip } from "./tooltip.js";
+import { attachTooltip, renderWithKeys } from "./tooltip.js";
 import { SHAPE_HELP } from "./tool-help.js";
 
 // SHAPES — то, чем можно рисовать. "eraser" — не форма, а режим стирания
@@ -77,14 +77,51 @@ export function createDrawOptions(mount, { onClear } = {}) {
   mode.className = "draw-mode";
   shapesBlock.appendChild(mode);
 
+  // selection — что сейчас выбрано на карте (см. interaction.js:
+  // setSelectedDrawing). Пока выбор есть, «Цвет» и «Толщина» правят именно
+  // его, а не только будущие пометки, — иначе нарисованное тонкой линией
+  // по невнимательности оставалось бы тонким навсегда.
+  let selection = null;
+
+  function renderMode() {
+    let text;
+    if (state.shape) {
+      text = "Рисуем новое. Нажми выбранную фигуру ещё раз — вернёшься к правке.";
+    } else if (selection) {
+      text =
+        selection.kind === "text"
+          ? "Выбрана подпись: «Цвет» и «Толщина» меняют её прямо сейчас — у текста толщина это размер. [Delete] — стереть."
+          : "Выбрана пометка: «Цвет» и «Толщина» меняют её прямо сейчас. [Delete] — стереть.";
+    } else {
+      text = "Правка: кликни пометку, чтобы менять её цвет и толщину. Тяни за белую точку — переформовать, за линию — перенести.";
+    }
+    mode.textContent = "";
+    renderWithKeys(mode, text);
+  }
+
   function setShape(next) {
     state.shape = next;
     for (const [id, b] of shapeBtns) b.classList.toggle("active", id === next);
-    mode.textContent = next
-      ? "Рисуем новое. Нажми выбранную фигуру ещё раз — вернёшься к правке."
-      : "Правка: тяни за белую точку — переформовать, за саму линию — перенести, двойной клик по подписи — сменить текст.";
+    renderMode();
     push();
   }
+
+  // showSelection — подтянуть контролы под выбранную пометку. Молча, без
+  // push(): панель тут ОТРАЖАЕТ чужое состояние, а не задаёт своё, и лишняя
+  // рассылка вернулась бы обратно правкой той же пометки теми же значениями.
+  function showSelection(sel) {
+    selection = sel;
+    if (sel) {
+      state.color = sel.color || "";
+      markColor(state.color);
+      if (sel.width > 0) {
+        state.width = Math.min(24, Math.max(2, sel.width));
+        widthInput.value = String(state.width);
+      }
+    }
+    renderMode();
+  }
+  document.addEventListener("vtt:drawSelection", (e) => showSelection(e.detail || null));
 
   // ---- цвет ----
   const colorBlock = document.createElement("div");
@@ -99,14 +136,18 @@ export function createDrawOptions(mount, { onClear } = {}) {
     sw.title = color || "Цвет участника (у ДМ — белый)";
     if (color) sw.style.background = color;
     else sw.classList.add("draw-swatch--auto");
+    sw.dataset.color = color;
     sw.onclick = () => {
       state.color = color;
-      for (const el of colorRow.children) el.classList.toggle("active", el === sw);
+      markColor(color);
       push();
     };
     colorRow.appendChild(sw);
   }
-  colorRow.firstChild.classList.add("active");
+  function markColor(color) {
+    for (const el of colorRow.children) el.classList.toggle("active", el.dataset.color === color);
+  }
+  markColor(state.color);
   colorBlock.appendChild(colorRow);
 
   // ---- толщина ----

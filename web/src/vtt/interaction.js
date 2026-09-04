@@ -24,7 +24,7 @@ import {
 import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
 import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
-import { paintDrawing, drawingHandles, canEditDrawing, DRAWING_DEFAULT_WIDTH, DRAWING_DEFAULT_TEXT_SIZE, DRAWING_TEXT_SIZE_FACTOR } from "./layers/drawings.js";
+import { paintDrawing, drawingHandles, canEditDrawing, widthForKind, sliderForWidth } from "./layers/drawings.js";
 import { fetchCharacter, fetchMonster } from "../api.js";
 import { showPrompt } from "../modal.js";
 
@@ -250,12 +250,18 @@ export function createInteraction(ctx) {
   // как ctx.tool: по нему layers/drawings.js решает, показывать ли ручки.
   ctx.drawEditing = true;
   document.addEventListener("vtt:drawSettings", (e) => {
-    Object.assign(drawSettings, e.detail || {});
+    const next = e.detail || {};
+    // Что именно подкрутили — по этому решаем, трогать ли выбранную пометку:
+    // смена фигуры к её стилю отношения не имеет.
+    const styleChanged = next.color !== drawSettings.color || next.width !== drawSettings.width;
+    Object.assign(drawSettings, next);
     ctx.drawEditing = !drawSettings.shape;
     // Смена режима посреди начатого жеста — не повод его докоммитить.
     cancelDraw();
     ctx.dirty.drawings = true;
     ctx.render();
+    if (drawSettings.shape) setSelectedDrawing(null); // ушли рисовать — выбор ни к чему
+    else if (styleChanged && selectedDrawingId) applyStyleToSelection();
   });
 
   // drawStroke — жест, который прямо сейчас в руке: {kind, points}. На
@@ -268,13 +274,48 @@ export function createInteraction(ctx) {
   // "фигура", а режим, поэтому отдельный флаг, а не drawStroke.
   let erasing = false;
 
-  // drawWidth — что уедет в Drawing.Width. У линий это толщина как есть, у
-  // подписи то же поле означает кегль (см. DRAWING_TEXT_SIZE_FACTOR).
+  // drawWidth — что уедет в Drawing.Width для НОВОЙ пометки (см.
+  // widthForKind: у подписи это же поле означает кегль).
   function drawWidth() {
-    if (drawSettings.shape === "text") {
-      return drawSettings.width > 0 ? drawSettings.width * DRAWING_TEXT_SIZE_FACTOR : DRAWING_DEFAULT_TEXT_SIZE;
+    return widthForKind(drawSettings.shape, drawSettings.width);
+  }
+
+  // selectedDrawingId — пометка, выбранная в режиме правки. Нужна ровно
+  // затем, чтобы её можно было перекрасить и изменить в толщине уже ПОСЛЕ
+  // того, как нарисовал: промахнуться ползунком легко, а до сих пор
+  // единственным лекарством было стереть и нарисовать заново.
+  let selectedDrawingId = null;
+  ctx.selectedDrawingId = null;
+
+  function setSelectedDrawing(id) {
+    const d = id ? ctx.scene.drawings[id] : null;
+    selectedDrawingId = d ? id : null;
+    ctx.selectedDrawingId = selectedDrawingId;
+    ctx.dirty.drawings = true;
+    ctx.render();
+    // Панель показывает цвет и толщину выбранного, чтобы было видно, что
+    // именно правишь (см. draw-options.js: showSelection).
+    document.dispatchEvent(
+      new CustomEvent("vtt:drawSelection", {
+        detail: d ? { id, kind: d.kind, color: d.color || "", width: sliderForWidth(d.kind, d.width) } : null,
+      })
+    );
+  }
+
+  // applyStyleToSelection — цвет и толщина из панели уезжают в выбранную
+  // пометку. Кегль подписи считается тем же widthForKind, что и при
+  // создании, поэтому ползунок означает одно и то же в обоих случаях.
+  function applyStyleToSelection() {
+    const d = selectedDrawingId && ctx.scene.drawings[selectedDrawingId];
+    if (!d) {
+      setSelectedDrawing(null);
+      return;
     }
-    return drawSettings.width > 0 ? drawSettings.width : DRAWING_DEFAULT_WIDTH;
+    d.color = drawSettings.color || "";
+    d.width = widthForKind(d.kind, drawSettings.width);
+    ctx.dirty.drawings = true;
+    ctx.render();
+    sendDrawingUpdate(d, true);
   }
 
   // ownDrawing — элемент, который эта роль вправе тронуть (см. фильтр
@@ -338,12 +379,17 @@ export function createInteraction(ctx) {
   function beginDrawEdit(x, y) {
     const handle = drawHandleAt(x, y);
     if (handle) {
+      setSelectedDrawing(handle.id);
       drawEdit = { id: handle.id, index: handle.index };
       return true;
     }
     const id = drawingAt(x, y, ctx.scene.drawings || {}, ctx.world.scale.x || 1, 8, ownDrawing);
-    if (!id) return false;
+    if (!id) {
+      setSelectedDrawing(null); // клик по пустому месту — снять выбор
+      return false;
+    }
     const d = ctx.scene.drawings[id];
+    setSelectedDrawing(id);
     drawEdit = { id, index: null, startX: x, startY: y, origin: d.points.map((p) => ({ x: p.x, y: p.y })) };
     return true;
   }
@@ -528,6 +574,7 @@ export function createInteraction(ctx) {
     const id = drawingAt(x, y, ctx.scene.drawings || {}, ctx.world.scale.x || 1, 8, ownDrawing);
     if (!id) return false;
     delete ctx.scene.drawings[id];
+    if (id === selectedDrawingId) setSelectedDrawing(null);
     ctx.dirty.drawings = true;
     ctx.render();
     ctx.send({ type: "remove_drawing", id });
@@ -758,6 +805,7 @@ export function createInteraction(ctx) {
       buildingChain = null;
       fogPath = null;
       cancelDraw();
+      setSelectedDrawing(null);
       gridDragStart = null;
       marquee = null;
       rulerFrom = null;
@@ -1547,6 +1595,7 @@ export function createInteraction(ctx) {
         distanceLabel.hide();
       }
       cancelDraw();
+      if (tool === "draw" && selectedDrawingId) setSelectedDrawing(null);
       if (marquee) {
         marquee = null;
         preview.clear();
@@ -1573,7 +1622,20 @@ export function createInteraction(ctx) {
     // сообщению на каждый выделенный id.
     window.addEventListener("keydown", (e) => {
       if (e.key !== "Delete" && e.key !== "Backspace") return;
-      if (!selectedTokenIds.size || isTypingTarget()) return;
+      if (isTypingTarget()) return;
+      // В инструменте пометок Delete стирает выбранную пометку — тем же
+      // жестом, каким на карте удаляют выделенные токены.
+      if (tool === "draw" && selectedDrawingId) {
+        e.preventDefault();
+        const id = selectedDrawingId;
+        setSelectedDrawing(null);
+        delete ctx.scene.drawings[id];
+        ctx.dirty.drawings = true;
+        ctx.render();
+        ctx.send({ type: "remove_drawing", id });
+        return;
+      }
+      if (!selectedTokenIds.size) return;
       e.preventDefault();
       for (const id of selectedTokenIds) ctx.send({ type: "remove_token", id });
       setSelection([]);
@@ -1961,6 +2023,7 @@ export function createInteraction(ctx) {
       ctx.dirty.drawings = true;
       rulerFrom = null;
       cancelDraw();
+      setSelectedDrawing(null);
       rulerLine.clear();
       distanceLabel.hide();
       canvas.style.cursor = "";

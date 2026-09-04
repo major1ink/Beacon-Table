@@ -35,6 +35,14 @@ function ensureEl() {
 // appendValue — текст значения с чипами клавиш: всё, что в квадратных
 // скобках, становится <kbd> ("[Ctrl] + [ЛКМ] и протяжка"). Собираем узлами,
 // а не innerHTML — подсказки задаются в коде, но экранирование тут бесплатно.
+//
+// Экспортируется как renderWithKeys: та же запись клавиш нужна и вне
+// подсказок (строка режима в панели «Пометки»), а два разных способа
+// нарисовать [Delete] на одном экране — это уже два разных языка.
+export function renderWithKeys(host, text) {
+  appendValue(host, text);
+}
+
 function appendValue(host, text) {
   for (const part of String(text).split(/(\[[^\]]+\])/)) {
     if (!part) continue;

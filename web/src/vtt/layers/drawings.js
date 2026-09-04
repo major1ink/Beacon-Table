@@ -85,17 +85,64 @@ function visibleDrawings(ctx) {
 // отличие от стен/сетки, где она компенсируется под 1/scale): пометка —
 // часть карты, она обязана расти и уменьшаться вместе с ней, иначе стрелка,
 // нарисованная на общем плане, при зуме в комнату превратится в волосок.
-function strokeFor(d) {
-  return { width: d.width > 0 ? d.width : DRAWING_DEFAULT_WIDTH, color: colorOf(d), alpha: 0.95, cap: "round", join: "round" };
+function strokeFor(d, override) {
+  return {
+    width: d.width > 0 ? d.width : DRAWING_DEFAULT_WIDTH,
+    color: colorOf(d),
+    alpha: 0.95,
+    cap: "round",
+    join: "round",
+    ...override,
+  };
+}
+
+// SELECT_COLOR — тот же голубой, что у рамки выделения токенов и у превью
+// инструментов: «вот это сейчас в работе».
+const SELECT_COLOR = 0x5dd0ff;
+
+// widthForKind / sliderForWidth — перевод между ползунком «Толщина» панели
+// (2–24) и Drawing.Width. У подписи это же поле означает кегль, поэтому
+// туда-обратно оно ходит с множителем (см. DRAWING_TEXT_SIZE_FACTOR).
+// Обе стороны перевода живут рядом: разъехавшись, они дали бы подпись,
+// которая при каждой правке скачет в размере.
+export function widthForKind(kind, slider) {
+  if (kind === "text") return slider > 0 ? slider * DRAWING_TEXT_SIZE_FACTOR : DRAWING_DEFAULT_TEXT_SIZE;
+  return slider > 0 ? slider : DRAWING_DEFAULT_WIDTH;
+}
+
+export function sliderForWidth(kind, width) {
+  if (!(width > 0)) return 0;
+  return kind === "text" ? Math.max(1, Math.round(width / DRAWING_TEXT_SIZE_FACTOR)) : Math.round(width);
+}
+
+// paintSelection — подсветка выбранной пометки: под самой линией рисуется
+// та же геометрия толще и полупрозрачным голубым. Подпись линией не
+// обвести, ей — пунктирная рамка по прикидке метрик (точные размеры знает
+// PIXI.Text, но ради рамки гонять их сюда незачем).
+function paintSelection(g, d, scale) {
+  if (d.kind === "text") {
+    const size = d.width > 0 ? d.width : DRAWING_DEFAULT_TEXT_SIZE;
+    const w = Math.max((d.text || "").length * size * 0.6, size);
+    const p = d.points[0];
+    const pad = 5 / scale;
+    g.rect(p.x - w / 2 - pad, p.y - size / 2 - pad, w + pad * 2, size + pad * 2).stroke({
+      width: 1.5 / scale,
+      color: SELECT_COLOR,
+      alpha: 0.9,
+    });
+    return;
+  }
+  const base = d.width > 0 ? d.width : DRAWING_DEFAULT_WIDTH;
+  paintDrawing(g, d, { width: base + 10 / scale, color: SELECT_COLOR, alpha: 0.3 });
 }
 
 // paintDrawing — геометрия одной пометки в переданный Graphics. "text" тут
 // не рисуется — им занимаются Text-объекты ниже. Экспортируется, потому что
 // тем же кодом interaction.js рисует превью текущего жеста: превью обязано
 // выглядеть ровно так же, как получившийся элемент.
-export function paintDrawing(g, d) {
+export function paintDrawing(g, d, override) {
   const p = d.points || [];
-  const style = strokeFor(d);
+  const style = strokeFor(d, override);
   switch (d.kind) {
     case "free": {
       if (p.length < 2) return;
@@ -149,6 +196,11 @@ export function createDrawingsLayer(ctx) {
     strokes.clear();
     const items = visibleDrawings(ctx);
     const textIds = new Set();
+    const scale = ctx.world.scale.x || 1;
+
+    // Подсветка — ПЕРВОЙ, чтобы лечь под саму линию, а не поверх неё.
+    const selected = ctx.selectedDrawingId ? items.find((d) => d.id === ctx.selectedDrawingId) : null;
+    if (selected && ctx.tool === "draw" && ctx.drawEditing) paintSelection(strokes, selected, scale);
 
     for (const d of items) {
       if (d.kind === "text") {
@@ -171,11 +223,14 @@ export function createDrawingsLayer(ctx) {
     // занята рисованием новой фигуры, точки уже нарисованного не при делах
     // и только мешали бы целиться.
     if (ctx.tool === "draw" && ctx.drawEditing) {
-      const scale = ctx.world.scale.x || 1;
       for (const d of items) {
         if (!canEditDrawing(ctx, d)) continue;
+        const isSelected = d.id === ctx.selectedDrawingId;
         for (const h of drawingHandles(d)) {
-          strokes.circle(h.x, h.y, 5 / scale).fill(0xffffff).stroke({ width: 1.5 / scale, color: colorOf(d) });
+          strokes
+            .circle(h.x, h.y, (isSelected ? 6 : 5) / scale)
+            .fill(isSelected ? SELECT_COLOR : 0xffffff)
+            .stroke({ width: 1.5 / scale, color: isSelected ? 0xffffff : colorOf(d) });
         }
       }
     }
