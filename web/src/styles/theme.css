@@ -436,6 +436,7 @@
 .draw-shape:hover { background: var(--surface-hover); color: var(--text); }
 .draw-shape.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .draw-shape-glyph { font-size: 13px; line-height: 1; }
+.draw-mode { margin: 2px 0 0; font-size: 11px; line-height: 1.35; color: var(--text-dim); }
 .draw-colors { display: flex; flex-wrap: wrap; gap: 6px; }
 .draw-swatch {
   width: 22px; height: 22px; padding: 0; border-radius: 50%; cursor: pointer;

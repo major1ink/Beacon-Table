@@ -22,8 +22,11 @@ export function createSideMenu(ctx) {
   let openPanelSticky = false;
   // openPanelOnCanvas — панель "Пометки" (opts.keepOnCanvas, см. addIcon):
   // канвас для неё не "мимо", а рабочая поверхность — первый же штрих
-  // захлопывал бы панель вместе с инструментом. От sticky отличается тем,
-  // что Esc и своя иконка её по-прежнему закрывают: инструмент надо уметь
+  // захлопывал бы панель вместе с инструментом. Сюда же попадают модалки:
+  // жест инструмента может уходить в диалог (ввод подписи — см.
+  // interaction.js: placeDrawingText), и клик по его кнопке — продолжение
+  // работы инструментом, а не уход от него. От sticky отличается тем, что
+  // Esc и своя иконка панель по-прежнему закрывают: инструмент надо уметь
   // выключить, не целясь в крестик.
   let openPanelOnCanvas = false;
   // openPanelToggle — opts.onToggle текущей открытой панели (см. addIcon):
@@ -121,7 +124,7 @@ export function createSideMenu(ctx) {
 
   document.addEventListener("mousedown", (e) => {
     if (!openPanel || openPanelSticky || column.contains(e.target)) return;
-    if (openPanelOnCanvas && e.target === ctx.canvas) return;
+    if (openPanelOnCanvas && (e.target === ctx.canvas || e.target.closest?.(".bt-modal-overlay"))) return;
     closeOpen();
   });
   document.addEventListener("keydown", (e) => {

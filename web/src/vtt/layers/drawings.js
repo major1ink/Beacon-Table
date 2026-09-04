@@ -46,16 +46,39 @@ function colorOf(d) {
   return hexToInt(d.color || colorForAuthor(d.authorId));
 }
 
-// visibleDrawings — что вообще рисуем: тумблер стола «скрыть пометки
+// isDrawingVisible — видна ли пометка сейчас: тумблер стола «скрыть пометки
 // игроков» (см. domain.CombatState.HidePlayerDrawings) убирает с карты всё
 // чужое, не стирая его на сервере. Фильтр клиентский, а не в payload
 // (в отличие от hidden-токенов/значков заметок в service.Room.sceneFor):
 // тут нет секрета ДМ — это разгрузка экрана, и вернуть пометки обратно
 // тумблером надо мгновенно, не дожидаясь новой рассылки сцены.
+//
+// Экспортируется, потому что по этому же признаку interaction.js решает,
+// что вообще ловить мышью: невидимую пометку нельзя ни стереть, ни
+// подвинуть — иначе ДМ таскал бы за невидимые ручки.
+export function isDrawingVisible(ctx, d) {
+  return !(d.authorId && ctx.combat && ctx.combat.hidePlayerDrawings);
+}
+
+// canEditDrawing — эту пометку данная роль вправе двигать и стирать: ДМ —
+// любую, игрок — только свою (сервер проверяет то же самое, см.
+// internal/service/room_drawings.go: canDrawingWrite).
+export function canEditDrawing(ctx, d) {
+  return isDrawingVisible(ctx, d) && (ctx.isDM || d.authorId === ctx.playerId);
+}
+
+// drawingHandles — точки, за которые пометку можно переформовать. У
+// свободной кисти ручек нет: точек в росчерке сотни, таскать их по одной
+// бессмысленно — её двигают целиком. У подписи ручка одна (её якорь), у
+// остальных форм — обе опорные точки (концы отрезка, углы прямоугольника,
+// центр и точка на окружности).
+export function drawingHandles(d) {
+  if (!d || d.kind === "free") return [];
+  return (d.points || []).map((p, index) => ({ x: p.x, y: p.y, index }));
+}
+
 function visibleDrawings(ctx) {
-  const all = Object.values(ctx.scene.drawings || {});
-  if (!(ctx.combat && ctx.combat.hidePlayerDrawings)) return all;
-  return all.filter((d) => !d.authorId);
+  return Object.values(ctx.scene.drawings || {}).filter((d) => isDrawingVisible(ctx, d));
 }
 
 // strokeFor — общий стиль линии всех форм. Толщина задана в МИРОВЫХ px (в
@@ -141,6 +164,22 @@ export function createDrawingsLayer(ctx) {
         textViews.delete(id);
       }
     }
+    // Ручки — только пока активен инструмент «Пометки» (ctx.tool) И в нём
+    // выбран режим правки (ctx.drawEditing — фигура не выбрана, см.
+    // draw-options.js). Та же идиома, что у кружков на вершинах
+    // стен/тумана/зданий, только с дополнительным разделением: пока рука
+    // занята рисованием новой фигуры, точки уже нарисованного не при делах
+    // и только мешали бы целиться.
+    if (ctx.tool === "draw" && ctx.drawEditing) {
+      const scale = ctx.world.scale.x || 1;
+      for (const d of items) {
+        if (!canEditDrawing(ctx, d)) continue;
+        for (const h of drawingHandles(d)) {
+          strokes.circle(h.x, h.y, 5 / scale).fill(0xffffff).stroke({ width: 1.5 / scale, color: colorOf(d) });
+        }
+      }
+    }
+
     for (const d of items) {
       if (d.kind !== "text" || !d.points || !d.points.length) continue;
       let view = textViews.get(d.id);

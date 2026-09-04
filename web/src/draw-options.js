@@ -31,7 +31,11 @@ const SHAPES = [
 // ДМ белые, а каждого игрока — своего цвета, без всякой договорённости.
 const PALETTE = ["", "#ffffff", "#ff7b72", "#ffb454", "#ffd866", "#7ee081", "#5dd0ff", "#c792ea"];
 
-const DEFAULTS = { shape: "free", color: "", width: 4 };
+// Пустая shape — не «ничего не выбрано по недосмотру», а РЕЖИМ ПРАВКИ:
+// панель открыта, инструмент включён, и рука занята уже нарисованным —
+// тянет за точки и линии. Фигура выбирается осознанно и ровно тогда, когда
+// человек собрался рисовать новое; повторный клик по ней возвращает правку.
+const DEFAULTS = { shape: "", color: "", width: 4 };
 
 // createDrawOptions строит панель внутри mount. onClear — если передан,
 // добавляется кнопка «Очистить слой» (у игрока её нет: сервер очистку от
@@ -58,16 +62,27 @@ export function createDrawOptions(mount, { onClear } = {}) {
     btn.className = "draw-shape";
     btn.title = shape.title;
     btn.innerHTML = `<span class="draw-shape-glyph">${shape.glyph}</span>${shape.label}`;
-    btn.onclick = () => {
-      state.shape = shape.id;
-      for (const [id, b] of shapeBtns) b.classList.toggle("active", id === shape.id);
-      push();
-    };
+    btn.onclick = () => setShape(state.shape === shape.id ? "" : shape.id);
     shapeBtns.set(shape.id, btn);
     shapesGrid.appendChild(btn);
   }
-  shapeBtns.get(state.shape).classList.add("active");
   shapesBlock.appendChild(shapesGrid);
+
+  // mode — строка состояния под фигурами: в какой руке сейчас инструмент.
+  // Без неё режим правки читался бы только по отсутствию подсветки, то есть
+  // никак.
+  const mode = document.createElement("p");
+  mode.className = "draw-mode";
+  shapesBlock.appendChild(mode);
+
+  function setShape(next) {
+    state.shape = next;
+    for (const [id, b] of shapeBtns) b.classList.toggle("active", id === next);
+    mode.textContent = next
+      ? "Рисуем новое. Нажми выбранную фигуру ещё раз — вернёшься к правке."
+      : "Правка: тяни за белую точку — переформовать, за саму линию — перенести, двойной клик по подписи — сменить текст.";
+    push();
+  }
 
   // ---- цвет ----
   const colorBlock = document.createElement("div");
@@ -120,13 +135,13 @@ export function createDrawOptions(mount, { onClear } = {}) {
     mount.appendChild(clearBtn);
   }
 
+  setShape(state.shape); // начальное состояние строки режима + рассылка настроек
+
   return {
-    // reset — вернуть панель к дефолтам (игроку, когда ДМ отобрал право
+    // reset — вернуть панель в режим правки (игроку, когда ДМ отобрал право
     // рисовать: возвращаться к инструменту с зажатым ластиком не надо).
     reset() {
-      state.shape = DEFAULTS.shape;
-      for (const [id, b] of shapeBtns) b.classList.toggle("active", id === DEFAULTS.shape);
-      push();
+      setShape(DEFAULTS.shape);
     },
   };
 }

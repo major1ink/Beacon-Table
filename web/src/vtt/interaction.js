@@ -24,7 +24,7 @@ import {
 import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
 import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
-import { paintDrawing, DRAWING_DEFAULT_WIDTH, DRAWING_DEFAULT_TEXT_SIZE, DRAWING_TEXT_SIZE_FACTOR } from "./layers/drawings.js";
+import { paintDrawing, drawingHandles, canEditDrawing, DRAWING_DEFAULT_WIDTH, DRAWING_DEFAULT_TEXT_SIZE, DRAWING_TEXT_SIZE_FACTOR } from "./layers/drawings.js";
 import { fetchCharacter, fetchMonster } from "../api.js";
 import { showPrompt } from "../modal.js";
 
@@ -74,6 +74,12 @@ export function createInteraction(ctx) {
     ctx.dirty.buildings = true;
     ctx.dirty.tokens = true;
     ctx.dirty.manualFog = true;
+    // Сами пометки — в мировых координатах и от зума не зависят (в отличие
+    // от стен, у которых толщина линии экранная), пересчитывать слой на
+    // каждый шаг пана незачем. Исключение — ручки правки: они нарисованы
+    // постоянным ЭКРАННЫМ размером (5/scale) и есть только внутри
+    // инструмента «Пометки».
+    if (ctx.tool === "draw") ctx.dirty.drawings = true;
   }
 
   function applyCameraAndRender() {
@@ -238,8 +244,19 @@ export function createInteraction(ctx) {
   // толщина); панель шлёт "vtt:drawSettings", как тулбар шлёт "vtt:setTool".
   // Пустой цвет означает «цвет участника» (layers/drawings.js:
   // colorForAuthor) — его и подставит слой при отрисовке.
-  const drawSettings = { shape: "free", color: "", width: 0 };
-  document.addEventListener("vtt:drawSettings", (e) => Object.assign(drawSettings, e.detail || {}));
+  const drawSettings = { shape: "", color: "", width: 0 };
+  // ctx.drawEditing — в инструменте «Пометки» сейчас режим ПРАВКИ, а не
+  // рисования: фигура не выбрана (см. draw-options.js). Зеркало наружу,
+  // как ctx.tool: по нему layers/drawings.js решает, показывать ли ручки.
+  ctx.drawEditing = true;
+  document.addEventListener("vtt:drawSettings", (e) => {
+    Object.assign(drawSettings, e.detail || {});
+    ctx.drawEditing = !drawSettings.shape;
+    // Смена режима посреди начатого жеста — не повод его докоммитить.
+    cancelDraw();
+    ctx.dirty.drawings = true;
+    ctx.render();
+  });
 
   // drawStroke — жест, который прямо сейчас в руке: {kind, points}. На
   // сервер не уходит ничего, пока жест не закончен, — в отличие от стен
@@ -260,10 +277,94 @@ export function createInteraction(ctx) {
     return drawSettings.width > 0 ? drawSettings.width : DRAWING_DEFAULT_WIDTH;
   }
 
-  // ownDrawing — элемент, который эта роль вправе стереть (см. фильтр
-  // drawingAt): у ДМ — любой, у игрока — только свой.
+  // ownDrawing — элемент, который эта роль вправе тронуть (см. фильтр
+  // drawingAt): у ДМ — любой, у игрока — только свой, и в обоих случаях
+  // только видимый сейчас (см. canEditDrawing в layers/drawings.js —
+  // спрятанные тумблером чужие пометки не должны ловиться мышью).
   function ownDrawing(d) {
-    return ctx.isDM || d.authorId === ctx.playerId;
+    return canEditDrawing(ctx, d);
+  }
+
+  // drawEdit — правка уже созданной пометки: {id, index} — тащим одну ручку,
+  // либо {id, index:null, startX, startY, origin} — двигаем целиком. origin —
+  // снимок точек на начало жеста: смещение считаем от него, а не накапливаем
+  // по текущим (иначе дрейф округления на долгой протяжке — тот же приём,
+  // что у draggingFogArea выше).
+  let drawEdit = null;
+  // DRAW_HANDLE_PX — радиус попадания по ручке, в ЭКРАННЫХ px (как у
+  // вершин стен/тумана): на любом зуме хватать одинаково удобно.
+  const DRAW_HANDLE_PX = 10;
+
+  // drawEditSentAt — когда последний раз отправляли правку. Каждый шаг
+  // протяжки шлёт пометку ЦЕЛИКОМ, и у свободной кисти это сотни точек на
+  // сообщение — без ограничения перенос одного росчерка забивал бы канал
+  // стола. Финальное состояние всегда уходит на отпускании (force), так что
+  // экономия ничего не теряет.
+  let drawEditSentAt = 0;
+
+  function sendDrawingUpdate(d, force) {
+    const now = Date.now();
+    if (!force && now - drawEditSentAt < 40) return;
+    drawEditSentAt = now;
+    // Шлём СВОИ поля пометки, а не текущие настройки панели: правка двигает
+    // геометрию и не должна перекрашивать чужую стрелку в выбранный сейчас
+    // цвет. "add_drawing" с тем же id — апсерт (см. room_drawings.go), автор
+    // при этом сохраняется.
+    ctx.send({
+      type: "add_drawing",
+      drawing: { id: d.id, kind: d.kind, points: d.points, text: d.text || "", color: d.color || "", width: d.width || 0 },
+    });
+  }
+
+  // drawHandleAt — ручка редактируемой пометки под точкой, либо null. Обход
+  // с конца — сверху вниз по стопке, как в geometry.drawingAt.
+  function drawHandleAt(x, y) {
+    const threshold = DRAW_HANDLE_PX / (ctx.world.scale.x || 1);
+    const drawings = ctx.scene.drawings || {};
+    const ids = Object.keys(drawings);
+    for (let k = ids.length - 1; k >= 0; k--) {
+      const d = drawings[ids[k]];
+      if (!ownDrawing(d)) continue;
+      for (const h of drawingHandles(d)) {
+        if (Math.hypot(h.x - x, h.y - y) <= threshold) return { id: ids[k], index: h.index };
+      }
+    }
+    return null;
+  }
+
+  // beginDrawEdit — попытка начать правку вместо рисования нового. Ручка
+  // важнее тела: она лежит прямо НА линии, и без приоритета переформовать
+  // угол было бы нельзя — жест всегда уезжал бы в перенос целиком.
+  function beginDrawEdit(x, y) {
+    const handle = drawHandleAt(x, y);
+    if (handle) {
+      drawEdit = { id: handle.id, index: handle.index };
+      return true;
+    }
+    const id = drawingAt(x, y, ctx.scene.drawings || {}, ctx.world.scale.x || 1, 8, ownDrawing);
+    if (!id) return false;
+    const d = ctx.scene.drawings[id];
+    drawEdit = { id, index: null, startX: x, startY: y, origin: d.points.map((p) => ({ x: p.x, y: p.y })) };
+    return true;
+  }
+
+  function moveDrawEdit(x, y) {
+    const d = ctx.scene.drawings[drawEdit.id];
+    if (!d) {
+      // Пометку успели стереть с другого экрана прямо посреди жеста.
+      drawEdit = null;
+      return;
+    }
+    if (drawEdit.index === null) {
+      const dx = x - drawEdit.startX;
+      const dy = y - drawEdit.startY;
+      d.points = drawEdit.origin.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+    } else {
+      d.points[drawEdit.index] = { x, y };
+    }
+    ctx.dirty.drawings = true;
+    ctx.render();
+    sendDrawingUpdate(d);
   }
 
   function sendDrawing(kind, points, text) {
@@ -303,6 +404,15 @@ export function createInteraction(ctx) {
       eraseDrawingAt(x, y);
       return;
     }
+    // Фигура не выбрана — это режим правки: ничего не создаём, только
+    // двигаем уже нарисованное. Разделение на два режима вместо «сначала
+    // пробуем правку, потом рисуем» — потому что смешанный вариант нельзя
+    // было предсказать рукой: начал штрих чуть ближе к чужой линии, чем
+    // ожидал, и вместо новой стрелки утащил соседнюю.
+    if (!drawSettings.shape) {
+      beginDrawEdit(x, y);
+      return;
+    }
     if (drawSettings.shape === "text") {
       placeDrawingText(x, y);
       return;
@@ -315,6 +425,10 @@ export function createInteraction(ctx) {
   function moveDraw(x, y) {
     if (erasing) {
       eraseDrawingAt(x, y);
+      return;
+    }
+    if (drawEdit) {
+      moveDrawEdit(x, y);
       return;
     }
     if (!drawStroke) return;
@@ -331,6 +445,14 @@ export function createInteraction(ctx) {
   }
 
   function endDraw() {
+    if (drawEdit) {
+      // Итоговое положение — обязательно и без throttle: промежуточные
+      // отправки могли оборваться на любом шаге (см. sendDrawingUpdate).
+      const edited = ctx.scene.drawings[drawEdit.id];
+      if (edited) sendDrawingUpdate(edited, true);
+      drawEdit = null;
+      return;
+    }
     const stroke = drawStroke;
     drawStroke = null;
     erasing = false;
@@ -349,9 +471,47 @@ export function createInteraction(ctx) {
 
   function cancelDraw() {
     erasing = false;
+    // Начатую правку просто прекращаем — уже отправленное не откатываем, как
+    // и у переформовки тумана: «отмена» тут означает «убрал руки», а не
+    // «верни как было».
+    drawEdit = null;
     if (!drawStroke) return;
     drawStroke = null;
     preview.clear();
+  }
+
+  // drawingTextAt / editDrawingText — правка уже поставленной подписи
+  // двойным кликом по ней. Разделены на синхронный поиск и асинхронную
+  // правку, потому что вызывающему (обработчику dblclick) нужно СРАЗУ
+  // решить, его это случай или нет, а модалка ввода — это await.
+  function drawingTextAt(x, y) {
+    return drawingAt(x, y, ctx.scene.drawings || {}, ctx.world.scale.x || 1, 8, (d) => d.kind === "text" && ownDrawing(d));
+  }
+
+  async function editDrawingText(id) {
+    const d = ctx.scene.drawings[id];
+    if (!d) return;
+    const text = await showPrompt("Текст подписи", { title: "Подпись на карте", value: d.text || "" });
+    if (text === null || !text.trim()) return;
+    d.text = text.trim();
+    ctx.dirty.drawings = true;
+    ctx.render();
+    sendDrawingUpdate(d, true);
+  }
+
+  // drawHoverFeedback — что под курсором, пока в инструменте «Пометки»
+  // ничего не тащим: курсор говорит, что случится по нажатию, а подпись —
+  // чья это пометка (требование «мастер видит, кто что нарисовал»).
+  // distanceLabel тут свободна: линейка и драг токена — другие инструменты.
+  function drawHoverFeedback(x, y) {
+    const hoverId = drawingAt(x, y, ctx.scene.drawings || {}, ctx.world.scale.x || 1, 8);
+    const hovered = hoverId ? ctx.scene.drawings[hoverId] : null;
+    const editable = hovered && ownDrawing(hovered);
+    // Курсор «схватить/перенести» — только в режиме правки: пока выбрана
+    // фигура, нажатие всё равно начнёт новый штрих, и обещать другое нельзя.
+    canvas.style.cursor = ctx.drawEditing && editable ? (drawHandleAt(x, y) ? "grab" : "move") : "";
+    if (editable) distanceLabel.show(x, y, hovered.authorName || "ДМ");
+    else distanceLabel.hide();
   }
 
   // eraseDrawingAt — стереть пометку под точкой: инструментом «Ластик» или
@@ -611,6 +771,7 @@ export function createInteraction(ctx) {
       ctx.dirty.walls = true;
       ctx.dirty.buildings = true;
       ctx.dirty.manualFog = true;
+      ctx.dirty.drawings = true; // ручки правки пометок — тоже «только в своём инструменте»
       // ctx.gridEditActive/ctx.gridEditHandle читает layers/grid.js — сама
       // подсветка "ручки" (красный квадрат) рисуется там на update(), тут
       // только считаем ЕЁ ОДИН РАЗ (по центру вьюпорта — см. gridHandleCell)
@@ -943,18 +1104,8 @@ export function createInteraction(ctx) {
       const scale = ctx.world.scale.x || 1;
 
       if (tool === "draw") {
-        if (drawStroke || erasing) {
-          moveDraw(x, y);
-          return;
-        }
-        // Пока ничего не рисуем — подпись под курсором говорит, чья это
-        // пометка (требование «мастер видит, кто что нарисовал»). Своя
-        // отдельная плашка не нужна: distanceLabel в инструменте "Рисование"
-        // всё равно свободна (линейка и драг токена — другие инструменты).
-        const hoverId = drawingAt(x, y, ctx.scene.drawings || {}, scale, 8);
-        const hovered = hoverId ? ctx.scene.drawings[hoverId] : null;
-        if (hovered) distanceLabel.show(x, y, hovered.authorName || "ДМ");
-        else distanceLabel.hide();
+        if (drawStroke || erasing || drawEdit) moveDraw(x, y);
+        else drawHoverFeedback(x, y);
         return;
       }
 
@@ -1434,6 +1585,16 @@ export function createInteraction(ctx) {
     // мгновенно включает/выключает сам источник (см. domain.Token.LightOnly
     // и #tokenMenuLightToggleBtn в dm.js — та же операция доступна и оттуда).
     canvas.addEventListener("dblclick", (e) => {
+      if (tool === "draw") {
+        // В инструменте пометок двойной клик занят правкой подписи и ничего
+        // другого не делает: reveal токена под ней тут был бы сюрпризом.
+        if (ctx.drawEditing) {
+          const pos = mousePos(e);
+          const textId = drawingTextAt(pos.x, pos.y);
+          if (textId) editDrawingText(textId);
+        }
+        return;
+      }
       if (tool === "wall" && (wallChainLast || wallDragFrom)) {
         wallChainLast = null;
         wallDragFrom = null;
@@ -1792,10 +1953,18 @@ export function createInteraction(ctx) {
     document.addEventListener("vtt:setTool", (e) => {
       rulerActive = e.detail === "ruler";
       drawActive = e.detail === "draw";
+      // ctx.tool — то же зеркало наружу, что и в ветке ДМ: по нему
+      // layers/drawings.js решает, рисовать ли ручки правки. У игрока из
+      // инструментов только линейка и пометки, остальные слои этот флаг и
+      // так читают уже после проверки роли.
+      ctx.tool = e.detail || "select";
+      ctx.dirty.drawings = true;
       rulerFrom = null;
       cancelDraw();
       rulerLine.clear();
       distanceLabel.hide();
+      canvas.style.cursor = "";
+      ctx.render();
     });
 
     // Второй палец на планшете — жест камеры (см. ctx.touchPanning выше).
@@ -1865,7 +2034,8 @@ export function createInteraction(ctx) {
       const { x, y } = mousePos(e);
 
       if (drawActive) {
-        moveDraw(x, y);
+        if (drawStroke || erasing || drawEdit) moveDraw(x, y);
+        else if (canPlayerDraw()) drawHoverFeedback(x, y);
         return;
       }
 
@@ -1929,6 +2099,15 @@ export function createInteraction(ctx) {
       ctx.render();
       distanceLabel.show(t.x, t.y, formatDistanceValue(dragTraveled, ctx.scene.grid, limitUnits));
       ctx.send({ type: "move_own_token", token: { id: t.id, x: t.x, y: t.y } });
+    });
+
+    // Двойной клик по своей подписи — правка её текста. Других сценариев
+    // двойного клика на карте у игрока нет.
+    canvas.addEventListener("dblclick", (e) => {
+      if (!drawActive || !canPlayerDraw() || !ctx.drawEditing) return;
+      const pos = mousePos(e);
+      const textId = drawingTextAt(pos.x, pos.y);
+      if (textId) editDrawingText(textId);
     });
 
     canvas.addEventListener("pointerup", () => {
