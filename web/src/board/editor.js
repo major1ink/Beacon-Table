@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import {
   Excalidraw,
   reconcileElements,
+  newElementWith,
   CaptureUpdateAction,
 } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
@@ -57,7 +58,7 @@ function colorFor(id) {
 
 // mountBoardEditor монтирует редактор в el. scene — холст, прочитанный по
 // HTTP для первой отрисовки; дальше всё идёт через WebSocket.
-export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers } = {}) {
+export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen } = {}) {
   const root = createRoot(el);
 
   let api = null;
@@ -132,8 +133,20 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
   }
 
   function handleChange() {
+    // onChange срабатывает и на смене выделения — этим же и пользуемся,
+    // чтобы страница знала, есть ли что связывать.
+    onSelection?.(selectedElement());
     if (readOnly || sendTimer) return;
     sendTimer = setTimeout(flushChanges, SEND_DELAY_MS);
+  }
+
+  // selectedElement — выделенный элемент, если он ровно один. Связывать с
+  // заметкой скопом нечего: ссылка у элемента одна.
+  function selectedElement() {
+    if (!api) return null;
+    const ids = Object.keys(api.getAppState().selectedElementIds || {});
+    if (ids.length !== 1) return null;
+    return api.getSceneElements().find((e) => e.id === ids[0]) || null;
   }
 
   function handlePointer({ pointer }) {
@@ -166,6 +179,11 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       },
       onChange: handleChange,
       onPointerUpdate: handlePointer,
+      // Ссылку вида [[Заметка]] открываем сами (см. board/links.js), адрес —
+      // пусть открывает как обычно.
+      onLinkOpen: (element, event) => {
+        if (onLinkOpen?.(element.link)) event.preventDefault();
+      },
       viewModeEnabled: readOnly,
       theme: "dark",
       langCode: "ru-RU",
@@ -191,6 +209,17 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
     flush() {
       if (sendTimer) clearTimeout(sendTimer);
       flushChanges();
+    },
+    selectedElement,
+    // setLink вешает ссылку на элемент. newElementWith сам поднимает version
+    // и versionNonce, поэтому правка уезжает соседям обычным порядком.
+    setLink(id, link) {
+      if (!api || readOnly) return;
+      const next = api.getSceneElementsIncludingDeleted().map((e) =>
+        e.id === id ? newElementWith(e, { link }) : e
+      );
+      api.updateScene({ elements: next, captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+      handleChange();
     },
   };
 }

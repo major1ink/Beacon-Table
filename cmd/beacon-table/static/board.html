@@ -35,6 +35,11 @@
     #linkState { color: var(--text-dim); font-size: 11px; }
     #linkState.err { color: var(--danger, #e5484d); }
     #peers { color: var(--text-dim); font-size: 11px; }
+    #linkBtn {
+      cursor: pointer; padding: 4px 10px; border: none; border-radius: var(--radius);
+      background: var(--surface); color: var(--text); font: inherit; font-size: 11px;
+    }
+    #linkBtn:hover { background: var(--surface-hover); }
 
     #editorWrap { flex: 1 1 auto; min-height: 0; position: relative; }
     /* Excalidraw тянется по контейнеру, но своей высоты не имеет. */
@@ -46,9 +51,11 @@
       max-width: 420px; pointer-events: none;
     }
   </style>
-  <script type="module" crossorigin src="/assets/board-CUA-YPdE.js"></script>
+  <script type="module" crossorigin src="/assets/board-ORidRhEL.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-DhjkwNA8.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-DKVLSjpf.js">
   <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
   <link rel="stylesheet" crossorigin href="/assets/board-BcAUh2Nm.css">
 </head>
@@ -57,6 +64,7 @@
     <span id="boardName">Доска</span>
     <span id="boardMeta"></span>
     <div id="topbarRight">
+      <button type="button" id="linkBtn" hidden>Связать с журналом</button>
       <span id="peers"></span>
       <span id="linkState"></span>
       <span id="readonlyBadge">только чтение</span>

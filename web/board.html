@@ -36,6 +36,11 @@
     #linkState { color: var(--text-dim); font-size: 11px; }
     #linkState.err { color: var(--danger, #e5484d); }
     #peers { color: var(--text-dim); font-size: 11px; }
+    #linkBtn {
+      cursor: pointer; padding: 4px 10px; border: none; border-radius: var(--radius);
+      background: var(--surface); color: var(--text); font: inherit; font-size: 11px;
+    }
+    #linkBtn:hover { background: var(--surface-hover); }
 
     #editorWrap { flex: 1 1 auto; min-height: 0; position: relative; }
     /* Excalidraw тянется по контейнеру, но своей высоты не имеет. */
@@ -53,6 +58,7 @@
     <span id="boardName">Доска</span>
     <span id="boardMeta"></span>
     <div id="topbarRight">
+      <button type="button" id="linkBtn" hidden>Связать с журналом</button>
       <span id="peers"></span>
       <span id="linkState"></span>
       <span id="readonlyBadge">только чтение</span>
