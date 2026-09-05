@@ -36,11 +36,23 @@
     #linkState { color: var(--text-dim); font-size: 11px; }
     #linkState.err { color: var(--danger, #e5484d); }
     #peers { color: var(--text-dim); font-size: 11px; }
-    #linkBtn {
+    #linkBtn, #imageBtn {
       cursor: pointer; padding: 4px 10px; border: none; border-radius: var(--radius);
       background: var(--surface); color: var(--text); font: inherit; font-size: 11px;
     }
-    #linkBtn:hover { background: var(--surface-hover); }
+    #linkBtn:hover, #imageBtn:hover { background: var(--surface-hover); }
+
+    /* Выбор картинки из уже загруженных. */
+    .image-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 8px; max-height: 320px; overflow: auto; padding: 2px;
+    }
+    .image-cell {
+      cursor: pointer; padding: 0; border: 2px solid transparent; border-radius: var(--radius);
+      background: var(--surface); aspect-ratio: 4 / 3; overflow: hidden;
+    }
+    .image-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .image-cell.on { border-color: var(--accent, #7c6cf0); }
 
     #editorWrap { flex: 1 1 auto; min-height: 0; position: relative; }
     /* Excalidraw тянется по контейнеру, но своей высоты не имеет. */
@@ -88,6 +100,7 @@
     <span id="boardName">Доска</span>
     <span id="boardMeta"></span>
     <div id="topbarRight">
+      <button type="button" id="imageBtn" hidden>Картинка</button>
       <button type="button" id="linkBtn" hidden>Связать с журналом</button>
       <span id="peers"></span>
       <span id="linkState"></span>

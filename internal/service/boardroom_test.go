@@ -401,3 +401,20 @@ func TestBoardRoomIgnoresFilesFromReadOnly(t *testing.T) {
 	sv.Dispatch(BoardMsg{Type: "board_files", Files: []BoardFile{{FileID: "f1", URL: "/uploads/boards/x.png"}}})
 	editor.quiet(t, "board_files")
 }
+
+// Картинки досок — не ДМ-ская библиотека: доску правит и игрок, которому её
+// открыли, значит и картинку он вставить должен.
+func TestBoardAssetKindIsNotDMOnly(t *testing.T) {
+	if dmOnlyKind(domain.AssetKindBoards) {
+		t.Error("картинки досок стали доступны только ДМ — игрок не сможет вставить картинку")
+	}
+	found := false
+	for _, k := range domain.AssetKinds {
+		if k == domain.AssetKindBoards {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("вид ассета boards не в списке — библиотека картинок доски окажется пустой")
+	}
+}

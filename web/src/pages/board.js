@@ -4,7 +4,7 @@
 // Сохранением страница не занимается вовсе: правки уходят по WebSocket, на
 // диск пишет сервер.
 import { createElement } from "react";
-import { fetchMe, fetchBoard, fetchBoardScene, fetchJournal, fetchJournalEntry, uploadFile } from "../api.js";
+import { fetchMe, fetchBoard, fetchBoardScene, fetchJournal, fetchJournalEntry, uploadFile, fetchBoardImages } from "../api.js";
 import { mountBoardEditor } from "../board/editor.js";
 import { parseWikilink, wikilink, findEntryByTitle } from "../board/links.js";
 import { openModal, showAlert } from "../modal.js";
@@ -18,6 +18,7 @@ const metaEl = document.getElementById("boardMeta");
 const readonlyBadge = document.getElementById("readonlyBadge");
 const linkState = document.getElementById("linkState");
 const linkBtn = document.getElementById("linkBtn");
+const imageBtn = document.getElementById("imageBtn");
 const peersEl = document.getElementById("peers");
 
 // Доска открывается плавающим окном по ссылке board.html?id=… — см.
@@ -198,6 +199,63 @@ function extFor(mime) {
   return "";
 }
 
+// MAX_INSERT — во сколько вписываем картинку при вставке. Полноразмерная
+// карта на 4000 пикселей закрыла бы весь холст; растянуть обратно можно
+// руками.
+const MAX_INSERT = 600;
+
+// pickImage — выбор из уже загруженного. Размеры берём у самой картинки:
+// сервер их не хранит, а Excalidraw ждёт готовые ширину и высоту.
+async function pickImage() {
+  let images = [];
+  try {
+    images = await fetchBoardImages();
+  } catch {
+    images = [];
+  }
+  if (!images.length) {
+    showAlert("Картинок пока нет. Перетащи файл на доску — он попадёт сюда.");
+    return null;
+  }
+  let chosen = null;
+  const ok = await openModal({
+    title: "Картинка на доску",
+    okLabel: "Вставить",
+    buildBody: (body) => {
+      const grid = document.createElement("div");
+      grid.className = "image-grid";
+      for (const img of images) {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "image-cell";
+        cell.title = img.name;
+        const pic = document.createElement("img");
+        pic.src = img.url;
+        pic.alt = img.name;
+        cell.appendChild(pic);
+        cell.onclick = () => {
+          chosen = img;
+          for (const el of grid.children) el.classList.toggle("on", el === cell);
+        };
+        grid.appendChild(cell);
+      }
+      body.appendChild(grid);
+    },
+    onOk: () => chosen,
+    onCancel: () => null,
+  });
+  if (!ok) return null;
+  // Натуральный размер знает только сама картинка.
+  const size = await new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve({ w: probe.naturalWidth, h: probe.naturalHeight });
+    probe.onerror = () => resolve({ w: 320, h: 240 });
+    probe.src = ok.url;
+  });
+  const k = Math.min(1, MAX_INSERT / Math.max(size.w, size.h));
+  return { url: ok.url, width: Math.round(size.w * k), height: Math.round(size.h * k) };
+}
+
 (async function boot() {
   if (!boardId) {
     fail("Доска не указана.");
@@ -262,6 +320,12 @@ function extFor(mime) {
   }
   await refreshNotes();
   window.addEventListener("focus", refreshNotes);
+
+  imageBtn.hidden = readOnly;
+  imageBtn.onclick = async () => {
+    const picked = await pickImage();
+    if (picked) await editor.insertImage(picked);
+  };
 
   linkBtn.onclick = async () => {
     if (!selected) return;

@@ -410,6 +410,12 @@ export async function deleteBoard(id) {
 export async function fetchBoardScene(id) {
   return apiFetch(`/api/boards/${id}/scene`);
 }
+// fetchBoardImages — картинки, уже загруженные на доски этого мира: их можно
+// вставить повторно, не заливая тот же файл заново. Отдельно от fetchAssets —
+// та библиотека ДМ-ская, а доску правит и игрок.
+export async function fetchBoardImages() {
+  return apiFetch("/api/board-images");
+}
 // importBoard — доска из файла Excalidraw: .excalidraw.md из ваулта Obsidian
 // либо голый .excalidraw. Имя необязательно: без него сервер возьмёт имя
 // файла. Не через apiFetch — тут multipart, а не JSON.

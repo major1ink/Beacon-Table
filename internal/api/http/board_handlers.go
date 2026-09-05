@@ -198,6 +198,31 @@ func (a *API) handleBoardScene(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, doc.Scene)
 }
 
+// handleBoardImages — картинки, уже загруженные на доски этого мира, чтобы
+// вставить их повторно, а не заливать тот же файл заново.
+//
+// Отдельно от /api/assets: та библиотека целиком ДМ-ская, а доску правит и
+// игрок, которому её открыли (см. domain.AssetKindBoards).
+func (a *API) handleBoardImages(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireAccount(w, r); !ok {
+		return
+	}
+	world, ok := a.requireWorld(w)
+	if !ok {
+		return
+	}
+	all, err := world.Assets.List(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
+		return
+	}
+	items := all[domain.AssetKindBoards]
+	if items == nil {
+		items = []domain.AssetInfo{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 func (a *API) handleBoardGet(w http.ResponseWriter, r *http.Request) {
 	acc, ok := a.requireAccount(w, r)
 	if !ok {

@@ -10,6 +10,7 @@ import {
   reconcileElements,
   newElementWith,
   convertToExcalidrawElements,
+  viewportCoordsToSceneCoords,
   CaptureUpdateAction,
 } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
@@ -53,6 +54,15 @@ function colorFor(id) {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   const c = PEER_COLORS[h % PEER_COLORS.length];
   return { background: c, stroke: c };
+}
+
+// fileIDForURL — устойчивый идентификатор картинки по её адресу. Excalidraw
+// считает свой по содержимому файла; нам содержимое ни к чему, а вот
+// повторная вставка одной и той же картинки должна ссылаться на неё же.
+function fileIDForURL(url) {
+  let h = 0;
+  for (let i = 0; i < url.length; i++) h = (h * 31 + url.charCodeAt(i)) >>> 0;
+  return "lib-" + h.toString(36) + "-" + url.length;
 }
 
 function blobToDataURL(blob) {
@@ -334,6 +344,39 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       flushChanges();
     },
     selectedElement,
+    // insertImage кладёт на середину экрана картинку, уже лежащую в загрузках
+    // стола. fileId считается от адреса, поэтому одна и та же картинка,
+    // вставленная дважды, не удваивается в файле доски.
+    async insertImage({ url, width, height }) {
+      if (!api || readOnly) return;
+      const fileId = fileIDForURL(url);
+      if (!knownFiles.has(fileId)) {
+        knownFiles.set(fileId, url);
+        await addFileToScene(fileId, url);
+        conn.sendFiles([{ fileId, url }]);
+      }
+      const state = api.getAppState();
+      const at = viewportCoordsToSceneCoords(
+        { clientX: state.width / 2, clientY: state.height / 2 },
+        state
+      );
+      const made = convertToExcalidrawElements([
+        {
+          type: "image",
+          fileId,
+          x: at.x - width / 2,
+          y: at.y - height / 2,
+          width,
+          height,
+          status: "saved",
+        },
+      ]);
+      api.updateScene({
+        elements: [...api.getSceneElementsIncludingDeleted(), ...made],
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+      handleChange();
+    },
     // linkedNotes — названия записей, на которые ссылается доска: страница по
     // ним перечитывает тексты врезок.
     linkedNotes() {
