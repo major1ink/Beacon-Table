@@ -144,6 +144,30 @@ Beacon Table я делал немного с другой стороны.
 
 ![Журнал стола: список записей слева, открытая статья справа](docs/assets/screenshots/journal.png)
 
+### Доски и пометки
+
+Поверх карты можно рисовать прямо во время боя: кисть, линия, стрелка,
+прямоугольник, круг, текст. У каждого свой цвет, ДМ решает, могут ли рисовать
+игроки, и стирает как отдельную пометку, так и весь слой.
+
+![Слой пометок поверх карты: стрелка и рамка на переходе через реку, панель инструментов справа](docs/assets/screenshots/scene-drawings.png)
+
+Рядом с заметками живут доски — бесконечные холсты для схемы расследования,
+связей между NPC или набросков карты мира. Досок может быть сколько угодно,
+каждая со своим автором и правами: общая на стол или личная.
+
+Редактор доски — Excalidraw, и файл доски одновременно является файлом плагина
+Excalidraw для Obsidian. Одну и ту же доску можно править за столом и в ваулте.
+
+- несколько человек рисуют одновременно, видно курсоры и выделение соседей;
+- импорт `.excalidraw.md` из ваулта вместе с картинками и, по желанию,
+  заметками, на которые доска ссылается;
+- элемент можно связать с записью журнала — клик по значку открывает её, а
+  галочкой фигура превращается во врезку с живым текстом записи;
+- картинки лежат в загрузках стола, а не внутри файла доски.
+
+![Доска, перенесённая из Obsidian: сцены, стрелки, картинка и связанные с журналом врезки](docs/assets/screenshots/board-imported.png)
+
 ### Атмосфера
 
 У каждой сцены может быть свой фоновый звук.
@@ -223,6 +247,7 @@ docker compose up -d
 | [Импорт из Foundry VTT](https://github.com/major1ink/Beacon-Table/wiki/Импорт-из-Foundry-VTT) | Что именно переносится и как работают повторные импорты |
 | [Экспорт и импорт мира](https://github.com/major1ink/Beacon-Table/wiki/Экспорт-и-импорт-мира) | Перенос мира между серверами одним `.zip` |
 | [Несколько ДМ](https://github.com/major1ink/Beacon-Table/wiki/Несколько-ДМ) | Как подключить соведущего к тому же столу |
+| [Доски и пометки](https://github.com/major1ink/Beacon-Table/wiki/Доски-и-пометки) | Права, совместная правка, совместимость с плагином Excalidraw для Obsidian и импорт досок из ваулта |
 | [Сборка из исходников](https://github.com/major1ink/Beacon-Table/wiki/Сборка-из-исходников) | Для сборки нужен только Go — фронтенд уже собран |
 
 ---
@@ -304,6 +329,24 @@ Players have their own accounts, character sheets, inventories and permissions.
 The built-in content catalog contains SRD 5.1/5.2 content. DMs can add their own monsters, spells and items.
 
 DM notes work like a small wiki, with folders and links between notes. The table journal uses regular `.md` files and allows each entry to be visible to everyone at the table or only to a specific player.
+
+### Boards and annotations
+
+Anyone at the table can draw over the map during a fight: brush, line, arrow,
+rectangle, circle and text, each participant in their own colour. The DM
+decides whether players may draw, and can erase a single mark or the whole
+layer.
+
+Boards are infinite canvases next to the notes, with the same permission model
+as the journal: shared with the table or private, as many as you like. The
+editor is Excalidraw, and a board file *is* an Obsidian Excalidraw plugin
+file — the same board can be edited at the table and in the vault.
+
+Several people can draw on a board at once, with neighbours' cursors and
+selections visible. A `.excalidraw.md` file imports from a vault together with
+its images and, optionally, the notes it links to. A canvas element can be
+linked to a journal entry, or turned into an inset showing that entry's live
+text.
 
 ### Import and export
 
