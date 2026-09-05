@@ -161,7 +161,7 @@ function showPeers(list) {
     if (!selected) return;
     const title = await pickEntry(parseWikilink(selected.link));
     if (title === null) return;
-    editor.setLink(selected.id, title ? wikilink(title) : null);
+    editor.setLink(selected.id, title ? wikilink(title) : null, title);
     showSelection(editor.selectedElement());
   };
 

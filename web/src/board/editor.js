@@ -9,6 +9,7 @@ import {
   Excalidraw,
   reconcileElements,
   newElementWith,
+  convertToExcalidrawElements,
   CaptureUpdateAction,
 } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
@@ -54,6 +55,44 @@ function colorFor(id) {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   const c = PEER_COLORS[h % PEER_COLORS.length];
   return { background: c, stroke: c };
+}
+
+// LABEL_SHAPES — во что Excalidraw умеет вкладывать подпись. У стрелки и
+// линии подпись тоже бывает, но там она посреди линии и смысл другой.
+const LABEL_SHAPES = new Set(["rectangle", "ellipse", "diamond"]);
+
+// needsLabel — фигура, которую есть смысл подписать: подходящая формой и ещё
+// не подписанная. Чужой текст не трогаем.
+function needsLabel(el, all) {
+  if (!LABEL_SHAPES.has(el.type)) return false;
+  const bound = el.boundElements || [];
+  if (bound.some((b) => b.type === "text")) return false;
+  return !all.some((e) => e.containerId === el.id && !e.isDeleted);
+}
+
+// makeBoundText — подпись внутри фигуры. Считает её не наш код, а сам
+// Excalidraw: convertToExcalidrawElements меряет текст шрифтом и возвращает
+// пару «контейнер + текст» с готовой привязкой. Контейнер оттуда мы
+// выбрасываем — свой элемент правим сами, чтобы не растерять его поля.
+function makeBoundText(el, text) {
+  const made = convertToExcalidrawElements([
+    {
+      type: el.type,
+      id: el.id,
+      x: el.x,
+      y: el.y,
+      width: el.width,
+      height: el.height,
+      strokeColor: el.strokeColor,
+      backgroundColor: el.backgroundColor,
+      label: { text, textAlign: "center", verticalAlign: "middle" },
+    },
+  ]);
+  const label = made.find((e) => e.type === "text");
+  if (!label) return null;
+  // containerId переписываем на всякий случай: конвертер волен выдать пару со
+  // своим id контейнера, а привязка нужна к НАШЕМУ элементу.
+  return label.containerId === el.id ? label : newElementWith(label, { containerId: el.id });
 }
 
 // mountBoardEditor монтирует редактор в el. scene — холст, прочитанный по
@@ -211,13 +250,27 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       flushChanges();
     },
     selectedElement,
-    // setLink вешает ссылку на элемент. newElementWith сам поднимает version
-    // и versionNonce, поэтому правка уезжает соседям обычным порядком.
-    setLink(id, link) {
+    // setLink вешает ссылку на элемент и, если фигура пустая, подписывает её
+    // названием: сама ссылка рисуется одним значком в углу, и без подписи на
+    // холсте остаётся немой кружок. Так же это выглядит и в ваулте — там
+    // подпись тоже обычный текст внутри фигуры, а не свойство ссылки.
+    //
+    // newElementWith сам поднимает version и versionNonce, поэтому правка
+    // уезжает соседям обычным порядком.
+    setLink(id, link, label) {
       if (!api || readOnly) return;
-      const next = api.getSceneElementsIncludingDeleted().map((e) =>
-        e.id === id ? newElementWith(e, { link }) : e
-      );
+      const all = api.getSceneElementsIncludingDeleted();
+      const target = all.find((e) => e.id === id);
+      if (!target) return;
+
+      const text = label && needsLabel(target, all) ? makeBoundText(target, label) : null;
+      const next = all.map((e) => {
+        if (e.id !== id) return e;
+        const updates = { link };
+        if (text) updates.boundElements = [...(e.boundElements || []), { type: "text", id: text.id }];
+        return newElementWith(e, updates);
+      });
+      if (text) next.push(text);
       api.updateScene({ elements: next, captureUpdate: CaptureUpdateAction.IMMEDIATELY });
       handleChange();
     },
