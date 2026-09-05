@@ -243,3 +243,34 @@ func (s *Scene) TextElements() []*Element {
 	}
 	return out
 }
+
+// CarryOverPluginFields переносит в новую сцену поля плагина Obsidian,
+// которые редактор Excalidraw выбрасывает при загрузке.
+//
+// Пока такое поле одно — rawText: исходный markdown подписи с [[ссылками]].
+// Переносится только у подписей с неизменившимся originalText — у правленых
+// старый markdown уже не к месту.
+func CarryOverPluginFields(old, next *Scene) {
+	if old == nil || next == nil {
+		return
+	}
+	prev := make(map[string]*Element, len(old.Elements))
+	for _, e := range old.Elements {
+		if e != nil && e.RawText != "" {
+			prev[e.ID] = e
+		}
+	}
+	if len(prev) == 0 {
+		return
+	}
+	for _, e := range next.Elements {
+		if e == nil || e.RawText != "" {
+			continue
+		}
+		was, ok := prev[e.ID]
+		if !ok || was.OriginalText != e.OriginalText {
+			continue
+		}
+		e.RawText = was.RawText
+	}
+}

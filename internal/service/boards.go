@@ -49,6 +49,8 @@ type BoardService interface {
 	Import(ctx context.Context, v domain.JournalViewer, name string, raw []byte) (*domain.Board, error)
 	// Scene — холст доски; нужен уровень чтения.
 	Scene(ctx context.Context, v domain.JournalViewer, id string) (*excalidraw.Document, error)
+	// SaveScene заменяет холст; нужен уровень правки. Шапку не трогает.
+	SaveScene(ctx context.Context, v domain.JournalViewer, id string, scene *excalidraw.Scene) error
 	// Rename — только автор и ДМ (см. domain.Sharing.CanManage).
 	Rename(ctx context.Context, v domain.JournalViewer, id, name string) (*domain.Board, error)
 	// SetAccess переписывает раздачу прав — только автор и ДМ.
@@ -182,6 +184,38 @@ func (s *boardService) Scene(ctx context.Context, v domain.JournalViewer, id str
 		return nil, domain.ErrForbidden
 	}
 	return s.boards.Scene(ctx, id)
+}
+
+// SaveScene — не через manageable: рисовать может и тот, кому доску открыли
+// на правку, а переименовывать и раздавать ключи — только автор и ДМ.
+func (s *boardService) SaveScene(ctx context.Context, v domain.JournalViewer, id string, scene *excalidraw.Scene) error {
+	if scene == nil {
+		return &domain.ValidationError{Msg: "пустой холст"}
+	}
+	if err := scene.Validate(); err != nil {
+		return &domain.ValidationError{Msg: err.Error()}
+	}
+	if len(scene.Elements) > maxBoardElements {
+		return &domain.ValidationError{Msg: "на доске слишком много элементов"}
+	}
+	b, err := s.boards.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !b.CanSee(v) {
+		return domain.ErrNotFound
+	}
+	if !b.CanEdit(v) {
+		return domain.ErrForbidden
+	}
+	found, err := s.boards.SetScene(ctx, id, &excalidraw.Document{Scene: scene})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 // manageable — «доска существует и viewer вправе ею распоряжаться», общая

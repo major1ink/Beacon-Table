@@ -263,6 +263,9 @@ func (s *Store) SetScene(ctx context.Context, id string, doc *excalidraw.Documen
 	if len(doc.EmbeddedFiles) == 0 && old != nil {
 		doc.EmbeddedFiles = old.EmbeddedFiles
 	}
+	if old != nil {
+		excalidraw.CarryOverPluginFields(old.Scene, doc.Scene)
+	}
 	return true, s.save(b, doc)
 }
 

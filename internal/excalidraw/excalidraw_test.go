@@ -195,3 +195,35 @@ func TestMarkdownWritesTextElementsForSearch(t *testing.T) {
 		t.Error("рисунок записан не обычным json-блоком")
 	}
 }
+
+// rawText возвращается только у подписей, которых не касались.
+func TestCarryOverPluginFields(t *testing.T) {
+	old := &Scene{Elements: []*Element{
+		{ID: "a", Type: TypeText, OriginalText: "Холод", RawText: "[[Холод, что пришёл с юга]]"},
+		{ID: "b", Type: TypeText, OriginalText: "Азорн", RawText: "[[Азорн]]"},
+		{ID: "c", Type: TypeRectangle},
+	}}
+	next := &Scene{Elements: []*Element{
+		// не менялась
+		{ID: "a", Type: TypeText, OriginalText: "Холод"},
+		// переписали
+		{ID: "b", Type: TypeText, OriginalText: "Кто-то другой"},
+		{ID: "c", Type: TypeRectangle},
+		// новая
+		{ID: "d", Type: TypeText, OriginalText: "Свежая подпись"},
+	}}
+	CarryOverPluginFields(old, next)
+
+	if got := next.Elements[0].RawText; got != "[[Холод, что пришёл с юга]]" {
+		t.Errorf("rawText неизменённой подписи не вернулся: %q", got)
+	}
+	if got := next.Elements[1].RawText; got != "" {
+		t.Errorf("rawText переписанной подписи подставился: %q", got)
+	}
+	if got := next.Elements[3].RawText; got != "" {
+		t.Errorf("у новой подписи взялся чужой rawText: %q", got)
+	}
+	// Пустые сцены.
+	CarryOverPluginFields(nil, next)
+	CarryOverPluginFields(old, nil)
+}

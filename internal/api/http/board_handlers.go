@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/excalidraw"
 	"beacon-table/internal/service"
 )
 
@@ -196,6 +197,31 @@ func (a *API) handleBoardScene(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, doc.Scene)
+}
+
+// handleBoardSceneSave — запись холста. Тело — сцена Excalidraw ровно в том
+// виде, в каком её отдаёт редактор (см. serializeAsJSON в
+// web/src/board/editor.js).
+func (a *API) handleBoardSceneSave(w http.ResponseWriter, r *http.Request) {
+	acc, ok := a.requireAccount(w, r)
+	if !ok {
+		return
+	}
+	world, ok := a.requireWorld(w)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBoardUpload)
+	var scene excalidraw.Scene
+	if err := json.NewDecoder(r.Body).Decode(&scene); err != nil {
+		writeErr(w, http.StatusBadRequest, "не удалось разобрать холст")
+		return
+	}
+	if err := world.Boards.SaveScene(r.Context(), journalViewer(acc), r.PathValue("id"), &scene); err != nil {
+		writeBoardErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) handleBoardGet(w http.ResponseWriter, r *http.Request) {

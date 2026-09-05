@@ -2,20 +2,20 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
+  <!-- Шрифты только свои: Excalidraw дописывает к каждому запасной адрес на
+       esm.sh, пропсом это не отключается (см. board/editor.js). -->
+  <meta http-equiv="Content-Security-Policy" content="font-src 'self' data:" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>Beacon Table — Доска</title>
   <style>
-    /* Доска: бесконечный холст на весь экран плюс тонкая шапка сверху.
-       Страница живёт плавающим окном поверх стола (см. floating-window.js)
-       и у ДМ, и у игрока — как журнал. */
+    /* Редактор на весь экран плюс тонкая шапка. Страница живёт плавающим
+       окном поверх стола (см. floating-window.js) у обеих ролей. */
     html, body { height: 100%; }
     body {
       margin: 0; background: var(--bg); color: var(--text); font-size: 13px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       display: flex; flex-direction: column; overflow: hidden;
     }
-    button { cursor: pointer; padding: 6px 11px; border: none; border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
-    button:hover { background: var(--surface-hover); }
 
     #topbar {
       flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
@@ -31,48 +31,38 @@
       background: var(--surface); color: var(--text-dim); font-size: 11px;
     }
     #readonlyBadge.on { display: inline-block; }
+    /* Пустое, пока всё сохранено. */
+    #saveState { color: var(--text-dim); font-size: 11px; }
+    #saveState.err { color: var(--danger, #e5484d); }
 
-    /* Обёртка канваса: Pixi подгоняет размер под неё через ResizeObserver. */
-    #canvasWrap { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
-    #board { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
-    #board.panning { cursor: grabbing; }
+    #editorWrap { flex: 1 1 auto; min-height: 0; position: relative; }
+    /* Excalidraw тянется по контейнеру, но своей высоты не имеет. */
+    #editorRoot { position: absolute; inset: 0; }
 
     #status {
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
       color: var(--text-dim); font-size: 13px; text-align: center; line-height: 1.5;
+      max-width: 420px; pointer-events: none;
     }
-    #zoomHud {
-      position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px;
-      padding: 5px 8px; border-radius: var(--radius-pill);
-      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-      border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
-    }
-    #zoomHud button { padding: 4px 8px; background: none; color: var(--text-dim); }
-    #zoomHud button:hover { background: var(--surface); color: var(--text); }
-    #zoomLevel { min-width: 44px; text-align: center; color: var(--text-dim); font-variant-numeric: tabular-nums; }
   </style>
-  <script type="module" crossorigin src="/assets/board-yYUPT7rt.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CvdpAfGM.js">
-  <link rel="modulepreload" crossorigin href="/assets/index-DCjyaclJ.js">
+  <script type="module" crossorigin src="/assets/board-Bv0354ap.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BHM-q9K3.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="stylesheet" crossorigin href="/assets/board-BcAUh2Nm.css">
 </head>
 <body>
   <div id="topbar">
     <span id="boardName">Доска</span>
     <span id="boardMeta"></span>
     <div id="topbarRight">
+      <span id="saveState"></span>
       <span id="readonlyBadge">только чтение</span>
     </div>
   </div>
-  <div id="canvasWrap">
-    <canvas id="board"></canvas>
+  <div id="editorWrap">
+    <div id="editorRoot"></div>
     <div id="status">Загружаю доску…</div>
-    <div id="zoomHud">
-      <button id="zoomOutBtn" title="Отдалить">−</button>
-      <span id="zoomLevel">100%</span>
-      <button id="zoomInBtn" title="Приблизить">+</button>
-      <button id="zoomResetBtn" title="Вернуться в начало координат">Сброс</button>
-    </div>
   </div>
 </body>
 </html>
