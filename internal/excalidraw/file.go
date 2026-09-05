@@ -57,8 +57,11 @@ var drawingFence = regexp.MustCompile("(?s)```(compressed-json|json)\r?\n(.*?)\r
 // embeddedFileLine — строка раздела «## Embedded Files». У плагина это
 // «<fileId>: [[файл ваулта]]», у нас — «<fileId>: /uploads/…»: картинки доски
 // лежат в загрузках стола, а не в ваулте.
+//
+// Ссылка берётся до конца строки: в именах файлов бывают пробелы, и «слово
+// без пробелов» обрезало бы адрес на первом же.
 // fileId у плагина — sha1, но завязываться на длину незачем.
-var embeddedFileLine = regexp.MustCompile(`^([A-Za-z0-9_.-]+):\s*(\[\[.+?\]\]|\S+)\s*$`)
+var embeddedFileLine = regexp.MustCompile(`^([A-Za-z0-9_.-]+):\s*(\S.*?)\s*$`)
 
 var whitespace = regexp.MustCompile(`\s+`)
 

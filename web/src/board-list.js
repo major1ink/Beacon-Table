@@ -130,6 +130,15 @@ async function importDialog() {
       boards = fileRow(body, "Файлы досок", { accept: ".md,.excalidraw", multiple: true });
       vault = fileRow(body, "Папка ваулта (необязательно)", { directory: true });
 
+      // Браузер на выбор папки пугает своим «загрузить N файлов» — счётчик
+      // там про всю папку, а не про то, что уйдёт на сервер. Предупреждаем
+      // заранее, иначе на большом ваулте это выглядит дико.
+      const warn = document.createElement("p");
+      warn.className = "bt-modal-text";
+      warn.textContent =
+        "Браузер спросит разрешение на всю папку и назовёт число файлов в ней — это его формулировка. Читаем и отправляем только то, что доска назвала по имени; остальное компьютер не покидает. Подойдёт и папка поменьше, если нужные картинки и заметки лежат в ней.";
+      body.appendChild(warn);
+
       withImages = checkRow(body, "Перенести картинки", true);
       withNotes = checkRow(body, "Завести заметки, на которые ссылается доска", false);
 

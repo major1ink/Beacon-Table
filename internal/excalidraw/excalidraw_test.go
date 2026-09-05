@@ -227,3 +227,35 @@ func TestCarryOverPluginFields(t *testing.T) {
 	CarryOverPluginFields(nil, next)
 	CarryOverPluginFields(old, nil)
 }
+
+// Адрес картинки доски содержит имя файла как есть — с пробелами и
+// кириллицей. Строка раздела обязана пережить и запись, и чтение: иначе
+// картинка молча пропадает с доски, а файл при этом на месте.
+func TestEmbeddedFileLinkWithSpaces(t *testing.T) {
+	doc := NewDocument()
+	doc.EmbeddedFiles = []EmbeddedFile{
+		{FileID: "sha1aaa", Link: "/uploads/companies/w1/boards/1788-Тронный зал.png"},
+		{FileID: "sha1bbb", Link: "[[Схема боя.png]]"},
+	}
+	md, err := doc.Markdown("name: Доска\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := ParseDocument(md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back.EmbeddedFiles) != 2 {
+		t.Fatalf("строк раздела осталось %d, ожидалось 2: %+v", len(back.EmbeddedFiles), back.EmbeddedFiles)
+	}
+	links := map[string]string{}
+	for _, f := range back.EmbeddedFiles {
+		links[f.FileID] = f.Link
+	}
+	if links["sha1aaa"] != "/uploads/companies/w1/boards/1788-Тронный зал.png" {
+		t.Errorf("адрес с пробелом прочитан как %q", links["sha1aaa"])
+	}
+	if links["sha1bbb"] != "[[Схема боя.png]]" {
+		t.Errorf("ссылка ваулта с пробелом прочитана как %q", links["sha1bbb"])
+	}
+}
