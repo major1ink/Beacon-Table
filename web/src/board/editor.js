@@ -97,7 +97,7 @@ function makeBoundText(el, text) {
 
 // mountBoardEditor монтирует редактор в el. scene — холст, прочитанный по
 // HTTP для первой отрисовки; дальше всё идёт через WebSocket.
-export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen } = {}) {
+export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen, renderNote, isNoteLink } = {}) {
   const root = createRoot(el);
 
   let api = null;
@@ -230,9 +230,13 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       UIOptions: UI_OPTIONS,
       // Ходит на oss-ai.excalidraw.com.
       aiEnabled: false,
-      // Встроенные объекты тянут чужие страницы в iframe. В файле остаются,
-      // просто не отрисовываются.
-      validateEmbeddable: false,
+      // Врезки пускаем только свои — ссылки на записи журнала. Всё чужое
+      // (YouTube, Figma) осталось запрещённым: тянуть посторонние страницы в
+      // iframe столу незачем. В файле такие элементы сохраняются, просто не
+      // отрисовываются.
+      validateEmbeddable: (link) => !!isNoteLink?.(link),
+      // Содержимое врезки рисуем сами — см. renderNote в pages/board.js.
+      renderEmbeddable: (element) => renderNote?.(element) ?? null,
     })
   );
 
@@ -250,6 +254,26 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       flushChanges();
     },
     selectedElement,
+    // linkedNotes — названия записей, на которые ссылается доска: страница по
+    // ним перечитывает тексты врезок.
+    linkedNotes() {
+      if (!api) return [];
+      const out = [];
+      for (const e of api.getSceneElements()) {
+        if (typeof e.link === "string" && e.link) out.push(e.link);
+      }
+      return out;
+    },
+    // repaint — перерисовать врезки после того, как их текст обновился.
+    // Своей сцены это не меняет, поэтому captureUpdate NEVER: в отмену такое
+    // попадать не должно.
+    repaint() {
+      if (!api) return;
+      api.updateScene({
+        elements: api.getSceneElementsIncludingDeleted(),
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    },
     // setLink вешает ссылку на элемент и, если фигура пустая, подписывает её
     // названием: сама ссылка рисуется одним значком в углу, и без подписи на
     // холсте остаётся немой кружок. Так же это выглядит и в ваулте — там
@@ -257,16 +281,20 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
     //
     // newElementWith сам поднимает version и versionNonce, поэтому правка
     // уезжает соседям обычным порядком.
-    setLink(id, link, label) {
+    setLink(id, link, label, asNote) {
       if (!api || readOnly) return;
       const all = api.getSceneElementsIncludingDeleted();
       const target = all.find((e) => e.id === id);
       if (!target) return;
 
-      const text = label && needsLabel(target, all) ? makeBoundText(target, label) : null;
+      // Врезка — это тип embeddable: только его Excalidraw отдаёт нам на
+      // отрисовку. Фигура при этом становится рамкой с текстом записи, и
+      // своей формы (круг, ромб) у неё больше нет.
+      const text = !asNote && label && needsLabel(target, all) ? makeBoundText(target, label) : null;
       const next = all.map((e) => {
         if (e.id !== id) return e;
         const updates = { link };
+        if (asNote) updates.type = "embeddable";
         if (text) updates.boundElements = [...(e.boundElements || []), { type: "text", id: text.id }];
         return newElementWith(e, updates);
       });

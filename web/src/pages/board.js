@@ -3,10 +3,12 @@
 //
 // Сохранением страница не занимается вовсе: правки уходят по WebSocket, на
 // диск пишет сервер.
-import { fetchMe, fetchBoard, fetchBoardScene, fetchJournal } from "../api.js";
+import { createElement } from "react";
+import { fetchMe, fetchBoard, fetchBoardScene, fetchJournal, fetchJournalEntry } from "../api.js";
 import { mountBoardEditor } from "../board/editor.js";
 import { parseWikilink, wikilink, findEntryByTitle } from "../board/links.js";
 import { openModal, showAlert } from "../modal.js";
+import { renderNoteHtml } from "../notes/markdown.js";
 import { openFloatingWindow } from "../floating-window.js";
 
 const editorRoot = document.getElementById("editorRoot");
@@ -32,6 +34,44 @@ let me = "";
 // заводят их редко, а ходить в сеть на каждый клик по ссылке незачем.
 let entries = [];
 let selected = null;
+// Текст записей для врезок. Держим отдельно от списка: список приходит без
+// текста (см. handleJournalList), а врезка рисуется на каждый кадр — ходить
+// в сеть оттуда нельзя.
+const noteHtml = new Map();
+
+// loadNote кладёт в кэш готовый HTML записи. Возвращает, изменилось ли что-то
+// — по этому редактор решает, надо ли перерисовывать врезки.
+async function loadNote(entry) {
+  try {
+    const full = await fetchJournalEntry(entry.id);
+    const html = renderNoteHtml(full.content || "");
+    if (noteHtml.get(entry.id) === html) return false;
+    noteHtml.set(entry.id, html);
+    return true;
+  } catch {
+    return false; // нет доступа или запись удалили — врезка покажет, что пусто
+  }
+}
+
+// renderNote — содержимое врезки. Excalidraw зовёт это на отрисовку, поэтому
+// только чтение из кэша, никакой сети.
+function renderNote(element) {
+  const title = parseWikilink(element.link);
+  if (!title) return null;
+  const entry = findEntryByTitle(entries, title);
+  const html = entry ? noteHtml.get(entry.id) : null;
+  return createElement("div", { className: "board-note" }, [
+    createElement("div", { className: "board-note-title", key: "t" }, title),
+    html
+      ? createElement("div", {
+          className: "board-note-body",
+          key: "b",
+          dangerouslySetInnerHTML: { __html: html },
+        })
+      : createElement("div", { className: "board-note-empty", key: "b" },
+          entry ? "Запись пока пуста." : "Такой записи в журнале нет."),
+  ]);
+}
 
 // openJournal — то же окно журнала, что открывают значки заметок на карте и
 // боковое меню (key "journal", см. pages/dm.js).
@@ -73,6 +113,7 @@ function showSelection(el) {
 
 async function pickEntry(current) {
   let select = null;
+  let asNote = null;
   const ok = await openModal({
     title: "Связать с записью журнала",
     okLabel: "Связать",
@@ -96,8 +137,26 @@ async function pickEntry(current) {
       }
       select.value = current || "";
       body.appendChild(select);
+
+      // Врезка — это уже не фигура со ссылкой, а рамка с текстом записи:
+      // формы у неё не остаётся. Поэтому выбор явный, а не по умолчанию.
+      asNote = document.createElement("label");
+      asNote.className = "bt-modal-text";
+      asNote.style.cssText = "display:flex;align-items:center;gap:8px;";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      const cap = document.createElement("span");
+      cap.textContent = "Показывать текст записи прямо на доске";
+      asNote.append(box, cap);
+      asNote.check = box;
+      body.appendChild(asNote);
+
+      const note = document.createElement("p");
+      note.className = "bt-modal-text";
+      note.textContent = "Тогда фигура станет рамкой с текстом — своей формы у неё не останется. Текст живой: правка записи видна на доске, в файле доски он не хранится.";
+      body.appendChild(note);
     },
-    onOk: () => select.value,
+    onOk: () => ({ title: select.value, asNote: asNote.check.checked }),
     onCancel: () => null,
   });
   return ok;
@@ -155,13 +214,38 @@ function showPeers(list) {
     onPeers: showPeers,
     onSelection: readOnly ? undefined : showSelection,
     onLinkOpen: followLink,
+    renderNote,
+    isNoteLink: (link) => parseWikilink(link) !== null,
   });
+
+  // Тексты врезок перечитываем при возврате в окно: запись правят в журнале,
+  // и доска не должна показывать вчерашний текст.
+  async function refreshNotes() {
+    const wanted = new Set();
+    for (const e of scene.elements || []) {
+      const title = e && parseWikilink(e.link);
+      const entry = title && findEntryByTitle(entries, title);
+      if (entry) wanted.add(entry);
+    }
+    for (const link of editor.linkedNotes()) {
+      const title = parseWikilink(link);
+      const entry = title && findEntryByTitle(entries, title);
+      if (entry) wanted.add(entry);
+    }
+    const changed = await Promise.all([...wanted].map(loadNote));
+    if (changed.some(Boolean)) editor.repaint();
+  }
+  await refreshNotes();
+  window.addEventListener("focus", refreshNotes);
 
   linkBtn.onclick = async () => {
     if (!selected) return;
-    const title = await pickEntry(parseWikilink(selected.link));
-    if (title === null) return;
-    editor.setLink(selected.id, title ? wikilink(title) : null, title);
+    const picked = await pickEntry(parseWikilink(selected.link));
+    if (picked === null) return;
+    const { title, asNote } = picked;
+    const entry = title && findEntryByTitle(entries, title);
+    if (entry) await loadNote(entry);
+    editor.setLink(selected.id, title ? wikilink(title) : null, title, asNote && !!title);
     showSelection(editor.selectedElement());
   };
 
