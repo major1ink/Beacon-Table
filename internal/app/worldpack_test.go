@@ -101,6 +101,8 @@ func seedWorldContent(t *testing.T, m *CompanyManager, c *domain.Company, ownerA
 		`{"active":false,"round":0,"combatants":{"c1":{"id":"c1","name":"Гвен","ownerId":"`+ownerAcc+`","characterId":"`+ownerChar+`"}}}`)
 	writeFile(t, filepath.Join(data, "journal", "Глава 1", "e1.md"),
 		"---\nowner: "+ownerAcc+"\nownerName: Гвен\ndefault: observer\naccess:\n  "+ownerAcc+": owner\n---\n# Таверна\n\n![map]("+url+"maps/map.png)\n")
+	writeFile(t, filepath.Join(data, "boards", "b1.md"),
+		"---\nexcalidraw-plugin: parsed\ntags: [excalidraw]\nname: Схема\nowner: "+ownerAcc+"\nownerName: Гвен\ndefault: observer\naccess:\n  "+ownerAcc+": owner\n---\n# Excalidraw Data\n")
 	writeFile(t, filepath.Join(data, "bestiary", "bestiary", "m1.json"),
 		`{"id":"m1","name":"Гоблин","imageUrl":"`+url+`tokens/g.png"}`)
 	writeFile(t, filepath.Join(uploads, "maps", "map.png"), "PNGDATA-map")
@@ -156,6 +158,17 @@ func TestWorldPack_RoundTrip_ContentOnly(t *testing.T) {
 	}
 	if !strings.Contains(journal, "default: observer") || !strings.Contains(journal, dstURL+"maps/map.png") {
 		t.Fatalf("журнал: видимость/URL: %s", journal)
+	}
+	board := readFile(t, filepath.Join(dstData, "boards", "b1.md"))
+	if strings.Contains(board, "owner:") || strings.Contains(board, "acc-123") {
+		t.Fatalf("привязка к аккаунту осталась в доске: %s", board)
+	}
+	// Ключи плагина и название обязаны пережить чистку, иначе файл перестанет
+	// быть доской Excalidraw.
+	for _, want := range []string{"excalidraw-plugin: parsed", "tags: [excalidraw]", "name: Схема", "default: observer"} {
+		if !strings.Contains(board, want) {
+			t.Fatalf("доска потеряла %q: %s", want, board)
+		}
 	}
 	monster := readFile(t, filepath.Join(dstData, "bestiary", "bestiary", "m1.json"))
 	if !strings.Contains(monster, dstURL+"tokens/g.png") {
@@ -248,6 +261,10 @@ func TestWorldPack_RoundTrip_WithAccounts(t *testing.T) {
 	journal := readFile(t, filepath.Join(dstData, "journal", "Глава 1", "e1.md"))
 	if !strings.Contains(journal, "owner: acc-gwen") || !strings.Contains(journal, "acc-gwen: owner") {
 		t.Fatalf("шапка журнала не сохранена при переносе с аккаунтами: %s", journal)
+	}
+	board := readFile(t, filepath.Join(dstData, "boards", "b1.md"))
+	if !strings.Contains(board, "owner: acc-gwen") || !strings.Contains(board, "acc-gwen: owner") {
+		t.Fatalf("шапка доски не сохранена при переносе с аккаунтами: %s", board)
 	}
 }
 

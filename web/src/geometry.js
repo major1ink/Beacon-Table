@@ -442,6 +442,56 @@ export function buildingVertexNear(x, y, buildings, scale, screenPx = 10) {
   return best;
 }
 
+// drawingAt — id пометки под точкой (x,y), либо null (см. domain.Drawing).
+// Порог попадания — половина толщины линии плюс запас в screenPx экранных
+// пикселей: тонкую линию иначе было бы не поймать ни мышью, ни тем более
+// пальцем. Обход идёт с конца (Object.values сохраняет порядок вставки, а
+// слой рисует в том же порядке) — сверху вниз по стопке, чтобы ПКМ попадал
+// в последнюю нарисованную, а не в ту, что под ней.
+//
+// filter — какие элементы вообще ловим (у игрока — только свои, см.
+// interaction.js).
+export function drawingAt(x, y, drawings, scale, screenPx = 8, filter) {
+  const slack = screenPx / scale;
+  const ids = Object.keys(drawings || {});
+  for (let k = ids.length - 1; k >= 0; k--) {
+    const d = drawings[ids[k]];
+    if (filter && !filter(d)) continue;
+    const pts = d.points || [];
+    if (!pts.length) continue;
+    const half = (d.width > 0 ? d.width : 4) / 2 + slack;
+    if (d.kind === "text") {
+      // Подпись — не линия: ловим прямоугольник вокруг её центра, размер
+      // прикидываем по кеглю (d.width) и длине строки. Точная метрика
+      // текста живёт в Pixi и сюда не дотягивается, но для попадания ПКМ
+      // грубой оценки достаточно.
+      const size = d.width > 0 ? d.width : 18;
+      const w = (d.text || "").length * size * 0.6;
+      if (Math.abs(x - pts[0].x) <= w / 2 + slack && Math.abs(y - pts[0].y) <= size / 2 + slack) return ids[k];
+      continue;
+    }
+    if (d.kind === "circle" && pts.length === 2) {
+      const r = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      if (Math.abs(Math.hypot(x - pts[0].x, y - pts[0].y) - r) <= half) return ids[k];
+      continue;
+    }
+    if (d.kind === "rect" && pts.length === 2) {
+      const x0 = Math.min(pts[0].x, pts[1].x), x1 = Math.max(pts[0].x, pts[1].x);
+      const y0 = Math.min(pts[0].y, pts[1].y), y1 = Math.max(pts[0].y, pts[1].y);
+      const onSide =
+        (Math.abs(x - x0) <= half || Math.abs(x - x1) <= half) && y >= y0 - half && y <= y1 + half;
+      const onCap = (Math.abs(y - y0) <= half || Math.abs(y - y1) <= half) && x >= x0 - half && x <= x1 + half;
+      if (onSide || onCap) return ids[k];
+      continue;
+    }
+    // free/line/arrow — ломаная: попадание в любой её сегмент.
+    for (let i = 1; i < pts.length; i++) {
+      if (distToSegment(x, y, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y) <= half) return ids[k];
+    }
+  }
+  return null;
+}
+
 // tokenAt — id токена под точкой (x,y), либо null. tokens: { [id]: {x,y,size} }.
 //
 // Раньше эта функция возвращала ПЕРВЫЙ попавшийся токен в порядке обхода

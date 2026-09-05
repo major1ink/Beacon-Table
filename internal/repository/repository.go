@@ -21,6 +21,7 @@ import (
 	"io"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/excalidraw"
 )
 
 // CompanyRepository — CRUD миров/компаний (domain.Company) плюс
@@ -228,6 +229,33 @@ type JournalRepository interface {
 	// service.JournalService.DeleteFolder).
 	DeleteFolder(ctx context.Context, folder string) error
 	RenameFolder(ctx context.Context, from, to string) error
+}
+
+// BoardRepository — доски стола, файл-на-доску (см.
+// internal/repository/boardfile) — .md на диске с шапкой: имя, автор и
+// раздача прав (domain.Board). Права репозиторий только ХРАНИТ — решает по
+// ним service.BoardService, репозиторий отдаёт все доски подряд, кто бы ни
+// спрашивал (тот же принцип, что у JournalRepository).
+type BoardRepository interface {
+	// List — все доски стола. Содержимого холста в domain.Board пока нет
+	// вовсе, поэтому отдельного «без тела» варианта не нужно.
+	List(ctx context.Context) ([]*domain.Board, error)
+	Get(ctx context.Context, id string) (*domain.Board, error)
+	// Create кладёт доску целиком (id/имя/автор/права уже заполнены
+	// вызывающим); domain.ErrConflict, если файл с таким id уже есть.
+	// doc — начальный холст; nil означает пустую доску (excalidraw.NewDocument).
+	Create(ctx context.Context, b *domain.Board, doc *excalidraw.Document) error
+	// Scene — холст доски. Отдельно от Get: списку досок рисунки не нужны, а
+	// разбирать их ради списка — лишняя работа на каждый файл.
+	Scene(ctx context.Context, id string) (*excalidraw.Document, error)
+	// SetScene заменяет холст, не трогая шапку; false — доски нет.
+	SetScene(ctx context.Context, id string, doc *excalidraw.Document) (bool, error)
+	// Rename меняет ТОЛЬКО имя, не трогая тело файла; false — доски нет.
+	Rename(ctx context.Context, id, name string) (bool, error)
+	// SetAccess меняет ТОЛЬКО раздачу прав; false — доски нет. Отдельно от
+	// Rename по той же причине, что и у журнала (см. JournalRepository).
+	SetAccess(ctx context.Context, id string, def domain.JournalAccess, access map[string]domain.JournalAccess) (bool, error)
+	Delete(ctx context.Context, id string) error
 }
 
 // MonsterRepository — библиотека карточек бестиария ДМ, файл-на-монстра (см.

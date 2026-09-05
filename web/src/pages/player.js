@@ -23,6 +23,10 @@ import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { createDrawOptions } from "../draw-options.js";
+import { createBoardList } from "../board-list.js";
+import { attachTooltip } from "../tooltip.js";
+import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import { isPlayer } from "../roles.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
@@ -107,6 +111,30 @@ let editingCharId = null; // null — форма создаёт нового; и
 // ниже), а не только внутри самого boot().
 let vtt = null;
 
+// drawPanel появляется только в boot(), когда есть vtt.sideMenu, а
+// переключатель инструментов нужен раньше — отсюда изменяемая ссылка.
+let drawPanel = null;
+// closingDrawPanel — панель закрываем МЫ, потому что уходим на другой
+// инструмент. Без этого флага закрытие дёргало бы свой onToggle, тот звал
+// бы setPlayerTool("select") посреди уже идущего setPlayerTool("ruler"), и
+// линейка включалась бы с погашенной кнопкой и сбитым playerTool.
+let closingDrawPanel = false;
+
+// PLAYER_DRAW_HELP — подсказка у игрока своя: про чужие пометки и про то,
+// что право рисовать выдаёт ДМ, ему знать полезнее, чем про «Настройки»,
+// которых у него нет.
+const PLAYER_DRAW_HELP = {
+  title: "Пометки",
+  summary: "Быстрые пометки поверх карты: стрелка, круг, подпись. Видны всем за столом.",
+  rows: [
+    ["Цвет", "твой собственный — за столом видно, чья пометка"],
+    ["Правка", "пока фигура не выбрана — тяни свои пометки"],
+    ["Рисование", "выбери фигуру в панели"],
+    ["Удаление", "«Ластик» или [ПКМ] по своей пометке"],
+    ["Чужие", "трогать нельзя — только свои"],
+  ],
+};
+
 (async function boot() {
   me = await fetchMe();
   if (!me || !isPlayer(me.role)) {
@@ -139,14 +167,70 @@ let vtt = null;
   // тот же sticky, см. комментарий там), первая иконка тут (игрок кубы
   // бросает через #diceDock снизу, не через sideMenu — у него это основной
   // инструмент, и он всегда на виду, а не за иконкой).
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
   mountCompendiumMenu(compendiumPanel, { role: "player" });
+
+  // Пометки — та же иконка и та же панель, что у ДМ (см. pages/dm.js и
+  // web/src/draw-options.js), только без кнопки «Очистить слой»: она стирает
+  // и чужое, сервер её от игрока всё равно не примет.
+  //
+  // Открытая панель = включённый инструмент, как у ДМ: закрыли её (своей
+  // иконкой, Esc, другой иконкой колонки) — вернулись в «Выбор».
+  drawPanel = vtt.sideMenu.addIcon(icon("pencil", { size: 16 }), "Пометки", {
+    width: 250,
+    keepOnCanvas: true,
+    tip: PLAYER_DRAW_HELP,
+    onToggle: (open) => {
+      if (!open && (closingDrawPanel || playerTool !== "draw")) return;
+      setPlayerTool(open ? "draw" : "select");
+    },
+  });
+  const drawOptions = createDrawOptions(drawPanel);
+  const drawHint = document.createElement("p");
+  drawHint.className = "draw-hint";
+  drawHint.textContent = "Наведи на фигуру — подскажет, каким жестом она рисуется.";
+  drawPanel.appendChild(drawHint);
+  // Иконки нет, пока ДМ не разрешил игрокам рисовать (см.
+  // domain.CombatState.PlayerDrawingEnabled): выключил посреди сессии —
+  // инструмент сам возвращается в «Выбор».
+  drawPanel.host.style.display = "none";
+  document.addEventListener("vtt:combatState", (e) => {
+    const allowed = !!e.detail.playerDrawingEnabled;
+    drawPanel.host.style.display = allowed ? "" : "none";
+    if (!allowed && playerTool === "draw") {
+      setPlayerTool("select");
+      drawOptions.reset();
+    }
+  });
+  // Доски — тот же список, что у ДМ (см. board-list.js). Игрок заводит свои
+  // и видит те чужие, которые ему открыли: разбирается с этим сервер, панель
+  // одинаковая.
+  const boardsPanel = vtt.sideMenu.addIcon(icon("board", { size: 16 }), "Доски", {
+    width: 280,
+    sticky: true,
+    tip: PANEL_HELP.boards,
+    // Список перечитывается на открытии панели, а не подпиской: доски
+    // заводят редко, и держать ради этого ещё один канал незачем.
+    onToggle: (open) => {
+      if (open) boardList.refresh();
+    },
+  });
+  const boardList = createBoardList(boardsPanel);
+  const boardsClose = document.createElement("button");
+  boardsClose.type = "button";
+  boardsClose.className = "board-item-btn";
+  boardsClose.style.cssText = "position:absolute;right:8px;top:8px;";
+  boardsClose.title = "Закрыть";
+  boardsClose.innerHTML = icon("close", { size: 13 });
+  boardsClose.onclick = () => boardsPanel.close();
+  boardsPanel.style.position = "relative";
+  boardsPanel.appendChild(boardsClose);
 
   // Журнал стола — та же страница, что и у ДМ (см. web/journal.html):
   // игрок пишет туда свои заметки и сам решает, кому их видно и кому можно
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
   // выезжающей плашке бокового меню.
-  vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow);
+  vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow, { tip: PANEL_HELP.journal });
 
   // Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
   // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
@@ -195,18 +279,28 @@ document.getElementById("zoomInBtn").onclick = () => document.dispatchEvent(new 
 document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1 / 1.3 }));
 document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
 
-// ================= "Линейка" =================
-// Единственный "инструмент" карты, доступный игроку (см. web/src/vtt/
-// interaction.js: ветка ctx.isPlayer слушает то же "vtt:setTool", что и ДМ)
-// — ЛКМ-драг по карте показывает линию и расстояние в формате текущей
-// сцены, отпустил — замер исчезает.
+// ================= инструменты карты =================
+// Линейка живёт в топбаре, пометки — иконкой в боковой колонке над канвасом
+// (как у ДМ, см. pages/dm.js: там панель тоже уехала из общего списка в
+// быстрый доступ). Инструмент один на двоих: включил линейку — пометки
+// выключились, и наоборот.
 const rulerBtn = document.getElementById("rulerBtn");
-let rulerOn = false;
-rulerBtn.onclick = () => {
-  rulerOn = !rulerOn;
-  rulerBtn.classList.toggle("active", rulerOn);
-  document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: rulerOn ? "ruler" : "select" }));
-};
+let playerTool = "select";
+function setPlayerTool(name) {
+  playerTool = name;
+  rulerBtn.classList.toggle("active", name === "ruler");
+  // Панель пометок И ЕСТЬ включённый инструмент (см. её onToggle ниже):
+  // ушли на другой инструмент — закрываем её.
+  if (name !== "draw" && drawPanel) {
+    closingDrawPanel = true;
+    drawPanel.close();
+    closingDrawPanel = false;
+  }
+  document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: name }));
+}
+
+rulerBtn.onclick = () => setPlayerTool(playerTool === "ruler" ? "select" : "ruler");
+attachTooltip(rulerBtn, TOOL_HELP.ruler);
 
 // ================= "Настройки" =================
 // Пока единственное поле — версия сервера (short commit hash, см.

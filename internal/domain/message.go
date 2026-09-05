@@ -3,15 +3,19 @@ package domain
 // ClientMsg — универсальный конверт команд от DM/игрока по WebSocket. Поля,
 // не нужные конкретной команде, остаются zero-value и просто игнорируются.
 type ClientMsg struct {
-	Type       string        `json:"type"`
-	Token      *Token        `json:"token,omitempty"`
-	ID         string        `json:"id,omitempty"`
-	NoteMarker *NoteMarker   `json:"noteMarker,omitempty"`
-	Wall       *Wall         `json:"wall,omitempty"`
-	Wall2      *Wall         `json:"wall2,omitempty"` // вторая половина при "split_wall" (см. Wall)
-	FogArea    *FogArea      `json:"fogArea,omitempty"`
-	Building   *Building     `json:"building,omitempty"` // "add_building" — контур целиком, ОДНОЙ мутацией (см. Building)
-	Grid       *GridSettings `json:"grid,omitempty"`
+	Type       string      `json:"type"`
+	Token      *Token      `json:"token,omitempty"`
+	ID         string      `json:"id,omitempty"`
+	NoteMarker *NoteMarker `json:"noteMarker,omitempty"`
+	Wall       *Wall       `json:"wall,omitempty"`
+	Wall2      *Wall       `json:"wall2,omitempty"` // вторая половина при "split_wall" (см. Wall)
+	FogArea    *FogArea    `json:"fogArea,omitempty"`
+	Building   *Building   `json:"building,omitempty"` // "add_building" — контур целиком, ОДНОЙ мутацией (см. Building)
+	// Drawing — "add_drawing": элемент слоя пометок целиком, апсерт по ID
+	// (см. Drawing). AuthorID/AuthorName из клиентского значения не берутся —
+	// их проставляет сервер по отправителю.
+	Drawing *Drawing      `json:"drawing,omitempty"`
+	Grid    *GridSettings `json:"grid,omitempty"`
 
 	// поля редактирования точек стен (см. web/src/vtt/interaction.js) —
 	// "точка" не отдельная сущность с ID, а координата, к которой привязан
@@ -151,6 +155,15 @@ type ClientMsg struct {
 	// стола (раздел "Настройки"), показывать ли вшитый каталог "из коробки" в
 	// справочнике и пикерах (см. domain.CombatState.ShowBuiltinCards).
 	ShowBuiltinCards *bool `json:"showBuiltinCards,omitempty"`
+
+	// PlayerDrawingEnabled — только для "set_player_drawing_enabled": общий
+	// тумблер стола, могут ли игроки рисовать пометки на карте (см.
+	// domain.CombatState.PlayerDrawingEnabled).
+	PlayerDrawingEnabled *bool `json:"playerDrawingEnabled,omitempty"`
+	// HidePlayerDrawings — только для "set_hide_player_drawings": общий
+	// тумблер стола, прятать ли пометки игроков (см.
+	// domain.CombatState.HidePlayerDrawings).
+	HidePlayerDrawings *bool `json:"hidePlayerDrawings,omitempty"`
 
 	// HideLightMarkers — только для "set_hide_light_markers": общий тумблер
 	// стола (раздел "Настройки"), прятать ли у ДМ лампочки токенов света вне

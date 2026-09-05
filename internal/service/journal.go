@@ -200,13 +200,15 @@ func (s *journalService) Create(ctx context.Context, v domain.JournalViewer, dra
 		return nil, err
 	}
 	e := &domain.JournalEntry{
-		ID:        newID(),
-		Folder:    folder,
-		Content:   draft.Content,
-		OwnerID:   v.ID,
-		OwnerName: v.Name,
-		Default:   def,
-		Access:    access,
+		ID:      newID(),
+		Folder:  folder,
+		Content: draft.Content,
+		Sharing: domain.Sharing{
+			OwnerID:   v.ID,
+			OwnerName: v.Name,
+			Default:   def,
+			Access:    access,
+		},
 	}
 	if err := s.entries.Create(ctx, e); err != nil {
 		return nil, err

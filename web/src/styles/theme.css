@@ -417,3 +417,135 @@
 .roll-op { color: var(--text-dim); }
 .roll-eq { margin-left: 2px; color: var(--text-dim); }
 .roll-eq b { color: var(--text); font-size: 13px; }
+
+/* ---- панель инструмента «Пометки» (см. web/src/draw-options.js) ----
+   Общая и для рейл-панели ДМ, и для всплывашки в топбаре игрока: набор
+   инструментов у ролей одинаковый, отличается только место, куда панель
+   смонтирована. */
+.draw-options { display: flex; flex-direction: column; gap: 9px; }
+.draw-field { display: flex; flex-direction: column; gap: 5px; }
+.draw-field-label { font-size: 11px; color: var(--text-dim); }
+.draw-shapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.draw-shape {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 4px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text-dim);
+  font: inherit; font-size: 11px; line-height: 1.15; text-align: center; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.draw-shape:hover { background: var(--surface-hover); color: var(--text); }
+.draw-shape.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.draw-shape-glyph { font-size: 13px; line-height: 1; }
+.draw-mode { margin: 2px 0 0; font-size: 11px; line-height: 1.35; color: var(--text-dim); }
+.draw-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+.draw-swatch {
+  width: 22px; height: 22px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; box-shadow: 0 0 0 1px var(--border) inset;
+}
+.draw-swatch.active { border-color: #fff; }
+/* «Свой цвет» — пометка рисуется цветом участника (см. colorForAuthor),
+   поэтому у образца не один цвет, а вся палитра разом. */
+.draw-swatch--auto { background: linear-gradient(135deg, #5dd0ff, #7ee081, #ffb454); }
+.draw-options input[type="range"] { width: 100%; }
+/* Подпись под панелью. Своя, а не общий .hint: тот объявлен только в
+   dm.html, а панель одна на обе роли — у игрока текст остался бы без стилей. */
+.draw-hint { margin: 2px 0 0; font-size: 11px; line-height: 1.35; color: var(--text-dim); }
+.draw-clear {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text-dim); font: inherit; font-size: 12px; cursor: pointer;
+}
+.draw-clear:hover { background: var(--danger); border-color: var(--danger-hover); color: #fff; }
+
+/* ---- всплывающая подсказка инструмента (см. web/src/tooltip.js) ----
+   Тёмная плашка сбоку от иконки: заголовок, необязательная строка-описание
+   и строки «метка: значение». Клавиши и кнопки мыши — чипами, чтобы жест
+   читался с одного взгляда, а не вычитывался из абзаца. */
+.bt-tip {
+  position: fixed; z-index: 60; display: none; max-width: 460px;
+  padding: 14px 16px; box-sizing: border-box;
+  background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  font-size: 13px; line-height: 1.45; color: var(--text);
+  pointer-events: none; /* подсказка не должна перехватывать курсор у карты */
+}
+.bt-tip.open { display: block; }
+.bt-tip-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.bt-tip-summary { color: var(--text-dim); margin-bottom: 8px; }
+/* Строка — обычный текстовый поток, а не flex: у flex-строки длинное
+   значение не переносится по словам, а целиком спрыгивает под метку,
+   оставляя её в одиночестве. */
+.bt-tip-row { margin-top: 5px; }
+.bt-tip-label { font-weight: 500; margin-right: 6px; }
+.bt-tip-value { color: var(--text-dim); }
+/* Чип клавиши — тот же приём, что у кубов в логе бросков (.roll-die):
+   моноширинный прямоугольник, читаемый как физическая клавиша. */
+.bt-tip-key {
+  display: inline-block; margin: 0 1px; padding: 1px 6px;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  vertical-align: baseline;
+}
+
+/* ---- панель «Доски» (см. web/src/board-list.js) ----
+   Общая для ДМ и игрока, живёт в боковой колонке над канвасом. */
+.board-list { display: flex; flex-direction: column; gap: 8px; }
+.board-add {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--accent); color: #fff; font: inherit; font-size: 12px; cursor: pointer;
+}
+.board-add:hover { background: var(--accent-hover); }
+.board-items { display: flex; flex-direction: column; gap: 4px; }
+.board-item { display: flex; align-items: center; gap: 4px; }
+.board-open {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 9px; border: 1px solid transparent; border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+  text-align: left; cursor: pointer;
+}
+.board-open:hover { background: var(--surface-hover); }
+.board-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-item-meta { font-size: 10.5px; color: var(--text-dim); }
+.board-item-actions { flex: 0 0 auto; display: flex; gap: 2px; }
+.board-item-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; border: none; border-radius: var(--radius);
+  background: none; color: var(--text-dim); cursor: pointer;
+}
+.board-item-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* ---- панель «Доски» (см. web/src/board-list.js) ---- */
+.board-list { display: flex; flex-direction: column; gap: 8px; }
+.board-add {
+  display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
+  padding: 8px 10px; border: none; border-radius: var(--radius);
+  background: var(--accent); color: #fff; font: inherit; font-size: 12px; cursor: pointer;
+}
+.board-add:hover { background: var(--accent-hover); }
+/* Импорт — действие второго ряда: та же форма, но без акцентной заливки. */
+.board-import { background: var(--surface); color: var(--text-dim); }
+.board-import:hover { background: var(--surface-hover); color: var(--text); }
+.board-items { display: flex; flex-direction: column; gap: 4px; }
+.board-item {
+  display: flex; align-items: center; gap: 4px;
+  border-radius: var(--radius); background: var(--surface);
+}
+.board-open {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  padding: 7px 10px; border: none; background: none; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius);
+}
+.board-open:hover { background: var(--surface-hover); }
+.board-item-name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-item-meta { font-size: 10.5px; color: var(--text-dim); }
+.board-item-actions { display: flex; align-items: center; gap: 2px; padding-right: 6px; }
+.board-item-btn {
+  width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px;
+  background: none; color: var(--text-dim); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.board-item-btn:hover { background: var(--surface-hover); color: var(--text); }

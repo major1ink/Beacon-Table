@@ -14,10 +14,13 @@ import (
 // бы его в память.
 const maxAPIBody = 1 << 20
 
-// bigBodyAPIPath — единственная /api/*-ручка с файлом (импорт мира), у неё
-// свой, больший лимит (см. company_handlers.go: maxWorldImportSize).
-// /upload лежит вне /api/ и под этот middleware не попадает вовсе.
-const bigBodyAPIPath = "/api/companies/import"
+// bigBodyAPIPaths — /api/*-ручки, принимающие файлы: у каждой свой, больший
+// предел в самом хендлере (см. maxWorldImportSize, maxBoardUpload). /upload
+// лежит вне /api/ и под этот middleware не попадает вовсе.
+var bigBodyAPIPaths = map[string]bool{
+	"/api/companies/import": true,
+	"/api/boards/import":    true,
+}
 
 // multipartMemoryBudget — второй аргумент http.Request.ParseMultipartForm:
 // сколько тела запроса разбирать В ПАМЯТИ, остальное уходит во временный
@@ -37,7 +40,7 @@ const multipartMemoryBudget = 32 << 20
 // без него (chunked) — на чтении в хендлере.
 func (a *API) LimitAPIBodies(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != bigBodyAPIPath {
+		if strings.HasPrefix(r.URL.Path, "/api/") && !bigBodyAPIPaths[r.URL.Path] {
 			if r.ContentLength > maxAPIBody {
 				writeErr(w, http.StatusRequestEntityTooLarge, "тело запроса слишком большое")
 				return

@@ -32,11 +32,17 @@ const (
 	// хендауты (портрет NPC, письмо, символ), поэтому своя библиотека, а не
 	// AssetKindProps. Доступ — только ДМ, как у maps/audio/props.
 	AssetKindHandouts = "handouts"
+	// AssetKindBoards — картинки, вставленные на доску (см. domain.Board и
+	// web/src/board). Не ДМ-only, в отличие от props/handouts: доску правит
+	// и игрок, которому её открыли на правку. Своя подпапка по той же
+	// причине, что и AssetKindNotes, — это содержимое конкретного документа,
+	// а не библиотека, из которой выбирают повторно.
+	AssetKindBoards = "boards"
 )
 
 // AssetKinds — все известные виды ассетов, в порядке отображения в
 // библиотеке DM.
-var AssetKinds = []string{AssetKindMaps, AssetKindTokens, AssetKindAudio, AssetKindNotes, AssetKindProps, AssetKindHandouts}
+var AssetKinds = []string{AssetKindMaps, AssetKindTokens, AssetKindAudio, AssetKindNotes, AssetKindProps, AssetKindHandouts, AssetKindBoards}
 
 // AssetInfo — одна запись в библиотеке ранее загруженных файлов. Name —
 // человекочитаемое имя (без "<unixnano>-" префикса, добавленного при

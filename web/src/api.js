@@ -380,6 +380,64 @@ export async function deleteJournalEntry(id) {
   return apiFetch(`/api/journal/${id}`, { method: "DELETE" });
 }
 
+// ---- доски стола (ДМ и игроки) — web/board.html ----
+// Права те же, что у записей журнала, и теми же словами (см. domain.Sharing):
+// "default" — что достаётся всем за столом, "access" — точечные выдачи.
+// Доска с default >= "observer" — общая, с "none" — личная; досок сколько
+// угодно одновременно. Кому раздавать — тот же список, что у журнала
+// (fetchJournalMembers), отдельного эндпоинта нет.
+export async function fetchBoards() {
+  return apiFetch("/api/boards");
+}
+export async function fetchBoard(id) {
+  return apiFetch(`/api/boards/${id}`);
+}
+export async function createBoard({ name, def = "none", access = {} } = {}) {
+  return apiFetch("/api/boards", { method: "POST", body: JSON.stringify({ name, default: def, access }) });
+}
+export async function renameBoard(id, name) {
+  return apiFetch(`/api/boards/${id}/name`, { method: "PUT", body: JSON.stringify({ name }) });
+}
+export async function setBoardAccess(id, def, access) {
+  return apiFetch(`/api/boards/${id}/access`, { method: "PUT", body: JSON.stringify({ default: def, access }) });
+}
+export async function deleteBoard(id) {
+  return apiFetch(`/api/boards/${id}`, { method: "DELETE" });
+}
+// fetchBoardScene — сам холст доски в формате Excalidraw (см.
+// internal/excalidraw). Отдельным запросом от fetchBoard: список и шапку
+// читают часто, рисунок — только когда доску открыли.
+export async function fetchBoardScene(id) {
+  return apiFetch(`/api/boards/${id}/scene`);
+}
+// fetchBoardImages — картинки, уже загруженные на доски этого мира: их можно
+// вставить повторно, не заливая тот же файл заново. Отдельно от fetchAssets —
+// та библиотека ДМ-ская, а доску правит и игрок.
+export async function fetchBoardImages() {
+  return apiFetch("/api/board-images");
+}
+// importBoard — доска из файла Excalidraw: .excalidraw.md из ваулта Obsidian
+// либо голый .excalidraw. Имя необязательно: без него сервер возьмёт имя
+// файла. Не через apiFetch — тут multipart, а не JSON.
+// images — [{name, file}]: картинка и то имя, которым доска называет её в
+// разделе «## Embedded Files». В ваулте файлы лежат отдельно, и найти их —
+// забота вызывающего (см. importDialog в board-list.js). Ответ, кроме самой доски, говорит, каких
+// картинок не хватило и на какие заметки доска ссылается.
+export async function importBoard(file, name, images = []) {
+  const form = new FormData();
+  form.append("file", file);
+  if (name) form.append("name", name);
+  // Пара «файл + под каким именем его знает доска»: имя из ваулта и имя
+  // файла на диске совпадают не всегда (разная нормализация юникода).
+  for (const { name, file } of images) {
+    form.append("image", file, file.name);
+    form.append("imageName", name);
+  }
+  const res = await fetch("/api/boards/import", { method: "POST", body: form });
+  if (!res.ok) throw new Error((await res.text()) || "не удалось импортировать доску");
+  return res.json();
+}
+
 export async function fetchJournalFolders() {
   return apiFetch("/api/journal-folders");
 }

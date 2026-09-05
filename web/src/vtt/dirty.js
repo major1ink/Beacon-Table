@@ -20,6 +20,7 @@ export function createDirtyFlags() {
     walls: true,
     buildings: true, // контуры зданий + их "крыша" у игрока (layers/buildings.js)
     manualFog: true, // blur-заливка фигур тумана — вторая дорогая часть
+    drawings: true, // слой пометок (layers/drawings.js)
     grid: true,
     background: true,
     worldSize: true, // размеры сцены сменились — камеру надо пересчитать заново
@@ -46,6 +47,9 @@ export function diffAndMarkDirty(dirty, prevScene, nextScene) {
   }
   if (!prevScene || prevScene.fogAreas !== nextScene.fogAreas) {
     dirty.manualFog = true;
+  }
+  if (!prevScene || prevScene.drawings !== nextScene.drawings) {
+    dirty.drawings = true;
   }
   if (!prevScene || prevScene.grid !== nextScene.grid) {
     dirty.grid = true;
@@ -78,6 +82,7 @@ export function diffAndMarkDirty(dirty, prevScene, nextScene) {
     dirty.vision = true;
     dirty.buildings = true;
     dirty.manualFog = true;
+    dirty.drawings = true;
     dirty.background = true;
   }
   // Смена сцены целиком: пан/зум от предыдущей карты к новой отношения не

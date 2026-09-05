@@ -24,6 +24,7 @@ import (
 	"beacon-table/internal/domain"
 	"beacon-table/internal/quota"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/repository/boardfile"
 	"beacon-table/internal/repository/conditionfile"
 	"beacon-table/internal/repository/itemfile"
 	"beacon-table/internal/repository/journalfile"
@@ -54,7 +55,11 @@ type ActiveWorld struct {
 	References service.ReferenceService
 	Conditions service.ConditionService
 
-	Journal   service.JournalService
+	Journal service.JournalService
+	Boards  service.BoardService
+	// BoardSync — живые доски мира (см. service.BoardHub): по горутине на
+	// доску, открытую сейчас хотя бы одним окном.
+	BoardSync *service.BoardHub
 	Playlists service.PlaylistService
 	Assets    service.AssetService
 
@@ -265,6 +270,7 @@ func (m *CompanyManager) Deactivate(ctx context.Context) error {
 	m.mu.Unlock()
 	if prev != nil {
 		prev.Room.Shutdown()
+		prev.BoardSync.Shutdown()
 	}
 	return m.companies.SetActiveID(ctx, "")
 }
@@ -307,12 +313,14 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	m.mu.Unlock()
 	if prev != nil {
 		prev.Room.Shutdown()
+		prev.BoardSync.Shutdown()
 	}
 
 	dataRoot, uploadsRoot, uploadsURL := m.rootsFor(company)
 
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
 	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
+	boardRepo := boardfile.NewStore(filepath.Join(dataRoot, "boards"))
 	monsterRepo := monsterfile.NewCatalog(
 		monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")),
 		monsterfile.NewSystemStore(m.systemFS, "systemdata/bestiary/"+company.System),
@@ -359,6 +367,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	}
 
 	journal := service.NewJournalService(journalRepo)
+	boards := service.NewBoardService(boardRepo)
+	boardSync := service.NewBoardHub(boardRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
 	assets := service.NewAssetService(assetRepo)
 	bestiary := service.NewBestiaryService(monsterRepo)
@@ -379,6 +389,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		References: references,
 		Conditions: conditions,
 		Journal:    journal,
+		Boards:     boards,
+		BoardSync:  boardSync,
 		Playlists:  playlists,
 		Assets:     assets,
 		Foundry: service.NewFoundryService(
@@ -401,6 +413,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 func (m *CompanyManager) Shutdown() {
 	if w := m.Current(); w != nil {
 		w.Room.Shutdown()
+		w.BoardSync.Shutdown()
 	}
 }
 

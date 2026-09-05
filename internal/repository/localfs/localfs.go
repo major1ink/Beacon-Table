@@ -20,7 +20,8 @@ import (
 )
 
 // knownKinds — подпапки, которые реально изолируются от общей "плоской"
-// uploads/: карты, токены, аудио, файлы заметок, ассеты карты. Всё
+// uploads/: карты, токены, аудио, файлы заметок, ассеты карты, картинки
+// досок. Всё
 // остальное (пустой/незнакомый kind) падает в корень rootDir с urlPrefix как
 // есть — так вело себя исходное приложение, сохраняем поведение 1-в-1.
 var knownKinds = map[string]bool{
@@ -30,6 +31,7 @@ var knownKinds = map[string]bool{
 	domain.AssetKindNotes:    true,
 	domain.AssetKindProps:    true,
 	domain.AssetKindHandouts: true,
+	domain.AssetKindBoards:   true,
 }
 
 // Store — реализация repository.AssetRepository. rootDir — корневая папка

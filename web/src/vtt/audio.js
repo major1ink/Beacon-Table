@@ -11,6 +11,7 @@
 // Громкость — источник один (то, что задал ДМ), но у каждого клиента
 // локальный множитель поверх (localStorage, не шлётся по сети).
 import { icon } from "../icons.js";
+import { PANEL_HELP } from "../tool-help.js";
 
 const LOCAL_VOL_KEY_AMBIENT = "beacon-vol-ambient";
 const LOCAL_VOL_KEY_CUE = "beacon-vol-cue";
@@ -186,7 +187,7 @@ export function createAudio(ctx, sideMenu) {
   // Колонку (позиционирование у правого края канваса, клик-панели вместо
   // hover) заводит sideMenu — см. side-menu.js. Кубы (pages/dm.js) вешают
   // туда же СВОЮ отдельную иконку 🎲, а не встраиваются в эту панель.
-  const volumePanel = sideMenu.addIcon(icon("volume", { size: 16 }), "Громкость");
+  const volumePanel = sideMenu.addIcon(icon("volume", { size: 16 }), "Громкость", { tip: PANEL_HELP.volume });
 
   function addVolumeRow(iconHtml, label, title) {
     const row = document.createElement("label");

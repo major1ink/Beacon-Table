@@ -266,6 +266,36 @@ type Building struct {
 	Locked bool `json:"locked,omitempty"`
 }
 
+// Drawing — один элемент слоя рисования: быстрая пометка поверх карты
+// (стрелка «обходим слева», круг вокруг двери, подпись «здесь ловушка»).
+// Живёт вместе со сценой и стирается кнопкой «Очистить» (см.
+// service.Room: "clear_drawings").
+//
+// Kind задаёт форму, Points — геометрию в мировых координатах:
+//
+//	"free"   — вся кривая свободной кисти, точек сколько угодно;
+//	"line"   — отрезок, две точки;
+//	"arrow"  — отрезок со стрелкой на второй точке, две точки;
+//	"rect"   — прямоугольник по двум противоположным углам, две точки;
+//	"circle" — окружность: центр и точка на радиусе, две точки;
+//	"text"   — подпись в Points[0], сам текст в Text.
+//
+// AuthorID/AuthorName проставляет СЕРВЕР по отправителю (см.
+// service.Room.handleAddDrawing), клиентское значение игнорируется: по ним
+// решается, кому можно править элемент, и по ним же ДМ видит, кто что
+// нарисовал. AuthorID пустой — рисовал ДМ.
+type Drawing struct {
+	ID     string  `json:"id"`
+	Kind   string  `json:"kind"`
+	Points []Point `json:"points"`
+	Text   string  `json:"text,omitempty"`
+	Color  string  `json:"color,omitempty"`
+	// Width — толщина линии в мировых px (для "text" — размер шрифта).
+	Width      float64 `json:"width,omitempty"`
+	AuthorID   string  `json:"authorId,omitempty"`
+	AuthorName string  `json:"authorName,omitempty"`
+}
+
 // GridSettings — сетка клеток поверх карты. Size — сторона клетки в мировых
 // единицах, Size<=0 значит "сетка выключена" (snap не работает). Visible —
 // отдельный от Size флаг "рисовать ли сетку на экране". Указатель — чтобы
@@ -340,6 +370,7 @@ type SceneState struct {
 	Walls       map[string]*Wall       `json:"walls"`
 	FogAreas    map[string]*FogArea    `json:"fogAreas"`
 	Buildings   map[string]*Building   `json:"buildings"`
+	Drawings    map[string]*Drawing    `json:"drawings"`
 }
 
 // NewScene создаёт пустую сцену с разумными дефолтами "из коробки".
@@ -366,6 +397,7 @@ func NewScene(id, name string) *SceneState {
 		Walls:       make(map[string]*Wall),
 		FogAreas:    make(map[string]*FogArea),
 		Buildings:   make(map[string]*Building),
+		Drawings:    make(map[string]*Drawing),
 	}
 }
 
@@ -402,6 +434,13 @@ func (s *SceneState) RescaleGeometry(oldW, oldH float64) {
 			b.Points[i].Y *= scaleY
 		}
 	}
+	for _, d := range s.Drawings {
+		for i := range d.Points {
+			d.Points[i].X *= scaleX
+			d.Points[i].Y *= scaleY
+		}
+		d.Width *= scaleX
+	}
 	// Token.Light.Bright/Dim НЕ масштабируем: они хранятся в единицах линейки
 	// сцены (см. TokenLight), не в пикселях, — как и Grid.UnitsPerCell чуть
 	// ниже, они resolution-independent сами по себе. Пиксельный радиус для
@@ -432,6 +471,7 @@ type PublicScene struct {
 	Walls         map[string]*Wall       `json:"walls"`
 	FogAreas      map[string]*FogArea    `json:"fogAreas"`
 	Buildings     map[string]*Building   `json:"buildings"`
+	Drawings      map[string]*Drawing    `json:"drawings"`
 }
 
 // SceneListEntry — одна строка в переключателе сцен DM. ViewerCount

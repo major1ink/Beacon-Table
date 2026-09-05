@@ -21,9 +21,11 @@ func TestFrontMatterRoundTrip(t *testing.T) {
 
 	in := &domain.JournalEntry{
 		ID: "e1", Folder: "Глава 1", Content: "# Тайник\n\nПод третьей доской.\n",
-		OwnerID: "acc-gwen", OwnerName: "Гвен",
-		Default: domain.JournalLimited,
-		Access:  map[string]domain.JournalAccess{"acc-dm": domain.JournalObserver, "acc-tom": domain.JournalOwner},
+		Sharing: domain.Sharing{
+			OwnerID: "acc-gwen", OwnerName: "Гвен",
+			Default: domain.JournalLimited,
+			Access:  map[string]domain.JournalAccess{"acc-dm": domain.JournalObserver, "acc-tom": domain.JournalOwner},
+		},
 	}
 	if err := s.Create(ctx, in); err != nil {
 		t.Fatal(err)
@@ -66,7 +68,7 @@ func TestFrontMatterRoundTrip(t *testing.T) {
 func TestUpdateAndSetAccessAreIndependent(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(t.TempDir())
-	if err := s.Create(ctx, &domain.JournalEntry{ID: "e1", Content: "# Было\n", OwnerID: "a", Default: domain.JournalNone}); err != nil {
+	if err := s.Create(ctx, &domain.JournalEntry{ID: "e1", Content: "# Было\n", Sharing: domain.Sharing{OwnerID: "a", Default: domain.JournalNone}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -99,10 +101,10 @@ func TestUpdateAndSetAccessAreIndependent(t *testing.T) {
 func TestListWithoutContentAndMissing(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(t.TempDir())
-	if err := s.Create(ctx, &domain.JournalEntry{ID: "e1", Content: "# Раз\n", Default: domain.JournalNone}); err != nil {
+	if err := s.Create(ctx, &domain.JournalEntry{ID: "e1", Content: "# Раз\n", Sharing: domain.Sharing{Default: domain.JournalNone}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Create(ctx, &domain.JournalEntry{ID: "e2", Folder: "Папка", Content: "# Два\n", Default: domain.JournalObserver}); err != nil {
+	if err := s.Create(ctx, &domain.JournalEntry{ID: "e2", Folder: "Папка", Content: "# Два\n", Sharing: domain.Sharing{Default: domain.JournalObserver}}); err != nil {
 		t.Fatal(err)
 	}
 	list, err := s.List(ctx)

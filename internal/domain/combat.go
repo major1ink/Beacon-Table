@@ -122,6 +122,12 @@ type CombatState struct {
 	HighlightActiveToken *bool                 `json:"highlightActiveToken,omitempty"`
 	ShowBuiltinCards     bool                  `json:"showBuiltinCards,omitempty"`
 	HideLightMarkers     *bool                 `json:"hideLightMarkers,omitempty"`
+	// PlayerDrawingEnabled — могут ли игроки рисовать на слое пометок (см.
+	// domain.Drawing, service.Room.handleAddDrawing). Выключено по умолчанию.
+	PlayerDrawingEnabled bool `json:"playerDrawingEnabled,omitempty"`
+	// HidePlayerDrawings — не показывать чужие пометки на карте: ДМ убирает
+	// с экрана всё, что нарисовали игроки, не стирая это (см. Drawing.AuthorID).
+	HidePlayerDrawings bool `json:"hidePlayerDrawings,omitempty"`
 }
 
 // NewCombatState — пустой трекер "из коробки" (первый запуск/нет

@@ -158,6 +158,8 @@ func RegisterRoutes(mux *http.ServeMux, mgr *app.CompanyManager, auth service.Au
 		defer gw.guestPresence(acc)()
 		serveWs(gw, world.Room, w, r, domain.RolePlayer, acc.ID, acc.Username)
 	})
+	// Доска — свой канал, см. board.go.
+	registerBoardRoute(mux, mgr, auth, gw)
 	return gw
 }
 

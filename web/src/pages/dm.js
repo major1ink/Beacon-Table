@@ -13,6 +13,10 @@ import { setCardOpener } from "../combatant-card.js";
 import { openSheetDock } from "../sheet-dock.js";
 import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
+import { createDrawOptions } from "../draw-options.js";
+import { createBoardList } from "../board-list.js";
+import { attachTooltip } from "../tooltip.js";
+import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import {
   fetchMe,
   apiLogout,
@@ -100,7 +104,7 @@ let isDemoGuest = false;
   // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
   // формулы, "Бросить", см. dice.js); лог результатов — отдельный виджет
   // (roll-log.js) в плашке #diceLog сверху канваса (см. dm.html).
-  const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240 });
+  const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240, tip: PANEL_HELP.dice });
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
@@ -112,7 +116,73 @@ let isDemoGuest = false;
   // плавающие окна web/catalog.html). sticky — не закрывается кликом мимо
   // (пользователь кликает по только что открытым спискам/карточкам, это не
   // "мимо"), только своей кнопкой ✕ в шапке.
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true });
+  // Пометки — та же колонка, что 🔊/🎲: инструмент нужен посреди боя, и
+  // лезть за ним в рейл-панель «Инструменты» каждый раз слишком долго.
+  // Панель — общий с игроком компонент (см. web/src/draw-options.js).
+  //
+  // Открытая панель И ЕСТЬ включённый инструмент: onToggle переключает
+  // "draw"/"select", поэтому отдельной кнопки-тумблера не нужно. keepOnCanvas
+  // — иначе первый же штрих по карте засчитался бы как «клик мимо» и
+  // захлопнул панель вместе с инструментом.
+  //
+  // drawToolActive — какой инструмент сейчас реально выбран. Без этой
+  // проверки закрытие панели всегда сбрасывало бы инструмент в "select", а
+  // закрывается она в том числе от переключения НА ДРУГОЙ инструмент (см.
+  // слушатель vtt:toolChanged ниже) — и только что выбранные «Стены»
+  // тут же сбрасывались бы обратно.
+  let drawToolActive = false;
+  const drawPanel = vtt.sideMenu.addIcon(icon("pencil", { size: 16 }), "Пометки", {
+    width: 250,
+    keepOnCanvas: true,
+    tip: TOOL_HELP.draw,
+    onToggle: (open) => {
+      if (!open && !drawToolActive) return;
+      document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: open ? "draw" : "select" }));
+    },
+  });
+  createDrawOptions(drawPanel, {
+    onClear: async () => {
+      if (!(await showConfirm("Стереть со сцены все пометки — и свои, и игроков?", { title: "Очистить слой", okLabel: "Очистить", danger: true }))) return;
+      vtt.send({ type: "clear_drawings" });
+    },
+  });
+  const drawHint = document.createElement("p");
+  drawHint.className = "draw-hint";
+  drawHint.textContent = "Наведи на фигуру — подскажет, каким жестом она рисуется. Наведи на пометку на карте — покажет, кто её нарисовал.";
+  drawPanel.appendChild(drawHint);
+  // Переключились на другой инструмент (или вышли из рисования по Esc) —
+  // панель закрывается сама, чтобы открытая плашка не врала про то, что
+  // сейчас в руке.
+  document.addEventListener("vtt:toolChanged", (e) => {
+    drawToolActive = e.detail === "draw";
+    if (!drawToolActive) drawPanel.close();
+  });
+
+  // Доски — бесконечные холсты рядом с заметками (см. board-list.js).
+  // sticky: открытая доска — это плавающее окно, и клик по нему не должен
+  // считаться «кликом мимо» и захлопывать список за спиной.
+  const boardsPanel = vtt.sideMenu.addIcon(icon("board", { size: 16 }), "Доски", {
+    width: 280,
+    sticky: true,
+    tip: PANEL_HELP.boards,
+    // Список перечитывается на открытии панели, а не подпиской: доски
+    // заводят редко, и держать ради этого ещё один канал незачем.
+    onToggle: (open) => {
+      if (open) boardList.refresh();
+    },
+  });
+  const boardList = createBoardList(boardsPanel);
+  const boardsClose = document.createElement("button");
+  boardsClose.type = "button";
+  boardsClose.className = "board-item-btn";
+  boardsClose.style.cssText = "position:absolute;right:8px;top:8px;";
+  boardsClose.title = "Закрыть";
+  boardsClose.innerHTML = icon("close", { size: 13 });
+  boardsClose.onclick = () => boardsPanel.close();
+  boardsPanel.style.position = "relative";
+  boardsPanel.appendChild(boardsClose);
+
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
   // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
   // и пункт меню ему показывать незачем.
   mountCompendiumMenu(compendiumPanel, { role: "dm", canImport: !isDemoGuest });
@@ -588,13 +658,15 @@ document.addEventListener("vtt:toolChanged", (e) => {
   fogBtn.classList.toggle("active", e.detail === "fog");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
-  // подсказка в панели "Инструменты" — только для выбранного инструмента (см. dm.html:data-hint-tool)
-  // "" тут не сработает — .hint[data-hint-tool]{display:none} в <style> и
-  // так победит пустую инлайн-строку, нужен явный display, отличный от none
-  document.querySelectorAll("[data-hint-tool]").forEach((el) => {
-    el.style.display = el.dataset.hintTool === e.detail ? "block" : "none";
-  });
 });
+
+// Всплывающие подсказки инструментов — вместо абзацев, которые раньше
+// лежали в самой панели и показывались по выбранному инструменту (см.
+// web/src/tooltip.js и tool-help.js: что инструмент делает и какими жестами).
+attachTooltip(wallBtn, TOOL_HELP.wall);
+attachTooltip(buildingBtn, TOOL_HELP.building);
+attachTooltip(fogBtn, TOOL_HELP.fog);
+attachTooltip(rulerBtn, TOOL_HELP.ruler);
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
   showSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
@@ -3661,6 +3733,28 @@ document.addEventListener("vtt:combatState", (e) => {
 });
 showBuiltinCardsToggle.onchange = () => {
   vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
+};
+
+// playerDrawingToggle / hidePlayerDrawingsToggle — тот же приём: общие
+// тумблеры стола, значение приходит внутри "combat_state" (см.
+// domain.CombatState.PlayerDrawingEnabled / HidePlayerDrawings,
+// service.combatPayload). Первый решает, принимает ли сервер пометки от
+// игроков вообще (internal/service/room_drawings.go: canDrawingWrite),
+// второй — показывать ли уже нарисованное ими (web/src/vtt/layers/drawings.js).
+const playerDrawingToggle = document.getElementById("playerDrawingToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  playerDrawingToggle.checked = !!e.detail.playerDrawingEnabled;
+});
+playerDrawingToggle.onchange = () => {
+  vtt.send({ type: "set_player_drawing_enabled", playerDrawingEnabled: playerDrawingToggle.checked });
+};
+
+const hidePlayerDrawingsToggle = document.getElementById("hidePlayerDrawingsToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  hidePlayerDrawingsToggle.checked = !!e.detail.hidePlayerDrawings;
+});
+hidePlayerDrawingsToggle.onchange = () => {
+  vtt.send({ type: "set_hide_player_drawings", hidePlayerDrawings: hidePlayerDrawingsToggle.checked });
 };
 
 const hideLightMarkersToggle = document.getElementById("hideLightMarkersToggle");

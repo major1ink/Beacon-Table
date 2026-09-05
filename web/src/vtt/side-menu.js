@@ -6,6 +6,8 @@
 // захлопывалась). Открытие одной панели закрывает другую — тот же принцип,
 // что был у старых hover-иконок, просто без самого hover. Клик мимо колонки
 // или Esc закрывают текущую открытую.
+import { attachTooltip, hideTooltip } from "../tooltip.js";
+
 export function createSideMenu(ctx) {
   const column = document.createElement("div");
   column.style.cssText = "position:fixed;z-index:41;display:flex;flex-direction:column;gap:8px;transform:translateY(-50%);";
@@ -20,10 +22,27 @@ export function createSideMenu(ctx) {
   // посреди работы. Закрывается такая панель только своей кнопкой ✕ внутри
   // (см. compendium-menu.js), которая зовёт panel.close() — тот же closeOpen.
   let openPanelSticky = false;
+  // openPanelOnCanvas — панель "Пометки" (opts.keepOnCanvas, см. addIcon):
+  // канвас для неё не "мимо", а рабочая поверхность — первый же штрих
+  // захлопывал бы панель вместе с инструментом. Сюда же попадают модалки:
+  // жест инструмента может уходить в диалог (ввод подписи — см.
+  // interaction.js: placeDrawingText), и клик по его кнопке — продолжение
+  // работы инструментом, а не уход от него. От sticky отличается тем, что
+  // Esc и своя иконка панель по-прежнему закрывают: инструмент надо уметь
+  // выключить, не целясь в крестик.
+  let openPanelOnCanvas = false;
+  // openPanelToggle — opts.onToggle текущей открытой панели (см. addIcon):
+  // её надо дёрнуть и при закрытии, а закрытие идёт общим closeOpen, который
+  // сам не знает, чью панель гасит.
+  let openPanelToggle = null;
   function closeOpen() {
     if (openPanel) openPanel.style.display = "none";
+    const toggle = openPanelToggle;
     openPanel = null;
     openPanelSticky = false;
+    openPanelOnCanvas = false;
+    openPanelToggle = null;
+    if (toggle) toggle(false);
   }
 
   // addIcon — заводит кнопку с иконкой + пустую панель рядом с ней (слева,
@@ -33,8 +52,17 @@ export function createSideMenu(ctx) {
   // по умолчанию — нужно панели "Справочник" (дереву категорий тесно).
   // opts.sticky — см. openPanelSticky выше; панель получает .close() — тот
   // же closeOpen, вызывающий код может дать свою кнопку ✕.
+  // opts.keepOnCanvas — см. openPanelOnCanvas выше.
+  // opts.onToggle(open) — панель открыли/закрыли. Нужно тем иконкам, что
+  // не просто показывают плашку, а ВКЛЮЧАЮТ режим на карте (сейчас —
+  // "Пометки": открыта панель значит выбран инструмент рисования).
   // iconButton — общая «стеклянная» круглая кнопка колонки; ею пользуются и
   // addIcon (кнопка + своя панель), и addButton (кнопка без панели).
+  // opts.tip — структурированная подсказка вместо нативного title (см.
+  // web/src/tooltip.js): у иконки колонки нет подписи, и одной строки
+  // системного тултипа мало, чтобы объяснить, что за ней. Вешает её не
+  // iconButton, а вызывающий: у иконки с панелью подсказка должна молчать,
+  // пока панель открыта (см. addIcon), и про это знает только он.
   function iconButton(icon, title) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -52,8 +80,9 @@ export function createSideMenu(ctx) {
   // стола, см. pages/player.js, открывается плавающим окном, а не выезжающей
   // плашкой). Открытую панель при этом закрываем — как и переход к любой
   // другой иконке колонки.
-  function addButton(icon, title, onClick) {
+  function addButton(icon, title, onClick, opts) {
     const btn = iconButton(icon, title);
+    if (opts && opts.tip) attachTooltip(btn, opts.tip);
     btn.onclick = () => {
       closeOpen();
       onClick();
@@ -78,6 +107,8 @@ export function createSideMenu(ctx) {
       panel.style.minWidth = opts.width + "px";
     }
     const sticky = !!(opts && opts.sticky);
+    const keepOnCanvas = !!(opts && opts.keepOnCanvas);
+    const onToggle = (opts && opts.onToggle) || null;
     btn.onclick = () => {
       if (openPanel === panel) {
         // sticky-панель по клику на свою же иконку не закрывается — только
@@ -87,17 +118,36 @@ export function createSideMenu(ctx) {
       }
       closeOpen();
       panel.style.display = "flex";
+      // Гасим подсказку явно, а не надеемся на глобальный mousedown-хук:
+      // порядок pointerenter и mousedown у синтезированного клика не
+      // гарантирован, и подсказка успевала остаться висеть поверх только
+      // что открытой панели — ровно та каша, из-за которой она и молчит,
+      // пока панель открыта.
+      hideTooltip();
       openPanel = panel;
       openPanelSticky = sticky;
+      openPanelOnCanvas = keepOnCanvas;
+      openPanelToggle = onToggle;
+      if (onToggle) onToggle(true);
     };
+    // Пока панель этой иконки открыта, подсказка про неё молчит: она
+    // выезжает в ту же сторону и накрывала бы собой ровно то, что описывает.
+    if (opts && opts.tip) attachTooltip(btn, () => (openPanel === panel ? null : opts.tip));
     wrap.append(btn, panel);
     column.appendChild(wrap);
     panel.close = closeOpen;
+    // host — обёртка иконки целиком. Нужна тем, кто прячет иконку по
+    // условию (у игрока «Пометки» появляются, только когда ДМ разрешил
+    // рисовать): спрятать одну кнопку мало — у колонки flex-gap, и от
+    // пустой обёртки остаётся дыра в ряду.
+    panel.host = wrap;
     return panel;
   }
 
   document.addEventListener("mousedown", (e) => {
-    if (openPanel && !openPanelSticky && !column.contains(e.target)) closeOpen();
+    if (!openPanel || openPanelSticky || column.contains(e.target)) return;
+    if (openPanelOnCanvas && (e.target === ctx.canvas || e.target.closest?.(".bt-modal-overlay"))) return;
+    closeOpen();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !openPanelSticky) closeOpen();

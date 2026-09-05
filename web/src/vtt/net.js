@@ -31,6 +31,7 @@ export function createNet(ctx, audio) {
     walls: {},
     fogAreas: {},
     buildings: {},
+    drawings: {},
   };
   ctx.clockOffsetMs = 0;
   // now() — время сервера с поправкой на рассинхрон часов ЭТОГО клиента:
@@ -65,6 +66,7 @@ export function createNet(ctx, audio) {
       if (!nextScene.walls) nextScene.walls = {};
       if (!nextScene.fogAreas) nextScene.fogAreas = {};
       if (!nextScene.buildings) nextScene.buildings = {};
+      if (!nextScene.drawings) nextScene.drawings = {};
       if (!nextScene.grid) nextScene.grid = { size: 0, offsetX: 0, offsetY: 0 };
       diffAndMarkDirty(ctx.dirty, ctx.scene, nextScene);
       ctx.scene = nextScene;
@@ -110,6 +112,11 @@ export function createNet(ctx, audio) {
       // сцены. Дёшево — тот же объём работы, что и любой другой dirty.tokens
       // (см. dirty.js).
       ctx.dirty.tokens = true;
+      // hidePlayerDrawings — такой же тумблер стола, приезжающий вне сцены:
+      // слой пометок фильтрует по нему на своей стороне (см.
+      // layers/drawings.js: visibleDrawings), поэтому его надо явно
+      // перерисовать — сцена при этом не менялась.
+      ctx.dirty.drawings = true;
       ctx.render();
       document.dispatchEvent(new CustomEvent("vtt:combatState", { detail: data }));
     } else if (data.type === "hub_state") {
