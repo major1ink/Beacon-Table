@@ -32,9 +32,10 @@
       background: var(--surface); color: var(--text-dim); font-size: 11px;
     }
     #readonlyBadge.on { display: inline-block; }
-    /* Пустое, пока всё сохранено. */
-    #saveState { color: var(--text-dim); font-size: 11px; }
-    #saveState.err { color: var(--danger, #e5484d); }
+    /* Пустое, пока связь есть. */
+    #linkState { color: var(--text-dim); font-size: 11px; }
+    #linkState.err { color: var(--danger, #e5484d); }
+    #peers { color: var(--text-dim); font-size: 11px; }
 
     #editorWrap { flex: 1 1 auto; min-height: 0; position: relative; }
     /* Excalidraw тянется по контейнеру, но своей высоты не имеет. */
@@ -52,7 +53,8 @@
     <span id="boardName">Доска</span>
     <span id="boardMeta"></span>
     <div id="topbarRight">
-      <span id="saveState"></span>
+      <span id="peers"></span>
+      <span id="linkState"></span>
       <span id="readonlyBadge">только чтение</span>
     </div>
   </div>

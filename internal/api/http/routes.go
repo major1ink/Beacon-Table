@@ -185,8 +185,6 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/boards/import", a.handleBoardImport)
 	mux.HandleFunc("GET /api/boards/{id}", a.handleBoardGet)
 	mux.HandleFunc("GET /api/boards/{id}/scene", a.handleBoardScene)
-	mux.HandleFunc("PUT /api/boards/{id}/scene", a.handleBoardSceneSave)
-	mux.HandleFunc("POST /api/boards/{id}/scene", a.handleBoardSceneSave)
 	mux.HandleFunc("PUT /api/boards/{id}/name", a.handleBoardRename)
 	mux.HandleFunc("PUT /api/boards/{id}/access", a.handleBoardAccess)
 	mux.HandleFunc("DELETE /api/boards/{id}", a.handleBoardDelete)

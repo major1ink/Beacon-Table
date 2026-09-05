@@ -53,7 +53,7 @@ const (
 // worldSubdirs — поддиректории мира под dataRoot, которые едут в архив. Всё
 // прочее в dataRoot (beacon.db у legacy-мира, foundry-cache, companies/) —
 // не контент этого мира и в экспорт не попадает.
-var worldSubdirs = []string{"scenes", "journal", "bestiary", "spells", "items", "references", "conditions"}
+var worldSubdirs = []string{"scenes", "journal", "boards", "bestiary", "spells", "items", "references", "conditions"}
 
 type worldManifest struct {
 	Format           string            `json:"format"`
@@ -211,6 +211,11 @@ func (m *CompanyManager) ExportWorld(ctx context.Context, companyID, beaconVersi
 						text = stripJournalFrontMatter(text)
 					}
 					counts["journal"]++
+				case sub == "boards" && ext == ".md":
+					if !includeAccounts {
+						text = stripBoardFrontMatter(text)
+					}
+					counts["boards"]++
 				case sub == "scenes" && strings.HasSuffix(slashRel, "/combat.json"):
 					if !includeAccounts {
 						text = scrubOwners(text, "combatants")
@@ -866,6 +871,20 @@ func readZipEntry(entry *zip.File, budget int64) ([]byte, error) {
 // сохраняя только уровень видимости default. Формат шапки — см.
 // internal/repository/journalfile package-doc.
 func stripJournalFrontMatter(raw string) string {
+	return keepFrontMatterKeys(raw, "default")
+}
+
+// stripBoardFrontMatter — то же для доски, но шапка у неё общая с плагином
+// Excalidraw (см. internal/repository/boardfile): excalidraw-plugin/tags/name
+// остаются, иначе файл перестанет открываться ваултом и потеряет название.
+func stripBoardFrontMatter(raw string) string {
+	return keepFrontMatterKeys(raw, "excalidraw-plugin", "tags", "name", "default")
+}
+
+// keepFrontMatterKeys оставляет в шапке только перечисленные ключи верхнего
+// уровня вместе с их вложенными строками. Шапки нет или она не закрыта —
+// возвращаем как есть, текст терять нельзя.
+func keepFrontMatterKeys(raw string, keep ...string) string {
 	s := strings.TrimPrefix(raw, "\ufeff") // BOM от редактора не должен прятать шапку
 	if !strings.HasPrefix(s, "---\n") && !strings.HasPrefix(s, "---\r\n") {
 		return raw
@@ -881,18 +900,36 @@ func stripJournalFrontMatter(raw string) string {
 	if end < 0 {
 		return raw // незакрытая шапка — не трогаем, текст не теряем
 	}
-	def := ""
+	wanted := make(map[string]bool, len(keep))
+	for _, k := range keep {
+		wanted[k] = true
+	}
+	var head []string
+	keeping := false
 	for _, line := range lines[1:end] {
-		key, value, ok := strings.Cut(strings.TrimSpace(strings.TrimRight(line, "\r")), ":")
-		if ok && strings.TrimSpace(key) == "default" {
-			def = strings.TrimSpace(value)
+		clean := strings.TrimRight(line, "\r")
+		if clean == "" {
+			continue
+		}
+		// Строка с отступом принадлежит предыдущему ключу — так записан
+		// access: список выдач.
+		if clean[0] == ' ' || clean[0] == '\t' {
+			if keeping {
+				head = append(head, clean)
+			}
+			continue
+		}
+		key, _, _ := strings.Cut(clean, ":")
+		keeping = wanted[strings.TrimSpace(key)]
+		if keeping {
+			head = append(head, clean)
 		}
 	}
 	body := strings.Join(lines[end+1:], "\n")
-	if def == "" {
+	if len(head) == 0 {
 		return body
 	}
-	return "---\ndefault: " + def + "\n---\n" + body
+	return "---\n" + strings.Join(head, "\n") + "\n---\n" + body
 }
 
 // scrubOwners вырезает ownerId/characterId из объектов под ключом key

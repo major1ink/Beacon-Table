@@ -410,18 +410,6 @@ export async function deleteBoard(id) {
 export async function fetchBoardScene(id) {
   return apiFetch(`/api/boards/${id}/scene`);
 }
-// saveBoardScene — записать холст. Нужен уровень «чтение и правка».
-export async function saveBoardScene(id, scene) {
-  return apiFetch(`/api/boards/${id}/scene`, { method: "PUT", body: JSON.stringify(scene) });
-}
-// То же при закрытии окна: обычный fetch браузер вправе оборвать. Метод
-// всегда POST, поэтому ручка холста слушает и PUT, и POST. Ответа нет, так
-// что и ошибку не показать.
-export function saveBoardSceneBeacon(id, scene) {
-  if (!navigator.sendBeacon) return false;
-  const body = new Blob([JSON.stringify(scene)], { type: "application/json" });
-  return navigator.sendBeacon(`/api/boards/${id}/scene`, body);
-}
 // importBoard — доска из файла Excalidraw: .excalidraw.md из ваулта Obsidian
 // либо голый .excalidraw. Имя необязательно: без него сервер возьмёт имя
 // файла. Не через apiFetch — тут multipart, а не JSON.
