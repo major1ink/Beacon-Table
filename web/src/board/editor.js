@@ -174,10 +174,17 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
   // addFileToScene — картинка со стола в виде, который понимает Excalidraw.
   // Он ждёт data-адрес, поэтому файл сначала выкачиваем: сам адрес остаётся
   // в файле доски, а тяжёлые байты живут только в памяти вкладки.
+  //
+  // В доске, привезённой из ваулта, вместо адреса стоит «[[картинка.png]]» —
+  // файл лежит в Obsidian, у стола его нет. Такие пропускаем: иначе запрос
+  // ушёл бы на сам стол и вернул не картинку, а страницу с ошибкой.
   async function addFileToScene(fileId, url) {
+    if (typeof url !== "string" || !url.startsWith("/")) return;
     try {
       const res = await fetch(url);
+      if (!res.ok) return;
       const blob = await res.blob();
+      if (!blob.type.startsWith("image/")) return;
       const dataURL = await blobToDataURL(blob);
       api?.addFiles([{ id: fileId, dataURL, mimeType: blob.type, created: Date.now() }]);
     } catch {
