@@ -41,6 +41,9 @@ export function connectBoard(boardId, handlers = {}) {
         case "board_change":
           handlers.onChange?.(msg.elements || []);
           break;
+        case "board_files":
+          handlers.onFiles?.(msg.files || []);
+          break;
         case "board_cursor":
           handlers.onCursor?.(msg);
           break;
@@ -75,6 +78,9 @@ export function connectBoard(boardId, handlers = {}) {
   return {
     sendChange(elements) {
       if (elements.length) send({ type: "board_change", elements });
+    },
+    sendFiles(files) {
+      if (files.length) send({ type: "board_files", files });
     },
     sendCursor(x, y, selected) {
       send({ type: "board_cursor", x, y, selected });

@@ -4,7 +4,7 @@
 // Сохранением страница не занимается вовсе: правки уходят по WebSocket, на
 // диск пишет сервер.
 import { createElement } from "react";
-import { fetchMe, fetchBoard, fetchBoardScene, fetchJournal, fetchJournalEntry } from "../api.js";
+import { fetchMe, fetchBoard, fetchBoardScene, fetchJournal, fetchJournalEntry, uploadFile } from "../api.js";
 import { mountBoardEditor } from "../board/editor.js";
 import { parseWikilink, wikilink, findEntryByTitle } from "../board/links.js";
 import { openModal, showAlert } from "../modal.js";
@@ -174,6 +174,30 @@ function showPeers(list) {
   peersEl.textContent = others.length ? "тут ещё: " + others.map((p) => p.name).join(", ") : "";
 }
 
+// uploadImage — картинку с доски кладём в загрузки стола, а в файле доски
+// остаётся только адрес (см. board_files в internal/service/boardroom.go).
+// Excalidraw отдаёт её data-адресом, поэтому переводим обратно в файл.
+async function uploadImage(file) {
+  try {
+    const blob = await (await fetch(file.dataURL)).blob();
+    const name = "board-" + (file.id || Date.now()) + extFor(blob.type);
+    const { url } = await uploadFile(new File([blob], name, { type: blob.type }), "boards");
+    return url;
+  } catch (err) {
+    showAlert("Не удалось загрузить картинку: " + ((err && err.message) || "ошибка"));
+    return null;
+  }
+}
+
+function extFor(mime) {
+  if (mime === "image/png") return ".png";
+  if (mime === "image/jpeg") return ".jpg";
+  if (mime === "image/gif") return ".gif";
+  if (mime === "image/webp") return ".webp";
+  if (mime === "image/svg+xml") return ".svg";
+  return "";
+}
+
 (async function boot() {
   if (!boardId) {
     fail("Доска не указана.");
@@ -216,6 +240,7 @@ function showPeers(list) {
     onLinkOpen: followLink,
     renderNote,
     isNoteLink: (link) => parseWikilink(link) !== null,
+    uploadImage,
   });
 
   // Тексты врезок перечитываем при возврате в окно: запись правят в журнале,

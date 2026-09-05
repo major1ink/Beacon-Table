@@ -54,9 +54,11 @@ import (
 // такой нашёлся, и на нём наивный разбор молча не находил рисунка вовсе).
 var drawingFence = regexp.MustCompile("(?s)```(compressed-json|json)\r?\n(.*?)\r?\n```")
 
-// embeddedFileLine — строка раздела «## Embedded Files»: «<fileId>: [[файл]]».
+// embeddedFileLine — строка раздела «## Embedded Files». У плагина это
+// «<fileId>: [[файл ваулта]]», у нас — «<fileId>: /uploads/…»: картинки доски
+// лежат в загрузках стола, а не в ваулте.
 // fileId у плагина — sha1, но завязываться на длину незачем.
-var embeddedFileLine = regexp.MustCompile(`^([A-Za-z0-9_.-]+):\s*(\[\[.+?\]\])\s*$`)
+var embeddedFileLine = regexp.MustCompile(`^([A-Za-z0-9_.-]+):\s*(\[\[.+?\]\]|\S+)\s*$`)
 
 var whitespace = regexp.MustCompile(`\s+`)
 

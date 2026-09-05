@@ -295,3 +295,109 @@ func TestBoardHubRejectsUnknownBoard(t *testing.T) {
 		t.Fatalf("Open несуществующей доски = %v, ожидался ErrNotFound", err)
 	}
 }
+
+// Картинка: доска хранит только соответствие fileId → адрес, сам файл лежит
+// в загрузках стола.
+func TestBoardRoomRelaysAndKeepsFiles(t *testing.T) {
+	dir := t.TempDir()
+	store := boardfile.NewStore(dir)
+	svc := NewBoardService(store)
+	b, err := svc.Create(context.Background(), gwen, BoardDraft{Name: "Схема"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewBoardHub(store)
+	defer hub.Shutdown()
+
+	a := newFakeBoardClient("acc-a", "Гвен", true)
+	other := newFakeBoardClient("acc-b", "Том", true)
+	sa, err := hub.Open(context.Background(), b.ID, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	so, err := hub.Open(context.Background(), b.ID, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.waitFor(t, "board_snapshot")
+	other.waitFor(t, "board_snapshot")
+
+	sa.Dispatch(BoardMsg{Type: "board_files", Files: []BoardFile{{FileID: "f1", URL: "/uploads/boards/1-map.png"}}})
+	got := other.waitFor(t, "board_files")
+	files, _ := got["files"].([]BoardFile)
+	if len(files) != 1 || files[0].FileID != "f1" {
+		t.Fatalf("сосед не получил картинку: %+v", got)
+	}
+
+	// На диск доска пишется, когда её закрыл последний, — уводим обоих.
+	sa.Dispatch(BoardMsg{Type: "board_cursor"})
+	sa.Leave()
+	so.Leave()
+
+	doc, err := svc.Scene(context.Background(), gwen, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.EmbeddedFiles) != 1 || doc.EmbeddedFiles[0].Link != "/uploads/boards/1-map.png" {
+		t.Fatalf("картинка не сохранилась в файле доски: %+v", doc.EmbeddedFiles)
+	}
+	// Свежеподключившийся получает список в снимке.
+	c := newFakeBoardClient("acc-c", "Гость", false)
+	if _, err := hub.Open(context.Background(), b.ID, c); err != nil {
+		t.Fatal(err)
+	}
+	snap := c.waitFor(t, "board_snapshot")
+	if list, _ := snap["files"].([]BoardFile); len(list) != 1 {
+		t.Fatalf("в снимке нет картинок: %+v", snap["files"])
+	}
+}
+
+// Адрес принимаем только внутри стола: иначе доска стала бы способом заставить
+// чужой браузер сходить на посторонний сайт.
+func TestBoardRoomRejectsForeignFileURL(t *testing.T) {
+	hub, id := boardHubWith(t)
+	defer hub.Shutdown()
+
+	a := newFakeBoardClient("acc-a", "Гвен", true)
+	other := newFakeBoardClient("acc-b", "Том", true)
+	sa, err := hub.Open(context.Background(), id, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.Open(context.Background(), id, other); err != nil {
+		t.Fatal(err)
+	}
+	a.waitFor(t, "board_snapshot")
+	other.waitFor(t, "board_snapshot")
+
+	for _, bad := range []string{
+		"https://example.com/x.png",
+		"//example.com/x.png",
+		"/uploads/../../etc/passwd",
+		"data:image/png;base64,AAAA",
+	} {
+		sa.Dispatch(BoardMsg{Type: "board_files", Files: []BoardFile{{FileID: "f", URL: bad}}})
+	}
+	other.quiet(t, "board_files")
+}
+
+// Наблюдателю картинки не добавить.
+func TestBoardRoomIgnoresFilesFromReadOnly(t *testing.T) {
+	hub, id := boardHubWith(t)
+	defer hub.Shutdown()
+
+	viewer := newFakeBoardClient("acc-v", "Зритель", false)
+	editor := newFakeBoardClient("acc-e", "Автор", true)
+	sv, err := hub.Open(context.Background(), id, viewer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.Open(context.Background(), id, editor); err != nil {
+		t.Fatal(err)
+	}
+	viewer.waitFor(t, "board_snapshot")
+	editor.waitFor(t, "board_snapshot")
+
+	sv.Dispatch(BoardMsg{Type: "board_files", Files: []BoardFile{{FileID: "f1", URL: "/uploads/boards/x.png"}}})
+	editor.quiet(t, "board_files")
+}

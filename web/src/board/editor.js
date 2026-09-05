@@ -33,9 +33,7 @@ const UI_OPTIONS = {
     changeViewBackgroundColor: true,
     clearCanvas: true,
   },
-  // Excalidraw кладёт картинки в файл data-адресом. Нужны — через общую
-  // загрузку стола, отдельной работой.
-  tools: { image: false },
+  tools: { image: true },
 };
 
 // Пауза перед отправкой: onChange срабатывает на каждое движение указателя,
@@ -55,6 +53,15 @@ function colorFor(id) {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   const c = PEER_COLORS[h % PEER_COLORS.length];
   return { background: c, stroke: c };
+}
+
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
 }
 
 // LABEL_SHAPES — во что Excalidraw умеет вкладывать подпись. У стрелки и
@@ -97,7 +104,7 @@ function makeBoundText(el, text) {
 
 // mountBoardEditor монтирует редактор в el. scene — холст, прочитанный по
 // HTTP для первой отрисовки; дальше всё идёт через WebSocket.
-export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen, renderNote, isNoteLink } = {}) {
+export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen, renderNote, isNoteLink, uploadImage } = {}) {
   const root = createRoot(el);
 
   let api = null;
@@ -105,12 +112,21 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
   // отправленная или его же присланная. По ней и считается, что слать.
   const sent = new Map();
   const peers = new Map();
+  // knownFiles — картинки, чей адрес в загрузках стола уже известен: свои
+  // выгруженные и чужие присланные. Заодно защита от повторной выгрузки —
+  // onChange срабатывает много раз подряд.
+  const knownFiles = new Map();
+  const uploading = new Set();
   let sendTimer = null;
   let cursorTimer = null;
 
   const conn = connectBoard(boardId, {
     onStatus,
-    onSnapshot: (msg) => applyRemote(msg.elements || []),
+    onSnapshot: (msg) => {
+      takeFiles(msg.files || []);
+      applyRemote(msg.elements || []);
+    },
+    onFiles: takeFiles,
     onChange: (elements) => applyRemote(elements),
     onPeers: (list) => {
       // Себя в списке соседей не показываем — курсор под своей же рукой не
@@ -134,6 +150,66 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       pushPeers();
     },
   });
+
+  // takeFiles — картинки, о которых сказал сервер: подкладываем их
+  // Excalidraw, чтобы он нарисовал элементы image.
+  function takeFiles(files) {
+    for (const f of files) {
+      if (!f || !f.fileId || knownFiles.has(f.fileId)) continue;
+      knownFiles.set(f.fileId, f.url);
+      addFileToScene(f.fileId, f.url);
+    }
+  }
+
+  // addFileToScene — картинка со стола в виде, который понимает Excalidraw.
+  // Он ждёт data-адрес, поэтому файл сначала выкачиваем: сам адрес остаётся
+  // в файле доски, а тяжёлые байты живут только в памяти вкладки.
+  async function addFileToScene(fileId, url) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const dataURL = await blobToDataURL(blob);
+      api?.addFiles([{ id: fileId, dataURL, mimeType: blob.type, created: Date.now() }]);
+    } catch {
+      // Картинку удалили или нет доступа — элемент останется пустой рамкой.
+    }
+  }
+
+  // pushLocalImages — картинки, которые вставил ЭТОТ человек. Excalidraw
+  // кладёт их в сцену data-адресом; в файл доски такое пускать нельзя (пара
+  // фотографий — и доска весит мегабайты), поэтому выгружаем в загрузки
+  // стола и запоминаем адрес.
+  function pushLocalImages() {
+    if (readOnly || !api || !uploadImage) return;
+    const files = api.getFiles() || {};
+    for (const [fileId, file] of Object.entries(files)) {
+      if (knownFiles.has(fileId) || uploading.has(fileId)) continue;
+      if (!file || typeof file.dataURL !== "string" || !file.dataURL.startsWith("data:")) continue;
+      uploading.add(fileId);
+      uploadImage(file)
+        .then((url) => {
+          if (!url) return;
+          knownFiles.set(fileId, url);
+          markFileSaved(fileId);
+          conn.sendFiles([{ fileId, url }]);
+        })
+        .finally(() => uploading.delete(fileId));
+    }
+  }
+
+  // Только что вставленную картинку Excalidraw держит в состоянии pending —
+  // «приложение файл ещё не сохранило». Сохранили: снимаем пометку, иначе
+  // элемент так и уедет соседям недоделанным.
+  function markFileSaved(fileId) {
+    if (!api) return;
+    let touched = false;
+    const next = api.getSceneElementsIncludingDeleted().map((e) => {
+      if (e.fileId !== fileId || e.status === "saved") return e;
+      touched = true;
+      return newElementWith(e, { status: "saved" });
+    });
+    if (touched) api.updateScene({ elements: next, captureUpdate: CaptureUpdateAction.NEVER });
+  }
 
   function pushPeers() {
     api?.updateScene({ collaborators: new Map(peers) });
@@ -172,6 +248,7 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
   }
 
   function handleChange() {
+    pushLocalImages();
     // onChange срабатывает и на смене выделения — этим же и пользуемся,
     // чтобы страница знала, есть ли что связывать.
     onSelection?.(selectedElement());
@@ -208,6 +285,9 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       excalidrawAPI: (instance) => {
         api = instance;
         for (const e of instance.getSceneElementsIncludingDeleted()) sent.set(e.id, e.version);
+        // Снимок мог приехать раньше, чем редактор поднялся: подкладываем
+        // картинки ещё раз, теперь уже есть кому.
+        for (const [fileId, url] of knownFiles) addFileToScene(fileId, url);
         // Вписываем содержимое в экран. initialData.scrollToContent не
         // годится: он доводит камеру до содержимого, но масштаб оставляет
         // как есть.

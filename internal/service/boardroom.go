@@ -14,6 +14,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"beacon-table/internal/excalidraw"
@@ -41,6 +42,13 @@ type BoardClient interface {
 	CanEdit() bool
 }
 
+// BoardFile — картинка доски: id, которым её знает Excalidraw, и адрес в
+// загрузках стола.
+type BoardFile struct {
+	FileID string `json:"fileId"`
+	URL    string `json:"url"`
+}
+
 type boardInbound struct {
 	client BoardClient
 	msg    BoardMsg
@@ -62,6 +70,10 @@ type BoardMsg struct {
 	// Elements — изменившиеся элементы целиком (удалённые приходят с
 	// isDeleted, Excalidraw их не выбрасывает).
 	Elements []*excalidraw.Element `json:"elements,omitempty"`
+	// Files — картинки, вставленные на доску: сами файлы лежат в загрузках
+	// стола, в доске остаётся только соответствие fileId → адрес (тот же
+	// приём, что у плагина Obsidian, см. Document.EmbeddedFiles).
+	Files []BoardFile `json:"files,omitempty"`
 	// Курсор и выделение соседа: не хранятся и на диск не попадают.
 	X        float64  `json:"x,omitempty"`
 	Y        float64  `json:"y,omitempty"`
@@ -149,6 +161,7 @@ func (r *boardRoom) run() {
 			c.Send(map[string]any{
 				"type":     "board_snapshot",
 				"elements": r.scene().Elements,
+				"files":    r.files(),
 				"canEdit":  c.CanEdit(),
 			})
 			r.broadcastPeers()
@@ -212,6 +225,24 @@ func (r *boardRoom) handle(c BoardClient, msg BoardMsg) {
 		// бы Excalidraw перерисовать сцену под рукой рисующего.
 		r.broadcast(c, map[string]any{"type": "board_change", "elements": accepted})
 
+	case "board_files":
+		if !c.CanEdit() || len(msg.Files) == 0 || len(msg.Files) > maxBoardFrameElements {
+			return
+		}
+		added := make([]BoardFile, 0, len(msg.Files))
+		for _, f := range msg.Files {
+			if !validBoardFileURL(f.URL) || f.FileID == "" || r.hasFile(f.FileID) {
+				continue
+			}
+			r.doc.EmbeddedFiles = append(r.doc.EmbeddedFiles, excalidraw.EmbeddedFile{FileID: f.FileID, Link: f.URL})
+			added = append(added, f)
+		}
+		if len(added) == 0 {
+			return
+		}
+		r.dirty = true
+		r.broadcast(c, map[string]any{"type": "board_files", "files": added})
+
 	case "board_cursor":
 		r.broadcast(c, map[string]any{
 			"type":     "board_cursor",
@@ -222,6 +253,32 @@ func (r *boardRoom) handle(c BoardClient, msg BoardMsg) {
 			"selected": msg.Selected,
 		})
 	}
+}
+
+func (r *boardRoom) hasFile(id string) bool {
+	for _, f := range r.doc.EmbeddedFiles {
+		if f.FileID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *boardRoom) files() []BoardFile {
+	out := make([]BoardFile, 0, len(r.doc.EmbeddedFiles))
+	for _, f := range r.doc.EmbeddedFiles {
+		out = append(out, BoardFile{FileID: f.FileID, URL: f.Link})
+	}
+	return out
+}
+
+// validBoardFileURL — только адрес внутри самого стола. Клиент недоверенный,
+// и пустить в файл доски ссылку на чужой сайт значило бы, что открывший её
+// молча ходит наружу. Ссылки ваулта («[[картинка.png]]») приходят не отсюда,
+// а из импортированного файла.
+func validBoardFileURL(u string) bool {
+	return strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") &&
+		!strings.Contains(u, "://") && !strings.Contains(u, "..")
 }
 
 // apply — правило Excalidraw для совместной правки: побеждает больший
