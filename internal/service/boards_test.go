@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestBoardPersonalIsInvisibleToOthers(t *testing.T) {
 
 	// Постороннему — именно «не найдено», а не «нет прав»: иначе ответ сам
 	// сообщал бы, что такая доска существует.
-	if _, err := s.Get(ctx, tom, b.ID); err != domain.ErrNotFound {
+	if _, err := s.Get(ctx, tom, b.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("Get чужой личной доски = %v, ожидался ErrNotFound", err)
 	}
 }
@@ -109,10 +110,10 @@ func TestBoardPointwiseGrant(t *testing.T) {
 	if got.CanManage(tom) {
 		t.Error("выданный owner не должен распоряжаться правами")
 	}
-	if _, err := s.Rename(ctx, tom, b.ID, "Переименовал"); err != domain.ErrForbidden {
+	if _, err := s.Rename(ctx, tom, b.ID, "Переименовал"); !errors.Is(err, domain.ErrForbidden) {
 		t.Errorf("Rename чужой доски = %v, ожидался ErrForbidden", err)
 	}
-	if _, err := s.Get(ctx, guest, b.ID); err != domain.ErrNotFound {
+	if _, err := s.Get(ctx, guest, b.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("посторонний видит доску: %v", err)
 	}
 }
@@ -125,7 +126,7 @@ func TestBoardRenameAndDeleteOnlyByOwnerOrDM(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Rename(ctx, tom, b.ID, "Чужими руками"); err != domain.ErrForbidden {
+	if _, err := s.Rename(ctx, tom, b.ID, "Чужими руками"); !errors.Is(err, domain.ErrForbidden) {
 		t.Errorf("Rename игроком-читателем = %v, ожидался ErrForbidden", err)
 	}
 	renamed, err := s.Rename(ctx, gwen, b.ID, "  Схема   ")
@@ -140,13 +141,13 @@ func TestBoardRenameAndDeleteOnlyByOwnerOrDM(t *testing.T) {
 		t.Error("переименование сбросило раздачу прав")
 	}
 
-	if err := s.Delete(ctx, tom, b.ID); err != domain.ErrForbidden {
+	if err := s.Delete(ctx, tom, b.ID); !errors.Is(err, domain.ErrForbidden) {
 		t.Errorf("Delete игроком-читателем = %v, ожидался ErrForbidden", err)
 	}
 	if err := s.Delete(ctx, dm, b.ID); err != nil {
 		t.Fatalf("ДМ не смог удалить доску: %v", err)
 	}
-	if _, err := s.Get(ctx, dm, b.ID); err != domain.ErrNotFound {
+	if _, err := s.Get(ctx, dm, b.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("доска пережила удаление: %v", err)
 	}
 }
@@ -169,7 +170,7 @@ func TestBoardSetAccessOpensAndCloses(t *testing.T) {
 	if _, err := s.SetAccess(ctx, gwen, b.ID, domain.JournalNone, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Get(ctx, tom, b.ID); err != domain.ErrNotFound {
+	if _, err := s.Get(ctx, tom, b.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("после закрытия доска всё ещё видна: %v", err)
 	}
 }
@@ -274,7 +275,7 @@ func TestBoardSceneRespectsAccess(t *testing.T) {
 	}
 	b := res.Board
 	// Чужому доски вообще нет.
-	if _, err := s.Scene(ctx, tom, b.ID); err != domain.ErrNotFound {
+	if _, err := s.Scene(ctx, tom, b.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("Scene чужой доски = %v, ожидался ErrNotFound", err)
 	}
 	// «Только название» — доска в списке есть, а холста не видно.
@@ -284,7 +285,7 @@ func TestBoardSceneRespectsAccess(t *testing.T) {
 	if _, err := s.Get(ctx, tom, b.ID); err != nil {
 		t.Fatalf("доска с limited не видна в списке: %v", err)
 	}
-	if _, err := s.Scene(ctx, tom, b.ID); err != domain.ErrForbidden {
+	if _, err := s.Scene(ctx, tom, b.ID); !errors.Is(err, domain.ErrForbidden) {
 		t.Errorf("Scene при limited = %v, ожидался ErrForbidden", err)
 	}
 }

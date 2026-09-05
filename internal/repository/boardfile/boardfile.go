@@ -286,6 +286,9 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 // доску вместе с правами незачем.
 func (s *Store) load(id string) (*domain.Board, *excalidraw.Document, error) {
 	p := s.path(id)
+	//nolint:gosec // G304: p собран из s.dir и fileName(id), а тот вычищает
+	// из id всё, кроме букв, цифр, точки, дефиса и подчёркивания — выйти за
+	// пределы каталога досок нечем.
 	raw, err := os.ReadFile(p)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -362,7 +365,9 @@ func writeAtomic(path, content string) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // no-op после успешного rename
+	// no-op после успешного rename; ошибка удаления временного файла ничего
+	// не меняет — записать мы уже либо смогли, либо нет.
+	defer func() { _ = os.Remove(tmpName) }()
 	if _, err := tmp.WriteString(content); err != nil {
 		tmp.Close()
 		return err

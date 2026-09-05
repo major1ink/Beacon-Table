@@ -71,7 +71,8 @@ func sanitizeDrawingColor(c string) string {
 	}
 	for i := 1; i < 7; i++ {
 		ch := c[i]
-		if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f' || ch >= 'A' && ch <= 'F') {
+		hex := ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f' || ch >= 'A' && ch <= 'F'
+		if !hex {
 			return ""
 		}
 	}

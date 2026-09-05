@@ -107,12 +107,19 @@ func decompress(length, resetValue int, getNextValue func(int) int) ([]uint16, e
 		return bits
 	}
 
+	// readChar — символ словаря: команда 0 читает 8 бит, команда 1 — 16, и
+	// шире формат не бывает. Маска сохраняет это как утверждение в коде, а не
+	// только в комментарии, и заодно защищает от испорченного потока.
+	readChar := func(maxpower int) uint16 {
+		return uint16(readBits(maxpower) & 0xFFFF)
+	}
+
 	var c []uint16
 	switch readBits(4) {
 	case 0:
-		c = []uint16{uint16(readBits(1 << 8))}
+		c = []uint16{readChar(1 << 8)}
 	case 1:
-		c = []uint16{uint16(readBits(1 << 16))}
+		c = []uint16{readChar(1 << 16)}
 	case 2:
 		return nil, nil // пустая строка на входе — это валидный результат
 	default:
@@ -135,12 +142,12 @@ func decompress(length, resetValue int, getNextValue func(int) int) ([]uint16, e
 		}
 		switch cc {
 		case 0:
-			dictionary[dictSize] = []uint16{uint16(readBits(1 << 8))}
+			dictionary[dictSize] = []uint16{readChar(1 << 8)}
 			dictSize++
 			cc = dictSize - 1
 			enlargeIn--
 		case 1:
-			dictionary[dictSize] = []uint16{uint16(readBits(1 << 16))}
+			dictionary[dictSize] = []uint16{readChar(1 << 16)}
 			dictSize++
 			cc = dictSize - 1
 			enlargeIn--

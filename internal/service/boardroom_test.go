@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -291,7 +292,7 @@ func TestBoardHubRejectsUnknownBoard(t *testing.T) {
 	defer hub.Shutdown()
 
 	c := newFakeBoardClient("acc-a", "Гвен", true)
-	if _, err := hub.Open(context.Background(), "нет-такой", c); err != domain.ErrNotFound {
+	if _, err := hub.Open(context.Background(), "нет-такой", c); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("Open несуществующей доски = %v, ожидался ErrNotFound", err)
 	}
 }
