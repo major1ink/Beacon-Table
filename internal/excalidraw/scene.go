@@ -3,6 +3,7 @@ package excalidraw
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // scene.go — модель сцены Excalidraw. Максимально близко к оригиналу: имена
@@ -273,4 +274,40 @@ func CarryOverPluginFields(old, next *Scene) {
 		}
 		e.RawText = was.RawText
 	}
+}
+
+// NoteLinks — названия заметок, на которые ссылаются элементы холста, в
+// порядке появления и без повторов. Ссылка вида «[[Кладбище]]» — то, чем
+// плагин Obsidian связывает элемент с заметкой (см. web/src/board/links.js).
+func (s *Scene) NoteLinks() []string {
+	if s == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, e := range s.Elements {
+		if e == nil || e.IsDeleted || e.Link == nil {
+			continue
+		}
+		name := wikiName(*e.Link)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
+}
+
+// wikiName — «[[Кладбище#Склеп|там]]» → «Кладбище»; всё прочее → "".
+func wikiName(link string) string {
+	s := strings.TrimSpace(link)
+	if !strings.HasPrefix(s, "[[") || !strings.HasSuffix(s, "]]") {
+		return ""
+	}
+	s = strings.TrimSuffix(strings.TrimPrefix(s, "[["), "]]")
+	if i := strings.IndexAny(s, "|#"); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
 }

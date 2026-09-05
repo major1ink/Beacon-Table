@@ -235,3 +235,24 @@ func (d *Document) Markdown(frontmatter string) (string, error) {
 	b.WriteString("\n```\n%%\n")
 	return b.String(), nil
 }
+
+// FileName — имя файла из ссылки раздела «## Embedded Files»:
+// «[[Тронный зал.png]]» → «Тронный зал.png». Наши собственные адреса
+// («/uploads/…») возвращаются как есть — по ним и так видно, что искать
+// нечего.
+func (f EmbeddedFile) FileName() string {
+	s := strings.TrimSpace(f.Link)
+	if !strings.HasPrefix(s, "[[") || !strings.HasSuffix(s, "]]") {
+		return ""
+	}
+	s = strings.TrimSuffix(strings.TrimPrefix(s, "[["), "]]")
+	// «[[файл|подпись]]» и «[[файл#раздел]]» — синтаксис Obsidian.
+	if i := strings.IndexAny(s, "|#"); i >= 0 {
+		s = s[:i]
+	}
+	// Ссылка бывает с путём внутри ваулта — нам нужно только имя файла.
+	if i := strings.LastIndexAny(s, "/\\"); i >= 0 {
+		s = s[i+1:]
+	}
+	return strings.TrimSpace(s)
+}

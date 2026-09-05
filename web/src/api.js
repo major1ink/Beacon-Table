@@ -419,10 +419,20 @@ export async function fetchBoardImages() {
 // importBoard — доска из файла Excalidraw: .excalidraw.md из ваулта Obsidian
 // либо голый .excalidraw. Имя необязательно: без него сервер возьмёт имя
 // файла. Не через apiFetch — тут multipart, а не JSON.
-export async function importBoard(file, name) {
+// images — [{name, file}]: картинка и то имя, которым доска называет её в
+// разделе «## Embedded Files». В ваулте файлы лежат отдельно, и найти их —
+// забота вызывающего (см. importDialog в board-list.js). Ответ, кроме самой доски, говорит, каких
+// картинок не хватило и на какие заметки доска ссылается.
+export async function importBoard(file, name, images = []) {
   const form = new FormData();
   form.append("file", file);
   if (name) form.append("name", name);
+  // Пара «файл + под каким именем его знает доска»: имя из ваулта и имя
+  // файла на диске совпадают не всегда (разная нормализация юникода).
+  for (const { name, file } of images) {
+    form.append("image", file, file.name);
+    form.append("imageName", name);
+  }
   const res = await fetch("/api/boards/import", { method: "POST", body: form });
   if (!res.ok) throw new Error((await res.text()) || "не удалось импортировать доску");
   return res.json();

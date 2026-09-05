@@ -46,7 +46,11 @@ type BoardService interface {
 	// Import заводит доску из файла Excalidraw (.excalidraw.md из ваулта
 	// Obsidian либо голый .excalidraw). Права — как у Create: импортирующий
 	// становится автором, доска заводится закрытой.
-	Import(ctx context.Context, v domain.JournalViewer, name string, raw []byte) (*domain.Board, error)
+	//
+	// images — уже загруженные в стол картинки, «имя файла в ваулте» → адрес:
+	// в самой доске лежат только имена, а файлы приезжают отдельно (см.
+	// handleBoardImport).
+	Import(ctx context.Context, v domain.JournalViewer, name string, raw []byte, images map[string]string) (*BoardImport, error)
 	// Scene — холст доски; нужен уровень чтения.
 	Scene(ctx context.Context, v domain.JournalViewer, id string) (*excalidraw.Document, error)
 	// Rename — только автор и ДМ (см. domain.Sharing.CanManage).
@@ -55,6 +59,18 @@ type BoardService interface {
 	SetAccess(ctx context.Context, v domain.JournalViewer, id string, def domain.JournalAccess, access map[string]domain.JournalAccess) (*domain.Board, error)
 	// Delete удаляет доску — только автор и ДМ.
 	Delete(ctx context.Context, v domain.JournalViewer, id string) error
+}
+
+// BoardImport — итог импорта. Кроме самой доски рассказывает, чего ей не
+// хватило: молчаливый частичный импорт хуже честного «эту картинку не нашёл».
+type BoardImport struct {
+	Board *domain.Board
+	// Notes — названия записей журнала, на которые ссылается доска. Сами
+	// записи импорт не заводит: связь у нас по названию, и уже имеющиеся
+	// подхватятся сами (см. web/src/board/links.js).
+	Notes []string
+	// MissingImages — картинки, которые доска называет, а файлов не дали.
+	MissingImages []string
 }
 
 // BoardDraft — что клиент присылает на создание доски. Отдельный тип, а не
@@ -153,7 +169,7 @@ func (s *boardService) create(ctx context.Context, v domain.JournalViewer, draft
 // одним: холст берётся не пустой, а из файла. Имя, если его не задали,
 // берётся из имени файла — так импорт десятка досок не требует придумывать
 // названия заново.
-func (s *boardService) Import(ctx context.Context, v domain.JournalViewer, name string, raw []byte) (*domain.Board, error) {
+func (s *boardService) Import(ctx context.Context, v domain.JournalViewer, name string, raw []byte, images map[string]string) (*BoardImport, error) {
 	if len(raw) > maxBoardImportBytes {
 		return nil, &domain.ValidationError{Msg: "файл слишком большой"}
 	}
@@ -166,7 +182,31 @@ func (s *boardService) Import(ctx context.Context, v domain.JournalViewer, name 
 	if len(doc.Scene.Elements) > maxBoardElements {
 		return nil, &domain.ValidationError{Msg: "на доске слишком много элементов"}
 	}
-	return s.create(ctx, v, BoardDraft{Name: name, Default: domain.JournalNone}, doc)
+	missing := relinkImages(doc, images)
+	b, err := s.create(ctx, v, BoardDraft{Name: name, Default: domain.JournalNone}, doc)
+	if err != nil {
+		return nil, err
+	}
+	return &BoardImport{Board: b, Notes: doc.Scene.NoteLinks(), MissingImages: missing}, nil
+}
+
+// relinkImages переписывает ссылки на картинки ваулта на адреса в загрузках
+// стола и возвращает имена тех, для которых файла не дали. Файла у стола нет
+// и не будет: ваулт ему недоступен, картинки приносит тот, кто импортирует.
+func relinkImages(doc *excalidraw.Document, images map[string]string) []string {
+	var missing []string
+	for i, f := range doc.EmbeddedFiles {
+		name := f.FileName()
+		if name == "" {
+			continue // уже наш адрес, а не ссылка ваулта
+		}
+		if url, ok := images[name]; ok {
+			doc.EmbeddedFiles[i].Link = url
+			continue
+		}
+		missing = append(missing, name)
+	}
+	return missing
 }
 
 func (s *boardService) Scene(ctx context.Context, v domain.JournalViewer, id string) (*excalidraw.Document, error) {

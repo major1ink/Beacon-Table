@@ -13,8 +13,9 @@ import (
 	"beacon-table/internal/service"
 )
 
-// maxBoardUpload — потолок тела запроса на импорт доски
-const maxBoardUpload = 16 << 20
+// maxBoardUpload — потолок тела запроса на импорт доски: сам файл плюс его
+// картинки из ваулта, а те бывают многомегабайтными.
+const maxBoardUpload = 64 << 20
 
 // ---- доски стола (см. internal/service/boards.go,
 // internal/repository/boardfile) ----
@@ -160,13 +161,47 @@ func (a *API) handleBoardImport(w http.ResponseWriter, r *http.Request) {
 		name = boardNameFromFile(header.Filename)
 	}
 
+	// Картинки доски приезжают тем же запросом: в файле ваулта лежат только
+	// их имена, а сами файлы — в ваулте, куда столу хода нет. Кладём их в
+	// загрузки и отдаём сервису соответствие «имя → адрес».
+	//
+	// Выгружаем до разбора доски: если файл окажется не тот, пара картинок
+	// осядет в загрузках без дела. Это дешевле, чем разбирать доску дважды.
+	// Под каким именем доска знает картинку, говорит клиент отдельным полем
+	// imageName — по порядку, файл к файлу. Сопоставлять по имени вложения
+	// нельзя: доска пишет имя как оно есть в ваулте, а файловая система и
+	// браузер могут отдать то же имя другой нормализацией юникода.
+	names := r.MultipartForm.Value["imageName"]
+	images := map[string]string{}
+	for i, fh := range r.MultipartForm.File["image"] {
+		img, err := fh.Open()
+		if err != nil {
+			continue
+		}
+		url, err := world.Assets.Upload(r.Context(), acc, domain.AssetKindBoards, "", fh.Filename, img)
+		img.Close()
+		if err != nil {
+			writeBoardErr(w, err)
+			return
+		}
+		key := fh.Filename
+		if i < len(names) && strings.TrimSpace(names[i]) != "" {
+			key = names[i]
+		}
+		images[key] = url
+	}
+
 	v := journalViewer(acc)
-	b, err := world.Boards.Import(r.Context(), v, name, raw)
+	res, err := world.Boards.Import(r.Context(), v, name, raw, images)
 	if err != nil {
 		writeBoardErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, boardJSON(b, v))
+	out := boardJSON(res.Board, v)
+	// Чего не хватило и что ещё можно подвезти — клиент показывает отчётом.
+	out["notes"] = res.Notes
+	out["missingImages"] = res.MissingImages
+	writeJSON(w, http.StatusCreated, out)
 }
 
 // boardNameFromFile — «Сессия 55.excalidraw.md» -> «Сессия 55». Обрезаются

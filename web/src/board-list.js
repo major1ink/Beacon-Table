@@ -9,7 +9,8 @@
 // второй источник правды о правах тут не заводится.
 import { icon } from "./icons.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "./modal.js";
-import { fetchBoards, createBoard, renameBoard, setBoardAccess, deleteBoard, importBoard, fetchJournalMembers } from "./api.js";
+import { fetchBoards, createBoard, renameBoard, setBoardAccess, deleteBoard, importBoard, fetchJournalMembers, fetchJournal, createJournalEntry } from "./api.js";
+import { imageNamesOf, indexFolder, lookupFile, noteFileFor, titleOf, noteContent } from "./board/import.js";
 import { openFloatingWindow } from "./floating-window.js";
 
 // ACCESS_LEVELS — те же четыре уровня, что у журнала (domain.JournalAccess),
@@ -105,6 +106,153 @@ async function accessDialog(board) {
   return { def: defSelect.value, access };
 }
 
+// importDialog — что импортировать и откуда брать то, на что доска
+// ссылается. Папку спрашиваем именно папкой: картинки в ваулте лежат
+// отдельно от excalidraw-файлов, и заставлять человека вылавливать их по
+// одной — перекладывать на него работу, которую машина сделает точнее (см.
+// board/import.js).
+async function importDialog() {
+  let boards = null;
+  let vault = null;
+  let withImages = null;
+  let withNotes = null;
+
+  const ok = await openModal({
+    title: "Импорт из Excalidraw",
+    okLabel: "Импортировать",
+    buildBody: (body) => {
+      const hint = document.createElement("p");
+      hint.className = "bt-modal-text";
+      hint.textContent =
+        "Доска сама знает, какие картинки и заметки ей нужны — папку ваулта укажи, чтобы было где их взять.";
+      body.appendChild(hint);
+
+      boards = fileRow(body, "Файлы досок", { accept: ".md,.excalidraw", multiple: true });
+      vault = fileRow(body, "Папка ваулта (необязательно)", { directory: true });
+
+      withImages = checkRow(body, "Перенести картинки", true);
+      withNotes = checkRow(body, "Завести заметки, на которые ссылается доска", false);
+
+      const note = document.createElement("p");
+      note.className = "bt-modal-text";
+      note.textContent =
+        "Заметки заводятся только те, что названы прямо на доске, и только если такой записи в журнале ещё нет: связь идёт по названию, и уже имеющаяся подхватится сама.";
+      body.appendChild(note);
+    },
+    onOk: () => ({
+      boards: [...boards.files],
+      vault: [...vault.files],
+      images: withImages.checked,
+      notes: withNotes.checked,
+    }),
+    onCancel: () => null,
+  });
+  if (!ok || !ok.boards.length) return null;
+  return ok;
+}
+
+function fileRow(body, label, { accept, multiple, directory } = {}) {
+  const wrap = document.createElement("label");
+  wrap.className = "bt-modal-text";
+  wrap.style.cssText = "display:block;margin-top:6px;";
+  const cap = document.createElement("div");
+  cap.textContent = label;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.className = "bt-modal-input";
+  if (accept) input.accept = accept;
+  if (multiple) input.multiple = true;
+  if (directory) {
+    // webkitdirectory поддерживают все живые браузеры, но только атрибутом:
+    // свойства с таким именем у input нет.
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+  }
+  wrap.append(cap, input);
+  body.appendChild(wrap);
+  return input;
+}
+
+function checkRow(body, label, on) {
+  const wrap = document.createElement("label");
+  wrap.className = "bt-modal-text";
+  wrap.style.cssText = "display:flex;align-items:center;gap:8px;margin-top:8px;";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = on;
+  const cap = document.createElement("span");
+  cap.textContent = label;
+  wrap.append(box, cap);
+  body.appendChild(wrap);
+  return box;
+}
+
+// runImport — сам перенос. Отчёт в конце обязателен: молчаливый частичный
+// импорт хуже честного «эту картинку не нашёл».
+async function runImport(refresh) {
+  const opts = await importDialog();
+  if (!opts) return;
+
+  const index = indexFolder(opts.vault);
+  const failed = [];
+  const missingImages = new Set();
+  const missingNotes = new Set();
+  let addedNotes = 0;
+
+  // Список записей журнала — чтобы не заводить то, что уже есть. Читаем один
+  // раз на весь импорт и дополняем по ходу.
+  let titles = new Set();
+  if (opts.notes) {
+    try {
+      titles = new Set((await fetchJournal()).map((e) => (e.title || "").trim().toLowerCase()));
+    } catch {
+      titles = new Set();
+    }
+  }
+
+  for (const file of opts.boards) {
+    try {
+      const text = await file.text();
+      const images = [];
+      if (opts.images) {
+        for (const name of imageNamesOf(text)) {
+          const found = lookupFile(index, name);
+          if (found) images.push({ name, file: found });
+          else missingImages.add(name);
+        }
+      }
+      const board = await importBoard(file, "", images);
+      for (const name of board.missingImages || []) missingImages.add(name);
+
+      if (!opts.notes) continue;
+      for (const title of board.notes || []) {
+        if (titles.has(title.trim().toLowerCase())) continue;
+        const note = noteFileFor(index, title);
+        if (!note) {
+          missingNotes.add(title);
+          continue;
+        }
+        await createJournalEntry({ content: noteContent(titleOf(note.name), await note.text()) });
+        titles.add(title.trim().toLowerCase());
+        addedNotes++;
+      }
+    } catch (err) {
+      failed.push(`${file.name}: ${(err && err.message) || "ошибка"}`);
+    }
+  }
+
+  await refresh();
+
+  const report = [];
+  const done = opts.boards.length - failed.length;
+  if (done) report.push(`Досок перенесено: ${done}.`);
+  if (addedNotes) report.push(`Заметок заведено: ${addedNotes}.`);
+  if (missingImages.size) report.push("Не нашлось картинок: " + [...missingImages].join(", ") + ".");
+  if (missingNotes.size) report.push("Не нашлось заметок: " + [...missingNotes].join(", ") + ".");
+  if (failed.length) report.push("Не импортировалось:\n" + failed.join("\n"));
+  if (report.length) showAlert(report.join("\n\n"));
+}
+
 // createBoardList наполняет mount списком досок. Возвращает { refresh } —
 // список перечитывается при открытии панели, а не живёт подпиской: доски
 // заводят редко, и держать ради этого ещё один канал незачем.
@@ -116,21 +264,11 @@ export function createBoardList(mount) {
   addBtn.className = "board-add";
   addBtn.innerHTML = `${icon("plus", { size: 14 })} Новая доска`;
 
-  // Импорт — скрытый input и кнопка рядом с «Новой доской»: файл
-  // .excalidraw.md из ваулта Obsidian переносится целиком, вместе с
-  // элементами, цветами и всем, чего мы ещё не умеем рисовать (см.
-  // internal/excalidraw — незнакомое сохраняется нетронутым).
-  const importInput = document.createElement("input");
-  importInput.type = "file";
-  importInput.accept = ".md,.excalidraw";
-  importInput.multiple = true;
-  importInput.style.display = "none";
-
   const importBtn = document.createElement("button");
   importBtn.type = "button";
   importBtn.className = "board-add board-import";
   importBtn.innerHTML = `${icon("upload", { size: 14 })} Импорт из Excalidraw`;
-  importBtn.onclick = () => importInput.click();
+  importBtn.onclick = () => runImport(refresh);
 
   const listEl = document.createElement("div");
   listEl.className = "board-items";
@@ -138,25 +276,9 @@ export function createBoardList(mount) {
   const hint = document.createElement("p");
   hint.className = "draw-hint";
   hint.textContent =
-    "Доска — бесконечный холст рядом с заметками. Открытая всем за столом видна всем, закрытая — только тебе и ДМ. Импорт принимает файлы плагина Excalidraw из ваулта Obsidian.";
+    "Доска — бесконечный холст рядом с заметками. Открытая всем за столом видна всем, закрытая — только тебе и ДМ. Импорт принимает файлы плагина Excalidraw и переносит их картинки, если показать папку ваулта.";
 
-  importInput.onchange = async () => {
-    const files = [...importInput.files];
-    importInput.value = ""; // иначе повторный выбор того же файла не сработает
-    if (!files.length) return;
-    const failed = [];
-    for (const file of files) {
-      try {
-        await importBoard(file);
-      } catch (err) {
-        failed.push(`${file.name}: ${(err && err.message) || "ошибка"}`);
-      }
-    }
-    await refresh();
-    if (failed.length) showAlert("Не импортировалось:\n" + failed.join("\n"));
-  };
-
-  mount.append(addBtn, importBtn, importInput, listEl, hint);
+  mount.append(addBtn, importBtn, listEl, hint);
 
   async function refresh() {
     let boards = [];

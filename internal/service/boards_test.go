@@ -213,10 +213,11 @@ func TestBoardImportKeepsSceneAndOwnership(t *testing.T) {
 	ctx := context.Background()
 	s := boardsSvc(t)
 
-	b, err := s.Import(ctx, gwen, "Сессия 55", []byte(excalidrawFile))
+	res, err := s.Import(ctx, gwen, "Сессия 55", []byte(excalidrawFile), nil)
 	if err != nil {
 		t.Fatalf("импорт: %v", err)
 	}
+	b := res.Board
 	if b.Name != "Сессия 55" {
 		t.Errorf("имя = %q", b.Name)
 	}
@@ -257,7 +258,7 @@ func TestBoardImportRejectsForeignFile(t *testing.T) {
 		"---\ntags: [note]\n---\n\nПросто заметка.\n",
 		`{"type":"drawio","version":2,"elements":[]}`,
 	} {
-		if _, err := s.Import(ctx, gwen, "Не доска", []byte(raw)); err == nil {
+		if _, err := s.Import(ctx, gwen, "Не доска", []byte(raw), nil); err == nil {
 			t.Errorf("чужой файл импортировался: %q", raw[:16])
 		}
 	}
@@ -267,10 +268,11 @@ func TestBoardSceneRespectsAccess(t *testing.T) {
 	ctx := context.Background()
 	s := boardsSvc(t)
 
-	b, err := s.Import(ctx, gwen, "Тайная схема", []byte(excalidrawFile))
+	res, err := s.Import(ctx, gwen, "Тайная схема", []byte(excalidrawFile), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	b := res.Board
 	// Чужому доски вообще нет.
 	if _, err := s.Scene(ctx, tom, b.ID); err != domain.ErrNotFound {
 		t.Errorf("Scene чужой доски = %v, ожидался ErrNotFound", err)
@@ -310,5 +312,66 @@ func TestBoardFileIsExcalidrawFile(t *testing.T) {
 	// Даже пустая доска — валидный файл Excalidraw, а не заготовка.
 	if _, err := excalidraw.ParseDocument(string(raw)); err != nil {
 		t.Errorf("файл пустой доски не разбирается как Excalidraw: %v", err)
+	}
+}
+
+// Доска из ваулта со своими картинками и ссылками на заметки: картинки
+// перевешиваются на загрузки стола, названия заметок возвращаются отдельно.
+const excalidrawWithDeps = "---\n" +
+	"excalidraw-plugin: parsed\ntags: [excalidraw]\n" +
+	"---\n\n# Excalidraw Data\n\n" +
+	"## Embedded Files\nsha1aaa: [[Тронный зал.png]]\n\nsha1bbb: [[Карта/Схема.png]]\n\n" +
+	"%%\n## Drawing\n```json\n" +
+	`{"type":"excalidraw","version":2,"elements":[` +
+	`{"id":"i1","type":"image","x":0,"y":0,"width":10,"height":10,"fileId":"sha1aaa"},` +
+	`{"id":"i2","type":"image","x":0,"y":0,"width":10,"height":10,"fileId":"sha1bbb"},` +
+	`{"id":"r1","type":"rectangle","x":0,"y":0,"width":10,"height":10,"link":"[[Кладбище#Склеп|туда]]"},` +
+	`{"id":"r2","type":"rectangle","x":0,"y":0,"width":10,"height":10,"link":"[[Кладбище]]"},` +
+	`{"id":"r3","type":"rectangle","x":0,"y":0,"width":10,"height":10,"link":"https://example.com"}` +
+	`],"appState":{},"files":{}}` +
+	"\n```\n%%\n"
+
+func TestBoardImportRelinksImages(t *testing.T) {
+	ctx := context.Background()
+	s := boardsSvc(t)
+
+	res, err := s.Import(ctx, gwen, "Сессия", []byte(excalidrawWithDeps),
+		map[string]string{"Тронный зал.png": "/uploads/boards/1-tron.png"})
+	if err != nil {
+		t.Fatalf("импорт: %v", err)
+	}
+	// Ту, что принесли, перевесили на стол; о второй честно сказали.
+	if len(res.MissingImages) != 1 || res.MissingImages[0] != "Схема.png" {
+		t.Errorf("не сошлось, каких картинок не хватает: %v", res.MissingImages)
+	}
+	doc, err := s.Scene(ctx, gwen, res.Board.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	links := map[string]string{}
+	for _, f := range doc.EmbeddedFiles {
+		links[f.FileID] = f.Link
+	}
+	if links["sha1aaa"] != "/uploads/boards/1-tron.png" {
+		t.Errorf("картинка не перевешена на стол: %q", links["sha1aaa"])
+	}
+	// Ненайденную не трогаем: ссылка ваулта — единственное, что о ней
+	// известно, и терять её незачем.
+	if links["sha1bbb"] != "[[Карта/Схема.png]]" {
+		t.Errorf("ссылка ненайденной картинки испорчена: %q", links["sha1bbb"])
+	}
+}
+
+func TestBoardImportReportsNoteLinks(t *testing.T) {
+	ctx := context.Background()
+	s := boardsSvc(t)
+
+	res, err := s.Import(ctx, gwen, "Сессия", []byte(excalidrawWithDeps), nil)
+	if err != nil {
+		t.Fatalf("импорт: %v", err)
+	}
+	// Раздел и подпись отброшены, повтор схлопнут, обычный адрес не заметка.
+	if len(res.Notes) != 1 || res.Notes[0] != "Кладбище" {
+		t.Errorf("названия заметок = %v, ожидалось [Кладбище]", res.Notes)
 	}
 }
