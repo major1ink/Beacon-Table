@@ -24,9 +24,10 @@ import {
   deleteJournalFolder,
 } from "../api.js";
 import { openSocket } from "../ws-reconnect.js";
-import { renderNoteHtml, wireWikiLinks, scrollToHeading } from "../notes/markdown.js";
+import { renderNoteHtml, wireWikiLinks, markMissingWikiLinks, decorateTags, tagsIn, wikiTargetsIn, resolveWikiTarget, scrollToHeading } from "../notes/markdown.js";
 import { mountHeadingNav } from "../notes/heading-nav.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
+import { attachWikiAutocomplete } from "../notes/wiki-autocomplete.js";
 import { icon } from "../icons.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
@@ -55,6 +56,8 @@ const accessBtn = document.getElementById("accessBtn");
 const editBtn = document.getElementById("editBtn");
 const deleteBtn = document.getElementById("deleteBtn");
 mountNoteToolbar(document.getElementById("toolbar"), editArea);
+// Подсказка записей на [[ — без самой открытой записи.
+attachWikiAutocomplete(editArea, () => entries.filter((e) => !current || e.id !== current.id));
 const headingNav = mountHeadingNav(tocBtn, renderEl);
 
 // ACCESS_LEVELS — те же четыре уровня, что и на сервере
@@ -83,6 +86,8 @@ let filter = "all"; // all | shared | mine | others
 let pendingSection = "";
 let currentFolder = ""; // куда ляжет новая запись/папка
 const openFolders = new Set();
+// tagFilter — показывать в дереве только записи с этой меткой; "" — все.
+let tagFilter = "";
 
 // ---- список и дерево ----
 
@@ -98,6 +103,10 @@ async function refreshList({ keepMessage = false } = {}) {
     treeEl.appendChild(hint);
     return;
   }
+  contentIndex = null; // тексты изменились — указатель ссылок и меток соберём заново
+  tagCache.clear();
+  // Дерево сужено по метке, а метки читаются из указателя — он нужен сразу.
+  if (tagFilter) await ensureContentIndex().catch(() => {});
   renderTree();
   renderFolderSelect();
 }
@@ -123,6 +132,7 @@ function visibleEntries() {
   const q = searchEl.value.trim().toLowerCase();
   return entries.filter((e) => {
     if (!matchesFilter(e)) return false;
+    if (tagFilter && !entryTags(e.id).includes(tagFilter)) return false;
     if (!q) return true;
     return (e.title || "").toLowerCase().includes(q) || (e.ownerName || "").toLowerCase().includes(q);
   });
@@ -200,11 +210,20 @@ function makeDropTarget(row, folder) {
   });
 }
 
+// indentGuides — по спану-линии на каждый уровень вложенности; они же задают
+// отступ строки, поэтому padding-left строкам не нужен.
+function indentGuides(depth) {
+  return Array.from({ length: depth }, () => {
+    const g = document.createElement("span");
+    g.className = "indent-guide";
+    return g;
+  });
+}
+
 function entryRowEl(e, depth) {
   const row = document.createElement("button");
   row.type = "button";
   row.className = "entry-row" + (current && current.id === e.id ? " current" : "");
-  row.style.paddingLeft = 8 + depth * 12 + "px";
 
   // Права те же, что у выпадающего списка папок под записью.
   if (e.canManage) {
@@ -230,7 +249,7 @@ function entryRowEl(e, depth) {
   owner.textContent = e.ownerName || (e.ownerId ? "" : "ДМ");
   owner.title = "Автор: " + (e.ownerName || "ДМ");
 
-  row.append(accessDot(e), ico, title, owner);
+  row.append(...indentGuides(depth), accessDot(e), ico, title, owner);
   row.onclick = () => openEntry(e.id);
   return row;
 }
@@ -239,14 +258,10 @@ function folderRowEl(node, depth) {
   const open = openFolders.has(node.path);
   const row = document.createElement("div");
   row.className = "folder-row" + (open ? " open" : "") + (currentFolder === node.path ? " current" : "");
-  row.style.paddingLeft = 6 + depth * 12 + "px";
 
   const chevron = document.createElement("span");
   chevron.className = "folder-chevron";
   chevron.innerHTML = icon("chevron-right", { size: 12 });
-  const folderIcon = document.createElement("span");
-  folderIcon.className = "folder-icon";
-  folderIcon.innerHTML = icon("folder", { size: 13 });
   const name = document.createElement("span");
   name.className = "folder-name";
   name.textContent = node.name;
@@ -254,7 +269,7 @@ function folderRowEl(node, depth) {
   count.className = "folder-count";
   count.textContent = countEntries(node) || "";
 
-  row.append(chevron, folderIcon, name, count);
+  row.append(...indentGuides(depth), chevron, name, count);
   row.onclick = () => {
     if (open) openFolders.delete(node.path);
     else openFolders.add(node.path);
@@ -472,6 +487,7 @@ function renderEntry() {
 
   editWrap.style.display = editing ? "flex" : "none";
   renderEl.style.display = editing ? "none" : "block";
+  backlinksEl.replaceChildren(); // упоминания рисуются только в режиме чтения, ниже
   if (editing) {
     editArea.value = current.content || "";
     editArea.focus();
@@ -485,6 +501,9 @@ function renderEntry() {
     tocBtn.style.display = "none";
   } else {
     renderEl.innerHTML = renderNoteHtml(current.content || "");
+    markMissingWikiLinks(renderEl, entries, current.folder || "");
+    decorateTags(renderEl);
+    renderBacklinks();
     // Формулы в тексте кликабельны, как в карточках библиотек — бросок
     // уходит в общий лог стола (см. inline-rolls.js).
     enhanceRolls(renderEl, sendRoll);
@@ -624,9 +643,9 @@ document.getElementById("newFolderBtn").onclick = async () => {
 
 filtersEl.addEventListener("click", (e) => {
   const chip = e.target.closest(".filter-chip");
-  if (!chip) return;
+  if (!chip || chip.id === "tagChip") return; // чип метки снимает себя сам
   filter = chip.dataset.filter;
-  for (const c of filtersEl.querySelectorAll(".filter-chip")) c.classList.toggle("active", c === chip);
+  for (const c of filtersEl.querySelectorAll(".filter-chip[data-filter]")) c.classList.toggle("active", c === chip);
   renderTree();
 });
 searchEl.oninput = renderTree;
@@ -914,6 +933,211 @@ function sendRoll(formula, label) {
   const title = current && current.title;
   rollWS.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
 }
+
+// ---- «Упоминания» — записи, ссылающиеся на открытую ----
+// Ссылки лежат в тексте записей, поэтому нужен указатель: список с текстами
+// (fetchJournal withContent), запрашивается лениво и живёт до следующего
+// изменения журнала. Ссылки в нём разбирает тот же resolveWikiTarget, что и
+// клик по ссылке в тексте.
+const backlinksEl = document.getElementById("backlinks");
+let contentIndex = null;
+
+async function ensureContentIndex() {
+  if (!contentIndex) contentIndex = await fetchJournal({ withContent: true });
+  return contentIndex;
+}
+
+async function renderBacklinks() {
+  backlinksEl.replaceChildren();
+  if (!current) return;
+  const id = current.id;
+  let index;
+  try {
+    index = await ensureContentIndex();
+  } catch {
+    return; // без указателя упоминаний просто не будет
+  }
+  if (!current || current.id !== id) return; // пока грузили, открыли другую
+
+  const hits = index.filter(
+    (e) =>
+      e.id !== id &&
+      wikiTargetsIn(e.content).some((t) => {
+        const found = resolveWikiTarget(t, entries, e.folder || "");
+        return found && found.id === id;
+      })
+  );
+  if (!hits.length) return;
+
+  const head = document.createElement("div");
+  head.className = "backlinks-head";
+  head.textContent = `Упоминания · ${hits.length}`;
+  backlinksEl.appendChild(head);
+  for (const e of hits.sort((a, b) => (a.title || "").localeCompare(b.title || "", "ru"))) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "backlink";
+    const title = document.createElement("b");
+    title.textContent = e.title || "Без названия";
+    row.appendChild(title);
+    if (e.folder) {
+      const where = document.createElement("span");
+      where.textContent = e.folder;
+      row.appendChild(where);
+    }
+    row.onclick = () => openEntry(e.id);
+    backlinksEl.appendChild(row);
+  }
+}
+
+// ---- метки (#нпс) ----
+// Метка в тексте — чип; клик по нему сужает дерево до записей с этой меткой,
+// активная метка стоит отдельным чипом в ряду фильтров.
+const tagCache = new Map(); // id записи -> её метки, собирается из указателя
+
+function entryTags(id) {
+  if (!contentIndex) return [];
+  if (!tagCache.size) for (const e of contentIndex) tagCache.set(e.id, tagsIn(e.content));
+  return tagCache.get(id) || [];
+}
+
+async function setTagFilter(tag) {
+  if (tag) {
+    try {
+      await ensureContentIndex();
+    } catch {
+      return; // без указателя метки не сопоставить
+    }
+  }
+  tagFilter = tag;
+  renderTagChip();
+  renderTree();
+}
+
+function renderTagChip() {
+  const existing = document.getElementById("tagChip");
+  if (existing) existing.remove();
+  if (!tagFilter) return;
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.id = "tagChip";
+  chip.className = "filter-chip active";
+  chip.textContent = "#" + tagFilter + " ✕";
+  chip.title = "Снять фильтр по метке";
+  chip.onclick = () => setTagFilter("");
+  filtersEl.appendChild(chip);
+}
+
+renderEl.addEventListener("click", (e) => {
+  const chip = e.target.closest("a.note-tag");
+  if (!chip) return;
+  e.preventDefault();
+  setTagFilter(chip.dataset.tag);
+});
+
+// ---- быстрый переход по записям (Ctrl+O) ----
+// Поле поверх окна: фильтр по заголовку и папке, при пустом поле — десять
+// последних по времени правки.
+const quickOverlay = document.getElementById("quickOverlay");
+const quickInput = document.getElementById("quickInput");
+const quickList = document.getElementById("quickList");
+let quickItems = [];
+let quickActive = 0;
+
+function quickMatches() {
+  const q = quickInput.value.trim().toLowerCase();
+  const byFresh = [...entries].sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  if (!q) return byFresh.slice(0, 10);
+  const rank = (e) => {
+    const title = (e.title || "").toLowerCase();
+    if (title.startsWith(q)) return 0;
+    if (title.includes(q)) return 1;
+    return 2; // совпало только по папке
+  };
+  return byFresh
+    .filter((e) => (e.title || "").toLowerCase().includes(q) || (e.folder || "").toLowerCase().includes(q))
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, 10);
+}
+
+function drawQuick() {
+  quickList.replaceChildren();
+  if (!quickItems.length) {
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = "Ничего не найдено.";
+    quickList.appendChild(hint);
+    return;
+  }
+  quickItems.forEach((e, i) => {
+    const row = document.createElement("div");
+    row.className = "quick-item" + (i === quickActive ? " active" : "");
+    const title = document.createElement("b");
+    title.textContent = e.title || "Без названия";
+    row.appendChild(title);
+    if (e.folder) {
+      const where = document.createElement("span");
+      where.textContent = e.folder;
+      row.appendChild(where);
+    }
+    row.onmousedown = (ev) => {
+      ev.preventDefault();
+      pickQuick(e);
+    };
+    quickList.appendChild(row);
+  });
+  const activeEl = quickList.children[quickActive];
+  if (activeEl && activeEl.scrollIntoView) activeEl.scrollIntoView({ block: "nearest" });
+}
+
+function refreshQuick() {
+  quickItems = quickMatches();
+  quickActive = 0;
+  drawQuick();
+}
+
+function openQuick() {
+  quickOverlay.classList.add("open");
+  quickInput.value = "";
+  refreshQuick();
+  quickInput.focus();
+}
+
+function closeQuick() {
+  quickOverlay.classList.remove("open");
+}
+
+function pickQuick(entry) {
+  closeQuick();
+  openEntry(entry.id);
+}
+
+quickInput.addEventListener("input", refreshQuick);
+quickInput.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (!quickItems.length) return;
+    quickActive = (quickActive + (e.key === "ArrowDown" ? 1 : quickItems.length - 1)) % quickItems.length;
+    drawQuick();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (quickItems[quickActive]) pickQuick(quickItems[quickActive]);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    closeQuick();
+  }
+});
+quickOverlay.addEventListener("mousedown", (e) => {
+  if (e.target === quickOverlay) closeQuick();
+});
+// e.code, а не e.key: на русской раскладке та же клавиша даёт "щ".
+document.addEventListener("keydown", (e) => {
+  if (e.code !== "KeyO" || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+  e.preventDefault();
+  if (quickOverlay.classList.contains("open")) closeQuick();
+  else openQuick();
+});
 
 // ---- ссылки внутри текста ----
 

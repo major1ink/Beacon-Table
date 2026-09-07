@@ -48,26 +48,38 @@
     }
     .filter-chip.active { background: var(--accent-bg); color: var(--accent); }
 
+    /* #метка в тексте записи — чип (см. pages/journal.js: setTagFilter) */
+    .note-render a.note-tag {
+      padding: 1px 7px; border-radius: var(--radius-pill); font-size: .86em;
+      background: var(--accent-bg); color: var(--accent); text-decoration: none; cursor: pointer;
+      white-space: nowrap;
+    }
+    .note-render a.note-tag:hover { background: var(--accent); color: #fff; text-decoration: none; }
+
     #tree { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 6px 10px; }
     #tree .hint { padding: 8px 6px; opacity: .5; font-size: 12px; }
 
-    /* box-sizing обязателен: отступ вложенности — инлайновый padding-left, и
-       без него строка вылезала за дерево, унося кнопки папки за край. */
     .folder-row, .entry-row, .root-row {
       display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; text-align: left;
-      padding: 5px 8px; border-radius: 8px; background: none; font-size: 12.5px;
+      padding: 3px 8px; min-height: 24px; border-radius: 6px; background: none; font-size: 12.5px;
+    }
+    /* Направляющая вложенности — линия на уровень, она же задаёт отступ строки
+       (см. pages/journal.js: indentGuides). Отрицательные поля по вертикали
+       растягивают линию на всю высоту строки, вместе с её полями. */
+    .indent-guide {
+      flex: 0 0 13px; align-self: stretch; margin: -3px 0; margin-right: -3px;
+      border-left: 1px solid var(--border);
     }
     .root-row { color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; font-weight: 600; }
     .root-row:hover, .folder-row:hover { background: var(--surface); }
     .folder-row.current, .root-row.current { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
     .folder-chevron { display: flex; flex: 0 0 auto; opacity: .65; transition: transform .12s ease; }
     .folder-row.open .folder-chevron { transform: rotate(90deg); }
-    .folder-icon { display: flex; flex: 0 0 auto; opacity: .75; color: var(--gold); }
     .folder-name { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .folder-count { flex: 0 0 auto; margin-right: auto; font-size: 10.5px; font-weight: 400; opacity: .45; }
     .folder-actions { flex: 0 0 auto; display: flex; gap: 1px; visibility: hidden; }
     .folder-row:hover .folder-actions, .folder-row:focus-within .folder-actions { visibility: visible; }
-    .folder-actions .icon-btn { width: 22px; height: 22px; border-radius: 6px; }
+    .folder-actions .icon-btn { width: 20px; height: 20px; margin: -2px 0; border-radius: 6px; }
 
     /* перенос записи в папку мышкой (см. pages/journal.js: makeDropTarget) */
     .entry-row[draggable="true"] { cursor: grab; }
@@ -77,8 +89,8 @@
     }
 
     .entry-row { color: var(--text-dim); }
-    .entry-row:hover { background: var(--accent-bg); color: var(--text); }
-    .entry-row.current { background: var(--accent-bg); color: var(--text); }
+    .entry-row:hover { background: var(--surface); color: var(--text); }
+    .entry-row.current { background: var(--surface); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
     .entry-row-icon { display: flex; flex: 0 0 auto; opacity: .5; }
     .entry-row-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .entry-row-owner { flex: 0 0 auto; font-size: 10.5px; opacity: .5; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -151,9 +163,9 @@
     .note-toolbar-file-input { display: none; }
 
     /* рендер markdown — те же правила, что в окне заметки ДМ */
-    .note-render { font-size: 14.5px; line-height: 1.7; overflow-wrap: break-word; max-width: 780px; }
+    .note-render { font-size: 14.5px; line-height: 1.7; overflow-wrap: break-word; max-width: 780px; margin-inline: auto; }
     .note-render:empty::before { content: "Пусто — нажми ✎, чтобы начать писать."; opacity: .45; }
-    .note-render h1, .note-render h2, .note-render h3 { margin: .8em 0 .35em; line-height: 1.3; }
+    .note-render h1, .note-render h2, .note-render h3 { margin: 1.1em 0 .4em; line-height: 1.3; }
     .note-render h1:first-child, .note-render h2:first-child, .note-render h3:first-child { margin-top: 0; }
     /* раздел, на который вела ссылка (см. journal.js: scrollToSection) */
     .note-render .section-target {
@@ -164,9 +176,12 @@
     .note-render h1 { font-size: 1.6em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
     .note-render h2 { font-size: 1.3em; }
     .note-render h3 { font-size: 1.12em; opacity: .9; }
-    .note-render p { margin: .6em 0; }
+    .note-render p { margin: .7em 0; }
     .note-render a { color: var(--accent); text-decoration: none; }
     .note-render a:hover { text-decoration: underline; }
+    /* Ссылка на запись, которой ещё нет (см. markdown.js: markMissingWikiLinks). */
+    .note-render a.wikilink-missing { color: var(--text-dim); text-decoration: underline dashed 1px; text-underline-offset: 3px; }
+    .note-render a.wikilink-missing:hover { color: var(--accent); }
     .note-render code { background: var(--surface); border-radius: 4px; padding: 1px 6px; font-size: .88em; }
     .note-render pre { background: var(--surface); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
     .note-render pre code { background: none; padding: 0; }
@@ -196,6 +211,55 @@
     .note-render th { background: var(--surface); }
 
     /* ---- диалог прав (фаундривское "Configure Ownership") ---- */
+    /* ---- «Упоминания» — записи, ссылающиеся на открытую (см.
+       pages/journal.js: renderBacklinks). Пустой блок скрыт. ---- */
+    #backlinks { max-width: 780px; margin: 0 auto; }
+    #backlinks:empty { display: none; }
+    .backlinks-head {
+      margin-top: 28px; padding: 14px 0 6px; border-top: 1px solid var(--border);
+      font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); font-weight: 600;
+    }
+    .backlink {
+      display: flex; align-items: baseline; gap: 10px; width: 100%; box-sizing: border-box;
+      padding: 5px 8px; border-radius: 6px; background: none; text-align: left;
+      color: var(--text-dim); font-size: 12.5px;
+    }
+    .backlink:hover { background: var(--surface); color: var(--text); }
+    .backlink b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .backlink span {
+      margin-left: auto; font-size: 10.5px; opacity: .6;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+    }
+
+    /* ---- быстрый переход (Ctrl+O, см. pages/journal.js: quick switcher) ---- */
+    #quickOverlay {
+      display: none; position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, .5);
+      align-items: flex-start; justify-content: center; padding: 12vh 16px 16px;
+    }
+    #quickOverlay.open { display: flex; }
+    #quickBox {
+      width: min(480px, 100%); max-height: 60vh; display: flex; flex-direction: column; overflow: hidden;
+      background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-float);
+    }
+    #quickInput {
+      flex: 0 0 auto; padding: 12px 14px; font: inherit; font-size: 14px;
+      background: none; border: none; border-bottom: 1px solid var(--border); color: var(--text);
+    }
+    #quickInput:focus { outline: none; }
+    #quickList { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px; }
+    .quick-item {
+      display: flex; align-items: baseline; gap: 10px; padding: 6px 9px;
+      border-radius: 8px; cursor: pointer; font-size: 12.5px; white-space: nowrap;
+    }
+    .quick-item.active { background: var(--surface); }
+    .quick-item b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+    .quick-item span {
+      margin-left: auto; font-size: 10.5px; color: var(--text-dim);
+      overflow: hidden; text-overflow: ellipsis; direction: rtl;
+    }
+    #quickList .hint { padding: 10px; opacity: .5; font-size: 12px; }
+
     #accessOverlay {
       display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .55);
       align-items: center; justify-content: center; padding: 16px;
@@ -249,12 +313,12 @@
       #search, #editArea, select, input[type="text"] { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/journal-DnZL4Ml6.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-B9b0PkLz.js">
+  <script type="module" crossorigin src="/assets/journal-DOfgZbrG.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-Qm2rM3Dj.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-c-_nXWIr.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CvG2xQFU.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
@@ -303,6 +367,7 @@
         </div>
         <div id="scroll">
           <div id="render" class="note-render"></div>
+          <div id="backlinks"></div>
           <div id="editWrap">
             <div id="toolbar" class="note-toolbar"></div>
             <textarea id="editArea" placeholder="# Заголовок&#10;&#10;markdown, [[Другая запись]] — ссылка внутри журнала…"></textarea>
@@ -311,6 +376,13 @@
         <div id="msg"></div>
       </div>
     </main>
+  </div>
+
+  <div id="quickOverlay">
+    <div id="quickBox">
+      <input type="text" id="quickInput" placeholder="Перейти к записи…" autocomplete="off" />
+      <div id="quickList"></div>
+    </div>
   </div>
 
   <div id="accessOverlay">

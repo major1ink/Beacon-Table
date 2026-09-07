@@ -41,6 +41,9 @@ type JournalService interface {
 	// List — записи, которые viewer'у хотя бы видно (>= JournalLimited), без
 	// текста; у тех, где ему не положено читать, текст не поедет и в Get.
 	List(ctx context.Context, v domain.JournalViewer) ([]*domain.JournalEntry, error)
+	// ListFull — то же, что List, но с текстом записей. У тех, читать которые
+	// viewer'у не положено (JournalLimited), Content пустой — как и в Get.
+	ListFull(ctx context.Context, v domain.JournalViewer) ([]*domain.JournalEntry, error)
 	// Get — одна запись целиком. Если viewer'у положено только видеть её
 	// (JournalLimited), Content пустой — это не ошибка, а фаундривское
 	// «знаешь, что запись есть, но не что в ней».
@@ -167,6 +170,24 @@ func (s *journalService) List(ctx context.Context, v domain.JournalViewer) ([]*d
 		if e.CanSee(v) {
 			out = append(out, e)
 		}
+	}
+	return out, nil
+}
+
+func (s *journalService) ListFull(ctx context.Context, v domain.JournalViewer) ([]*domain.JournalEntry, error) {
+	all, err := s.entries.ListWithContent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*domain.JournalEntry, 0, len(all))
+	for _, e := range all {
+		if !e.CanSee(v) {
+			continue
+		}
+		if !e.CanRead(v) {
+			e.Content = "" // JournalLimited — запись видна, текст не отдаём
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }

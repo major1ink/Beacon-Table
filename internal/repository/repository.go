@@ -204,6 +204,8 @@ type SceneRepository interface {
 type JournalRepository interface {
 	// List — метаданные всех записей (без Content — не тащим содержимое ради списка).
 	List(ctx context.Context) ([]*domain.JournalEntry, error)
+	// ListWithContent — то же, что List, но с текстом каждой записи.
+	ListWithContent(ctx context.Context) ([]*domain.JournalEntry, error)
 	Get(ctx context.Context, id string) (*domain.JournalEntry, error)
 	// Create кладёт запись целиком (id/папка/текст/автор/права уже
 	// заполнены вызывающим).

@@ -105,14 +105,24 @@ func (a *API) handleJournalList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := journalViewer(acc)
-	entries, err := world.Journal.List(r.Context(), v)
+	// ?content=1 — отдать список вместе с текстами записей.
+	withContent := r.URL.Query().Get("content") == "1"
+	list := world.Journal.List
+	if withContent {
+		list = world.Journal.ListFull
+	}
+	entries, err := list(r.Context(), v)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
 	out := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, journalListJSON(e, v))
+		if withContent {
+			out = append(out, journalJSON(e, v))
+		} else {
+			out = append(out, journalListJSON(e, v))
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

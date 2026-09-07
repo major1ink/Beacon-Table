@@ -347,8 +347,9 @@ export async function movePlaylistTrack(playlistId, trackId, direction) {
 // "owner"), "access" — точечные выдачи {accountId: уровень} (см.
 // domain.JournalEntry). Сервер возвращает вместе с записью и уже вычисленные
 // для ТЕБЯ myAccess/canEdit/canManage — клиент права не пересчитывает.
-export async function fetchJournal() {
-  return apiFetch("/api/journal");
+// withContent — вернуть записи вместе с текстом (?content=1).
+export async function fetchJournal({ withContent = false } = {}) {
+  return apiFetch("/api/journal" + (withContent ? "?content=1" : ""));
 }
 export async function fetchJournalEntry(id) {
   return apiFetch(`/api/journal/${id}`);
