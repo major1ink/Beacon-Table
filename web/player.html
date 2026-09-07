@@ -3,6 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <!-- PWA: ярлык на телефоне с иконкой и без адресной строки. Настоящая
+       установка требует https; по http остаётся ручное «на главный экран». -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#131318" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Beacon Table" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Игрок</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
@@ -202,6 +209,13 @@
        специфичность больше одиночного id. */
     #topbar #diceBtn { display: none; }
 
+    /* «Во весь экран» (см. src/fullscreen.js) — по pointer: coarse, а не по
+       мобильному брейкпоинту: планшет в ландшафте под тот не попадает. */
+    #topbar #fullscreenBtn { display: none; }
+    @media (pointer: coarse) {
+      #topbar #fullscreenBtn { display: flex; }
+    }
+
     @media (max-width: 860px), (max-height: 500px) {
       #topbar {
         left: 6px; right: 6px; top: 6px; padding: 5px 6px; gap: 2px;
@@ -213,7 +227,7 @@
       #topbar > button { padding: 0; width: 38px; height: 38px; justify-content: center; border-radius: 50%; }
       #topbar > button .tb-label { display: none; }
       #topbar #diceBtn { display: flex; }
-      #diceBtn.open { background: var(--accent-bg); color: var(--accent); }
+      #diceBtn.open, #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
 
       #charDock:empty { display: none; }
 
@@ -263,6 +277,7 @@
           <span id="topbarUsername"></span>
           <div id="charDock"></div>
           <div id="combatBarMount"></div>
+          <button id="fullscreenBtn" type="button"></button>
           <button id="diceBtn" title="Кубы"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg><span class="tb-label">Кубы</span></button>
           <button id="charsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-4 3.4-6.4 7-6.4s7 2.4 7 6.4"/></svg><span class="tb-label">Мои персонажи</span></button>
           <button id="lootHubBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg><span class="tb-label">Хаб</span></button>

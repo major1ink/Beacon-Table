@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -177,6 +178,9 @@ func main() {
 	if err != nil {
 		fatal("не удалось открыть встроенный фронтенд", "err", err)
 	}
+	// Go не знает .webmanifest: без типа FileServer отдаёт его как text/plain,
+	// и браузер такой манифест игнорирует.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 	static := http.FileServer(http.FS(sub))
 	mux.Handle("/", static)
 

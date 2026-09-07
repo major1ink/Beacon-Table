@@ -3,6 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <!-- PWA: ярлык на телефоне с иконкой и без адресной строки. Настоящая
+       установка требует https; по http остаётся ручное «на главный экран». -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#131318" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Beacon Table" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — DM</title>
   <style>
@@ -48,6 +55,11 @@
       font-size: 9px; line-height: 1; padding: 2px 4px; min-width: 12px; text-align: center;
     }
     #accountsBadge.show { display: block; }
+    /* «Во весь экран» — только для пальца, см. src/fullscreen.js. */
+    #rail #fullscreenBtn { display: none; }
+    @media (pointer: coarse) {
+      #rail #fullscreenBtn { display: flex; }
+    }
 
     #panel {
       flex: 0 0 0; width: 0; margin: 14px 0; overflow: hidden;
@@ -890,26 +902,26 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-hr4JPdTF.js"></script>
+  <script type="module" crossorigin src="/assets/dm-Cz7SNvvD.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-CxWMrHP0.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-CfJhfFoU.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-CHDAAsWX.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-DubTaFaL.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-links-p1yCy-dF.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BQexTX3a.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette--qHVJDbn.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-C6e2R4yF.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-Chl2HYLA.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BsfLIaOi.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-D5BetBXU.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-aEEF5KWD.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-CzZPBGrO.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CsOOi3Wt.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-ylzn2Vlg.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-CdHnqiIi.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
@@ -932,6 +944,7 @@
         <button class="rail-btn" id="playlistsBtn" data-section="playlists" title="Аудио / плейлисты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg></span></button>
       </div>
       <div class="rail-bottom">
+        <button class="rail-btn" id="fullscreenBtn" type="button"></button>
         <button class="rail-btn" id="worldsBtn" title="Миры — переключить или создать другой стол"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 010 18 14 14 0 010-18z"/></svg></span></button>
         <button class="rail-btn" id="accountsBtn" data-section="accounts" title="Аккаунты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z"/><circle cx="12" cy="10" r="2.1"/><path d="M9 15.4c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg></span><span id="accountsBadge">0</span></button>
         <button class="rail-btn" id="settingsBtn" data-section="settings" title="Настройки"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg></span></button>

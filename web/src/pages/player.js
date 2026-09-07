@@ -19,6 +19,7 @@ import {
   claimPregen,
 } from "../api.js";
 import { icon } from "../icons.js";
+import { initFullscreenButton } from "../fullscreen.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
@@ -289,6 +290,13 @@ diceBtn.onclick = () => {
   const open = document.body.classList.toggle("dice-open");
   diceBtn.classList.toggle("open", open);
 };
+
+initFullscreenButton(
+  document.getElementById("fullscreenBtn"),
+  (active) =>
+    icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }) +
+    `<span class="tb-label">${active ? "Свернуть" : "Во весь экран"}</span>`
+);
 
 // ================= инструменты карты =================
 // Линейка живёт в топбаре, пометки — иконкой в боковой колонке над канвасом

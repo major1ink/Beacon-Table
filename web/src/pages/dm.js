@@ -64,6 +64,7 @@ import {
 } from "../api.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
+import { initFullscreenButton } from "../fullscreen.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
@@ -247,6 +248,11 @@ function hideOwnerOnlyUI() {
 // стол закрывается, игроки отключаются, рестарт сервера не поднимет мир сам —
 // ДМ вернётся и выберет мир заново. Единственное место, где стол снимается;
 // сам заход на worlds.html его не трогает.
+// Полный экран (см. src/fullscreen.js) — в рейле значок без подписи.
+initFullscreenButton(document.getElementById("fullscreenBtn"), (active) =>
+  `<span class="rail-icon">${icon(active ? "fullscreen-exit" : "fullscreen", { size: 20 })}</span>`
+);
+
 document.getElementById("worldsBtn")?.addEventListener("click", async () => {
   if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;
   await stopActiveWorld().catch(() => {});
