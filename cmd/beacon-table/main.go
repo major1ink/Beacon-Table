@@ -168,6 +168,17 @@ func main() {
 	if err != nil {
 		fatal("не удалось создать или проверить аккаунт ДМ", "err", err)
 	}
+	// --reset-dm-password: пароль забыт, войти нечем. Выдаём новый временный
+	// и дальше идём обычным путём — он ляжет и в файл, и в подсказку на
+	// странице входа (см. setupFirstRun ниже).
+	if cfg.ResetDMPassword {
+		pw, rerr := authSvc.ResetAdminPassword(ctx)
+		if rerr != nil {
+			fatal("не удалось сбросить пароль ДМ", "err", rerr)
+		}
+		tempPassword = pw
+		log.Printf("Пароль ДМ сброшен. Логин: %s  Пароль: %s", service.SeedAdminUsername, pw)
+	}
 	if err := companies.Bootstrap(ctx); err != nil {
 		fatal("не удалось поднять миры", "err", err)
 	}
@@ -196,6 +207,17 @@ func main() {
 		setupFirstRun(api, cfg, configFile, tempPassword)
 	} else {
 		removeFirstRunFile(cfg, configFile)
+	}
+	// Сброс забытого пароля со страницы входа, открытой на этой же машине
+	// (см. api/http: handleDMPasswordReset). Новый пароль раскладываем туда
+	// же, куда и временный пароль первого запуска.
+	api.ResetDMPassword = func() (string, string, error) {
+		pw, err := authSvc.ResetAdminPassword(ctx)
+		if err != nil {
+			return "", "", err
+		}
+		setupFirstRun(api, cfg, configFile, pw)
+		return service.SeedAdminUsername, pw, nil
 	}
 	// Уборщик гостей — только в демо-режиме
 	var guests *app.GuestKeeper

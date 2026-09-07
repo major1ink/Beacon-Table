@@ -1,6 +1,18 @@
 // Перенос inline-скрипта static/index.html — механически, логика не
 // менялась, только глобальные вызовы app.js заменены на import из api.js.
-import { fetchMe, apiLogin, apiRegister, apiLogout, fetchVersion, fetchDemoStatus, enterDemo, fetchFirstRun } from "../api.js";
+import {
+  fetchMe,
+  apiLogin,
+  apiRegister,
+  apiLogout,
+  fetchVersion,
+  fetchDemoStatus,
+  enterDemo,
+  fetchFirstRun,
+  canResetDMPassword,
+  resetDMPassword,
+} from "../api.js";
+import { showConfirm, showAlert } from "../modal.js";
 import { isOwner, isPlayer } from "../roles.js";
 
 // Версия сервера в углу экрана (см. cmd/beacon-table/version.go): тег релиза
@@ -193,8 +205,12 @@ demoEntry(demoPlayerBtn, "player");
 // handleFirstRun) — то есть тому, кто и так может прочитать его в файле
 // dm-password.txt рядом с программой. Подставляем в форму: после
 // автоматически открытого браузера человеку остаётся нажать «Войти».
+const forgotBtn = document.getElementById("forgotBtn");
+let firstRunShown = false;
 fetchFirstRun().then((creds) => {
   if (!creds) return;
+  firstRunShown = true;
+  forgotBtn.style.display = "none"; // временный пароль и так на экране
   document.getElementById("loginUsername").value = creds.username;
   document.getElementById("loginPassword").value = creds.password;
   const hint = document.getElementById("firstRunHint");
@@ -206,6 +222,39 @@ fetchFirstRun().then((creds) => {
     "</b>. Нажмите «Войти» и задайте свой пароль: временный выдаётся заново при каждом запуске программы.";
   hint.style.display = "";
 });
+
+// Забытый пароль ведущего. Кнопка появляется, только если сервер разрешает
+// сброс отсюда (страницу открыли на его же машине, см. internal/api/http:
+// handleDMPasswordReset); новый временный пароль сразу подставляем в форму.
+canResetDMPassword().then((can) => {
+  if (can && !firstRunShown) forgotBtn.style.display = "";
+});
+forgotBtn.onclick = async () => {
+  const ok = await showConfirm("Выдать ведущему новый временный пароль?", {
+    title: "Сброс пароля ведущего",
+    okLabel: "Сбросить",
+    hint: "Старый пароль перестанет подходить, а открытые сеансы ведущего закроются.",
+  });
+  if (!ok) return;
+  forgotBtn.disabled = true;
+  try {
+    const creds = await resetDMPassword();
+    document.getElementById("loginUsername").value = creds.username;
+    document.getElementById("loginPassword").value = creds.password;
+    const hint = document.getElementById("firstRunHint");
+    hint.innerHTML =
+      "Новый пароль ведущего: логин <b>" +
+      escapeHtml(creds.username) +
+      "</b>, пароль <b>" +
+      escapeHtml(creds.password) +
+      "</b>. Он записан и в файл dm-password.txt рядом с программой. Нажмите «Войти» и задайте свой.";
+    hint.style.display = "";
+    forgotBtn.style.display = "none";
+  } catch (err) {
+    forgotBtn.disabled = false;
+    showAlert("Не удалось сбросить пароль: " + err.message);
+  }
+};
 
 function escapeHtml(s) {
   const d = document.createElement("div");

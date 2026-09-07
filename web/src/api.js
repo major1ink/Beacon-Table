@@ -140,6 +140,23 @@ export async function fetchFirstRun() {
   }
 }
 
+// canResetDMPassword — предлагать ли сброс пароля ДМ на этой странице: он
+// доступен только с компьютера, где работает сервер (см. internal/api/http:
+// handleDMPasswordReset).
+export async function canResetDMPassword() {
+  try {
+    const { available } = await apiFetch("/api/dm-password-reset");
+    return !!available;
+  } catch {
+    return false;
+  }
+}
+
+// resetDMPassword — выдать ДМ новый временный пароль; возвращает {username, password}.
+export async function resetDMPassword() {
+  return apiFetch("/api/dm-password-reset", { method: "POST" });
+}
+
 // ---- трансляция (ТВ/проектор) ----
 // Ссылка с ключом, по которой экран в комнате получает доступ к столу без
 // аккаунта (см. internal/service/broadcast.go). Сервер отдаёт только путь —

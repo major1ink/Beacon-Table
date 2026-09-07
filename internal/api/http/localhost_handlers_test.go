@@ -104,3 +104,98 @@ func TestIsLoopback(t *testing.T) {
 		}
 	}
 }
+
+// dmResetResponse — запрос к /api/dm-password-reset с заданными методом и
+// адресом клиента.
+func dmResetResponse(t *testing.T, api *API, method, remoteAddr string) (int, map[string]string) {
+	t.Helper()
+	req := httptest.NewRequest(method, "/api/dm-password-reset", nil)
+	req.RemoteAddr = remoteAddr
+	rec := httptest.NewRecorder()
+	api.handleDMPasswordReset(rec, req)
+
+	var body map[string]string
+	if rec.Body.Len() > 0 {
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	}
+	return rec.Code, body
+}
+
+func apiWithReset() (*API, *int) {
+	calls := 0
+	api := &API{}
+	api.ResetDMPassword = func() (string, string, error) {
+		calls++
+		return "dm", "новый-пароль", nil
+	}
+	return api, &calls
+}
+
+// Сброс с этой же машины: пароль меняется и новый возвращается на страницу.
+func TestDMPasswordResetLoopback(t *testing.T) {
+	api, calls := apiWithReset()
+	code, body := dmResetResponse(t, api, http.MethodPost, "127.0.0.1:54321")
+	if code != http.StatusOK {
+		t.Fatalf("код %d, ожидался 200", code)
+	}
+	if body["username"] != "dm" || body["password"] != "новый-пароль" {
+		t.Fatalf("ответ %v", body)
+	}
+	if *calls != 1 {
+		t.Fatalf("сброс вызван %d раз", *calls)
+	}
+}
+
+// Запрос из сети, из-за прокси и в демо: сброс не выполняется. Иначе любой
+// игрок за столом одним запросом забирал бы себе аккаунт ДМ.
+func TestDMPasswordResetForbidden(t *testing.T) {
+	remote, calls := apiWithReset()
+	if code, _ := dmResetResponse(t, remote, http.MethodPost, "192.168.1.15:54321"); code != http.StatusForbidden {
+		t.Fatalf("из сети: код %d, ожидался 403", code)
+	}
+
+	proxied, proxiedCalls := apiWithReset()
+	proxied.SecureCookies = true
+	if code, _ := dmResetResponse(t, proxied, http.MethodPost, "127.0.0.1:54321"); code != http.StatusForbidden {
+		t.Fatalf("за прокси: код %d, ожидался 403", code)
+	}
+
+	demo, demoCalls := apiWithReset()
+	demo.DemoMode = true
+	if code, _ := dmResetResponse(t, demo, http.MethodPost, "127.0.0.1:54321"); code != http.StatusForbidden {
+		t.Fatalf("в демо: код %d, ожидался 403", code)
+	}
+
+	if *calls != 0 || *proxiedCalls != 0 || *demoCalls != 0 {
+		t.Fatal("сброс выполнился там, где не должен")
+	}
+}
+
+// GET говорит странице входа, показывать ли кнопку «Забыли пароль?».
+func TestDMPasswordResetAvailability(t *testing.T) {
+	available := func(api *API, remoteAddr string) bool {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/dm-password-reset", nil)
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		api.handleDMPasswordReset(rec, req)
+		var body struct {
+			Available bool `json:"available"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("ответ не JSON: %q", rec.Body.String())
+		}
+		return body.Available
+	}
+	api, _ := apiWithReset()
+	if !available(api, "127.0.0.1:54321") {
+		t.Fatal("с этой машины сброс должен быть доступен")
+	}
+	if available(api, "192.168.1.15:54321") {
+		t.Fatal("из сети сброс предлагать нельзя")
+	}
+	noReset := &API{}
+	if available(noReset, "127.0.0.1:54321") {
+		t.Fatal("без ResetDMPassword сброс предлагать нечем")
+	}
+}

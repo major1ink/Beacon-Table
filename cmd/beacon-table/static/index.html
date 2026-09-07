@@ -108,6 +108,13 @@
     }
     .first-run b { font-weight: 600; }
 
+    .link-btn {
+      display: block; width: auto; margin: 10px auto 0; padding: 2px;
+      background: none; border: none; color: var(--text-dim);
+      font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer;
+    }
+    .link-btn:hover { color: var(--text); }
+
     .msg { font-size: 12px; margin-top: 10px; min-height: 14px; }
     .msg.error { color: #e74c3c; }
     .msg.ok { color: var(--green-bright); }
@@ -118,8 +125,9 @@
       input { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/index-DLDDf2kJ.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-Qm2rM3Dj.js">
+  <script type="module" crossorigin src="/assets/index-DDX5eZha.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
@@ -181,6 +189,10 @@
         <label for="loginPassword">Пароль</label>
         <input type="password" id="loginPassword" autocomplete="current-password" required />
         <button type="submit">Войти</button>
+        <!-- Сброс забытого пароля ДМ. Показывается, только когда страницу
+             открыли на самом компьютере сервера (см. internal/api/http:
+             handleDMPasswordReset). -->
+        <button type="button" id="forgotBtn" class="link-btn" style="display:none">Забыли пароль ведущего?</button>
         <div id="loginMsg" class="msg"></div>
       </form>
 

@@ -165,3 +165,53 @@ func TestAuthService_ChangeOwnPassword(t *testing.T) {
 		t.Fatalf("новый пароль не работает: %v", err)
 	}
 }
+
+// Забытый пароль ДМ: ResetAdminPassword выдаёт новый временный, старый
+// перестаёт подходить, а сессии, открытые прежним паролем, закрываются.
+func TestResetAdminPassword(t *testing.T) {
+	ctx := context.Background()
+	ts := newTestSuite()
+
+	temp, err := ts.auth.SeedAdmin(ctx)
+	if err != nil {
+		t.Fatalf("SeedAdmin: %v", err)
+	}
+	// ДМ вошёл и поставил свой пароль — с этого момента временного пароля
+	// больше нет и SeedAdmin ничего не выдаст.
+	token, acc, err := ts.auth.Login(ctx, service.SeedAdminUsername, temp)
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if err := ts.auth.ChangeOwnPassword(ctx, acc.ID, temp, "свой-пароль-1"); err != nil {
+		t.Fatalf("ChangeOwnPassword: %v", err)
+	}
+	if again, err := ts.auth.SeedAdmin(ctx); err != nil || again != "" {
+		t.Fatalf("SeedAdmin после смены пароля: %q, %v", again, err)
+	}
+	token, _, err = ts.auth.Login(ctx, service.SeedAdminUsername, "свой-пароль-1")
+	if err != nil {
+		t.Fatalf("Login своим паролем: %v", err)
+	}
+
+	fresh, err := ts.auth.ResetAdminPassword(ctx)
+	if err != nil {
+		t.Fatalf("ResetAdminPassword: %v", err)
+	}
+	if fresh == "" || fresh == "свой-пароль-1" {
+		t.Fatalf("новый пароль %q", fresh)
+	}
+	if _, _, err := ts.auth.Login(ctx, service.SeedAdminUsername, "свой-пароль-1"); !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("вход старым паролем: %v, ожидали ErrUnauthorized", err)
+	}
+	if _, err := ts.auth.AccountBySession(ctx, token); err == nil {
+		t.Fatal("сессия ДМ пережила сброс пароля")
+	}
+
+	after, acc, err := ts.auth.Login(ctx, service.SeedAdminUsername, fresh)
+	if err != nil {
+		t.Fatalf("вход новым паролем: %v", err)
+	}
+	if after == "" || !acc.MustChangePassword {
+		t.Fatal("после сброса аккаунт должен снова просить сменить пароль")
+	}
+}
