@@ -167,11 +167,55 @@ function accessDot(e) {
   return dot;
 }
 
+// dndType — свой тип, чтобы дерево не ловило файлы и текст со стороны.
+const dndType = "application/x-beacon-journal-entry";
+
+// makeDropTarget — папка (или корень) принимает брошенную на неё запись.
+// dragleave летит и при переходе на дочерний элемент, поэтому подсветку
+// снимаем, только когда курсор ушёл из строки целиком.
+function makeDropTarget(row, folder) {
+  row.addEventListener("dragover", (ev) => {
+    if (!ev.dataTransfer.types.includes(dndType)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    row.classList.add("drop-target");
+  });
+  row.addEventListener("dragleave", (ev) => {
+    if (!row.contains(ev.relatedTarget)) row.classList.remove("drop-target");
+  });
+  row.addEventListener("drop", async (ev) => {
+    if (!ev.dataTransfer.types.includes(dndType)) return;
+    ev.preventDefault();
+    row.classList.remove("drop-target");
+    const id = ev.dataTransfer.getData(dndType);
+    if (!id) return;
+    await guard(async () => {
+      const moved = await moveJournalEntry(id, folder);
+      if (current && current.id === id) current = moved;
+      openFolders.add(folder); // раскрываем, чтобы было видно, куда легло
+      currentFolder = folder;
+      await refreshList({ keepMessage: true });
+      msgEl.textContent = folder ? `Перенесено в «${folder}».` : "Перенесено в корень журнала.";
+    });
+  });
+}
+
 function entryRowEl(e, depth) {
   const row = document.createElement("button");
   row.type = "button";
   row.className = "entry-row" + (current && current.id === e.id ? " current" : "");
   row.style.paddingLeft = 8 + depth * 12 + "px";
+
+  // Права те же, что у выпадающего списка папок под записью.
+  if (e.canManage) {
+    row.draggable = true;
+    row.addEventListener("dragstart", (ev) => {
+      ev.dataTransfer.setData(dndType, e.id);
+      ev.dataTransfer.effectAllowed = "move";
+      row.classList.add("dragging");
+    });
+    row.addEventListener("dragend", () => row.classList.remove("dragging"));
+  }
 
   const ico = document.createElement("span");
   ico.className = "entry-row-icon";
@@ -246,6 +290,7 @@ function folderRowEl(node, depth) {
     }, "danger"));
     row.appendChild(actions);
   }
+  makeDropTarget(row, node.path);
   return row;
 }
 
@@ -274,6 +319,7 @@ function rootRowEl(node) {
     currentFolder = "";
     renderTree();
   };
+  makeDropTarget(row, "");
   return row;
 }
 

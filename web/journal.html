@@ -52,8 +52,10 @@
     #tree { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 6px 10px; }
     #tree .hint { padding: 8px 6px; opacity: .5; font-size: 12px; }
 
+    /* box-sizing обязателен: отступ вложенности — инлайновый padding-left, и
+       без него строка вылезала за дерево, унося кнопки папки за край. */
     .folder-row, .entry-row, .root-row {
-      display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+      display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; text-align: left;
       padding: 5px 8px; border-radius: 8px; background: none; font-size: 12.5px;
     }
     .root-row { color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; font-weight: 600; }
@@ -67,6 +69,13 @@
     .folder-actions { flex: 0 0 auto; display: flex; gap: 1px; visibility: hidden; }
     .folder-row:hover .folder-actions, .folder-row:focus-within .folder-actions { visibility: visible; }
     .folder-actions .icon-btn { width: 22px; height: 22px; border-radius: 6px; }
+
+    /* перенос записи в папку мышкой (см. pages/journal.js: makeDropTarget) */
+    .entry-row[draggable="true"] { cursor: grab; }
+    .entry-row.dragging { opacity: .45; }
+    .folder-row.drop-target, .root-row.drop-target {
+      background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--accent);
+    }
 
     .entry-row { color: var(--text-dim); }
     .entry-row:hover { background: var(--accent-bg); color: var(--text); }
