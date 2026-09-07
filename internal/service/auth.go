@@ -25,6 +25,12 @@ type AuthService interface {
 	// пароль туда, где человек его найдёт (см. cmd/beacon-table: файл
 	// dm-password.txt и подсказка на странице входа с этого же компьютера).
 	SeedAdmin(ctx context.Context) (string, error)
+	// ResetAdminPassword выдаёт аккаунту ДМ новый временный пароль и
+	// возвращает его; открытые сессии ДМ при этом закрываются. Аккаунт
+	// снова оказывается в состоянии «пароль временный», то есть ведёт себя
+	// как после первого запуска (см. SeedAdmin). domain.ErrNotFound —
+	// аккаунта ДМ в базе нет.
+	ResetAdminPassword(ctx context.Context) (string, error)
 	// Register — companyID обязателен: саморегистрация привязывает игрока к
 	// тому миру, что запущен на сервере в момент отправки формы (см.
 	// api/http/auth_handlers.go: handleRegister резолвит его через
@@ -114,6 +120,28 @@ func (s *authService) SeedAdmin(ctx context.Context) (string, error) {
 		return "", err
 	}
 	log.Printf("Создан аккаунт ДМ. Логин: %s  Пароль: %s", seedAdminUsername, plain)
+	return plain, nil
+}
+
+func (s *authService) ResetAdminPassword(ctx context.Context) (string, error) {
+	acc, err := s.accounts.ByUsername(ctx, seedAdminUsername)
+	if err != nil {
+		return "", err
+	}
+	plain := generatePassword()
+	hash, err := hashPassword(plain)
+	if err != nil {
+		return "", err
+	}
+	if err := s.accounts.SetPassword(ctx, acc.ID, hash, true); err != nil {
+		return "", err
+	}
+	// Старый пароль забыт не только тем, кто его забыл: сессии, открытые с
+	// других устройств, после сброса жить не должны.
+	if err := s.sessions.DeleteForAccount(ctx, acc.ID); err != nil {
+		return "", err
+	}
+	log.Printf("Пароль ДМ сброшен. Логин: %s  Пароль: %s", seedAdminUsername, plain)
 	return plain, nil
 }
 

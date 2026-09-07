@@ -47,6 +47,12 @@ type API struct {
 	// демо): API сам процессом не распоряжается, только дёргает то, что ему
 	// дал композиционный корень.
 	Shutdown func()
+	// ResetDMPassword — выдать ДМ новый временный пароль и разложить его по
+	// тем же местам, что и при первом запуске (файл рядом с программой,
+	// подсказка на странице входа). Возвращает логин и новый пароль. nil —
+	// сброс отсюда недоступен: API про файлы и про то, где живёт пароль, не
+	// знает, это дело композиционного корня.
+	ResetDMPassword func() (username, password string, err error)
 	// loginGuard — защита /api/login и /api/register от перебора (см.
 	// loginguard.go). Транспортный уровень: считает по IP из запроса,
 	// service-слою про такое знать незачем.
@@ -80,6 +86,8 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// Подсказка с временным паролем ДМ — только для страницы входа,
 	// открытой на самом сервере (см. localhost_handlers.go).
 	mux.HandleFunc("GET /api/first-run", a.handleFirstRun)
+	mux.HandleFunc("GET /api/dm-password-reset", a.handleDMPasswordReset)
+	mux.HandleFunc("POST /api/dm-password-reset", a.handleDMPasswordReset)
 	// /healthz вне /api/ — это не часть API стола, а точка для мониторинга,
 	// systemd и docker healthcheck.
 	mux.HandleFunc("GET /healthz", a.handleHealth)
