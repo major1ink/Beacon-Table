@@ -35,10 +35,8 @@ import {
   deleteAssetFolder,
   deleteAsset,
   fetchAdminCharacters,
-  updateAdminCharacter,
   fetchAdminPregens,
   createAdminPregen,
-  updateAdminPregen,
   assignPregen,
   releasePregen,
   deleteAdminPregen,
@@ -2251,80 +2249,14 @@ document.getElementById("newAccountForm").addEventListener("submit", async (e) =
 });
 
 // ================= персонажи (панель "Персонажи") =================
-// Список персонажей ВСЕХ игроков — ДМ смотрит их, правит имя/аватар и
-// перетаскивает на карту (создаёт токен с сразу проставленными
-// ownerId/characterId, см. drag&drop на #scene ниже). Полноценный лист
-// (характеристики, HP и т.п.) правится отдельно, в character-sheet.html —
-// ДМ там теперь тоже редактирует, а не только смотрит (см.
-// web/src/pages/character-sheet.js: isAdminView).
+// Список персонажей ВСЕХ игроков — ДМ смотрит их и перетаскивает на карту
+// (создаёт токен с сразу проставленными ownerId/characterId, см. drag&drop
+// на #scene ниже). Сам персонаж — имя, аватар, характеристики, HP — правится
+// в его листе, character-sheet.html: ДМ там редактирует наравне с владельцем
+// (см. pages/character-sheet.js: isAdminView, identitySection).
 const dmCharactersList = document.getElementById("dmCharactersList");
-const dmCharEditForm = document.getElementById("dmCharEditForm");
-const dmCharEditName = document.getElementById("dmCharEditName");
-const dmCharEditAvatarUpload = document.getElementById("dmCharEditAvatarUpload");
-const dmCharEditPreviewWrap = document.getElementById("dmCharEditPreviewWrap");
-const dmCharEditPreview = document.getElementById("dmCharEditPreview");
-const dmCharEditPreviewVideo = document.getElementById("dmCharEditPreviewVideo");
-const dmCharEditMsg = document.getElementById("dmCharEditMsg");
 
 let dmCharacters = []; // [{id, accountId, accountUsername, name, avatarUrl}] — кэш для drag&drop-постановки на карту
-let dmCharEditingId = null;
-let dmCharPendingAvatarUrl = "";
-// dmCharEditPregen — если правится заготовка из пула «Готовые персонажи», а не
-// персонаж игрока: полный объект пре-гена (нужен его лист/модуль при
-// перезаписи через updateAdminPregen). null — обычная правка персонажа игрока.
-let dmCharEditPregen = null;
-
-// showDmCharAvatarPreview — isVideoUrl уже есть чуть ниже в этом же файле
-// (библиотека токен-арта переиспользует ту же проверку по расширению).
-function showDmCharAvatarPreview(url) {
-  if (!url) {
-    dmCharEditPreviewWrap.style.display = "none";
-    return;
-  }
-  if (isVideoUrl(url)) {
-    dmCharEditPreview.style.display = "none";
-    dmCharEditPreviewVideo.style.display = "block";
-    dmCharEditPreviewVideo.src = url;
-  } else {
-    dmCharEditPreviewVideo.style.display = "none";
-    dmCharEditPreviewVideo.removeAttribute("src");
-    dmCharEditPreview.style.display = "block";
-    dmCharEditPreview.src = url;
-  }
-  dmCharEditPreviewWrap.style.display = "block";
-}
-
-function closeDmCharEditForm() {
-  dmCharEditingId = null;
-  dmCharEditPregen = null;
-  dmCharEditForm.style.display = "none";
-  dmCharEditMsg.textContent = "";
-}
-
-function openDmCharEditForm(c) {
-  dmCharEditingId = c.id;
-  dmCharEditPregen = null;
-  dmCharPendingAvatarUrl = c.avatarUrl || "";
-  dmCharEditName.value = c.name;
-  dmCharEditAvatarUpload.value = "";
-  showDmCharAvatarPreview(c.avatarUrl || "");
-  dmCharEditMsg.textContent = "";
-  dmCharEditForm.style.display = "block";
-}
-
-// openDmPregenEditForm — та же форма «Имя / аватар», но для свободной
-// заготовки из пула: сохранение уходит в updateAdminPregen (полная
-// перезапись — лист и метку модуля берём из самого пре-гена).
-function openDmPregenEditForm(p) {
-  dmCharEditingId = p.id;
-  dmCharEditPregen = p;
-  dmCharPendingAvatarUrl = p.avatarUrl || "";
-  dmCharEditName.value = p.name;
-  dmCharEditAvatarUpload.value = "";
-  showDmCharAvatarPreview(p.avatarUrl || "");
-  dmCharEditMsg.textContent = "";
-  dmCharEditForm.style.display = "block";
-}
 
 // createPregenFlow — ДМ заводит заготовку персонажа заранee (до того, как
 // игрок вообще появился): пустой пре-ген по имени, затем сразу открываем его
@@ -2374,13 +2306,6 @@ function pregenPoolRow(p) {
   sheetBtn.title = "Открыть лист заготовки (можно править)";
   sheetBtn.onclick = () => openFloatingWindow({ key: "pregen-" + p.id, title: p.name, url: `/character-sheet.html?pregen=${p.id}` });
   row.appendChild(sheetBtn);
-
-  const editBtn = document.createElement("button");
-  editBtn.className = "icon-btn";
-  editBtn.innerHTML = icon("pencil", { size: 14 });
-  editBtn.title = "Имя / аватар";
-  editBtn.onclick = () => openDmPregenEditForm(p);
-  row.appendChild(editBtn);
 
   if (orphan) {
     const releaseBtn = document.createElement("button");
@@ -2500,12 +2425,7 @@ function assignedCharRow(c, pregen) {
   sheetBtn.innerHTML = icon("scroll", { size: 14 });
   sheetBtn.title = "Лист персонажа";
   sheetBtn.onclick = () => openFloatingWindow({ key: "char-" + c.id, title: c.name, url: `/character-sheet.html?id=${c.id}` });
-  const editBtn = document.createElement("button");
-  editBtn.className = "icon-btn";
-  editBtn.innerHTML = icon("pencil", { size: 14 });
-  editBtn.title = "Имя / аватар";
-  editBtn.onclick = () => openDmCharEditForm(c);
-  row.append(handle, avatar, name, sheetBtn, editBtn);
+  row.append(handle, avatar, name, sheetBtn);
   if (pregen) {
     const unassignBtn = document.createElement("button");
     unassignBtn.className = "icon-btn";
@@ -2539,7 +2459,6 @@ async function renderDmCharacters() {
     dmCharactersList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
     return;
   }
-  closeDmCharEditForm();
   dmCharactersList.innerHTML = "";
 
   const charById = new Map(dmCharacters.map((c) => [c.id, c]));
@@ -2607,43 +2526,6 @@ async function renderDmCharacters() {
 }
 onPanelOpen("characters", renderDmCharacters);
 
-dmCharEditAvatarUpload.onchange = async () => {
-  const file = dmCharEditAvatarUpload.files[0];
-  if (!file) return;
-  try {
-    const { url } = await uploadFile(file, "tokens");
-    dmCharPendingAvatarUrl = url;
-    showDmCharAvatarPreview(url);
-  } catch (err) {
-    dmCharEditMsg.textContent = "Не удалось загрузить аватар: " + err.message;
-  }
-};
-
-document.getElementById("dmCharEditSaveBtn").onclick = async () => {
-  if (!dmCharEditingId) return;
-  const name = dmCharEditName.value.trim();
-  if (!name) {
-    dmCharEditMsg.textContent = "Введи имя персонажа.";
-    return;
-  }
-  try {
-    if (dmCharEditPregen) {
-      // Полная перезапись пре-гена — лист и метку модуля не трогаем.
-      await updateAdminPregen(dmCharEditingId, {
-        name,
-        avatarUrl: dmCharPendingAvatarUrl,
-        foundryModuleId: dmCharEditPregen.source || "",
-        sheet: dmCharEditPregen.sheet,
-      });
-    } else {
-      await updateAdminCharacter(dmCharEditingId, name, dmCharPendingAvatarUrl);
-    }
-    await renderDmCharacters();
-  } catch (err) {
-    dmCharEditMsg.textContent = err.message;
-  }
-};
-document.getElementById("dmCharEditCancelBtn").onclick = closeDmCharEditForm;
 
 // ---- перетаскивание персонажа из панели на карту — создаёт токен ----
 // Тот же формат токена, что и у остальных drag&drop-источников (монстр,
@@ -3493,6 +3375,10 @@ window.addEventListener("message", async (e) => {
       );
       if (row) row.scrollIntoView({ block: "center" });
     }
+  } else if (e.data.type === "beacon:characterSaved") {
+    // Имя/аватар поменяли в листе — dmCharacters держит свою копию (она же
+    // источник drag&drop на карту), перечитываем.
+    renderDmCharacters();
   } else if (
     e.data.type === "beacon:monsterSaved" ||
     e.data.type === "beacon:spellSaved" ||

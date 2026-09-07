@@ -171,7 +171,6 @@
     }
     #charSaveBtn { background: var(--green); }
     #charSaveBtn:hover { background: var(--green-hover); }
-    #charCancelEditBtn { background: var(--surface-hover); display: none; }
     #charFormMsg { font-size: 12px; color: #e74c3c; margin-top: 8px; min-height: 14px; }
 
     /* ---- модалка "Настройки" — та же вёрстка, что "Мои персонажи" ---- */
@@ -310,6 +309,8 @@
 
       <div id="charsList"></div>
 
+      <!-- Форма только СОЗДАЁТ персонажа: имя и аватар уже заведённого
+           правятся в его листе (📜 → «Портрет»), а не отсюда. -->
       <div id="charForm">
         <label for="charName">Имя персонажа</label>
         <input type="text" id="charName" maxlength="60" placeholder="Теневой Клинок" />
@@ -321,7 +322,6 @@
         </div>
         <div id="charFormButtons">
           <button id="charSaveBtn" type="button">Создать персонажа</button>
-          <button id="charCancelEditBtn" type="button">Отмена</button>
         </div>
         <div id="charFormMsg"></div>
       </div>
