@@ -1528,11 +1528,44 @@ tokenMenuDelete.onclick = () => {
 };
 
 // ================= подключённые игроки (счётчик в тулбаре) =================
-document.addEventListener("vtt:playerList", (e) => {
-  const players = e.detail || [];
-  const hint = document.getElementById("playersHint");
-  hint.innerHTML = icon("users", { size: 13 }) + " игроков онлайн: " + players.length;
-  hint.title = players.map((p) => p.name).join(", ") || "пока никто не подключился";
+// Кто именно за столом — списком при наведении на счётчик, а не строкой в
+// нативном title: имён бывает несколько, и их надо читать, а не угадывать по
+// обрезанной подсказке. ДМ в списке не появляется — сервер шлёт только
+// клиентов с ролью игрока (broadcastPlayerList в internal/service/room.go),
+// а сам ДМ подписан рядом, в #dmUsername.
+const playersHint = document.getElementById("playersHint");
+const playersCount = document.getElementById("playersCount");
+const playersOnline = document.getElementById("playersOnline");
+
+function renderPlayersOnline(players) {
+  playersCount.textContent = "игроков онлайн: " + players.length;
+  playersOnline.replaceChildren();
+  if (!players.length) {
+    const empty = document.createElement("span");
+    empty.className = "player-empty";
+    empty.textContent = "пока никто не подключился";
+    playersOnline.append(empty);
+    return;
+  }
+  for (const p of players) {
+    const row = document.createElement("span");
+    row.className = "player-row";
+    const dot = document.createElement("span");
+    dot.className = "player-dot";
+    const name = document.createElement("span");
+    name.textContent = p.name || "без имени";
+    row.append(dot, name);
+    playersOnline.append(row);
+  }
+}
+renderPlayersOnline([]);
+
+document.addEventListener("vtt:playerList", (e) => renderPlayersOnline(e.detail || []));
+
+// На тач-экране :hover не наступает — там список открывается тапом.
+playersHint.onclick = () => playersOnline.classList.toggle("show");
+document.addEventListener("click", (e) => {
+  if (!playersHint.contains(e.target)) playersOnline.classList.remove("show");
 });
 
 // ================= управление аккаунтами =================

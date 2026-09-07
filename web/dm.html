@@ -210,7 +210,32 @@
     }
     #statusBar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #sceneSwitchName { font-weight: 600; }
-    #playersHint { opacity: 0.8; cursor: default; display: inline-flex; align-items: center; gap: 4px; }
+    /* Приглушение — на самом счётчике, а не на #playersHint целиком: opacity
+       на родителе гасила бы и всплывающий список, который должен читаться. */
+    #playersHint { cursor: default; display: inline-flex; align-items: center; gap: 4px; position: relative; }
+    #playersHint > svg, #playersCount { opacity: 0.8; }
+    /* Оба «#statusBar #…» — чтобы перебить #statusBar span выше: там overflow:
+       hidden ради многоточия на длинном имени сцены, и он бы срезал всплывший
+       список. */
+    #statusBar #playersHint { overflow: visible; }
+    /* Список подключённых игроков — всплывает над плашкой при наведении на
+       счётчик (на телефоне — по тапу, класс .show из pages/dm.js). ДМ в него
+       не попадает: сервер шлёт только клиентов с ролью игрока (см.
+       broadcastPlayerList в internal/service/room.go), а сам он и так
+       подписан рядом в #dmUsername. */
+    #statusBar #playersOnline {
+      position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6;
+      display: none; flex-direction: column; gap: 5px;
+      min-width: 160px; max-width: min(260px, calc(100vw - 24px));
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-float); padding: 9px 12px;
+      overflow: visible; white-space: normal;
+    }
+    #playersHint:hover #playersOnline, #statusBar #playersOnline.show { display: flex; }
+    #playersOnline .player-row { display: flex; align-items: center; gap: 6px; }
+    #playersOnline .player-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green-bright); flex: none; }
+    #playersOnline .player-empty { opacity: 0.6; }
     #dmUsername { opacity: 0.6; }
     .status-sep { opacity: 0.35; }
 
@@ -1330,7 +1355,7 @@
       <div id="statusBar">
         <span id="sceneSwitchName">Сцена</span>
         <span class="status-sep">·</span>
-        <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg> игроков онлайн: 0</span>
+        <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg><span id="playersCount">игроков онлайн: 0</span><span id="playersOnline"></span></span>
         <span class="status-sep">·</span>
         <span id="dmUsername"></span>
       </div>
