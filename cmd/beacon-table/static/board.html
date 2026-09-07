@@ -6,6 +6,7 @@
        esm.sh, пропсом это не отключается (см. board/editor.js). -->
   <meta http-equiv="Content-Security-Policy" content="font-src 'self' data:" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Доска</title>
   <style>
     /* Редактор на весь экран плюс тонкая шапка. Страница живёт плавающим
@@ -92,14 +93,27 @@
       color: var(--text-dim); font-size: 13px; text-align: center; line-height: 1.5;
       max-width: 420px; pointer-events: none;
     }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Excalidraw мобильный жест понимает сам; наша тут только шапка — в одну
+       строку на 390px она не встаёт. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #topbar { flex-wrap: wrap; gap: 6px; padding: 7px 10px; }
+      #boardName { flex: 1 1 100%; }
+      #boardMeta { display: none; }
+      #topbarRight { margin-left: 0; flex: 1 1 100%; }
+      #linkBtn, #imageBtn { padding: 7px 12px; font-size: 12px; }
+      .image-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 46dvh; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/board-Du0UjA9o.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DJkzCoTm.js">
+  <script type="module" crossorigin src="/assets/board-CEavxUXC.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-DKVLSjpf.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
+  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
   <link rel="stylesheet" crossorigin href="/assets/board-BcAUh2Nm.css">
 </head>
 <body>

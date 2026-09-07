@@ -383,20 +383,74 @@
       font-size: 11.5px; padding: 5px 10px; border-radius: 8px; background: var(--accent-bg); color: var(--accent); font-weight: 600;
     }
     .item-peek-foot button:hover { background: var(--accent); color: #fff; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Режим чтения уже собран из auto-fit-сеток и складывается сам; чинятся
+       размеры целей (пипсы, кружки владения, полоска ХП рисовались под мышь)
+       и шапка, разъезжавшаяся на 390px в три строки. Бланк правки тут
+       второстепенный: с телефона отмечают потраченное, а не заводят лист. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #topBar { gap: 6px; padding: 7px 10px; }
+      #charSub { display: none; } /* то же есть в шапке карточки чтения */
+      #saveStatus { min-width: 0; }
+      /* Вкладки отдельной строкой с прокруткой: пятью в 390px не встают. */
+      .tabs { order: 5; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tab-btn { flex: 0 0 auto; }
+      body.mode-view .tabs { display: none; }
+
+      #viewPanel, .tab-panel { padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
+
+      /* Жёстко 3 колонки: auto-fit по 84px даёт 4 и хвост из двух. */
+      .v-abils { grid-template-columns: repeat(3, 1fr); }
+      .v-tiles { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); }
+      /* В две колонки по 190px навыки ужимались бы в многоточие. */
+      .v-skills { grid-template-columns: 1fr; }
+      .notes-grid { grid-template-columns: 1fr; }
+
+      /* Таблицы бланка шириной в экран — столбик обрубков, пусть едут вбок. */
+      .section { overflow-x: auto; }
+      table.dyn-table { min-width: 380px; }
+
+      /* iOS зумит страницу на фокусе в поле мельче 16px. */
+      input, textarea, select { font-size: 16px; }
+      table.dyn-table input, table.dyn-table select { font-size: 16px; }
+    }
+
+    /* Цели под палец — отдельно от размера экрана, см. theme.css. */
+    @media (pointer: coarse) {
+      .v-pip { width: 26px; height: 26px; border-radius: 9px; }
+      .prof-toggle { width: 24px; height: 24px; font-size: 12px; }
+      .bulb { width: 22px; height: 22px; }
+      .v-dot { width: 12px; height: 12px; }
+      .v-skill { padding: 9px 7px; }
+      .v-abil-save { padding: 7px 0; font-size: 11.5px; }
+      .v-abil-mod { padding: 4px 0 2px; }
+      .roll-btn { padding: 7px 10px; }
+      .row-del { width: 30px; height: 30px; }
+      .v-inv-eq { width: 30px; height: 30px; }
+      .v-quick button { min-width: 44px; padding: 9px 10px; }
+      .v-atk-hit { padding: 9px 12px; }
+      .tab-btn { padding: 9px 14px; }
+      #closeBtn { width: 36px; height: 36px; }
+      /* Полоску хитов тянут пальцем (hp-bar.js) — в 10px не попасть. */
+      .v-bar { height: 16px; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/characterSheet-CFRJLQAH.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DJkzCoTm.js">
+  <script type="module" crossorigin src="/assets/characterSheet-VZVm3p-v.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-mCZxnTL6.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-COncd15L.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BsfLIaOi.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-D5BetBXU.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DIXKnAUC.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-p1yCy-dF.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
 <body>
   <div id="topBar">

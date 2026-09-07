@@ -64,6 +64,7 @@ import {
 } from "../api.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
+import { initFullscreenButton } from "../fullscreen.js";
 import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
@@ -164,6 +165,7 @@ let isDemoGuest = false;
   const boardsPanel = vtt.sideMenu.addIcon(icon("board", { size: 16 }), "Доски", {
     width: 280,
     sticky: true,
+    mobileFull: true,
     tip: PANEL_HELP.boards,
     // Список перечитывается на открытии панели, а не подпиской: доски
     // заводят редко, и держать ради этого ещё один канал незачем.
@@ -182,7 +184,7 @@ let isDemoGuest = false;
   boardsPanel.style.position = "relative";
   boardsPanel.appendChild(boardsClose);
 
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });
   // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
   // и пункт меню ему показывать незачем.
   mountCompendiumMenu(compendiumPanel, { role: "dm", canImport: !isDemoGuest });
@@ -246,6 +248,11 @@ function hideOwnerOnlyUI() {
 // стол закрывается, игроки отключаются, рестарт сервера не поднимет мир сам —
 // ДМ вернётся и выберет мир заново. Единственное место, где стол снимается;
 // сам заход на worlds.html его не трогает.
+// Полный экран (см. src/fullscreen.js) — в рейле значок без подписи.
+initFullscreenButton(document.getElementById("fullscreenBtn"), (active) =>
+  `<span class="rail-icon">${icon(active ? "fullscreen-exit" : "fullscreen", { size: 20 })}</span>`
+);
+
 document.getElementById("worldsBtn")?.addEventListener("click", async () => {
   if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;
   await stopActiveWorld().catch(() => {});
@@ -3808,6 +3815,9 @@ function setSidePanelSection(name) {
   openPanelSection = openPanelSection === name ? null : name;
   sidePanel.classList.toggle("open", !!openPanelSection);
   panelResizer.classList.toggle("visible", !!openPanelSection);
+  // На телефоне панель занимает всё, что не рейл, и колонка иконок карты
+  // легла бы поверх неё — на это время её убирает dm.html.
+  document.body.classList.toggle("panel-open", !!openPanelSection);
   if (openPanelSection) {
     sidePanel.style.flexBasis = panelWidth + "px";
     sidePanel.style.width = panelWidth + "px";

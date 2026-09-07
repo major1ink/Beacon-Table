@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Журнал</title>
   <style>
     /* Журнал стола: слева каталог (папки + записи, как в Foundry), справа
@@ -215,16 +216,39 @@
     #accessSaveBtn { background: var(--green); }
     #accessSaveBtn:hover { background: var(--green-hover); }
     #accessMsg { flex: 1 1 auto; align-self: center; font-size: 12px; color: #e74c3c; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Список слева + запись справа на 390px не работает: каталог в 244px
+       забирает две трети ширины у текста. Складываем в два экрана, как в
+       почте; переключает класс entry-open на <body> (ставит renderEntry,
+       см. src/pages/journal.js). */
+
+    /* На широком экране список и запись видны разом — возвращаться некуда. */
+    #dirBackBtn { display: none; }
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #app { flex-direction: column; }
+      #dir { flex: 1 1 auto; min-height: 0; border-right: none; }
+      body.entry-open #dir { display: none; }
+      body:not(.entry-open) #pane { display: none; }
+      #dirBackBtn { display: flex; }
+
+      .note-render { font-size: 15px; }
+      .access-row { flex-wrap: wrap; }
+      .access-row select { width: 100%; }
+      /* iOS зумит страницу на фокусе в поле мельче 16px. */
+      #search, #editArea, select, input[type="text"] { font-size: 16px; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/journal-3i8copYU.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DJkzCoTm.js">
+  <script type="module" crossorigin src="/assets/journal-BlJ36OVq.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DIXKnAUC.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-p1yCy-dF.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
 <body>
   <div id="app">
@@ -253,6 +277,7 @@
       <div id="emptyHint">Журнал стола. Выбери запись слева — или заведи свою: личную (её увидит только ДМ) либо сразу общую, для всего стола.</div>
       <div id="entryView">
         <header class="entry-head">
+          <button id="dirBackBtn" class="icon-btn" title="К списку записей"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="20" y1="12" x2="5" y2="12"/><polyline points="11 5 4 12 11 19"/></svg></button>
           <span id="entryTitle"></span>
           <span class="badge" id="entryBadge" style="display:none"></span>
           <button id="showBtn" title="Открыть эту запись у всех игроков за столом"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg> Показать</button>

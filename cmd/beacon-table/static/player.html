@@ -3,6 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <!-- PWA: ярлык на телефоне с иконкой и без адресной строки. Настоящая
+       установка требует https; по http остаётся ручное «на главный экран». -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#131318" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Beacon Table" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Игрок</title>
   <style>
@@ -190,21 +197,88 @@
       align-items: center; justify-content: center; text-align: center; color: var(--text); font-size: 14px; padding: 20px;
     }
     #authFailedOverlay.open { display: flex; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Кнопки топбара до иконок; чипы персонажей второй строкой — только в
+       портрете (блок в самом низу), в ландшафте высота дороже. Лоток кубов
+       за кнопкой и поверх карты, а не полосой снизу: она съедала треть
+       экрана. Лист персонажа и плавающие окна разворачивают себя сами. */
+
+    /* #topbar #diceBtn, а не #diceBtn: у `#topbar button` выше
+       специфичность больше одиночного id. */
+    #topbar #diceBtn { display: none; }
+
+    /* «Во весь экран» (см. src/fullscreen.js) — по pointer: coarse, а не по
+       мобильному брейкпоинту: планшет в ландшафте под тот не попадает. */
+    #topbar #fullscreenBtn { display: none; }
+    @media (pointer: coarse) {
+      #topbar #fullscreenBtn { display: flex; }
+    }
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #topbar {
+        left: 6px; right: 6px; top: 6px; padding: 5px 6px; gap: 2px;
+        flex-wrap: wrap; border-radius: var(--radius-lg);
+      }
+      #topbarUsername { display: none; }
+      /* Строго прямые дети: чипы персонажей и фишки полосы инициативы —
+         тоже <button>, и в 38×38 от имени остаётся одна буква. */
+      #topbar > button { padding: 0; width: 38px; height: 38px; justify-content: center; border-radius: 50%; }
+      #topbar > button .tb-label { display: none; }
+      #topbar #diceBtn { display: flex; }
+      #diceBtn.open, #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
+
+      #charDock:empty { display: none; }
+
+      #zoomHud { right: 6px; bottom: 6px; padding: 5px; gap: 5px; }
+      #zoomHud button { width: 38px; height: 38px; }
+
+      /* max-height: у длинного пула лоток переносится в несколько рядов. */
+      #diceDock { display: none; }
+      body.dice-open #diceDock {
+        display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 7;
+        max-height: 40dvh; overflow-y: auto; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+      }
+      /* Каждая часть своей строкой: на десктопе они flex:0 0 auto и ряд
+         кубиков уезжал за правый край вместе с d100. */
+      #diceDock .dice-buttons, #diceDock .dice-pool { flex: 1 1 100%; }
+      #diceDock .dice-custom { flex: 1 1 100%; min-width: 0; }
+      /* HUD зума под лотком всё равно не виден. */
+      body.dice-open #zoomHud { display: none; }
+      /* Лог поднимаем над лотком; 40dvh — тот же потолок, что у лотка. */
+      #diceLog { left: 6px; bottom: 6px; }
+      body.dice-open #diceLog { bottom: calc(40dvh + 6px); }
+
+      /* Модалки во весь экран: 420px на телефоне и так занимают всё. */
+      #charsModal, #settingsModal {
+        width: 100%; max-width: none; height: 100dvh; max-height: none;
+        border: none; border-radius: 0; padding: 14px 16px calc(20px + env(safe-area-inset-bottom));
+      }
+      #charForm input[type="text"] { font-size: 16px; } /* iOS зумит поля мельче 16px */
+    }
+
+    /* Вторая строка топбара — только в портрете: в ландшафте ширины хватает
+       на всё сразу, а высоты нет. order — в разметке чипы стоят перед
+       кнопками. */
+    @media (max-width: 720px) {
+      #charDock { order: 2; flex: 1 1 100%; padding: 3px 2px 0; }
+      #combatBarMount { order: 3; flex: 1 1 100%; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/player-0KeqVq_6.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DJkzCoTm.js">
+  <script type="module" crossorigin src="/assets/player-BUD9kFe0.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-DKVLSjpf.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-YBpGRp-K.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-KcgpuL3X.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-DubTaFaL.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-DPA-PUxx.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-C6e2R4yF.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-ylzn2Vlg.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
 <body>
   <div id="app">
@@ -216,11 +290,13 @@
           <span id="topbarUsername"></span>
           <div id="charDock"></div>
           <div id="combatBarMount"></div>
-          <button id="charsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-4 3.4-6.4 7-6.4s7 2.4 7 6.4"/></svg> Мои персонажи</button>
-          <button id="lootHubBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg> Хаб</button>
-          <button id="rulerBtn" title="Линейка — ЛКМ и тяни по карте, отпустил — замер исчезает"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg> Линейка</button>
-          <button id="settingsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg> Настройки</button>
-          <button id="logoutBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
+          <button id="fullscreenBtn" type="button"></button>
+          <button id="diceBtn" title="Кубы"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg><span class="tb-label">Кубы</span></button>
+          <button id="charsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-4 3.4-6.4 7-6.4s7 2.4 7 6.4"/></svg><span class="tb-label">Мои персонажи</span></button>
+          <button id="lootHubBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg><span class="tb-label">Хаб</span></button>
+          <button id="rulerBtn" title="Линейка — ЛКМ и тяни по карте, отпустил — замер исчезает"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg><span class="tb-label">Линейка</span></button>
+          <button id="settingsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg><span class="tb-label">Настройки</span></button>
+          <button id="logoutBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span class="tb-label">Выйти</span></button>
         </div>
         <div id="diceLog"></div>
         <div id="zoomHud">

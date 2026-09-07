@@ -196,6 +196,67 @@ export function createInteraction(ctx) {
   window.addEventListener("pointerup", endTouchPoint);
   window.addEventListener("pointercancel", endTouchPoint);
 
+  // ---- долгое нажатие пальцем = ПКМ ----
+  // Пальцем правой кнопки нет, а своё contextmenu браузер не зовёт из-за
+  // touch-action:none на канвасе (см. выше) — порождаем сами.
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_SLOP = 12;
+  let longPress = null; // {timer, x, y}
+
+  function cancelLongPress() {
+    if (!longPress) return;
+    clearTimeout(longPress.timer);
+    longPress = null;
+  }
+
+  // swallowNextTap — съесть mouse-события, которые браузер синтезирует из
+  // касания при отрыве пальца: «клик мимо меню — закрыть» (pages/dm.js)
+  // висит на document/mousedown и закрыл бы только что открытое меню.
+  // Снимаем слушателей сразу по событию, таймер — на случай, если браузер
+  // совместимых событий не шлёт вовсе.
+  function swallowNextTap() {
+    const kinds = ["mousedown", "mouseup", "click"];
+    const left = new Set(kinds);
+    function stop(ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      document.removeEventListener(ev.type, stop, true);
+      left.delete(ev.type);
+      if (left.size === 0) clearTimeout(timer);
+    }
+    for (const k of kinds) document.addEventListener(k, stop, true);
+    const timer = setTimeout(() => {
+      for (const k of left) document.removeEventListener(k, stop, true);
+    }, 700);
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    cancelLongPress();
+    // Второй палец — это уже жест камеры, а не долгое нажатие.
+    if (touchPoints.size !== 1) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    longPress = {
+      x,
+      y,
+      timer: setTimeout(() => {
+        longPress = null;
+        // Палец мог уже тащить токен — жест отменяем без записи на сервер.
+        document.dispatchEvent(new CustomEvent("vtt:cancelGesture"));
+        swallowNextTap();
+        canvas.dispatchEvent(new MouseEvent("contextmenu", { clientX: x, clientY: y, bubbles: true, cancelable: true }));
+      }, LONG_PRESS_MS),
+    };
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!longPress) return;
+    if (Math.abs(e.clientX - longPress.x) > LONG_PRESS_SLOP || Math.abs(e.clientY - longPress.y) > LONG_PRESS_SLOP) cancelLongPress();
+  });
+  window.addEventListener("pointerup", cancelLongPress);
+  window.addEventListener("pointercancel", cancelLongPress);
+
   document.addEventListener("vtt:zoomBy", (e) => {
     zoomAt(ctx.camera, screenW() / 2, screenH() / 2, e.detail, screenW(), screenH(), ctx.scene);
     applyCameraAndRender();

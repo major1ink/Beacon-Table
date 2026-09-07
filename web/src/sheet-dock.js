@@ -62,6 +62,20 @@ function injectStyle() {
     /* Пока тянем ручку — гасим указатель внутри iframe, иначе он перехватывает
        mousemove на себя и колонка "залипает" на границе. */
     .sheet-dock.resizing .sheet-dock-iframe { pointer-events: none; }
+
+    /* Телефон: док во весь экран — колонка в 300px рядом с картой в 390px
+       не имеет смысла. !important — ширину ставит инлайном build()/resize.
+       Брейкпоинт общий, см. theme.css. */
+    @media (max-width: 860px), (max-height: 500px) {
+      .sheet-dock.open {
+        position: fixed; inset: 0; z-index: 300;
+        width: auto !important; border-right: none;
+      }
+      /* Тянуть и выносить нечего: плавающее окно там тоже полноэкранное. */
+      .sheet-dock-resizer, .sheet-dock-popout { display: none; }
+      .sheet-dock-header { padding: 8px 8px 8px 14px; }
+      .sheet-dock-title { font-size: 14px; }
+    }
   `;
   document.head.appendChild(style);
 }
@@ -101,7 +115,7 @@ function build(hostEl) {
 
   const popoutBtn = document.createElement("button");
   popoutBtn.type = "button";
-  popoutBtn.className = "icon-btn";
+  popoutBtn.className = "icon-btn sheet-dock-popout";
   popoutBtn.title = "Открыть в отдельном окне";
   popoutBtn.innerHTML =
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
@@ -182,6 +196,9 @@ export function openSheetDock(hostEl, { key, title, url, onLayoutChange }) {
   }
   const wasOpen = dockEl.classList.contains("open");
   dockEl.classList.add("open");
+  // Класс на <body>: доку не хватает z-index против колонки иконок карты —
+  // он внутри #app, она прямой ребёнок body. Прячет её theme.css.
+  document.body.classList.add("sheet-dock-open");
   if (!wasOpen) notifyLayout();
   return dockEl;
 }
@@ -189,6 +206,7 @@ export function openSheetDock(hostEl, { key, title, url, onLayoutChange }) {
 export function closeSheetDock() {
   if (!dockEl || !dockEl.classList.contains("open")) return;
   dockEl.classList.remove("open");
+  document.body.classList.remove("sheet-dock-open");
   iframeEl.removeAttribute("src");
   current = null;
   notifyLayout();

@@ -4,6 +4,12 @@
 # файлов почти нет (systemdata/assets очищен от стороннего контента), но
 # правило действует с первого коммита, чтобы не было "уже поздно" повторно.
 *.png filter=lfs diff=lfs merge=lfs -text
+# Иконки приложения — обычным git: они уезжают в static/ и вшиваются через
+# go:embed, на клоне без lfs pull туда попал бы указатель.
+web/public/icon-*.png -filter -diff -merge -text
+web/public/apple-touch-icon.png -filter -diff -merge -text
+cmd/beacon-table/static/icon-*.png -filter -diff -merge -text
+cmd/beacon-table/static/apple-touch-icon.png -filter -diff -merge -text
 *.jpg filter=lfs diff=lfs merge=lfs -text
 *.jpeg filter=lfs diff=lfs merge=lfs -text
 *.webp filter=lfs diff=lfs merge=lfs -text

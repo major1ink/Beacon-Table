@@ -44,6 +44,23 @@ function injectStyle() {
     .fw-btn:hover { background: rgba(255,255,255,0.14); }
     .fw-body { flex: 1 1 auto; min-height: 0; position: relative; }
     .fw-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; background: #1c1c24; }
+
+    /* Телефон: окно во весь экран — min-width 420px не влезает, а таскать
+       и растягивать пальцем нечем (и то и другое висит на мыши).
+       !important — позицию и размер ставит инлайном openFloatingWindow.
+       Брейкпоинт общий, см. theme.css. */
+    @media (max-width: 860px), (max-height: 500px) {
+      .fw-window {
+        left: 0 !important; top: 0 !important;
+        width: 100% !important; height: 100dvh !important;
+        min-width: 0; min-height: 0; border: none; border-radius: 0;
+        resize: none;
+      }
+      .fw-titlebar { cursor: default; padding: 8px 8px 8px 12px; }
+      .fw-btn { width: 34px; height: 34px; font-size: 15px; }
+      /* 🗗 на телефоне — вторая вкладка, из которой не вернуться. */
+      .fw-popout { display: none; }
+    }
   `;
   document.head.appendChild(style);
 }
@@ -120,7 +137,7 @@ export function openFloatingWindow({
   titleEl.textContent = title || "";
   const popoutBtn = document.createElement("button");
   popoutBtn.type = "button";
-  popoutBtn.className = "fw-btn";
+  popoutBtn.className = "fw-btn fw-popout";
   popoutBtn.textContent = "🗗";
   popoutBtn.title = "Открыть в отдельном окне браузера";
   const closeBtn = document.createElement("button");

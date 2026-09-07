@@ -3,6 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <!-- PWA: ярлык на телефоне с иконкой и без адресной строки. Настоящая
+       установка требует https; по http остаётся ручное «на главный экран». -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#131318" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Beacon Table" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Миры</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
@@ -115,6 +122,20 @@
       font-size: 13px; font-weight: 600; padding: 9px 14px; cursor: pointer;
     }
     #passwordForm button:disabled { opacity: 0.6; cursor: default; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Карточка и так тянется по ширине; чинится ряд «название | система |
+       Создать» — втроём в строку на 375px полю названия остаётся сантиметр. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      body { align-items: flex-start; }
+      #page { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: 0; min-height: 100dvh; }
+      #createForm { flex-wrap: wrap; }
+      #createForm input { flex: 1 1 100%; }
+      #createForm select { flex: 1 1 auto; }
+      /* iOS зумит страницу на фокусе в поле мельче 16px. */
+      #createForm input, #createForm select, input, select { font-size: 16px; }
+    }
   </style>
 </head>
 <body>
