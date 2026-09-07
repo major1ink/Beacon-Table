@@ -6,6 +6,7 @@
        esm.sh, пропсом это не отключается (см. board/editor.js). -->
   <meta http-equiv="Content-Security-Policy" content="font-src 'self' data:" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Доска</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
@@ -92,6 +93,19 @@
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
       color: var(--text-dim); font-size: 13px; text-align: center; line-height: 1.5;
       max-width: 420px; pointer-events: none;
+    }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Excalidraw мобильный жест понимает сам; наша тут только шапка — в одну
+       строку на 390px она не встаёт. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #topbar { flex-wrap: wrap; gap: 6px; padding: 7px 10px; }
+      #boardName { flex: 1 1 100%; }
+      #boardMeta { display: none; }
+      #topbarRight { margin-left: 0; flex: 1 1 100%; }
+      #linkBtn, #imageBtn { padding: 7px 12px; font-size: 12px; }
+      .image-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 46dvh; }
     }
   </style>
 </head>

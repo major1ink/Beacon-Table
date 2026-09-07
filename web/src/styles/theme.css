@@ -549,3 +549,78 @@
   display: flex; align-items: center; justify-content: center;
 }
 .board-item-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* ---- мобильная вёрстка ----
+   Брейкпоинт на весь проект двойной: max-width ловит портрет, max-height —
+   ландшафт телефона (844×390). Копируется как есть везде, где нужна узкая
+   ветка. Отдельно (pointer: coarse) — размер целей под палец и hover. */
+
+@media (pointer: coarse) {
+  .rail-btn { width: 46px; height: 46px; }
+  .icon-btn { width: 34px; height: 34px; }
+  .board-item-btn { width: 32px; height: 32px; }
+  .draw-swatch { width: 30px; height: 30px; }
+  .item-picker-add { width: 32px; height: 32px; }
+  input[type="range"] { height: 28px; }
+
+  /* hover пальцем залипает — подсказка висит поверх открытого. */
+  .bt-tip { display: none !important; }
+
+  /* iOS зумит страницу на фокусе в поле мельче 16px и назад не отъезжает. */
+  .bt-modal-input, .bt-modal-textarea,
+  .item-picker-search, .item-picker-qty,
+  .dice-tray .dice-custom input { font-size: 16px; }
+}
+
+@media (max-width: 860px), (max-height: 500px) {
+  .dice-tray .dice-buttons button { padding: 9px 14px; font-size: 13px; }
+  .dice-tray .dice-pool button { padding: 7px 12px; font-size: 13px; }
+
+  /* 264px — две трети экрана телефона, плашка закрывает саму карту. */
+  .roll-log--plate { width: min(224px, 62vw); max-height: 34vh; }
+  .roll-log--strip { max-height: 30vh; }
+
+  .item-picker-results { max-height: 46vh; }
+  .loot-modal { width: 100%; max-height: calc(100dvh - 24px); }
+  .catalog-name { flex-basis: 100%; white-space: normal; }
+  .draw-shapes { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---- колонка иконок карты (см. web/src/vtt/side-menu.js): раскладка там
+   инлайновая, отсюда !important на всех переопределениях ---- */
+@media (pointer: coarse) {
+  /* Именно .vtt-side-menu-btn: панель выезжает ВНУТРИ колонки, и широкий
+     селектор ломал бы кнопки её содержимого. */
+  .vtt-side-menu-btn { width: 42px !important; height: 42px !important; }
+}
+
+@media (max-width: 860px), (max-height: 500px) {
+  /* Лист персонажа раскрыт во весь экран (sheet-dock.js), колонка — прямой
+     ребёнок body и легла бы поверх него. */
+  body.sheet-dock-open .vtt-side-menu { display: none !important; }
+
+  /* Панель — нижний лист; right: 58px оставляет справа саму колонку, иначе
+     закрыть панель её же значком нечем. */
+  .vtt-side-panel {
+    position: fixed !important;
+    right: 58px !important; left: 8px !important;
+    top: auto !important; bottom: 8px !important;
+    transform: none !important;
+    width: auto !important; min-width: 0 !important;
+    max-height: 62dvh !important;
+  }
+
+  /* --full («Справочник», «Доски») — во весь экран, как окно журнала.
+     Специфичность 0,2,0 — иначе !important правила выше перебьёт inset.
+     Верхние 46px — полоса под ✕, который «Доски» вешают абсолютом. */
+  .vtt-side-panel.vtt-side-panel--full {
+    inset: 0 !important;
+    max-height: none !important;
+    border: none !important; border-radius: 0 !important;
+    padding: calc(46px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)) !important;
+  }
+  /* У «Справочника» своя шапка с ✕ — она и занимает эту полосу. */
+  .vtt-side-panel--full > .compendium-panel-header { margin-top: -34px; }
+  /* Прячем кнопки, а не колонку: панель — её потомок. */
+  body.vtt-side-panel-full-open .vtt-side-menu-btn { display: none !important; }
+}

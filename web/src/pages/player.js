@@ -167,7 +167,7 @@ const PLAYER_DRAW_HELP = {
   // тот же sticky, см. комментарий там), первая иконка тут (игрок кубы
   // бросает через #diceDock снизу, не через sideMenu — у него это основной
   // инструмент, и он всегда на виду, а не за иконкой).
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });
   mountCompendiumMenu(compendiumPanel, { role: "player" });
 
   // Пометки — та же иконка и та же панель, что у ДМ (см. pages/dm.js и
@@ -208,6 +208,7 @@ const PLAYER_DRAW_HELP = {
   const boardsPanel = vtt.sideMenu.addIcon(icon("board", { size: 16 }), "Доски", {
     width: 280,
     sticky: true,
+    mobileFull: true,
     tip: PANEL_HELP.boards,
     // Список перечитывается на открытии панели, а не подпиской: доски
     // заводят редко, и держать ради этого ещё один канал незачем.
@@ -278,6 +279,16 @@ document.getElementById("logoutBtn").onclick = async () => {
 document.getElementById("zoomInBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1.3 }));
 document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1 / 1.3 }));
 document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
+
+// ================= лоток кубов на телефоне =================
+// На десктопе лоток — полоса внизу, кнопка спрятана стилями (player.html).
+// Класс на <body>, а не на доке: от него зависят и соседи — HUD зума и лог
+// бросков.
+const diceBtn = document.getElementById("diceBtn");
+diceBtn.onclick = () => {
+  const open = document.body.classList.toggle("dice-open");
+  diceBtn.classList.toggle("open", open);
+};
 
 // ================= инструменты карты =================
 // Линейка живёт в топбаре, пометки — иконкой в боковой колонке над канвасом

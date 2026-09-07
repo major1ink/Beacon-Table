@@ -381,9 +381,16 @@ function revealFolder(folder) {
   }
 }
 
+// Стрелка ← в шапке записи (только на телефоне): не закрывает запись, а
+// переключает экран обратно на список.
+document.getElementById("dirBackBtn").onclick = () => document.body.classList.remove("entry-open");
+
 function renderEntry() {
   emptyHint.style.display = current ? "none" : "block";
   entryView.style.display = current ? "flex" : "none";
+  // На телефоне список и запись — два экрана; класс выбирает, какой из них
+  // показывать (см. journal.html).
+  document.body.classList.toggle("entry-open", !!current);
   if (!current) return;
 
   entryTitle.textContent = current.title;

@@ -134,17 +134,29 @@
 
     .catalog-ref { color: var(--blue); text-decoration: none; border-bottom: 1px solid var(--blue); cursor: pointer; font-weight: 600; }
     .catalog-ref:hover { color: #fff; background: var(--blue); border-radius: 3px; border-bottom-color: transparent; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Карточка книги идёт столбиком; чинятся только места, свёрстанные в
+       две и шесть колонок под ширину монитора. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #app { padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
+      /* Двухколоночная врезка markdown — по 175px на колонку. */
+      .md-block { grid-template-columns: 1fr; }
+      /* iOS зумит страницу на фокусе в поле мельче 16px. */
+      input, textarea, select { font-size: 16px; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/conditions-ztFD1AzA.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DJkzCoTm.js">
+  <script type="module" crossorigin src="/assets/conditions-DwXy71r8.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-DwlZmB-I.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-text-8Hqfz_vU.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-import-DxmzJH5i.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-mCZxnTL6.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BQexTX3a.js">
+  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
 <body>
   <div id="topBar">

@@ -164,6 +164,7 @@ let isDemoGuest = false;
   const boardsPanel = vtt.sideMenu.addIcon(icon("board", { size: 16 }), "Доски", {
     width: 280,
     sticky: true,
+    mobileFull: true,
     tip: PANEL_HELP.boards,
     // Список перечитывается на открытии панели, а не подпиской: доски
     // заводят редко, и держать ради этого ещё один канал незачем.
@@ -182,7 +183,7 @@ let isDemoGuest = false;
   boardsPanel.style.position = "relative";
   boardsPanel.appendChild(boardsClose);
 
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, tip: PANEL_HELP.compendium });
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });
   // canImport: гостю демо импорт закрыт на сервере (requireOwner), значит
   // и пункт меню ему показывать незачем.
   mountCompendiumMenu(compendiumPanel, { role: "dm", canImport: !isDemoGuest });
@@ -3808,6 +3809,9 @@ function setSidePanelSection(name) {
   openPanelSection = openPanelSection === name ? null : name;
   sidePanel.classList.toggle("open", !!openPanelSection);
   panelResizer.classList.toggle("visible", !!openPanelSection);
+  // На телефоне панель занимает всё, что не рейл, и колонка иконок карты
+  // легла бы поверх неё — на это время её убирает dm.html.
+  document.body.classList.toggle("panel-open", !!openPanelSection);
   if (openPanelSection) {
     sidePanel.style.flexBasis = panelWidth + "px";
     sidePanel.style.width = panelWidth + "px";

@@ -10,7 +10,10 @@ import { attachTooltip, hideTooltip } from "../tooltip.js";
 
 export function createSideMenu(ctx) {
   const column = document.createElement("div");
-  column.style.cssText = "position:fixed;z-index:41;display:flex;flex-direction:column;gap:8px;transform:translateY(-50%);";
+  column.className = "vtt-side-menu"; // зацепка для мобильных правил в theme.css
+  // Без transform: он сделал бы колонку containing block'ом для fixed-панели
+  // внутри неё. Центрируем арифметикой в position().
+  column.style.cssText = "position:fixed;z-index:41;display:flex;flex-direction:column;gap:8px;";
   document.body.appendChild(column);
 
   let openPanel = null;
@@ -35,6 +38,11 @@ export function createSideMenu(ctx) {
   // её надо дёрнуть и при закрытии, а закрытие идёт общим closeOpen, который
   // сам не знает, чью панель гасит.
   let openPanelToggle = null;
+  // Пока открыта полноэкранная панель, иконки колонки прячет theme.css.
+  function syncFullClass() {
+    document.body.classList.toggle("vtt-side-panel-full-open", !!openPanel && openPanel.classList.contains("vtt-side-panel--full"));
+  }
+
   function closeOpen() {
     if (openPanel) openPanel.style.display = "none";
     const toggle = openPanelToggle;
@@ -42,6 +50,7 @@ export function createSideMenu(ctx) {
     openPanelSticky = false;
     openPanelOnCanvas = false;
     openPanelToggle = null;
+    syncFullClass();
     if (toggle) toggle(false);
   }
 
@@ -53,6 +62,8 @@ export function createSideMenu(ctx) {
   // opts.sticky — см. openPanelSticky выше; панель получает .close() — тот
   // же closeOpen, вызывающий код может дать свою кнопку ✕.
   // opts.keepOnCanvas — см. openPanelOnCanvas выше.
+  // opts.mobileFull — на телефоне панель во весь экран, а не нижним листом
+  // (см. theme.css). Не для тех, кем работают ПО КАРТЕ, — «Пометки».
   // opts.onToggle(open) — панель открыли/закрыли. Нужно тем иконкам, что
   // не просто показывают плашку, а ВКЛЮЧАЮТ режим на карте (сейчас —
   // "Пометки": открыта панель значит выбран инструмент рисования).
@@ -66,6 +77,9 @@ export function createSideMenu(ctx) {
   function iconButton(icon, title) {
     const btn = document.createElement("button");
     btn.type = "button";
+    // Свой класс, а не `.vtt-side-menu button`: под широкий селектор попали
+    // бы и кнопки внутри выезжающей панели.
+    btn.className = "vtt-side-menu-btn";
     btn.innerHTML = icon;
     btn.title = title;
     btn.style.cssText =
@@ -88,6 +102,7 @@ export function createSideMenu(ctx) {
       onClick();
     };
     column.appendChild(btn);
+    position(); // колонка подросла — пересчитать вертикальный центр
     return btn;
   }
 
@@ -96,6 +111,7 @@ export function createSideMenu(ctx) {
     wrap.style.cssText = "position:relative;";
     const btn = iconButton(icon, title);
     const panel = document.createElement("div");
+    panel.className = "vtt-side-panel" + (opts && opts.mobileFull ? " vtt-side-panel--full" : "");
     panel.style.cssText =
       "display:none;flex-direction:column;gap:8px;position:absolute;right:calc(100% + 8px);top:50%;" +
       "transform:translateY(-50%);background:var(--glass-bg-strong,rgba(22,22,29,0.88));" +
@@ -128,6 +144,7 @@ export function createSideMenu(ctx) {
       openPanelSticky = sticky;
       openPanelOnCanvas = keepOnCanvas;
       openPanelToggle = onToggle;
+      syncFullClass();
       if (onToggle) onToggle(true);
     };
     // Пока панель этой иконки открыта, подсказка про неё молчит: она
@@ -135,6 +152,7 @@ export function createSideMenu(ctx) {
     if (opts && opts.tip) attachTooltip(btn, () => (openPanel === panel ? null : opts.tip));
     wrap.append(btn, panel);
     column.appendChild(wrap);
+    position(); // колонка подросла — пересчитать вертикальный центр
     panel.close = closeOpen;
     // host — обёртка иконки целиком. Нужна тем, кто прячет иконку по
     // условию (у игрока «Пометки» появляются, только когда ДМ разрешил
@@ -144,7 +162,9 @@ export function createSideMenu(ctx) {
     return panel;
   }
 
-  document.addEventListener("mousedown", (e) => {
+  // pointerdown, а не mousedown: пальцем синтетический mousedown приходит
+  // только после отрыва, а над прокруткой не приходит вовсе.
+  document.addEventListener("pointerdown", (e) => {
     if (!openPanel || openPanelSticky || column.contains(e.target)) return;
     if (openPanelOnCanvas && (e.target === ctx.canvas || e.target.closest?.(".bt-modal-overlay"))) return;
     closeOpen();
@@ -154,14 +174,21 @@ export function createSideMenu(ctx) {
   });
 
   // Позиция — правый край канваса (не viewport), по вертикали посередине.
+  // Высота колонки известна только после того, как вызывающий добавит
+  // иконки, — отсюда наблюдатель за ней и вызовы из addIcon/addButton
+  // (объявление, а не const: они выше по файлу). Clamp — чтобы длинная
+  // колонка не уехала за верх экрана.
   function position() {
     const rect = ctx.canvas.getBoundingClientRect();
+    const h = column.offsetHeight;
+    const top = rect.top + rect.height / 2 - h / 2;
     column.style.left = Math.round(rect.right - 44) + "px";
-    column.style.top = Math.round(rect.top + rect.height / 2) + "px";
+    column.style.top = Math.round(Math.max(8, Math.min(top, window.innerHeight - h - 8))) + "px";
   }
   position();
   window.addEventListener("resize", position);
   new ResizeObserver(position).observe(ctx.canvas);
+  new ResizeObserver(position).observe(column);
 
   return { addIcon, addButton };
 }

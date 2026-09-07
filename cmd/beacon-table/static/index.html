@@ -104,11 +104,17 @@
     .msg { font-size: 12px; margin-top: 10px; min-height: 14px; }
     .msg.error { color: #e74c3c; }
     .msg.ok { color: var(--green-bright); }
+
+    /* Телефон: iOS зумит страницу на фокусе в поле мельче 16px.
+       Брейкпоинт общий, см. src/styles/theme.css. */
+    @media (max-width: 860px), (max-height: 500px) {
+      input { font-size: 16px; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/index-pF7pxv4X.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DJkzCoTm.js">
+  <script type="module" crossorigin src="/assets/index-4ncfkvWW.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
 <body>
   <div id="splash"></div>

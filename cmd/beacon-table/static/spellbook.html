@@ -105,9 +105,21 @@
     .sb-prose p:first-child { margin-top: 0; }
     .sb-prose p:last-child { margin-bottom: 0; }
     .sb-prose strong { color: #fff; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Карточка книги идёт столбиком; чинятся только места, свёрстанные в
+       две и шесть колонок под ширину монитора. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #app { padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
+      /* Двухколоночная врезка markdown — по 175px на колонку. */
+      .md-block { grid-template-columns: 1fr; }
+      /* iOS зумит страницу на фокусе в поле мельче 16px. */
+      input, textarea, select { font-size: 16px; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/spellbook-CLPnKHn7.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-DJkzCoTm.js">
+  <script type="module" crossorigin src="/assets/spellbook-BLjlqzDZ.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-DOpLO7Pn.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
@@ -117,10 +129,10 @@
   <link rel="modulepreload" crossorigin href="/assets/condition-import-DxmzJH5i.js">
   <link rel="modulepreload" crossorigin href="/assets/spell-import-uRcX00JW.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DIXKnAUC.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-p1yCy-dF.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-jD3yyO8U.css">
+  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
 <body>
   <div id="topBar">

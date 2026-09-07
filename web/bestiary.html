@@ -144,6 +144,20 @@
     .sb-prose p:first-child { margin-top: 0; }
     .sb-prose p:last-child { margin-bottom: 0; }
     .sb-prose strong { color: #fff; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Карточка книги идёт столбиком; чинятся только места, свёрстанные в
+       две и шесть колонок под ширину монитора. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #app { padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
+      /* Двухколоночная врезка markdown — по 175px на колонку. */
+      .md-block { grid-template-columns: 1fr; }
+      /* Шесть в ряд — по 55px на колонку вместе с подписью. */
+      .ability-grid, .sb-ability-grid { grid-template-columns: repeat(3, 1fr); }
+      /* iOS зумит страницу на фокусе в поле мельче 16px. */
+      input, textarea, select { font-size: 16px; }
+    }
   </style>
 </head>
 <body>

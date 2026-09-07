@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — DM</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
@@ -837,6 +838,58 @@
       align-items: center; justify-content: center; text-align: center; color: #eee; font-size: 14px; padding: 20px;
     }
     #authFailedOverlay.open { display: flex; }
+
+    /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
+       Стол ведут за компьютером; здесь только чтобы страница не разъезжалась
+       и до всех разделов можно было дотянуться. Рейл прокручивается (полтора
+       десятка иконок по 46px выше экрана), панель раздела ложится поверх
+       карты — в потоке она оставляла карте полтора сантиметра. */
+
+    @media (max-width: 860px), (max-height: 500px) {
+      #rail {
+        width: 56px; margin: 6px 0 6px 6px; padding: 8px 0;
+        overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+      }
+      #rail::-webkit-scrollbar { display: none; }
+      /* margin-top:auto дал бы пустой экран под иконками при прокрутке. */
+      .rail-bottom { margin-top: 6px; }
+
+      /* Панель поверх карты, left — за рейлом. Ширину, которую ставит
+         инлайном dm.js, перебиваем: ручка тут скрыта. */
+      #panel {
+        position: absolute; z-index: 7; left: 68px; right: 6px; top: 6px; bottom: 6px;
+        margin: 0; transition: none;
+      }
+      #panel.open { margin: 0; width: auto !important; }
+      #panelResizer { display: none !important; }
+      /* Колонка иконок живёт у правого края канваса, а он под панелью
+         полноэкранный (класс ставит setSidePanelSection в dm.js). */
+      body.panel-open .vtt-side-menu { display: none !important; }
+
+      /* z-index и поля статблоку задаёт эта страница — её специфичность
+         выше правил sheet-dock.js. Иначе панель раздела легла бы поверх. */
+      #sheetDock.sheet-dock { z-index: 300; margin: 6px; }
+
+      /* Плашка уезжает из правого нижнего угла — там зум. */
+      #statusBar {
+        left: 68px; right: auto; bottom: 6px;
+        /* 68 слева + ~116 на HUD зума справа + зазоры. */
+        max-width: calc(100vw - 196px);
+        padding: 5px 11px; font-size: 11px;
+      }
+      #zoomHud { right: 6px; bottom: 6px; }
+      #zoomHud button { width: 38px; height: 38px; }
+      #diceLog { right: 6px; top: 6px; }
+
+      /* Меню открываются у пальца (долгое нажатие, см. interaction.js) —
+         без потолка уезжают за правый край. */
+      #tokenMenu, #canvasMenu, #wallMenu, #wallPointMenu, #fogAreaMenu, #buildingMenu, #noteMarkerMenu {
+        max-width: calc(100vw - 16px);
+      }
+
+      /* iOS зумит страницу на фокусе в поле мельче 16px. */
+      #panel input, #panel select, #panel textarea { font-size: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -930,7 +983,7 @@
           <button id="fogBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01.4-8 5.5 5.5 0 0110.4 1A3.5 3.5 0 0117 16H7z"/><line x1="5" y1="19" x2="19" y2="19"/></svg> Туман</button>
           <button id="rulerBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg> Линейка</button>
           <div class="section-divider"></div>
-          <p class="hint">Наведи на инструмент — подсказка расскажет, что он делает и какими жестами. ЛКМ таскает токены · ПКМ на токене — меню · средняя кнопка — пан · колесо — зум.</p>
+          <p class="hint">Наведи на инструмент — подсказка расскажет, что он делает и какими жестами. Мышь: ЛКМ таскает токены · ПКМ на токене — меню · средняя кнопка — пан · колесо — зум. Палец: тащить — токен, два пальца — двигать и масштабировать карту, долгое нажатие — то же меню, что ПКМ.</p>
         </div>
       </section>
 
