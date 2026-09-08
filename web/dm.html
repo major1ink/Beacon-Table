@@ -245,6 +245,10 @@
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
+      /* Меню длинное (зрение, свет, цвет, конус) и на невысоком экране в него
+         не влезает — своя прокрутка вместо уезжающих за край пунктов.
+         Позицию при этом зажимает placeTokenMenu в pages/dm.js. */
+      box-sizing: border-box; max-height: calc(100vh - 16px); overflow-y: auto;
     }
     #tokenMenu label { display: flex; gap: 6px; padding: 4px 2px; cursor: pointer; }
     #tokenMenu .light-field { display: none; }
@@ -257,6 +261,7 @@
       background: var(--surface-hover); color: var(--text);
     }
     #tokenMenu .light-presets button:hover { background: var(--accent); }
+    #tokenMenu .light-presets button.active { background: var(--accent); box-shadow: 0 0 0 1px var(--text) inset; }
     #tokenMenu button { width: 100%; margin-top: 6px; background: var(--danger); }
     #tokenMenu button:hover { background: var(--danger-hover); }
     #tokenMenuLightHeader {

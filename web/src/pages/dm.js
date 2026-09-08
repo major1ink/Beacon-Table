@@ -1184,6 +1184,7 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   // отдельной кнопкой пресетов (menuLightColor помнит, что выбрано).
   menuLightColor = menuIsMulti ? "" : (token.light && token.light.color) || "";
   tokenMenuLightColor.value = menuLightColor || "#ffcc66";
+  syncLightPresets();
   tokenMenuLightAngle.value = menuIsMulti ? 0 : (token.light && token.light.angle) || 0;
   tokenMenuLightDirection.value = menuIsMulti ? 0 : (token.light && token.light.direction) || 0;
 
@@ -1239,10 +1240,29 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLockLabel.textContent = menuTokenLocked ? "Разблокировать" : "Заблокировать";
   applyTokenMenuLockState();
 
-  tokenMenu.style.left = pageX + "px";
-  tokenMenu.style.top = pageY + "px";
-  tokenMenu.style.display = "block";
+  placeTokenMenu(pageX, pageY);
 });
+
+// placeTokenMenu — меню у курсора, но целиком в пределах окна. Раньше оно
+// ставилось строго в точку клика и у нижнего/правого края уезжало за экран:
+// пунктов в нём прибавилось (зрение, цвет, конус), и на ноутбучном экране
+// нижняя половина оказывалась недосягаема.
+function placeTokenMenu(pageX, pageY) {
+  const margin = 8;
+  tokenMenu.style.visibility = "hidden";
+  tokenMenu.style.left = "0px";
+  tokenMenu.style.top = "0px";
+  tokenMenu.style.display = "block";
+  const { width, height } = tokenMenu.getBoundingClientRect();
+  // По вертикали: не влезло вниз — поднимаем так, чтобы низ меню был у края
+  // окна; не влезло вообще (меню выше экрана) — прижимаем к верху, дальше
+  // работает собственная прокрутка меню (см. max-height в dm.html).
+  const left = Math.max(margin, Math.min(pageX, window.innerWidth - width - margin));
+  const top = Math.max(margin, Math.min(pageY, window.innerHeight - height - margin));
+  tokenMenu.style.left = left + "px";
+  tokenMenu.style.top = top + "px";
+  tokenMenu.style.visibility = "";
+}
 
 // applyTokenMenuLockState — гасит в открытом меню всё, что правит запертый
 // токен. Список исключений короткий и осознанный: сама кнопка замка (иначе
@@ -1579,20 +1599,44 @@ tokenMenuVision.onchange = () => {
   syncVisionFieldVisibility();
   sendTokenMenuVision();
 };
-tokenMenuVisionRange.onchange = sendTokenMenuVision;
+let visionSendTimer = null;
+tokenMenuVisionRange.oninput = () => {
+  clearTimeout(visionSendTimer);
+  visionSendTimer = setTimeout(sendTokenMenuVision, 150);
+};
 
-tokenMenuLightBright.onchange = sendTokenMenuLight;
-tokenMenuLightDim.onchange = sendTokenMenuLight;
+// oninput, а не onchange: change у number-поля срабатывает только по потере
+// фокуса или Enter, и правка радиуса/угла как будто «не применялась», пока
+// ДМ не кликнет мимо. Отправку придерживаем, чтобы набор «120» не улетел
+// тремя сообщениями подряд.
+let lightSendTimer = null;
+function sendTokenMenuLightSoon() {
+  clearTimeout(lightSendTimer);
+  lightSendTimer = setTimeout(sendTokenMenuLight, 150);
+}
+tokenMenuLightBright.oninput = sendTokenMenuLightSoon;
+tokenMenuLightDim.oninput = sendTokenMenuLightSoon;
+// syncLightPresets — подсветка выбранного пресета: без неё по меню не
+// понять, какой оттенок стоит сейчас (сам квадратик палитры показывает цвет,
+// но «без цвета» от тёплого дефолта в нём не отличить).
+function syncLightPresets() {
+  for (const btn of tokenMenuLightPresets.querySelectorAll("button")) {
+    btn.classList.toggle("active", (btn.dataset.lightColor || "").toLowerCase() === menuLightColor.toLowerCase());
+  }
+}
+
 tokenMenuLightColor.oninput = () => {
   menuLightColor = tokenMenuLightColor.value;
+  syncLightPresets();
   sendTokenMenuLight();
 };
-tokenMenuLightAngle.onchange = sendTokenMenuLight;
-tokenMenuLightDirection.onchange = sendTokenMenuLight;
+tokenMenuLightAngle.oninput = sendTokenMenuLightSoon;
+tokenMenuLightDirection.oninput = sendTokenMenuLightSoon;
 for (const btn of tokenMenuLightPresets.querySelectorAll("button")) {
   btn.onclick = () => {
     menuLightColor = btn.dataset.lightColor || "";
     if (menuLightColor) tokenMenuLightColor.value = menuLightColor;
+    syncLightPresets();
     sendTokenMenuLight();
   };
 }

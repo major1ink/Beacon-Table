@@ -244,6 +244,10 @@
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
+      /* Меню длинное (зрение, свет, цвет, конус) и на невысоком экране в него
+         не влезает — своя прокрутка вместо уезжающих за край пунктов.
+         Позицию при этом зажимает placeTokenMenu в pages/dm.js. */
+      box-sizing: border-box; max-height: calc(100vh - 16px); overflow-y: auto;
     }
     #tokenMenu label { display: flex; gap: 6px; padding: 4px 2px; cursor: pointer; }
     #tokenMenu .light-field { display: none; }
@@ -256,6 +260,7 @@
       background: var(--surface-hover); color: var(--text);
     }
     #tokenMenu .light-presets button:hover { background: var(--accent); }
+    #tokenMenu .light-presets button.active { background: var(--accent); box-shadow: 0 0 0 1px var(--text) inset; }
     #tokenMenu button { width: 100%; margin-top: 6px; background: var(--danger); }
     #tokenMenu button:hover { background: var(--danger-hover); }
     #tokenMenuLightHeader {
@@ -943,14 +948,14 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-B7YQJLbc.js"></script>
+  <script type="module" crossorigin src="/assets/dm-DDMMbjIT.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-BMsFffZ8.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-P3iR-zbd.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-links-CbF4yb8e.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
@@ -961,7 +966,7 @@
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
   <link rel="modulepreload" crossorigin href="/assets/combat-panel-O1GKBlkj.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-UeWazbcD.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-C41YONDG.js">
   <link rel="modulepreload" crossorigin href="/assets/item-picker-DIaNTmKg.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">

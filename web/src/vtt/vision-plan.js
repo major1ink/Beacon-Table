@@ -152,7 +152,9 @@ function planInputKey(scene, isDM) {
     // сбрасывал бы кэш плана впустую.
     if (!lights && !observes) continue;
     parts.push("T", id, t.x, t.y, observes ? 1 : 0);
-    if (lights) parts.push(light.bright || 0, light.dim || 0);
+    // Цвет и конус тоже меняют картинку: без них смена оттенка не сбрасывала
+    // кэш плана, и заливка обновлялась только со следующей правкой сцены.
+    if (lights) parts.push(light.bright || 0, light.dim || 0, light.color || "", light.angle || 0, light.direction || 0);
     if (observes && t.vision) parts.push(t.vision.mode || "", t.vision.range || 0);
   }
   parts.push(wallsSignature(scene));
