@@ -306,11 +306,20 @@ refreshLibrary();
 // ================= раздел "Ассеты" (декорации карты: костры, бочки, лодки
 // и т.п.) =================
 // Своя библиотека (domain.AssetKindProps = "props"), отдельная от токен-арта
-// монстров/аватаров персонажей (kind "tokens") — те у своих карточек уже
-// есть, здесь только то, что перетаскивается на карту как новый токен.
+// монстров/аватаров персонажей (kind "tokens", вторая вкладка раздела) —
+// здесь только то, что перетаскивается на карту как новый токен.
 // Единственный kind с подпапками (см. latestAssets.folders.props).
 const ASSET_KIND = "props";
+// Вторая вкладка раздела: токен-арт грузится из карточек, здесь только
+// просмотр и удаление — без папок, загрузки и перетаскивания на карту.
+const TOKEN_KIND = "tokens";
+let assetKind = ASSET_KIND;
 const assetsPanelSection = document.querySelector('.panel-section[data-panel="assets"]');
+const assetKindTabs = document.getElementById("assetKindTabs");
+const assetUploadBlock = document.getElementById("assetUploadBlock");
+const assetsNewFolderBtn = document.getElementById("assetsNewFolderBtn");
+const assetsHint = document.getElementById("assetsHint");
+const tokenArtHint = document.getElementById("tokenArtHint");
 const assetsBreadcrumb = document.getElementById("assetsBreadcrumb");
 const assetsGrid = document.getElementById("assetsGrid");
 const assetsStorage = document.getElementById("assetsStorage");
@@ -382,25 +391,35 @@ function renderAssetsStorage() {
 }
 
 function renderAssetsGrid() {
+  const isTokens = assetKind === TOKEN_KIND;
   // Папка могла исчезнуть (удалена в другой вкладке/сессии) — откатываемся
   // к корню, а не показываем вечно пустую сетку без выхода.
-  const folders = latestAssets.folders?.[ASSET_KIND] || [];
-  const files = latestAssets[ASSET_KIND] || [];
-  if (currentAssetFolder && !folders.some((f) => f.path === currentAssetFolder) && !files.some((f) => f.path === currentAssetFolder)) {
+  const folders = isTokens ? [] : latestAssets.folders?.[ASSET_KIND] || [];
+  const files = latestAssets[assetKind] || [];
+  if (!isTokens && currentAssetFolder && !folders.some((f) => f.path === currentAssetFolder) && !files.some((f) => f.path === currentAssetFolder)) {
     currentAssetFolder = "";
   }
+  assetKindTabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.assetKind === assetKind));
+  assetUploadBlock.hidden = isTokens;
+  assetsNewFolderBtn.hidden = isTokens;
+  assetsBreadcrumb.hidden = isTokens;
+  assetsHint.hidden = isTokens;
+  tokenArtHint.hidden = !isTokens;
   renderAssetsBreadcrumb();
   renderAssetsStorage();
   assetsGrid.innerHTML = "";
 
   const prefix = currentAssetFolder ? currentAssetFolder + "/" : "";
   const subfolders = folders.filter((f) => f.path.startsWith(prefix) && !f.path.slice(prefix.length).includes("/"));
-  const items = files.filter((f) => (f.path || "") === currentAssetFolder);
+  // У токен-арта подпапок нет — весь kind плоским списком.
+  const items = isTokens ? files : files.filter((f) => (f.path || "") === currentAssetFolder);
 
   if (subfolders.length === 0 && items.length === 0) {
     const empty = document.createElement("div");
     empty.className = "assets-empty-hint";
-    empty.textContent = "Пока пусто — загрузи файл или создай папку";
+    empty.textContent = isTokens
+      ? "Пусто — токен-арт появится здесь после загрузки в карточке монстра, предмета, состояния или статьи"
+      : "Пока пусто — загрузи файл или создай папку";
     assetsGrid.appendChild(empty);
     return;
   }
@@ -441,8 +460,9 @@ function renderAssetsGrid() {
   for (const a of items) {
     const tile = document.createElement("div");
     tile.className = "asset-tile item-tile";
-    tile.title = "Перетащи на карту, чтобы поставить токен";
-    tile.draggable = true;
+    // Токен-арт на карту не тащится — токен ставится из карточки монстра.
+    tile.title = isTokens ? a.name : "Перетащи на карту, чтобы поставить токен";
+    tile.draggable = !isTokens;
     if (isVideoUrl(a.url)) {
       const v = document.createElement("video");
       v.src = a.url;
@@ -454,10 +474,12 @@ function renderAssetsGrid() {
     } else {
       tile.style.backgroundImage = `url("${a.url}")`;
     }
-    tile.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("application/x-beacon-asset", JSON.stringify({ url: a.url, name: a.name }));
-      e.dataTransfer.effectAllowed = "copy";
-    });
+    if (!isTokens) {
+      tile.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("application/x-beacon-asset", JSON.stringify({ url: a.url, name: a.name }));
+        e.dataTransfer.effectAllowed = "copy";
+      });
+    }
     const name = document.createElement("span");
     name.className = "asset-tile-name";
     name.textContent = a.name;
@@ -465,17 +487,20 @@ function renderAssetsGrid() {
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.className = "asset-tile-del";
-    delBtn.title = "Удалить ассет";
+    delBtn.title = isTokens ? "Удалить токен-арт" : "Удалить ассет";
     delBtn.innerHTML = icon("trash", { size: 12 });
     delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!(await showConfirm(`Удалить «${a.name}» из библиотеки?`, { title: "Удалить файл", okLabel: "Удалить", danger: true }))) return;
+      const msg = isTokens
+        ? `Удалить «${a.name}» из библиотеки? Файл будет стёрт с диска, а карточки, где он стоял токен-артом, останутся без картинки.`
+        : `Удалить «${a.name}» из библиотеки?`;
+      if (!(await showConfirm(msg, { title: isTokens ? "Удалить токен-арт" : "Удалить файл", okLabel: "Удалить", danger: true }))) return;
       try {
-        await deleteAsset(ASSET_KIND, a.url);
+        await deleteAsset(assetKind, a.url);
         await refreshLibrary();
         renderAssetsGrid();
       } catch (err) {
-        showAlert("Не удалось удалить ассет: " + err.message);
+        showAlert("Не удалось удалить файл: " + err.message);
       }
     };
     tile.appendChild(delBtn);
@@ -484,7 +509,14 @@ function renderAssetsGrid() {
 }
 onPanelOpen("assets", renderAssetsGrid);
 
-document.getElementById("assetsNewFolderBtn").onclick = async () => {
+assetKindTabs.querySelectorAll("button").forEach((btn) => {
+  btn.onclick = () => {
+    assetKind = btn.dataset.assetKind;
+    renderAssetsGrid();
+  };
+});
+
+assetsNewFolderBtn.onclick = async () => {
   const name = await showPrompt("Название папки:", { title: "Новая папка", okLabel: "Создать" });
   if (!name || !name.trim()) return;
   const path = (currentAssetFolder ? currentAssetFolder + "/" : "") + name.trim();
@@ -4452,6 +4484,31 @@ function renderAudioAssetTable() {
       fAmbientUrl.value = a.url;
       renderAudioAssetTable();
     };
+    // Как у карт: сцены и плейлисты со стёртым треком остаются, но замолкают.
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "asset-row-del";
+    del.title = "Удалить трек из библиотеки";
+    del.innerHTML = icon("trash", { size: 12 });
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      const isCurrent = a.url === fAmbientUrl.value;
+      const msg =
+        `Удалить «${a.name}» из библиотеки? Файл будет стёрт с диска.` +
+        (isCurrent
+          ? " Сейчас он стоит амбиентом этой сцены — поле URL очистится."
+          : " Сцены и плейлисты, где он стоит, останутся без звука.");
+      if (!(await showConfirm(msg, { title: "Удалить трек", okLabel: "Удалить", danger: true }))) return;
+      try {
+        await deleteAsset("audio", a.url);
+        if (isCurrent) fAmbientUrl.value = "";
+        await refreshLibrary();
+        renderAudioAssetTable();
+      } catch (err) {
+        showAlert("Не удалось удалить трек: " + err.message);
+      }
+    };
+    row.appendChild(del);
     wrap.appendChild(row);
   }
 }

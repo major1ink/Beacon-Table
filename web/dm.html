@@ -113,6 +113,9 @@
     .panel-close:hover { opacity: 1; background: var(--surface); }
     .panel-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 
+    /* Классы с display перебивают браузерный [hidden] — нужно своё правило. */
+    [hidden] { display: none !important; }
+
     .field-block { display: flex; flex-direction: column; gap: 5px; width: 100%; box-sizing: border-box; }
     .field-label { font-size: 11px; opacity: 0.6; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1007,14 +1010,20 @@
           </div>
         </header>
         <div class="panel-body">
-          <div class="field-block">
+          <!-- Токен-арты (domain.AssetKindTokens) — только просмотр и удаление. -->
+          <div class="cat-tabs" id="assetKindTabs">
+            <button type="button" class="active" data-asset-kind="props">Ассеты карты</button>
+            <button type="button" data-asset-kind="tokens">Токен-арты</button>
+          </div>
+          <div class="field-block" id="assetUploadBlock">
             <span class="field-label">Загрузить в текущую папку</span>
             <input type="file" id="assetUpload" accept="image/*,video/mp4,video/webm" multiple title="Картинка или mp4/webm — анимированный арт (зациклен на карте)" />
           </div>
           <div id="assetsBreadcrumb" class="assets-breadcrumb"></div>
           <div id="assetsStorage" class="assets-storage"></div>
           <div id="assetsGrid" class="assets-grid"></div>
-          <p class="hint">Ассеты карты (костры, бочки, лодки и т.п.) — перетащи карточку на карту, чтобы поставить как токен. ПКМ на токене на карте → форма/скрыт от игроков/источник света. У монстров и персонажей свой токен-арт — в их собственных карточках.</p>
+          <p class="hint" id="assetsHint">Ассеты карты (костры, бочки, лодки и т.п.) — перетащи карточку на карту, чтобы поставить как токен. ПКМ на токене на карте → форма/скрыт от игроков/источник света. У монстров и персонажей свой токен-арт — в их собственных карточках.</p>
+          <p class="hint" id="tokenArtHint" hidden>Токен-арт монстров, предметов, состояний и статей. Загружается в самих карточках, здесь — только уборка: удалённый файл стирается с диска, а карточки, где он стоял, остаются без картинки.</p>
         </div>
       </section>
 
