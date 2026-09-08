@@ -7,20 +7,17 @@
 // createVisionFogLayer, накрыть его тестом было нечем — и регрессия
 // (сборка фронта, отставшая от исходников) доехала до боевого стола.
 //
-// Что видит игрок = (объединение обзора токенов ПАРТИИ) ∩
-// (объединение всех источников света + опциональный глобальный свет на всю
-// карту). Оба множителя по отдельности — обычный raycasting от точки,
-// ограниченный стенами и радиусом (computeVisibilityPolygon), просто теперь
-// их два разных смысла (обзор и свет), а не один. Нет ни одного источника
-// света — пересечение пустое — игрок не видит НИЧЕГО, даже там, куда
-// дотягивается обзор токена (нечего освещать — нечего видеть).
+// Что видит игрок = (объединение обзора токенов ПАРТИИ) ∩ (объединение всех
+// источников света + опциональный глобальный свет на всю карту), плюс зоны
+// ТЁМНОГО ЗРЕНИЯ наблюдателей (domain.TokenVision) — единственное, что видно
+// без света вообще. Все слагаемые — обычный raycasting от точки,
+// ограниченный стенами и радиусом (computeVisibilityPolygon).
 //
 // "Обзор" у токена не ограничен константным радиусом — единственная граница
 // обзора это стены (см. SIGHT_MARGIN: радиус берётся с запасом больше
 // диагонали карты, то есть фактически "докуда видно по прямой"). Это
-// осознанно ближе к дефолтному поведению Foundry VTT (без дарквижна и
-// настройки "Sight Range" на токене видно ровно то, что освещено и не
-// закрыто стеной — отдельного "радиуса зрения" сверху нет).
+// осознанно ближе к дефолтному поведению Foundry VTT: без тёмного зрения
+// видно ровно то, что освещено и не закрыто стеной.
 import { computeVisibilityPolygon, weldWalls, pointInPolygon, wallBlocksSight, wallBlocksLight } from "../geometry.js";
 import { worldSize } from "./camera.js";
 import { unionAll, intersectMulti, differenceMulti, subtractNested, unionMulti, worldRect, gridUnitsToWorld, quantizePoints } from "./light-geometry.js";
@@ -143,6 +140,7 @@ function planInputKey(scene, isDM) {
     if (!lights && !observes) continue;
     parts.push("T", id, t.x, t.y, observes ? 1 : 0);
     if (lights) parts.push(light.bright || 0, light.dim || 0);
+    if (observes && t.vision) parts.push(t.vision.mode || "", t.vision.range || 0);
   }
   parts.push(wallsSignature(scene));
   for (const id in scene.buildings || {}) {
@@ -241,13 +239,22 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
   const visionMulti = unionAll(visionPolys);
   if (!visionMulti.length) return empty;
 
+  // darkMulti — что видно ТЁМНЫМ ЗРЕНИЕМ: свой луч от каждого наблюдателя с
+  // domain.TokenVision, радиусом в его Range. Свет тут не при чём — это
+  // единственный способ увидеть что-то на неосвещённой карте.
+  const darkPolys = cachedDarkPolys(sightTokens, scene.grid, quantum, ray, memo, wallsSignature(scene)).filter((p) => p.length >= 3);
+  const darkMulti = darkPolys.length ? unionAll(darkPolys) : [];
+
   // Слой света считаем через memo (см. computeVisionPlanWithFallback): он не
   // зависит от того, где стоят наблюдатели, и при таскании токена по карте
   // не меняется вообще.
   const { dimMulti, ringMultis } = cachedLightLayer(scene, quantum, tokens, w, h, memo);
-  if (!dimMulti.length) return empty; // ни одного источника света на карте — игроки не видят НИЧЕГО (п.2 ТЗ)
+  if (!dimMulti.length && !darkMulti.length) return empty; // ни света, ни тёмного зрения — игроки не видят НИЧЕГО (п.2 ТЗ)
 
-  const revealDim = intersectMulti(visionMulti, dimMulti);
+  const revealLight = dimMulti.length ? intersectMulti(visionMulti, dimMulti) : [];
+  // Пересекать darkMulti с обзором незачем: он и построен лучом от самого
+  // наблюдателя, то есть уже ограничен теми же стенами.
+  const revealDim = darkMulti.length ? unionMulti(revealLight, darkMulti) : revealLight;
   if (!revealDim.length) return empty;
 
   // dimIslands — revealDim по отдельным "островам" (одна дыра могла
@@ -276,6 +283,19 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
       continue; // см. выше — кольцо не нарисуется, туман войны от этого не пострадает
     }
     if (reveal.length) rings.push({ level, multi: reveal });
+  }
+
+  // Зона тёмного зрения — с той же поволокой, что и внешний край тусклого
+  // света (level 0): по правилам 5e в темноте видно приглушённо. Освещённую
+  // часть вычитаем — кольца не должны перекрываться (см. ringMultis), иначе
+  // на стыке поволока ляжет дважды и получится тёмная кайма.
+  if (darkMulti.length) {
+    try {
+      const darkOnly = revealLight.length ? differenceMulti(darkMulti, revealLight) : darkMulti;
+      if (darkOnly.length) rings.push({ level: 0, multi: darkOnly });
+    } catch {
+      // как и со световым кольцом выше: без поволоки зона просто будет ярче
+    }
   }
 
   return { skip: false, w, h, dimIslands, rings };
@@ -368,6 +388,37 @@ function cachedSightPolys(sightTokens, radius, quantum, ray, memo, wallsKey) {
     out.push(poly);
   }
   memo.sight = fresh; // ушедшие со сцены токены не копятся в кэше
+  return out;
+}
+
+// cachedDarkPolys — лучи тёмного зрения, по одному на наблюдателя с ним (см.
+// domain.TokenVision). Радиус у каждого свой, поэтому в ключе кэша, кроме
+// позиции, ещё и он: сменил ДМ радиус — пересчитали только этот токен.
+function cachedDarkPolys(sightTokens, grid, quantum, ray, memo, wallsKey) {
+  const entries = [];
+  for (const [id, t] of sightTokens) {
+    const v = t.vision;
+    if (!v || v.mode !== "dark") continue;
+    const radius = gridUnitsToWorld(grid, v.range || 0);
+    if (radius > 0) entries.push([id, t, radius]);
+  }
+  if (!entries.length) return [];
+  if (!memo) return entries.map(([, t, radius]) => ray(t.x, t.y, radius));
+
+  const key = `${quantum}|${wallsKey}`;
+  if (memo.darkKey !== key) {
+    memo.darkKey = key;
+    memo.dark = new Map();
+  }
+  const fresh = new Map();
+  const out = [];
+  for (const [id, t, radius] of entries) {
+    const hit = memo.dark.get(id);
+    const poly = hit && hit.x === t.x && hit.y === t.y && hit.radius === radius ? hit.poly : ray(t.x, t.y, radius);
+    fresh.set(id, { x: t.x, y: t.y, radius, poly });
+    out.push(poly);
+  }
+  memo.dark = fresh;
   return out;
 }
 

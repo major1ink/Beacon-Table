@@ -731,6 +731,10 @@ const tokenMenuLightLabel = document.getElementById("tokenMenuLightLabel");
 const tokenMenuHidden = document.getElementById("tokenMenuHidden");
 const tokenMenuShape = document.getElementById("tokenMenuShape");
 const tokenMenuLight = document.getElementById("tokenMenuLight");
+const tokenMenuVisionRow = document.getElementById("tokenMenuVisionRow");
+const tokenMenuVision = document.getElementById("tokenMenuVision");
+const tokenMenuVisionRange = document.getElementById("tokenMenuVisionRange");
+const tokenMenuVisionRangeField = document.getElementById("tokenMenuVisionRangeField");
 const tokenMenuLightBright = document.getElementById("tokenMenuLightBright");
 const tokenMenuLightDim = document.getElementById("tokenMenuLightDim");
 const tokenMenuLightBrightField = document.getElementById("tokenMenuLightBrightField");
@@ -1133,6 +1137,14 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   const canOwn = !menuIsMulti && !menuIsLightOnly && !token.decor;
   tokenMenuOwnerRow.style.display = canOwn ? "flex" : "none";
   if (canOwn) fillTokenOwnerSelect(id, token);
+  // Зрение — только у существа: лампочка (LightOnly) не смотрит, а в пачке
+  // читать не с кого (у каждого своё), поэтому там строка тоже скрыта.
+  tokenMenuVisionRow.style.display = menuIsMulti || menuIsLightOnly ? "none" : "flex";
+  if (!menuIsMulti && !menuIsLightOnly) {
+    tokenMenuVision.value = token.vision && token.vision.mode === "dark" ? "dark" : "";
+    tokenMenuVisionRange.value = (token.vision && token.vision.range) || 0;
+  }
+  syncVisionFieldVisibility();
   tokenMenuLightRow.style.display = menuIsLightOnly ? "none" : "flex";
   tokenMenuLightToggleBtn.style.display = menuIsLightOnly ? "flex" : "none";
   // У токена персонажа игрока свет — это не "токен-лампочка", а факел/фонарь
@@ -1216,6 +1228,8 @@ function applyTokenMenuLockState() {
     tokenMenuLootBtn,
     tokenMenuHiddenRow,
     tokenMenuShapeRow,
+    tokenMenuVisionRow,
+    tokenMenuVisionRangeField,
     tokenMenuLightRow,
     tokenMenuLightBrightField,
     tokenMenuLightDimField,
@@ -1504,6 +1518,28 @@ tokenMenuLight.onchange = () => {
   syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
   sendTokenMenuLight();
 };
+// Радиус показываем только у тёмного зрения — обычному он не нужен, а
+// пустое поле рядом с «обычное» читается как «сюда что-то надо ввести».
+function syncVisionFieldVisibility() {
+  const on = tokenMenuVisionRow.style.display !== "none" && tokenMenuVision.value === "dark";
+  tokenMenuVisionRangeField.classList.toggle("visible", on);
+}
+
+function sendTokenMenuVision() {
+  if (!menuTokenId) return;
+  const mode = tokenMenuVision.value === "dark" ? "dark" : "";
+  const vision = { mode, range: mode ? +tokenMenuVisionRange.value || 0 : 0 };
+  document.dispatchEvent(new CustomEvent("vtt:setTokenVision", { detail: { id: menuTokenId, vision } }));
+}
+tokenMenuVision.onchange = () => {
+  // Радиус по умолчанию — 60 фт: тёмное зрение большинства рас и монстров 5e,
+  // иначе ДМ включает зрение и не понимает, почему ничего не изменилось.
+  if (tokenMenuVision.value === "dark" && !(+tokenMenuVisionRange.value > 0)) tokenMenuVisionRange.value = 60;
+  syncVisionFieldVisibility();
+  sendTokenMenuVision();
+};
+tokenMenuVisionRange.onchange = sendTokenMenuVision;
+
 tokenMenuLightBright.onchange = sendTokenMenuLight;
 tokenMenuLightDim.onchange = sendTokenMenuLight;
 tokenMenuLightToggleBtn.onclick = () => {

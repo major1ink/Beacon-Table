@@ -153,6 +153,79 @@ test("одни lightOnly-факелы без наблюдателя не рас�
   assert.equal(plan.dimIslands.length, 0);
 });
 
+// ---- тёмное зрение (domain.TokenVision) ----
+
+// areaOfPlan — площадь раскрытого куска карты; сравнивать планы удобнее ею,
+// чем числом островов (один остров может распасться на несколько).
+function areaOfPlan(plan) {
+  return plan.dimIslands.reduce((sum, { poly }) => {
+    let acc = 0;
+    for (let k = 0; k < poly[0].length - 1; k++) acc += poly[0][k][0] * poly[0][k + 1][1] - poly[0][k + 1][0] * poly[0][k][1];
+    return sum + Math.abs(acc / 2);
+  }, 0);
+}
+
+test("тёмное зрение раскрывает карту на сцене без единого источника света", () => {
+  const dark = { x: 800, y: 800, ownerId: "p1", vision: { mode: "dark", range: 60 } };
+  const plain = { x: 800, y: 800, ownerId: "p1" };
+  const withDark = computeVisionPlan(makeScene([dark], ""), false, WORKING_QUANTUM);
+  const withoutDark = computeVisionPlan(makeScene([plain], ""), false, WORKING_QUANTUM);
+  assert.ok(areaOfPlan(withDark) > 0, "токен с тёмным зрением не видит ничего в темноте");
+  assert.equal(areaOfPlan(withoutDark), 0, "обычный токен вдруг стал видеть без света");
+});
+
+test("радиус тёмного зрения считается в единицах линейки, а не в пикселях", () => {
+  const near = { x: 800, y: 800, ownerId: "p1", vision: { mode: "dark", range: 30 } };
+  const far = { x: 800, y: 800, ownerId: "p1", vision: { mode: "dark", range: 120 } };
+  const areaNear = areaOfPlan(computeVisionPlan(makeScene([near], ""), false, WORKING_QUANTUM));
+  const areaFar = areaOfPlan(computeVisionPlan(makeScene([far], ""), false, WORKING_QUANTUM));
+  assert.ok(areaFar > areaNear, "радиус не влияет на раскрытую площадь");
+  // Радиус вчетверо больше — площадь заметно больше, но не бесконечна: зону
+  // режут стены поместья.
+  assert.ok(areaFar < areaOfPlan(computeVisionPlan(makeScene([{ ...far, vision: { mode: "dark", range: 4000 } }], ""), false, WORKING_QUANTUM)));
+});
+
+test("нулевой радиус и обычный режим тёмного зрения не дают", () => {
+  const zero = { x: 800, y: 800, ownerId: "p1", vision: { mode: "dark", range: 0 } };
+  const normal = { x: 800, y: 800, ownerId: "p1", vision: { mode: "", range: 60 } };
+  assert.equal(areaOfPlan(computeVisionPlan(makeScene([zero], ""), false, WORKING_QUANTUM)), 0);
+  assert.equal(areaOfPlan(computeVisionPlan(makeScene([normal], ""), false, WORKING_QUANTUM)), 0);
+});
+
+test("тёмное зрение монстра игроку карту не открывает", () => {
+  const monster = { x: 800, y: 800, ownerId: "", vision: { mode: "dark", range: 60 } };
+  const hero = { x: 400, y: 400, ownerId: "p1" };
+  const plan = computeVisionPlan(makeScene([monster, hero], ""), false, WORKING_QUANTUM);
+  assert.equal(areaOfPlan(plan), 0);
+});
+
+test("кольцо тёмного зрения не накладывается на кольца света", () => {
+  // Тот же инвариант, что и у колец затухания ниже: поволока — это
+  // полупрозрачная тьма, наложение двух колец даёт тёмную кайму.
+  const torch = { x: 800, y: 800, lightOnly: true, light: { enabled: true, bright: 20, dim: 40 } };
+  const hero = { x: 800, y: 800, ownerId: "p1", vision: { mode: "dark", range: 60 } };
+  const plan = computeVisionPlan(makeScene([hero, torch], ""), false, WORKING_QUANTUM);
+  assert.ok(plan.rings.length > 1, "кольцо тёмного зрения не построилось поверх световых");
+  for (let x = 500; x < 1100; x += 11) {
+    for (let y = 500; y < 1100; y += 11) {
+      let hits = 0;
+      for (const { multi } of plan.rings) if (multiContains(multi, x, y)) hits++;
+      assert.ok(hits <= 1, `точка (${x}, ${y}) попала в ${hits} колец`);
+    }
+  }
+});
+
+test("смена зрения наблюдателя сбрасывает кэш плана", () => {
+  const memo = {};
+  const scene = makeScene([{ x: 800, y: 800, ownerId: "p1" }], "");
+  const before = computeVisionPlanWithFallback(scene, false, memo);
+  assert.equal(areaOfPlan(before.plan), 0);
+  scene.tokens["tok-0"].vision = { mode: "dark", range: 60 };
+  const after = computeVisionPlanWithFallback(scene, false, memo);
+  assert.equal(after.unchanged, undefined, "план взяли из кэша, хотя зрение сменилось");
+  assert.ok(areaOfPlan(after.plan) > 0);
+});
+
 // ---- окно: сквозь него видно, но свет оно держит (как в Foundry) ----
 
 // roomWithWindow — комната слева от глухой стены x=400, в стене окно

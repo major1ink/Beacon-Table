@@ -1388,6 +1388,15 @@
     <aside id="sheetDock"></aside>
 
     </select></label>
+    <!-- Зрение токена (domain.TokenVision) — рядом со светом, но это другое:
+         свет видят все, тёмное зрение — только партия. -->
+    <label id="tokenMenuVisionRow" title="Тёмное зрение — видно в темноте без всякого источника света, приглушённо, в пределах радиуса">зрение: <select id="tokenMenuVision">
+      <option value="">обычное</option>
+      <option value="dark">тёмное</option>
+    </select></label>
+    <label id="tokenMenuVisionRangeField" class="light-field" title="Радиус тёмного зрения в единицах линейки сцены (по умолчанию фт, см. настройку сетки)">
+      радиус <input type="number" id="tokenMenuVisionRange" min="0" step="5" value="0" />
+    </label>
     <label id="tokenMenuLightRow"><input type="checkbox" id="tokenMenuLight" /> <span id="tokenMenuLightLabel">источник света</span></label>
     <label id="tokenMenuLightBrightField" class="light-field" title="Радиус яркого света в единицах линейки сцены (по умолчанию фт, см. настройку сетки) — 0: без яркого ядра, только тусклая кайма">
       ярк. <input type="number" id="tokenMenuLightBright" min="0" step="5" value="0" />

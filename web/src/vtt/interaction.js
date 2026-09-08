@@ -1964,6 +1964,12 @@ export function createInteraction(ctx) {
       if (!t) return;
       ctx.send({ type: "move_token", token: { ...t, light } });
     });
+    document.addEventListener("vtt:setTokenVision", (e) => {
+      const { id, vision } = e.detail;
+      const t = ctx.scene.tokens[id];
+      if (!t) return;
+      ctx.send({ type: "move_token", token: { ...t, vision } });
+    });
     // toggleTokenLight — общая логика вкл/выкл источника света у токена
     // света: дёргается и двойным кликом по канвасу (см. dblclick выше), и
     // кнопкой "Включить/Выключить свет" в контекстном меню (см. dm.js).

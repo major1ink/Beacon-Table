@@ -37,8 +37,9 @@ type Token struct {
 	// MonsterID уже стоящим на картах токенам. Остаётся на токене и после
 	// связывания — чтобы повторный импорт/переустановка модуля нашли его
 	// снова.
-	FoundryActorID string      `json:"foundryActorId,omitempty"`
-	Light          *TokenLight `json:"light,omitempty"` // необязательный источник света — см. TokenLight
+	FoundryActorID string       `json:"foundryActorId,omitempty"`
+	Light          *TokenLight  `json:"light,omitempty"`  // необязательный источник света — см. TokenLight
+	Vision         *TokenVision `json:"vision,omitempty"` // особое зрение — см. TokenVision
 	// LightOnly — "токен света": не персонаж/арт, а голый маркер-лампочка,
 	// который DM ставит только ради Light. НЕ использует Hidden (тот целиком
 	// вырезает токен из PublicScene — см. service.Room.sceneFor — тогда
@@ -197,6 +198,19 @@ type TokenLight struct {
 	Enabled bool    `json:"enabled"`
 	Bright  float64 `json:"bright,omitempty"`
 	Dim     float64 `json:"dim,omitempty"`
+}
+
+// TokenVision — особое зрение токена. Обычный наблюдатель видит только то,
+// что освещено (см. web/src/vtt/vision-plan.js), тёмное зрение снимает это
+// условие в пределах Range: в темноте видно, но приглушённо, как в тусклом
+// свете (правило 5e).
+//
+// Отдельно от TokenLight намеренно: свет видят ВСЕ, зрение — только его
+// обладатель и его партия. Mode — "" (обычное) | "dark" (тёмное зрение);
+// Range — в единицах линейки сцены, как TokenLight.Bright/Dim.
+type TokenVision struct {
+	Mode  string  `json:"mode,omitempty"`
+	Range float64 `json:"range,omitempty"`
 }
 
 // Wall — отрезок, блокирующий обзор. Не секрет — уходит всем клиентам
