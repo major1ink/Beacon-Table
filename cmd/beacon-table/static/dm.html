@@ -209,7 +209,32 @@
     }
     #statusBar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #sceneSwitchName { font-weight: 600; }
-    #playersHint { opacity: 0.8; cursor: default; display: inline-flex; align-items: center; gap: 4px; }
+    /* Приглушение — на самом счётчике, а не на #playersHint целиком: opacity
+       на родителе гасила бы и всплывающий список, который должен читаться. */
+    #playersHint { cursor: default; display: inline-flex; align-items: center; gap: 4px; position: relative; }
+    #playersHint > svg, #playersCount { opacity: 0.8; }
+    /* Оба «#statusBar #…» — чтобы перебить #statusBar span выше: там overflow:
+       hidden ради многоточия на длинном имени сцены, и он бы срезал всплывший
+       список. */
+    #statusBar #playersHint { overflow: visible; }
+    /* Список подключённых игроков — всплывает над плашкой при наведении на
+       счётчик (на телефоне — по тапу, класс .show из pages/dm.js). ДМ в него
+       не попадает: сервер шлёт только клиентов с ролью игрока (см.
+       broadcastPlayerList в internal/service/room.go), а сам он и так
+       подписан рядом в #dmUsername. */
+    #statusBar #playersOnline {
+      position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6;
+      display: none; flex-direction: column; gap: 5px;
+      min-width: 160px; max-width: min(260px, calc(100vw - 24px));
+      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-float); padding: 9px 12px;
+      overflow: visible; white-space: normal;
+    }
+    #playersHint:hover #playersOnline, #statusBar #playersOnline.show { display: flex; }
+    #playersOnline .player-row { display: flex; align-items: center; gap: 6px; }
+    #playersOnline .player-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green-bright); flex: none; }
+    #playersOnline .player-empty { opacity: 0.6; }
     #dmUsername { opacity: 0.6; }
     .status-sep { opacity: 0.35; }
 
@@ -902,26 +927,26 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-Cz7SNvvD.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
+  <script type="module" crossorigin src="/assets/dm-BTZwEOh6.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-DubTaFaL.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-B298ffJA.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-p1yCy-dF.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CbF4yb8e.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BsfLIaOi.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-D5BetBXU.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-ByB5M8qg.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-CKrWa4YK.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-aEEF5KWD.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-C_d9qkPe.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-ylzn2Vlg.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CdHnqiIi.js">
+  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-CJTtgGmZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-DIaNTmKg.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
@@ -1286,26 +1311,8 @@
       <section class="panel-section" data-panel="characters">
         <header class="panel-header"><h3>Персонажи</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
-          <p class="hint">Сверху — заготовки, ещё никому не назначенные: заполни лист, потом назначь игроку (или игрок сам возьмёт). Ниже — назначенные, по игрокам: перетащи на карту, чтобы поставить токен. 📜 — лист, ✎ — имя/аватар.</p>
+          <p class="hint">Сверху — заготовки, ещё никому не назначенные: заполни лист, потом назначь игроку (или игрок сам возьмёт). Ниже — назначенные, по игрокам: перетащи на карту, чтобы поставить токен. 📜 — лист: имя, аватар и характеристики правятся там.</p>
           <div id="dmCharactersList"></div>
-          <div id="dmCharEditForm" style="display:none;">
-            <div class="section-divider"></div>
-            <div class="field-block">
-              <span class="field-label">Имя</span>
-              <input type="text" id="dmCharEditName" />
-            </div>
-            <div class="field-block">
-              <span class="field-label">Аватар / токен-арт</span>
-              <input type="file" id="dmCharEditAvatarUpload" accept="image/*,video/mp4,video/webm" />
-            </div>
-            <div id="dmCharEditPreviewWrap" style="display:none;">
-              <img id="dmCharEditPreview" style="max-width:100%;border-radius:8px;" />
-              <video id="dmCharEditPreviewVideo" muted loop autoplay playsinline style="display:none;max-width:100%;border-radius:8px;"></video>
-            </div>
-            <div id="dmCharEditMsg" class="hint"></div>
-            <button id="dmCharEditSaveBtn" class="primary-btn">Сохранить</button>
-            <button id="dmCharEditCancelBtn" class="tool-btn">Отмена</button>
-          </div>
         </div>
       </section>
 
@@ -1351,7 +1358,7 @@
       <div id="statusBar">
         <span id="sceneSwitchName">Сцена</span>
         <span class="status-sep">·</span>
-        <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg> игроков онлайн: 0</span>
+        <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg><span id="playersCount">игроков онлайн: 0</span><span id="playersOnline"></span></span>
         <span class="status-sep">·</span>
         <span id="dmUsername"></span>
       </div>

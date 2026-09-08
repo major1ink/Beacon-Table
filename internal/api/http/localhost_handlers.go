@@ -83,6 +83,36 @@ func isLoopback(remoteAddr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// handleDMPasswordReset — сброс забытого пароля ДМ со страницы входа,
+// открытой НА САМОЙ машине сервера.
+//
+//	GET  /api/dm-password-reset — доступен ли сброс отсюда;
+//	POST /api/dm-password-reset — сбросить, вернуть новый временный пароль.
+//
+// Забор тот же, что у handleFirstRun: петлевой адрес, не за прокси, не демо.
+// Сверх того, что человек за этой машиной может и так (прочитать базу,
+// подменить бинарник), это ничего не даёт, а без него забытый пароль
+// означает потерянный стол.
+func (a *API) handleDMPasswordReset(w http.ResponseWriter, r *http.Request) {
+	available := a.ResetDMPassword != nil && !a.DemoMode && !a.SecureCookies && isLoopback(r.RemoteAddr)
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, map[string]bool{"available": available})
+		return
+	}
+	if !available {
+		writeErr(w, http.StatusForbidden, "сброс пароля доступен только с компьютера, на котором работает сервер")
+		return
+	}
+	username, password, err := a.ResetDMPassword()
+	if err != nil {
+		slog.Error("не удалось сбросить пароль ДМ", "err", err)
+		writeErr(w, http.StatusInternalServerError, "не удалось сбросить пароль")
+		return
+	}
+	slog.Info("пароль ДМ сброшен со страницы входа", "адрес", r.RemoteAddr)
+	writeJSON(w, http.StatusOK, map[string]string{"username": username, "password": password})
+}
+
 // handleShutdown — POST /api/admin/shutdown: остановить сервер (только ДМ).
 //
 // Кнопка в интерфейсе — единственный способ закончить игру по-человечески

@@ -195,6 +195,75 @@ export function scrollHeadingIntoView(containerEl, heading) {
   setTimeout(restick, 2500);
 }
 
+// wikiTargetsIn — цели всех [[ссылок]] в тексте, как они написаны. Разбор
+// пути и поиск записи — за splitWikiTarget/resolveWikiTarget.
+export function wikiTargetsIn(text) {
+  const out = [];
+  for (const m of String(text || "").matchAll(wikiLinkRe)) out.push(m[1].trim());
+  return out;
+}
+
+// tagRe — «#метка»: решётка в начале строки или после пробела, дальше буква
+// или цифра без пробела; вложенность через «/» (#нпс/таверна). Заголовок
+// «# Название» и якорь ссылки «…/page#anchor» под это не подходят.
+const tagRe = /(^|\s)#([\p{L}\d][\p{L}\d_/-]*)/gu;
+
+// stripCode — выкинуть блоки ``` и вставки `код` из текста.
+function stripCode(text) {
+  return String(text || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`\n]*`/g, " ");
+}
+
+// tagsIn — метки текста: без повторов, в нижнем регистре.
+export function tagsIn(text) {
+  const out = new Set();
+  for (const m of stripCode(text).matchAll(tagRe)) out.add(m[2].toLowerCase());
+  return [...out];
+}
+
+// decorateTags — заменить «#метки» в уже вставленном HTML на чипы
+// <a class="note-tag" data-tag="…">. Текст внутри code/pre/a не трогает.
+export function decorateTags(containerEl) {
+  const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) =>
+      node.parentElement.closest("code, pre, a") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  const texts = [];
+  while (walker.nextNode()) texts.push(walker.currentNode);
+  for (const node of texts) {
+    const text = node.nodeValue;
+    tagRe.lastIndex = 0;
+    if (!tagRe.test(text)) continue;
+    tagRe.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let at = 0;
+    for (const m of text.matchAll(tagRe)) {
+      const start = m.index + m[1].length;
+      if (start > at) frag.appendChild(document.createTextNode(text.slice(at, start)));
+      const chip = document.createElement("a");
+      chip.className = "note-tag";
+      chip.dataset.tag = m[2].toLowerCase();
+      chip.textContent = "#" + m[2];
+      frag.appendChild(chip);
+      at = start + m[2].length + 1;
+    }
+    if (at < text.length) frag.appendChild(document.createTextNode(text.slice(at)));
+    node.replaceWith(frag);
+  }
+}
+
+// markMissingWikiLinks — повесить класс wikilink-missing на [[ссылки]], для
+// которых записи не нашлось. Зовётся после вставки HTML в DOM.
+export function markMissingWikiLinks(containerEl, notes, fromFolder = "") {
+  for (const a of containerEl.querySelectorAll('a[href^="wikilink:"]')) {
+    const target = decodeURIComponent(a.getAttribute("href").slice("wikilink:".length));
+    if (resolveWikiTarget(target, notes || [], fromFolder)) continue;
+    a.classList.add("wikilink-missing");
+    a.title = `Записи «${target}» ещё нет — клик создаст её`;
+  }
+}
+
 // wireWikiLinks — делегированный клик по ссылкам wikilink: внутри уже
 // вставленного в DOM HTML (см. renderNoteHtml). getNotesList — функция,
 // возвращающая АКТУАЛЬНЫЙ на момент клика список заметок [{id,title,folder}]

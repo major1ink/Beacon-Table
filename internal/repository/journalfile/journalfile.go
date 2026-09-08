@@ -261,6 +261,16 @@ func entryFrom(id, folder, raw string) *domain.JournalEntry {
 }
 
 func (s *Store) List(ctx context.Context) ([]*domain.JournalEntry, error) {
+	return s.list(false)
+}
+
+// ListWithContent implements repository.JournalRepository — то же, что List,
+// плюс текст каждой записи.
+func (s *Store) ListWithContent(ctx context.Context) ([]*domain.JournalEntry, error) {
+	return s.list(true)
+}
+
+func (s *Store) list(withContent bool) ([]*domain.JournalEntry, error) {
 	entries := make([]*domain.JournalEntry, 0, 16)
 	err := filepath.WalkDir(s.dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -279,7 +289,9 @@ func (s *Store) List(ctx context.Context) ([]*domain.JournalEntry, error) {
 			return nil
 		}
 		e := entryFrom(strings.TrimSuffix(d.Name(), ".md"), s.folderOf(p), string(data))
-		e.Content = "" // список — без текста (см. repository.JournalRepository.List)
+		if !withContent {
+			e.Content = "" // список — без текста (см. repository.JournalRepository.List)
+		}
 		e.UpdatedAt = info.ModTime()
 		entries = append(entries, e)
 		return nil

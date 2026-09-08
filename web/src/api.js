@@ -140,6 +140,23 @@ export async function fetchFirstRun() {
   }
 }
 
+// canResetDMPassword — предлагать ли сброс пароля ДМ на этой странице: он
+// доступен только с компьютера, где работает сервер (см. internal/api/http:
+// handleDMPasswordReset).
+export async function canResetDMPassword() {
+  try {
+    const { available } = await apiFetch("/api/dm-password-reset");
+    return !!available;
+  } catch {
+    return false;
+  }
+}
+
+// resetDMPassword — выдать ДМ новый временный пароль; возвращает {username, password}.
+export async function resetDMPassword() {
+  return apiFetch("/api/dm-password-reset", { method: "POST" });
+}
+
 // ---- трансляция (ТВ/проектор) ----
 // Ссылка с ключом, по которой экран в комнате получает доступ к столу без
 // аккаунта (см. internal/service/broadcast.go). Сервер отдаёт только путь —
@@ -347,8 +364,9 @@ export async function movePlaylistTrack(playlistId, trackId, direction) {
 // "owner"), "access" — точечные выдачи {accountId: уровень} (см.
 // domain.JournalEntry). Сервер возвращает вместе с записью и уже вычисленные
 // для ТЕБЯ myAccess/canEdit/canManage — клиент права не пересчитывает.
-export async function fetchJournal() {
-  return apiFetch("/api/journal");
+// withContent — вернуть записи вместе с текстом (?content=1).
+export async function fetchJournal({ withContent = false } = {}) {
+  return apiFetch("/api/journal" + (withContent ? "?content=1" : ""));
 }
 export async function fetchJournalEntry(id) {
   return apiFetch(`/api/journal/${id}`);

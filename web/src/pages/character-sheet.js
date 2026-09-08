@@ -22,6 +22,8 @@ import {
   fetchReferences,
   fetchPregen,
   updateAdminPregen,
+  updateCharacterApi,
+  updateAdminCharacter,
 } from "../api.js";
 import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
@@ -30,7 +32,8 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "../hp-bar.js";
 import { renderStatusChips } from "../status-palette.js";
 import { applyModifiers, explainModifiers, collectModifiers, ABILITY_TARGETS, TARGET_AC, TARGET_SPEED, TARGET_HP_MAX } from "../modifiers.js";
-import { showAlert, openModal } from "../modal.js";
+import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
+import { uploadAvatarFile, recropAvatarUrl, isVideoAvatar } from "../avatar-cropper.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { createRollLog } from "../roll-log.js";
@@ -836,14 +839,177 @@ function bulbRow(count, get, set, isFail) {
   return wrap;
 }
 
+// ==================== имя и аватар персонажа ====================
+// Правятся здесь — в шапке карточки чтения и на вкладке «Портрет»; в списках
+// персонажей (у игрока «Мои персонажи», у ДМ панель «Персонажи») только
+// заводят и удаляют. Уходит отдельным запросом, а не с листом: имя и аватар
+// лежат в самой записи персонажа (domain.Character), а не в sheet.
+
+// hostWindow — топ-документ стола: лист — плавающее окно-iframe, а вынесенный
+// кнопкой 🗗 ведёт наверх через opener (см. catalog-links.js: hostWindow).
+function hostWindow() {
+  if (window.opener && window.opener !== window) return window.opener;
+  return window.parent;
+}
+
+async function saveIdentity(patch) {
+  const name = String(patch.name !== undefined ? patch.name : character.name || "").trim();
+  const avatarUrl = patch.avatarUrl !== undefined ? patch.avatarUrl : character.avatarUrl || "";
+  if (!name) {
+    await showAlert("Имя персонажа не может быть пустым.");
+    return false;
+  }
+  setSaveStatus("saving");
+  try {
+    if (isPregenAdmin) {
+      // Пре-ген перезаписывается целиком — лист и метку модуля возвращаем как есть (см. doSave).
+      await updateAdminPregen(pregenEditId, { name, avatarUrl, foundryModuleId: character.source || "", sheet });
+    } else if (isAdminView) {
+      await updateAdminCharacter(charId, name, avatarUrl);
+    } else {
+      await updateCharacterApi(charId, name, avatarUrl);
+    }
+  } catch (err) {
+    setSaveStatus("error", err.message);
+    await showAlert("Не удалось сохранить: " + err.message);
+    return false;
+  }
+  character.name = name;
+  character.avatarUrl = avatarUrl;
+  document.getElementById("charTitle").textContent = name;
+  setSaveStatus("saved");
+  // Список персонажей и док держат свою копию — просим перечитать.
+  hostWindow().postMessage({ type: "beacon:characterSaved", id: charId || pregenEditId }, location.origin);
+  return true;
+}
+
+// redrawIdentity — имя и аватар стоят и в шапке чтения, и на вкладке правки.
+function redrawIdentity() {
+  if (mode === "view") renderView();
+  else renderEditTabs();
+}
+
+// pickImageFile — системный выбор файла. Отмена не даёт change, поэтому
+// слушаем ещё и cancel.
+function pickImageFile() {
+  return new Promise((resolve) => {
+    const inp = h("input", { type: "file", accept: "image/*,video/mp4,video/webm", style: "display:none" });
+    let done = false;
+    const finish = (file) => {
+      if (done) return;
+      done = true;
+      inp.remove();
+      resolve(file);
+    };
+    inp.addEventListener("change", () => finish(inp.files[0] || null));
+    inp.addEventListener("cancel", () => finish(null));
+    document.body.appendChild(inp);
+    inp.click();
+  });
+}
+
+async function changeAvatarFlow() {
+  const file = await pickImageFile();
+  if (!file) return;
+  let url;
+  try {
+    url = await uploadAvatarFile(file, { title: "Аватар персонажа" });
+  } catch (err) {
+    await showAlert("Не удалось загрузить: " + err.message);
+    return;
+  }
+  if (!url) return; // передумали на кадрировании
+  if (await saveIdentity({ avatarUrl: url })) redrawIdentity();
+}
+
+// recropAvatarFlow — переснять кадр без выбора файла: аватары, загруженные до
+// кадрирования, иначе не поправить без исходника.
+async function recropAvatarFlow() {
+  let url;
+  try {
+    url = await recropAvatarUrl(character.avatarUrl, { title: "Аватар персонажа" });
+  } catch (err) {
+    await showAlert("Не удалось: " + err.message);
+    return;
+  }
+  if (!url) return;
+  if (await saveIdentity({ avatarUrl: url })) redrawIdentity();
+}
+
+async function removeAvatarFlow() {
+  if (!(await showConfirm("Убрать аватар персонажа?", { title: "Аватар", okLabel: "Убрать", danger: true }))) return;
+  if (await saveIdentity({ avatarUrl: "" })) redrawIdentity();
+}
+
+async function renameFlow() {
+  const next = await showPrompt("Имя персонажа", {
+    title: "Переименовать",
+    value: character.name || "",
+    okLabel: "Сохранить",
+  });
+  if (next === null || next.trim() === (character.name || "").trim()) return;
+  if (await saveIdentity({ name: next })) redrawIdentity();
+}
+
+// identitySection — «Имя и портрет» на вкладке правки.
+function identitySection() {
+  const hasAvatar = !!character.avatarUrl;
+  const isVideo = isVideoAvatar(character.avatarUrl);
+  const portrait = hasAvatar
+    ? isVideo
+      ? h("video", { class: "portrait-img", src: character.avatarUrl, muted: true, loop: true, autoplay: true, playsinline: true })
+      : h("img", { class: "portrait-img", src: character.avatarUrl })
+    : h("div", { class: "portrait-placeholder", text: "нет аватара" });
+
+  // readOnly — предпросмотр заготовки игроком: портрет показываем, менять нечего.
+  const buttons = readOnly
+    ? null
+    : h("div", { class: "portrait-actions" }, [
+        h("button", { type: "button", class: "portrait-btn", onclick: changeAvatarFlow }, [
+          h("span", { html: icon("upload", { size: 13 }) }),
+          hasAvatar ? "Заменить" : "Загрузить",
+        ]),
+        hasAvatar && !isVideo ? h("button", { type: "button", class: "portrait-btn", text: "Кадрировать", onclick: recropAvatarFlow }) : null,
+        hasAvatar ? h("button", { type: "button", class: "portrait-btn", text: "Убрать", onclick: removeAvatarFlow }) : null,
+      ]);
+
+  const nameInput = h("input", { type: "text", maxlength: "60", value: character.name || "" });
+  // По уходу из поля/Enter, а не на каждую букву: это отдельный запрос, а не
+  // автосейв листа с его debounce.
+  const commitName = async () => {
+    const next = nameInput.value.trim();
+    if (!next || next === (character.name || "").trim()) {
+      nameInput.value = character.name || "";
+      return;
+    }
+    if (await saveIdentity({ name: next })) redrawIdentity();
+  };
+  nameInput.addEventListener("change", commitName);
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") nameInput.blur();
+  });
+
+  if (readOnly) nameInput.disabled = true;
+
+  return h("div", { class: "section" }, [
+    h("h3", { text: "Имя и портрет" }),
+    field("Имя персонажа", nameInput),
+    portrait,
+    buttons,
+    h("div", {
+      style: "margin-top:6px;color:var(--text-dim);font-size:11px;",
+      text: isVideo
+        ? "Анимированный токен-арт (mp4/webm) — кадрируется только картинка."
+        : "Аватар кадрируется при загрузке: то, что попало в рамку, и станет фишкой на карте.",
+    }),
+  ]);
+}
+
 // ==================== tab 2: портрет и т.д. ====================
 
 function renderTab2() {
   const root = document.getElementById("tab2");
   root.innerHTML = "";
-  const portrait = character.avatarUrl
-    ? h("img", { class: "portrait-img", src: character.avatarUrl })
-    : h("div", { class: "portrait-placeholder", text: "нет аватара" });
   const physicalSection = h("div", { class: "section" }, [
     h("h3", { text: "Данные персонажа" }),
     h("div", { class: "row" }, [
@@ -868,16 +1034,7 @@ function renderTab2() {
   root.appendChild(
     h("div", { class: "grid-cols" }, [
       h("div", { class: "col" }, [
-        h("div", { class: "section" }, [
-          h("h3", { text: "Портрет" }),
-          portrait,
-          h("div", {
-            style: "margin-top:6px;color:var(--text-dim);font-size:11px;",
-            // Сам аватар редактируется не здесь, а в списке персонажей —
-            // разном для игрока и ДМ (у ДМ нет "Мои персонажи").
-            text: isAdminView ? "Меняется в панели «Персонажи» → ✎." : "Меняется в «Мои персонажи» → аватар/токен-арт.",
-          }),
-        ]),
+        identitySection(),
         physicalSection,
         backstorySection,
         h("div", { class: "section" }, [h("h3", { text: "Цели и задачи" }), textareaInput(() => sheet.goals, (v) => (sheet.goals = v), { rows: 6 })]),
@@ -1431,11 +1588,18 @@ function vTile(label, compute, formula, rollLabel, hint) {
 // ---------- шапка ----------
 
 function vHero() {
-  const isVideoAvatar = /\.(mp4|webm|m4v)(\?|#|$)/i.test(character.avatarUrl || "");
-  const avatar =
-    character.avatarUrl && !isVideoAvatar
+  const face =
+    character.avatarUrl && !isVideoAvatar(character.avatarUrl)
       ? h("img", { class: "v-hero-avatar", src: character.avatarUrl, alt: "" })
       : h("div", { class: "v-hero-avatar", text: (character.name || "?").trim().charAt(0).toUpperCase() });
+  // Клик по аватару в шапке — короткий путь к смене портрета, переходить в
+  // правку не нужно. Полный набор действий — на вкладке «Портрет».
+  const avatar = readOnly
+    ? face
+    : h("button", { type: "button", class: "v-hero-portrait", title: "Сменить аватар", onclick: changeAvatarFlow }, [
+        face,
+        h("span", { class: "v-hero-portrait-edit", html: icon("upload", { size: 12 }) }),
+      ]);
 
   const bits = [];
   const cls = [sheet.info.class, sheet.info.subclass].filter(Boolean).join(" · ");
@@ -1453,7 +1617,18 @@ function vHero() {
     h("div", { class: "v-hero" }, [
       avatar,
       h("div", { class: "v-hero-main" }, [
-        h("div", { class: "v-hero-name", text: character.name || "—" }),
+        h("div", { class: "v-hero-name" }, [
+          h("span", { text: character.name || "—" }),
+          readOnly
+            ? null
+            : h("button", {
+                type: "button",
+                class: "v-hero-rename",
+                title: "Переименовать",
+                html: icon("pencil", { size: 12 }),
+                onclick: renameFlow,
+              }),
+        ]),
         h("div", { class: "v-hero-sub", text: bits.join(" · ") }),
       ]),
     ]),

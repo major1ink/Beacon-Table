@@ -12,9 +12,7 @@ import {
   fetchVersion,
   fetchCharacters,
   createCharacter,
-  updateCharacterApi,
   deleteCharacterApi,
-  uploadFile,
   fetchPregens,
   claimPregen,
 } from "../api.js";
@@ -29,6 +27,7 @@ import { createBoardList } from "../board-list.js";
 import { attachTooltip } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import { isPlayer } from "../roles.js";
+import { uploadAvatarFile } from "../avatar-cropper.js";
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
 // БОКОВОЙ КОЛОНКЕ слева от карты (см. sheet-dock.js): за столом лист держат
@@ -104,8 +103,9 @@ async function renderCharDock(chars) {
 }
 
 let me = null;
+// pendingAvatarUrl — аватар в форме СОЗДАНИЯ. У заведённого персонажа имя и
+// аватар правятся в его листе (pages/character-sheet.js: identitySection).
 let pendingAvatarUrl = "";
-let editingCharId = null; // null — форма создаёт нового; иначе — id редактируемого
 // vtt — модульная переменная (не const внутри boot), тем же приёмом, что и
 // pages/dm.js: let vtt — нужна за пределами boot() обработчикам, которые
 // регистрируются на верхнем уровне модуля (см. lootHubBtn/vtt:tokenLootRequest
@@ -373,17 +373,13 @@ function showAvatarPreview(url) {
   charAvatarPreviewWrap.style.display = "block";
 }
 const charSaveBtn = document.getElementById("charSaveBtn");
-const charCancelEditBtn = document.getElementById("charCancelEditBtn");
 const charFormMsg = document.getElementById("charFormMsg");
 
 function resetCharForm() {
-  editingCharId = null;
   pendingAvatarUrl = "";
   charName.value = "";
   charAvatarUpload.value = "";
   charAvatarPreviewWrap.style.display = "none";
-  charSaveBtn.textContent = "Создать персонажа";
-  charCancelEditBtn.style.display = "none";
   charFormMsg.textContent = "";
 }
 
@@ -477,36 +473,20 @@ async function renderChars() {
     sheetBtn.innerHTML = icon("scroll", { size: 13 });
     sheetBtn.title = "Лист персонажа";
     sheetBtn.onclick = () => openCharacterSheet(c);
-    const editBtn = document.createElement("button");
-    editBtn.innerHTML = icon("pencil", { size: 13 });
-    editBtn.title = "Редактировать";
-    editBtn.onclick = () => startEditChar(c);
     const delBtn = document.createElement("button");
     delBtn.className = "danger";
     delBtn.innerHTML = icon("trash", { size: 13 });
     delBtn.title = "Удалить";
     delBtn.onclick = () => deleteChar(c);
-    row.append(avatar, name, sheetBtn, editBtn, delBtn);
+    row.append(avatar, name, sheetBtn, delBtn);
     charsList.appendChild(row);
   }
-}
-
-function startEditChar(c) {
-  editingCharId = c.id;
-  pendingAvatarUrl = c.avatarUrl || "";
-  charName.value = c.name;
-  charAvatarUpload.value = "";
-  showAvatarPreview(c.avatarUrl || "");
-  charSaveBtn.textContent = "Сохранить изменения";
-  charCancelEditBtn.style.display = "inline-block";
-  charFormMsg.textContent = "";
 }
 
 async function deleteChar(c) {
   if (!(await showConfirm(`Удалить персонажа «${c.name}»?`, { title: "Удалить персонажа", okLabel: "Удалить", danger: true }))) return;
   try {
     await deleteCharacterApi(c.id);
-    if (editingCharId === c.id) resetCharForm();
     await renderChars();
   } catch (err) {
     showAlert("Не удалось удалить: " + err.message);
@@ -517,7 +497,13 @@ charAvatarUpload.onchange = async () => {
   const file = charAvatarUpload.files[0];
   if (!file) return;
   try {
-    const { url } = await uploadFile(file, "tokens");
+    // Картинка идёт через кадрирование (avatar-cropper.js); null — передумали,
+    // а не ошибка.
+    const url = await uploadAvatarFile(file, { title: "Аватар персонажа" });
+    if (!url) {
+      charAvatarUpload.value = "";
+      return;
+    }
     pendingAvatarUrl = url;
     showAvatarPreview(url);
   } catch (err) {
@@ -532,18 +518,13 @@ charSaveBtn.onclick = async () => {
     return;
   }
   try {
-    if (editingCharId) {
-      await updateCharacterApi(editingCharId, name, pendingAvatarUrl);
-    } else {
-      await createCharacter(name, pendingAvatarUrl);
-    }
+    await createCharacter(name, pendingAvatarUrl);
     resetCharForm();
     await renderChars();
   } catch (err) {
     charFormMsg.textContent = err.message;
   }
 };
-charCancelEditBtn.onclick = resetCharForm;
 
 document.getElementById("charsBtn").onclick = async () => {
   resetCharForm();
@@ -564,6 +545,9 @@ window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data) return;
   if (e.data.type === "beacon:openFloatingWindow") {
     openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
+  } else if (e.data.type === "beacon:characterSaved") {
+    // Имя/аватар поменяли в листе — список и чипы дока держат свою копию.
+    renderChars();
   } else if (
     e.data.type === "beacon:spellSaved" ||
     e.data.type === "beacon:itemSaved" ||

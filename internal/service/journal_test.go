@@ -194,3 +194,47 @@ func TestJournalFolderRulesForPlayers(t *testing.T) {
 		t.Fatalf("ДМ не смог переименовать папку: %v", err)
 	}
 }
+
+// ListFull отдаёт текст только тем, кому положено его читать: при доступе
+// «только название» (JournalLimited) Content пустой.
+func TestJournalListFullHidesTextFromLimitedViewer(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestJournal(t)
+
+	limited, err := svc.Create(ctx, gwen, JournalDraft{Content: "# Тайник\n\nпод мельницей", Default: domain.JournalLimited})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Create(ctx, gwen, JournalDraft{Content: "# Объявление\n\nна воротах", Default: domain.JournalObserver}); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := svc.ListFull(ctx, tom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("видно записей: %d, ожидали 2", len(list))
+	}
+	for _, e := range list {
+		if e.ID == limited.ID && e.Content != "" {
+			t.Fatalf("текст записи «только название» уехал читателю: %q", e.Content)
+		}
+		if e.ID != limited.ID && e.Content == "" {
+			t.Fatal("текст открытой записи не приехал")
+		}
+	}
+
+	// Автору и ДМ — всё целиком.
+	for _, v := range []domain.JournalViewer{gwen, dm} {
+		full, err := svc.ListFull(ctx, v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range full {
+			if e.Content == "" {
+				t.Fatalf("%s не получил текст записи %s", v.Name, e.ID)
+			}
+		}
+	}
+}

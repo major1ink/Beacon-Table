@@ -110,6 +110,11 @@ type Config struct {
 	// другой. Стол один на всех, как на demo.foundryvtt.com: посетители
 	// видят друг друга.
 	DemoMode bool
+
+	// ResetDMPassword — разовое действие, а не настройка: выдать аккаунту ДМ
+	// новый временный пароль на этом запуске. Ставится только флагом
+	// командной строки, в beacon.conf и переменные окружения не попадает.
+	ResetDMPassword bool
 	// DemoWorld — .zip эталонного мира (см. экспорт мира). К нему стол
 	// возвращается при сбросе; без него сбрасывать не из чего.
 	DemoWorld string
@@ -524,6 +529,7 @@ func bindFlags(cfg *Config, args []string) error {
 	worldQuota := fs.String("uploads-world-quota", quota.FormatFlag(cfg.UploadsWorldQuota), "предел на загрузки одного мира, например 5GB (0 — без предела)")
 	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")
 	fs.String("config", "", "путь к файлу настроек (по умолчанию "+configFileName+" рядом с программой)")
+	fs.BoolVar(&cfg.ResetDMPassword, "reset-dm-password", false, "выдать ДМ новый временный пароль при запуске")
 	showVersion := fs.Bool("version", false, "напечатать версию и выйти")
 	if err := fs.Parse(args); err != nil {
 		return err

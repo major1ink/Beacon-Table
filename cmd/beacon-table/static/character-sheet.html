@@ -108,6 +108,16 @@
 
     .portrait-img { width: 100%; max-width: 220px; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius); background: var(--surface); display: block; }
     .portrait-placeholder { width: 100%; max-width: 220px; aspect-ratio: 1; border-radius: var(--radius); background: var(--surface); display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 11px; }
+    /* ---- «Имя и портрет» на вкладке правки (см. pages/character-sheet.js:
+       identitySection) ---- */
+    .portrait-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-width: 220px; }
+    .portrait-btn {
+      display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+      padding: 6px 10px; font: inherit; font-size: 12px; color: var(--text);
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .portrait-btn:hover { background: var(--surface-hover); }
+    .portrait-btn svg { display: block; }
 
     .checkbox-line { display: flex; align-items: center; gap: 5px; font-size: 11.5px; }
 
@@ -163,7 +173,21 @@
       display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 18px; font-weight: 700;
     }
     .v-hero-main { flex: 1 1 auto; min-width: 0; }
-    .v-hero-name { font-size: 17px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+    .v-hero-name { display: flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+    .v-hero-name > span { min-width: 0; }
+    /* Аватар в шапке — кнопка «сменить портрет» со значком в углу. */
+    .v-hero-portrait { position: relative; flex: 0 0 auto; padding: 0; border: none; background: none; cursor: pointer; border-radius: 16px; }
+    .v-hero-portrait:hover .v-hero-avatar { filter: brightness(1.15); }
+    .v-hero-portrait-edit {
+      position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--accent); color: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+    }
+    .v-hero-rename {
+      flex: 0 0 auto; display: flex; padding: 3px; cursor: pointer;
+      background: none; border: none; color: var(--text-dim); border-radius: 6px;
+    }
+    .v-hero-rename:hover { background: var(--surface); color: var(--text); }
     .v-hero-sub { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; overflow-wrap: anywhere; }
 
     /* ---- крупные числа (ХП, ОП) ---- */
@@ -438,16 +462,17 @@
       .v-bar { height: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/characterSheet-VZVm3p-v.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-CJ8Y7YNt.js">
+  <script type="module" crossorigin src="/assets/characterSheet-CgkgEJ8-.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BsfLIaOi.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-D5BetBXU.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-CH_1mRWr.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-p1yCy-dF.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-ByB5M8qg.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-CKrWa4YK.js">
+  <link rel="modulepreload" crossorigin href="/assets/avatar-cropper-CbSnpori.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CbF4yb8e.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
