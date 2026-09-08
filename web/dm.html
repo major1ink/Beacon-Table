@@ -1255,6 +1255,17 @@
 
           <!-- Сервер: то же, что лежит в beacon.conf. -->
           <div class="set-tab-panel" data-settab-panel="server">
+            <!-- Версия и отчёт о баге (см. web/src/bug-report.js) — первым
+                 блоком: ниже длинный список настроек, за которым их не
+                 находили. -->
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Версия <b id="appVersion">…</b></span>
+                <button id="bugReportBtn" type="button">Сообщить о баге</button>
+              </div>
+              <p class="hint">Соберём версию, браузер и последние ошибки в консоли в готовый текст и откроем форму нового issue на GitHub — останется вычитать и отправить. Если GitHub'а нет, отчёт можно просто скопировать.</p>
+            </div>
+            <div class="section-divider"></div>
             <div class="field-block">
               <div class="field-label-row">
                 <span class="field-label">Настройки сервера</span>
@@ -1273,20 +1284,6 @@
                 <button id="shutdownBtn" type="button" class="danger">Выключить</button>
               </div>
               <p class="hint">Мир сохранится, стол закроется у всех — программу придётся запустить заново.</p>
-            </div>
-            <div class="section-divider"></div>
-            <!-- Отчёт о баге, см. web/src/bug-report.js -->
-            <div class="field-block">
-              <div class="field-label-row">
-                <span class="field-label">Нашли баг?</span>
-                <button id="bugReportBtn" type="button">Сообщить о баге</button>
-              </div>
-              <p class="hint">Соберём версию, браузер и последние ошибки в консоли в готовый текст и откроем форму нового issue на GitHub — останется вычитать и отправить. Если GitHub'а нет, отчёт можно просто скопировать.</p>
-            </div>
-            <div class="section-divider"></div>
-            <div class="field-block">
-              <span class="field-label">Версия</span>
-              <span id="appVersion">…</span>
             </div>
           </div>
 
