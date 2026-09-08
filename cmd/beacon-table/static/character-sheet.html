@@ -306,6 +306,12 @@
     .v-spell-lvl:first-child { margin-top: 0; }
     .v-spell { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 12px; flex-wrap: wrap; }
     .v-spell-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    /* Заклинание, у которого есть карточка в библиотеке, — ссылка на неё
+       (см. vSpellName в pages/character-sheet.js). Оформление то же, что у
+       .catalog-ref в описаниях: ссылки в них открывает тот же
+       wireCatalogLinks. */
+    .catalog-ref { color: var(--blue); text-decoration: none; border-bottom: 1px solid var(--blue); cursor: pointer; }
+    .catalog-ref:hover { color: #fff; background: var(--blue); border-radius: 3px; border-bottom-color: transparent; }
     .v-spell-meta { flex: 0 0 auto; font-size: 10.5px; color: var(--text-dim); }
     .v-tag {
       display: inline-block; font-size: 9.5px; line-height: 1; padding: 3px 6px; border-radius: var(--radius-pill);
@@ -462,7 +468,7 @@
       .v-bar { height: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/characterSheet-CgkgEJ8-.js"></script>
+  <script type="module" crossorigin src="/assets/characterSheet-B4XRX8JB.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">

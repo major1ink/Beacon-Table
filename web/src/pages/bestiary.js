@@ -7,7 +7,7 @@
 // только хранит присланный JSON. Единственная посчитанная здесь на клиенте
 // величина — модификатор характеристики (та же формула, что и в
 // character-sheet.js: floor((score-10)/2)).
-import { fetchMe, fetchMonster, createMonster, updateMonster, deleteMonster, uploadFile } from "../api.js";
+import { fetchMe, fetchMonster, createMonster, updateMonster, deleteMonster, uploadFile, fetchSpells } from "../api.js";
 import { openSocket } from "../ws-reconnect.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
@@ -395,9 +395,10 @@ function renderReadView(root) {
 // applyImport — общая точка для файла и вставленного текста: парсит JSON,
 // мапит через mapFoundryMonsterJson (см. web/src/monster-import.js), мержит
 // результат в monster (переписывает только пришедшие поля — существующие
-// теги/заклинания монстра, которых импорт не касается, сохраняются) и
-// перерисовывает карточку целиком, тем же приёмом, что и у карточки
-// заклинания (см. web/src/pages/spellbook.js: applyImport).
+// теги монстра, которых импорт не касается, сохраняются; заклинания не
+// перезаписываются, а дополняются, см. mergeSpellRefs) и перерисовывает
+// карточку целиком, тем же приёмом, что и у карточки заклинания (см.
+// web/src/pages/spellbook.js: applyImport).
 function applyImport(rawText, msgEl) {
   msgEl.classList.remove("error", "ok");
   msgEl.textContent = "";
@@ -417,6 +418,9 @@ function applyImport(rawText, msgEl) {
     msgEl.classList.add("error");
     return;
   }
+  // Заклинания — единственное поле, которое импорт не перезаписывает, а
+  // дополняет: список мог быть собран руками из панели «Заклинания» ДМ.
+  mapped.spells = mergeSpellRefs(monster.spells, mapped.spells);
   Object.assign(monster, mapped);
   document.getElementById("monsterTitle").textContent = monster.name || "Без имени";
   msgEl.textContent = `Импортировано: «${mapped.name}».`;
@@ -450,11 +454,64 @@ function spellLevelLabel(lvl) {
   return lvl ? lvl + "-й круг" : "Заговор";
 }
 
+// spellIndex — карточки библиотеки заклинаний по имени (см. domain.Spell).
+// Нужен, потому что импорт статблока spellId проставить не может (см.
+// buildSpellRefs в monster-import.js): у актёра Foundry лежит своя копия
+// заклинания, с карточкой библиотеки они сходятся только названием — тем же
+// способом, что ссылки .catalog-ref в описаниях (matchByName в
+// catalog-links.js) и блок заклинаний листа персонажа.
+let spellIndex = new Map();
+
+function spellKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+// spellBareKey — то же имя без хвоста "[English]": каталог «из коробки» и
+// импорт из Foundry держат «Свет [Light]», вписанное руками — обычно «Свет».
+function spellBareKey(name) {
+  return spellKey(String(name || "").replace(/\s*\[[^\]]*\]\s*$/, ""));
+}
+
+// loadSpellIndex — один запрос на открытие карточки. Ошибка не должна ронять
+// статблок: без индекса имена заклинаний просто останутся обычным текстом.
+async function loadSpellIndex() {
+  const list = await fetchSpells().catch(() => []);
+  spellIndex = new Map();
+  for (const sp of list) {
+    const name = String(sp.name || "").trim();
+    if (!name || !sp.id) continue;
+    for (const key of [spellKey(name), spellBareKey(name)]) {
+      if (!spellIndex.has(key)) spellIndex.set(key, sp.id);
+    }
+  }
+}
+
+// spellRefId — id карточки для строки списка: сохранённый (заклинание
+// добавили из панели «Заклинания» ДМ) или найденный по имени.
+function spellRefId(ref) {
+  return ref.spellId || spellIndex.get(spellKey(ref.name)) || spellIndex.get(spellBareKey(ref.name)) || "";
+}
+
+// mergeSpellRefs — импорт статблока не должен терять то, что ДМ собрал
+// руками: заклинания из файла дописываются к уже имеющемуся списку, тёзки не
+// задваиваются (у существующей строки может быть проставлен spellId).
+function mergeSpellRefs(existing, incoming) {
+  const out = (existing || []).slice();
+  const seen = new Set(out.map((r) => spellKey(r.name)));
+  for (const ref of incoming || []) {
+    const key = spellKey(ref.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref);
+  }
+  return out;
+}
+
 // spellsSection — список заклинаний монстра (domain.MonsterSpellRef).
-// Добавление — только из панели "Заклинания" ДМ (там виден весь стол и
-// выбор целей сразу), здесь можно только посмотреть карточку и (в
-// редактировании) убрать заклинание из списка — readOnly скрывает ✕, читает
-// то же самое, чем пользуется read-режим (renderReadView).
+// Заполняется импортом статблока (см. buildSpellRefs в monster-import.js) и
+// панелью "Заклинания" ДМ (там виден весь стол и выбор целей сразу); здесь
+// можно только посмотреть карточку и (в редактировании) убрать заклинание из
+// списка — readOnly скрывает ✕, читает то же самое, чем пользуется
+// read-режим (renderReadView).
 function spellsSection(readOnly) {
   const list = h("div", { class: "spell-ref-list" });
   function renderList() {
@@ -466,14 +523,15 @@ function spellsSection(readOnly) {
     }
     monster.spells.forEach((ref, i) => {
       const name = h("span", { class: "spell-ref-name", text: ref.name });
-      if (ref.spellId) {
+      const spellId = spellRefId(ref);
+      if (spellId) {
         name.classList.add("clickable");
         name.title = "Открыть карточку заклинания";
         // bestiary.js уже сам живёт внутри плавающего окна (floating-window.js
         // рендерит его в iframe) — вкладывать туда ещё один плавающий менеджер
         // окон незачем, поэтому просто открываем обычной вкладкой браузера
         // (тот же приём, что popoutBtn в floating-window.js).
-        name.onclick = () => window.open(`/spellbook.html?id=${ref.spellId}`, "spell-" + ref.spellId);
+        name.onclick = () => window.open(`/spellbook.html?id=${spellId}`, "spell-" + spellId);
       }
       const row = [name, h("span", { class: "spell-ref-level", text: spellLevelLabel(ref.level) })];
       if (!readOnly) {
@@ -785,6 +843,9 @@ function currentId() {
     editMode = new URLSearchParams(location.search).get("edit") === "1";
   }
   updateEditToggleBtn();
+  // Библиотека заклинаний — чтобы имена в блоке «Заклинания» стали ссылками
+  // на карточки (см. spellRefId).
+  await loadSpellIndex();
   renderApp();
 
   document.getElementById("loadingHint").style.display = "none";

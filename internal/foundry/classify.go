@@ -39,6 +39,11 @@ var ServerSideTargets = map[string]bool{
 type Entry struct {
 	Doc    Doc
 	Target string
+	// Embedded — документ вынут из вложения другого документа (заклинание из
+	// actor.items, см. actorSpells), а не лежал в паке сам по себе. Такой
+	// уступает одноимённому документу самого пака при дедупликации — см.
+	// dedupeEmbedded.
+	Embedded bool
 }
 
 // itemTargets — подтипы документа Item системы dnd5e. Всё, чего тут нет,
@@ -66,7 +71,38 @@ func Expand(docs []Doc, packType string) []Entry {
 	for _, d := range docs {
 		out = append(out, expandOne(d, packType, 0)...)
 	}
+	return dedupeEmbedded(out)
+}
+
+// dedupeEmbedded выбрасывает вложенные документы (см. Entry.Embedded), для
+// которых в паке уже есть одноимённая карточка того же раздела: заклинание
+// «Свет» из item-пака модуля полнее копии из листа персонажа, а семеро
+// предгенерированных заклинателей знают половину одних и тех же заклинаний.
+// Ключ — раздел и имя без регистра, ровно как у импорта карточек (см.
+// web/src/pages/foundry-import.js: cardKey).
+func dedupeEmbedded(entries []Entry) []Entry {
+	seen := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if !e.Embedded {
+			seen[entryKey(e)] = true
+		}
+	}
+	out := entries[:0]
+	for _, e := range entries {
+		if e.Embedded {
+			key := entryKey(e)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+		}
+		out = append(out, e)
+	}
 	return out
+}
+
+func entryKey(e Entry) string {
+	return e.Target + "\x00" + strings.ToLower(strings.TrimSpace(asString(e.Doc["name"])))
 }
 
 func expandOne(d Doc, packType string, depth int) []Entry {
@@ -76,7 +112,39 @@ func expandOne(d Doc, packType string, depth int) []Entry {
 	if isAdventure(d, packType) {
 		return expandAdventure(d, depth)
 	}
-	return []Entry{{Doc: d, Target: Classify(d, packType)}}
+	target := Classify(d, packType)
+	out := []Entry{{Doc: d, Target: target}}
+	if target == TargetPregens || target == TargetMonsters {
+		out = append(out, actorSpells(d)...)
+	}
+	return out
+}
+
+// actorSpells — заклинания, вложенные в актёра (actor.items[type=spell]):
+// и у готового персонажа, и у существа бестиария. В лист и в статблок из них
+// попадает только имя со кругом (см. buildSpellRows в
+// web/src/character-import.js и buildSpellRefs в monster-import.js), само
+// описание живёт в карточке библиотеки — без этого у импортированного
+// волшебника заклинания есть, а прочитать их негде: пак кладёт актёров уже
+// «снаряжёнными», своего пака заклинаний у модуля обычно нет, а заклинания
+// системного компендиума dnd5e в модуль не входят.
+func actorSpells(d Doc) []Entry {
+	items := asSlice(d["items"])
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]Entry, 0, 8)
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil || strings.ToLower(asString(item["type"])) != "spell" {
+			continue
+		}
+		if strings.TrimSpace(asString(item["name"])) == "" {
+			continue
+		}
+		out = append(out, Entry{Doc: Doc(item), Target: TargetSpells, Embedded: true})
+	}
+	return out
 }
 
 // adventureFields — что лежит внутри документа Adventure и какому типу пака

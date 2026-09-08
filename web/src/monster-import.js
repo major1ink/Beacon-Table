@@ -403,6 +403,27 @@ function bucketFor(item) {
   return "traits"; // "" (пассивные особенности) и "special" (напр. "Легендарная устойчивость") — сюда же
 }
 
+// buildSpellRefs — список "Заклинания" статблока (domain.MonsterSpellRef) из
+// items[type=spell] актёра. spellId тут не проставить: маппер — чистая
+// функция от документа Foundry и библиотеку заклинаний не видит, да и
+// карточки заклинаний того же пакета могут ещё не приехать (импорт идёт по
+// разделам, см. TARGETS в pages/foundry-import.js). Карточку по имени найдёт
+// уже сама страница бестиария — см. spellsSection в pages/bestiary.js.
+function buildSpellRefs(items) {
+  const seen = new Set();
+  const out = [];
+  for (const item of items || []) {
+    if (!item || item.type !== "spell") continue;
+    const name = String(item.name || "").trim();
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    const level = Number((item.system && item.system.level) || 0);
+    out.push({ name, level: Number.isFinite(level) ? Math.min(Math.max(level, 0), 9) : 0 });
+  }
+  out.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, "ru"));
+  return out;
+}
+
 function buildAbilityBlocks(items, resources, name, scores, prof) {
   const buckets = { traits: [], actions: [], bonusActions: [], reactions: [], legendaryActions: [], lairActions: [] };
   let legendaryIntro = "";
@@ -507,6 +528,7 @@ export function mapFoundryMonsterJson(raw) {
       proficiencyBonus: prof,
       description: cleanFoundryText(details.biography && details.biography.value, name),
       tags: buildTags(details),
+      spells: buildSpellRefs(items),
     },
     buildAbilityBlocks(items, sys.resources, name, scores, prof)
   );

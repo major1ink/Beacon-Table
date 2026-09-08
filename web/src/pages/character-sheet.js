@@ -20,6 +20,7 @@ import {
   updateCharacterInventoryItem,
   deleteCharacterInventoryItem,
   fetchReferences,
+  fetchSpells,
   fetchPregen,
   updateAdminPregen,
   updateCharacterApi,
@@ -2020,6 +2021,55 @@ function vSlotsCard() {
 
 // ---------- заклинания ----------
 
+// spellIndex — имена карточек библиотеки заклинаний (см. domain.Spell),
+// ключ → как карточка называется там. Строка листа (SpellRow) ссылки на
+// карточку не хранит и хранить не может: заклинание вписывают руками,
+// приносит импорт из lss или из Foundry — сходятся они только названием, как
+// и ссылки .catalog-ref в описаниях (см. matchByName в catalog-links.js).
+let spellIndex = new Map();
+
+function spellKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+// spellBareKey — то же имя без хвоста "[English]": каталог «из коробки» и
+// импорт из Foundry держат «Свет [Light]», а вписанное руками или пришедшее
+// из lss — обычно просто «Свет».
+function spellBareKey(name) {
+  return spellKey(String(name || "").replace(/\s*\[[^\]]*\]\s*$/, ""));
+}
+
+// loadSpellIndex — один запрос на открытие листа. Ошибка не должна ронять
+// лист: без индекса имена заклинаний просто останутся обычным текстом.
+async function loadSpellIndex() {
+  const list = await fetchSpells().catch(() => []);
+  spellIndex = new Map();
+  for (const sp of list) {
+    const name = String(sp.name || "").trim();
+    if (!name) continue;
+    for (const key of [spellKey(name), spellBareKey(name)]) {
+      if (!spellIndex.has(key)) spellIndex.set(key, name);
+    }
+  }
+}
+
+// vSpellName — имя заклинания в листе: ссылка на карточку, если такая есть в
+// библиотеке, и обычный текст, если нет (заклинание могли не импортировать
+// или вписать своё). Открывает карточку не сама — размечает ссылку так же,
+// как импорт размечает ссылки внутри описаний, а клик обрабатывает общий
+// wireCatalogLinks (см. catalog-links.js).
+function vSpellName(name) {
+  const libName = spellIndex.get(spellKey(name)) || spellIndex.get(spellBareKey(name)) || "";
+  if (!libName) return h("span", { class: "v-spell-name", text: name });
+  return h("a", {
+    class: "v-spell-name catalog-ref",
+    href: "#",
+    "data-kind": "spell",
+    "data-name": libName,
+    title: "Открыть карточку заклинания",
+    text: name,
+  });
+}
+
 function vSpellsCard() {
   const kids = [];
   if (sheet.spellcasting.ability) {
@@ -2044,7 +2094,7 @@ function vSpellsCard() {
     for (const s of byLevel.get(lvl)) {
       const meta = [s.castTime, s.range].filter(Boolean).join(" · ");
       const row = h("div", { class: "v-spell" }, [
-        h("span", { class: "v-spell-name", text: s.name }),
+        vSpellName(s.name),
         s.concentration ? h("span", { class: "v-tag c", text: "К" }) : null,
         s.ritual ? h("span", { class: "v-tag", text: "Р" }) : null,
         s.material ? h("span", { class: "v-tag", text: "М" }) : null,
@@ -2055,7 +2105,9 @@ function vSpellsCard() {
       kids.push(row);
     }
   }
-  return vCard("Заклинания", kids);
+  const card = vCard("Заклинания", kids);
+  if (card) wireCatalogLinks(card);
+  return card;
 }
 
 // ---------- деньги, настройка, инвентарь ----------
@@ -2625,6 +2677,7 @@ function currentPregenId() {
     }
     sheet = normalizeSheet(character.sheet);
     references = await fetchReferences().catch(() => []);
+    await loadSpellIndex();
 
     // ДМ открыл заготовку из пула — полноценная правка листа (шаблон
     // скопируется игроку при «Назначить»). Инвентарь и броски заготовке
@@ -2683,6 +2736,9 @@ function currentPregenId() {
   // не должна ронять открытие листа — тогда поля просто останутся обычным
   // текстовым вводом без подсказок.
   references = await fetchReferences().catch(() => []);
+  // Библиотека заклинаний — чтобы имена в блоке «Заклинания» стали ссылками
+  // на карточки (см. vSpellName).
+  await loadSpellIndex();
 
   document.getElementById("charTitle").textContent = character.name;
   document.getElementById("charSub").textContent = isAdminView && character.accountUsername ? "игрок: " + character.accountUsername : "";
