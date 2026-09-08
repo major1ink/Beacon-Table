@@ -52,6 +52,7 @@ func (a *API) handleSpellCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusCreated, sp)
 }
 
@@ -103,6 +104,7 @@ func (a *API) handleSpellUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -122,5 +124,6 @@ func (a *API) handleSpellDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

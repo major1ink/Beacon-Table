@@ -421,6 +421,14 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 	}); err != nil {
 		result.Warnings = appendWarning(result.Warnings, "не удалось запомнить установленный пакет: "+err.Error())
 	}
+	// Открытые окна компендиума, панель «Ассеты» и список модулей у других
+	// клиентов перечитают себя сами: импорт пака меняет всё это разом, а
+	// узнавали о нём только перезагрузкой страницы.
+	if result.Assets > 0 {
+		s.room.NotifyLibraryChanged("assets")
+	}
+	s.room.NotifyLibraryChanged("compendium")
+	s.room.NotifyLibraryChanged("foundry")
 	return result, nil
 }
 

@@ -35,6 +35,7 @@ import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { openSocket } from "../ws-reconnect.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -478,4 +479,13 @@ window.addEventListener("message", (e) => {
     }
   }
   await refresh();
+
+  // Карточку добавили/поправили/удалили в другом окне или приехал импорт
+  // Foundry — список перечитываем сами (см. RoomService.NotifyLibraryChanged).
+  // Раньше открытый компендиум показывал старое до перезагрузки страницы.
+  openSocket(role === "dm" ? "/ws/dm" : "/ws/player", {
+    onMessage: (data) => {
+      if (data.type === "library_changed" && data.kind === "compendium") refresh();
+    },
+  });
 })();

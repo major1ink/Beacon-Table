@@ -53,6 +53,7 @@ func (a *API) handleReferenceCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusCreated, ref)
 }
 
@@ -104,6 +105,7 @@ func (a *API) handleReferenceUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -123,5 +125,6 @@ func (a *API) handleReferenceDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

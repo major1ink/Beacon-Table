@@ -50,6 +50,46 @@ func TestCharactersChangedGoesToPlayersAndDMButNotTV(t *testing.T) {
 	}
 }
 
+func TestLibraryChangedCarriesKindToPlayersAndDM(t *testing.T) {
+	dm := &notifyClient{role: domain.RoleDM}
+	player := &notifyClient{role: domain.RolePlayer}
+	tv := &notifyClient{role: domain.RoleTV}
+
+	r := &Room{clients: map[RoomClient]bool{dm: true, player: true, tv: true}}
+	r.broadcastLibraryChanged("compendium")
+
+	// Компендиум открыт и у игрока (справочник, заклинания) — сообщение
+	// нужно обоим.
+	for _, c := range []*notifyClient{dm, player} {
+		if len(c.got) != 1 || c.got[0] != "library_changed" {
+			t.Fatalf("роль %v получила %v", c.role, c.got)
+		}
+	}
+	if len(tv.got) != 0 {
+		t.Fatalf("TV получил %v", tv.got)
+	}
+}
+
+func TestCharacterSheetChangedSkipsEmptyIDAndTV(t *testing.T) {
+	dm := &notifyClient{role: domain.RoleDM}
+	tv := &notifyClient{role: domain.RoleTV}
+	r := &Room{clients: map[RoomClient]bool{dm: true, tv: true}}
+
+	// Пустой id — рассылать нечего: окну не с чем сверить свой characterId.
+	r.broadcastCharacterSheetChanged("")
+	if len(dm.got) != 0 {
+		t.Fatalf("ДМ получил рассылку по пустому id: %v", dm.got)
+	}
+
+	r.broadcastCharacterSheetChanged("char-1")
+	if len(dm.got) != 1 || dm.got[0] != "character_sheet_changed" {
+		t.Fatalf("ДМ получил %v", dm.got)
+	}
+	if len(tv.got) != 0 {
+		t.Fatalf("TV получил %v", tv.got)
+	}
+}
+
 func TestNotifyCharactersChangedDoesNotBlockWithoutRunLoop(t *testing.T) {
 	// Отправка неблокирующая: HTTP-хендлер не должен виснуть, если горутина
 	// комнаты занята или уже остановлена (буфер канала на 4).

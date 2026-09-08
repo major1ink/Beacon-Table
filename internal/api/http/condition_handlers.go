@@ -69,6 +69,7 @@ func (a *API) handleConditionCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusCreated, cond)
 }
 
@@ -120,6 +121,7 @@ func (a *API) handleConditionUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -139,5 +141,6 @@ func (a *API) handleConditionDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("compendium")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

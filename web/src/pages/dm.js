@@ -2668,6 +2668,17 @@ async function renderDmCharacters() {
 onPanelOpen("characters", renderDmCharacters);
 // Список персонажей поменялся мимо этой вкладки (другая сессия ДМ, игрок
 // завёл своего) — открытая панель перечитывает его сама.
+// Библиотека загрузок и список модулей Foundry поменялись мимо этой вкладки
+// (вторая сессия ДМ, импорт или снос модуля — см.
+// RoomService.NotifyLibraryChanged): панели перечитывают себя сами.
+document.addEventListener("vtt:libraryChanged", (e) => {
+  const kind = e.detail && e.detail.kind;
+  if (kind === "assets") refreshLibrary();
+  if (kind === "foundry" && document.querySelector('[data-settab-panel="modules"]')?.classList.contains("active")) {
+    renderFoundryModules();
+  }
+});
+
 document.addEventListener("vtt:charactersChanged", () => {
   // Активность панели читаем из DOM, а не из openPanelSection: та объявлена
   // ниже по файлу, и порядок инициализации тут не должен иметь значения.
