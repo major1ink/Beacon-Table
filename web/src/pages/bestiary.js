@@ -454,19 +454,16 @@ function spellLevelLabel(lvl) {
   return lvl ? lvl + "-й круг" : "Заговор";
 }
 
-// spellIndex — карточки библиотеки заклинаний по имени (см. domain.Spell).
-// Нужен, потому что импорт статблока spellId проставить не может (см.
-// buildSpellRefs в monster-import.js): у актёра Foundry лежит своя копия
-// заклинания, с карточкой библиотеки они сходятся только названием — тем же
-// способом, что ссылки .catalog-ref в описаниях (matchByName в
-// catalog-links.js) и блок заклинаний листа персонажа.
+// spellIndex — карточки библиотеки по имени. Импорт статблока spellId
+// проставить не может (см. buildSpellRefs в monster-import.js): у актёра
+// своя копия заклинания, с карточкой она сходится только названием.
 let spellIndex = new Map();
 
 function spellKey(name) {
   return String(name || "").trim().toLowerCase();
 }
-// spellBareKey — то же имя без хвоста "[English]": каталог «из коробки» и
-// импорт из Foundry держат «Свет [Light]», вписанное руками — обычно «Свет».
+// spellBareKey — имя без хвоста "[English]": в каталоге «Свет [Light]»,
+// вписанное руками — обычно «Свет».
 function spellBareKey(name) {
   return spellKey(String(name || "").replace(/\s*\[[^\]]*\]\s*$/, ""));
 }
@@ -491,9 +488,8 @@ function spellRefId(ref) {
   return ref.spellId || spellIndex.get(spellKey(ref.name)) || spellIndex.get(spellBareKey(ref.name)) || "";
 }
 
-// mergeSpellRefs — импорт статблока не должен терять то, что ДМ собрал
-// руками: заклинания из файла дописываются к уже имеющемуся списку, тёзки не
-// задваиваются (у существующей строки может быть проставлен spellId).
+// mergeSpellRefs — импорт дописывает к списку, а не затирает его: часть строк
+// ДМ собрал руками, и у них проставлен spellId.
 function mergeSpellRefs(existing, incoming) {
   const out = (existing || []).slice();
   const seen = new Set(out.map((r) => spellKey(r.name)));

@@ -50,8 +50,16 @@ type Spell struct {
 	Concentration bool   `json:"concentration"`
 
 	SavingThrow string `json:"savingThrow,omitempty"` // "Тел", "Мдр"... — свободный текст, СЛ никто не считает на сервере
-	Damage      string `json:"damage,omitempty"`      // "8к6 (огонь)"
-	Classes     string `json:"classes,omitempty"`     // "Волшебник, Чародей..." — свободный текст, экспорт TTG Club это не отдаёт
+	// Attack — заклинание бьёт броском атаки, а не спасброском цели. Код, а
+	// не текст: по нему лист персонажа рисует кнопку броска (бонус считает
+	// сам — карточка про персонажа не знает).
+	Attack string `json:"attack,omitempty"`
+	Damage string `json:"damage,omitempty"` // "8к6 (огонь)"
+	// Upcast — прибавка за каждый круг ячейки выше своего ("1к6"). Полем, а
+	// не строкой в описании: по нему лист считает урон с ячейки повыше (см.
+	// spellDamageText в web/src/pages/character-sheet.js).
+	Upcast  string `json:"upcast,omitempty"`
+	Classes string `json:"classes,omitempty"` // "Волшебник, Чародей..." — свободный текст, экспорт TTG Club это не отдаёт
 
 	Description string   `json:"description,omitempty"` // markdown/HTML — рендерится тем же marked, что и заметки ДМ (см. web/src/notes/markdown.js); из импорта приходит готовый HTML, marked пропускает его как есть
 	Tags        []string `json:"tags,omitempty"`
@@ -72,6 +80,17 @@ type Spell struct {
 	Statuses []SpellStatusRef `json:"statuses,omitempty"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Вид броска атаки заклинанием (см. Spell.Attack).
+const (
+	SpellAttackMelee  = "melee"
+	SpellAttackRanged = "ranged"
+)
+
+// ValidSpellAttack — известный ли код; всё прочее сервер гасит в "".
+func ValidSpellAttack(v string) bool {
+	return v == SpellAttackMelee || v == SpellAttackRanged
 }
 
 // SpellStatusRef — одна строка списка «Накладывает» карточки заклинания.

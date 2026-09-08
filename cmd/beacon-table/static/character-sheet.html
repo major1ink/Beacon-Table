@@ -306,13 +306,15 @@
     .v-spell-lvl:first-child { margin-top: 0; }
     .v-spell { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 12px; flex-wrap: wrap; }
     .v-spell-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-    /* Заклинание, у которого есть карточка в библиотеке, — ссылка на неё
-       (см. vSpellName в pages/character-sheet.js). Оформление то же, что у
-       .catalog-ref в описаниях: ссылки в них открывает тот же
-       wireCatalogLinks. */
+    /* Заклинание с карточкой в библиотеке — ссылка на неё (см. vSpellName). */
     .catalog-ref { color: var(--blue); text-decoration: none; border-bottom: 1px solid var(--blue); cursor: pointer; }
     .catalog-ref:hover { color: #fff; background: var(--blue); border-radius: 3px; border-bottom-color: transparent; }
     .v-spell-meta { flex: 0 0 auto; font-size: 10.5px; color: var(--text-dim); }
+    /* Круг ячейки рядом с уроном (см. vSpellsCard): выбор живёт до перерисовки. */
+    .v-spell-slot {
+      flex: 0 0 auto; font-size: 10px; padding: 1px 3px; border-radius: 4px;
+      background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);
+    }
     .v-tag {
       display: inline-block; font-size: 9.5px; line-height: 1; padding: 3px 6px; border-radius: var(--radius-pill);
       background: var(--surface); color: var(--text-dim);
@@ -468,11 +470,11 @@
       .v-bar { height: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/characterSheet-B4XRX8JB.js"></script>
+  <script type="module" crossorigin src="/assets/characterSheet-BIF9R7zy.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
-  <link rel="modulepreload" crossorigin href="/assets/inline-rolls-DrPnKcfh.js">
+  <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
   <link rel="modulepreload" crossorigin href="/assets/modifier-editor-ByB5M8qg.js">
   <link rel="modulepreload" crossorigin href="/assets/status-palette-CKrWa4YK.js">

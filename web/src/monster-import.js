@@ -404,11 +404,9 @@ function bucketFor(item) {
 }
 
 // buildSpellRefs — список "Заклинания" статблока (domain.MonsterSpellRef) из
-// items[type=spell] актёра. spellId тут не проставить: маппер — чистая
-// функция от документа Foundry и библиотеку заклинаний не видит, да и
-// карточки заклинаний того же пакета могут ещё не приехать (импорт идёт по
-// разделам, см. TARGETS в pages/foundry-import.js). Карточку по имени найдёт
-// уже сама страница бестиария — см. spellsSection в pages/bestiary.js.
+// items[type=spell]. spellId тут не проставить: маппер — чистая функция от
+// документа и библиотеку не видит. Карточку по имени найдёт сама страница
+// бестиария (см. spellsSection).
 function buildSpellRefs(items) {
   const seen = new Set();
   const out = [];

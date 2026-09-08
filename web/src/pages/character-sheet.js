@@ -2021,19 +2021,17 @@ function vSlotsCard() {
 
 // ---------- заклинания ----------
 
-// spellIndex — имена карточек библиотеки заклинаний (см. domain.Spell),
-// ключ → как карточка называется там. Строка листа (SpellRow) ссылки на
-// карточку не хранит и хранить не может: заклинание вписывают руками,
-// приносит импорт из lss или из Foundry — сходятся они только названием, как
-// и ссылки .catalog-ref в описаниях (см. matchByName в catalog-links.js).
+// spellIndex — карточки библиотеки по имени: {name, attack, damage, upcast}.
+// Строка листа (SpellRow) ссылки на карточку не хранит: заклинание вписывают
+// руками или приносит импорт, сходятся они только названием (тот же приём,
+// что matchByName в catalog-links.js).
 let spellIndex = new Map();
 
 function spellKey(name) {
   return String(name || "").trim().toLowerCase();
 }
-// spellBareKey — то же имя без хвоста "[English]": каталог «из коробки» и
-// импорт из Foundry держат «Свет [Light]», а вписанное руками или пришедшее
-// из lss — обычно просто «Свет».
+// spellBareKey — имя без хвоста "[English]": каталог держит «Свет [Light]»,
+// вписанное руками — обычно просто «Свет».
 function spellBareKey(name) {
   return spellKey(String(name || "").replace(/\s*\[[^\]]*\]\s*$/, ""));
 }
@@ -2046,27 +2044,96 @@ async function loadSpellIndex() {
   for (const sp of list) {
     const name = String(sp.name || "").trim();
     if (!name) continue;
+    const card = { name, attack: sp.attack || "", damage: sp.damage || "", upcast: sp.upcast || "" };
     for (const key of [spellKey(name), spellBareKey(name)]) {
-      if (!spellIndex.has(key)) spellIndex.set(key, name);
+      if (!spellIndex.has(key)) spellIndex.set(key, card);
     }
   }
 }
 
-// vSpellName — имя заклинания в листе: ссылка на карточку, если такая есть в
-// библиотеке, и обычный текст, если нет (заклинание могли не импортировать
-// или вписать своё). Открывает карточку не сама — размечает ссылку так же,
-// как импорт размечает ссылки внутри описаний, а клик обрабатывает общий
-// wireCatalogLinks (см. catalog-links.js).
-function vSpellName(name) {
-  const libName = spellIndex.get(spellKey(name)) || spellIndex.get(spellBareKey(name)) || "";
-  if (!libName) return h("span", { class: "v-spell-name", text: name });
+// spellCard — карточка библиотеки для строки листа (null — такой там нет:
+// заклинание могли не импортировать или вписать своё).
+function spellCard(name) {
+  return spellIndex.get(spellKey(name)) || spellIndex.get(spellBareKey(name)) || null;
+}
+
+// vSpellName — имя-ссылка на карточку, если такая есть в библиотеке. Клик
+// обрабатывает общий wireCatalogLinks (см. catalog-links.js).
+function vSpellName(name, card) {
+  if (!card) return h("span", { class: "v-spell-name", text: name });
   return h("a", {
     class: "v-spell-name catalog-ref",
     href: "#",
     "data-kind": "spell",
-    "data-name": libName,
+    "data-name": card.name,
     title: "Открыть карточку заклинания",
     text: name,
+  });
+}
+
+// ---- урон заклинания глазами этого листа ----
+// В карточке прогрессия и модификатор остаются словами — она общая на стол
+// (см. humanizeDamage в web/src/spell-import.js). Лист знает уровень,
+// модификатор и ячейки, поэтому здесь они становятся числами. Шаблон свой,
+// обе стороны контракта в одном репозитории.
+const CANTRIP_DAMAGE_RE = /^(\d+)к(\d+)([^,]*), \+(\d+)к(\d+) на 5\/11\/17 ур\.$/;
+const SPELL_MOD_TEXT = " + мод. заклинательной характеристики";
+
+// cantripTier — сколько раз сработала прогрессия заговора: рубежи 5/11/17.
+function cantripTier(level) {
+  return level >= 17 ? 3 : level >= 11 ? 2 : level >= 5 ? 1 : 0;
+}
+
+// addDice — прибавить кубики к первой группе урона: "8к6 (огонь)" + 2к6 =
+// "10к6 (огонь)". Другая грань — отдельным слагаемым.
+function addDice(text, count, faces) {
+  if (count <= 0) return text;
+  const re = new RegExp(`^(\\d+)к${faces}\\b`);
+  if (re.test(text)) return text.replace(re, (_, n) => `${Number(n) + count}к${faces}`);
+  return `${text} + ${count}к${faces}`;
+}
+
+// spellDamageText — урон заклинания глазами ЭТОГО листа и ЭТОЙ ячейки.
+function spellDamageText(card, spellLevel, slotLevel) {
+  let text = String((card && card.damage) || "").trim();
+  if (!text) return "";
+  const cantrip = CANTRIP_DAMAGE_RE.exec(text);
+  if (cantrip) {
+    const dice = Number(cantrip[1]) + Number(cantrip[4]) * cantripTier(sheet.info.level || 1);
+    text = `${dice}к${cantrip[2]}${cantrip[3]}`;
+  }
+  if (text.includes(SPELL_MOD_TEXT)) text = text.replace(SPELL_MOD_TEXT, fmtMod(spellAbilityMod(sheet)));
+  const up = /^(\d+)к(\d+)$/.exec(String((card && card.upcast) || "").trim());
+  if (up && slotLevel > spellLevel) text = addDice(text, Number(up[1]) * (slotLevel - spellLevel), up[2]);
+  return text;
+}
+
+// slotLevelsFrom — круги, с которых лист может наложить: свой плюс те, где в
+// бланке проставлены ячейки (см. vSlotsCard).
+function slotLevelsFrom(spellLevel) {
+  const out = [spellLevel];
+  for (let i = 0; i < sheet.spellcasting.slotsByLevel.length; i++) {
+    const lvl = i + 1;
+    if (lvl <= spellLevel) continue;
+    const p = parseSlots(sheet.spellcasting.slotsByLevel[i]);
+    if (p && p.total > 0) out.push(lvl);
+  }
+  return out;
+}
+
+// vSpellHit — бонус к атаке кнопкой, как у оружия (см. vAttacksCard). Только
+// когда карточка говорит, что заклинание бьёт броском, и у листа есть
+// базовая характеристика.
+function vSpellHit(name, card) {
+  if (!card || !card.attack) return null;
+  const bonus = spellAtkBonus(sheet);
+  if (bonus === null) return null;
+  return h("button", {
+    type: "button",
+    class: "v-atk-hit",
+    text: fmtMod(bonus),
+    title: (card.attack === "melee" ? "Рукопашная" : "Дистанционная") + " атака заклинанием: " + name,
+    onclick: () => sendRoll("1d20" + fmtMod(bonus), name),
   });
 }
 
@@ -2093,15 +2160,44 @@ function vSpellsCard() {
     kids.push(h("div", { class: "v-spell-lvl", text: lvl === 0 ? "Заговоры" : lvl + "-й уровень" }));
     for (const s of byLevel.get(lvl)) {
       const meta = [s.castTime, s.range].filter(Boolean).join(" · ");
+      const card = spellCard(s.name);
+      const metaEl = meta ? h("span", { class: "v-spell-meta", text: meta }) : null;
+      const notesEl = s.notes ? h("span", { class: "v-spell-meta", text: s.notes }) : null;
+      // Урон и круг — только если карточка библиотеки знает про урон.
+      const dmgEl = h("span", { class: "v-atk-dmg" });
+      const showDamage = (slotLevel) => {
+        dmgEl.textContent = spellDamageText(card, s.level, slotLevel);
+        enhanceRolls(dmgEl, sendRoll);
+      };
+      const slots = card && card.upcast && s.level > 0 ? slotLevelsFrom(s.level) : [];
+      const slotEl =
+        slots.length > 1
+          ? h(
+              "select",
+              { class: "v-spell-slot", title: "С какой ячейки накладываем" },
+              slots.map((lvl) => h("option", { value: String(lvl), text: lvl + "-й" }))
+            )
+          : null;
+      if (slotEl) {
+        slotEl.value = String(s.level);
+        slotEl.addEventListener("change", () => showDamage(Number(slotEl.value)));
+      }
+      showDamage(s.level);
       const row = h("div", { class: "v-spell" }, [
-        vSpellName(s.name),
+        vSpellName(s.name, card),
+        vSpellHit(s.name, card),
+        dmgEl.textContent ? dmgEl : null,
+        dmgEl.textContent ? slotEl : null,
         s.concentration ? h("span", { class: "v-tag c", text: "К" }) : null,
         s.ritual ? h("span", { class: "v-tag", text: "Р" }) : null,
         s.material ? h("span", { class: "v-tag", text: "М" }) : null,
-        meta ? h("span", { class: "v-spell-meta", text: meta }) : null,
-        s.notes ? h("span", { class: "v-spell-meta", text: s.notes }) : null,
+        metaEl,
+        notesEl,
       ]);
-      enhanceRolls(row, sendRoll);
+      // Только свободный текст строки: иначе "+4" на кнопке атаки сам стал бы
+      // ссылкой-броском внутри кнопки и клик кидал бы кубик дважды.
+      if (metaEl) enhanceRolls(metaEl, sendRoll);
+      if (notesEl) enhanceRolls(notesEl, sendRoll);
       kids.push(row);
     }
   }
