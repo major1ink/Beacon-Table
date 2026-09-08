@@ -81,6 +81,27 @@ func (r *Room) NotifyCharacterSheetChanged(characterID string) {
 	}
 }
 
+// broadcastCharacterSheetChanged — «бланк этого персонажа переписали»
+// (см. NotifyCharacterSheetChanged). До этого сервер доносил только хиты, и
+// правка ДМ в чужом листе — уровень, характеристики, заклинания — доезжала
+// до открытого окна игрока лишь перезагрузкой страницы.
+//
+// Шлём всем, кроме TV: у листа один владелец, но открыт он может быть и у
+// ДМ; лишний адресат просто не найдёт у себя этот characterId. Само окно
+// решает, перечитывать ли сейчас (см. web/src/pages/character-sheet.js: в
+// режиме правки подмена разметки съела бы недописанное).
+func (r *Room) broadcastCharacterSheetChanged(characterID string) {
+	if characterID == "" {
+		return
+	}
+	payload := map[string]any{"type": "character_sheet_changed", "characterId": characterID}
+	for c := range r.clients {
+		if c.Role() != domain.RoleTV {
+			c.Send(payload)
+		}
+	}
+}
+
 // applyCharacterSheetHP — лист → трекер, уже внутри горутины run().
 // Никаких боевых последствий тут нет намеренно: персонаж, ушедший в ноль на
 // своём бланке, в трекере просто показывает ноль и ждёт спасбросков от

@@ -75,6 +75,9 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Панель «Ассеты» и вкладки «Фон»/«Аудио» других клиентов (вторая вкладка
+	// ДМ, импорт Foundry) перечитают список сами.
+	world.Room.NotifyLibraryChanged("assets")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"url": url})
 }
@@ -148,6 +151,7 @@ func (a *API) handleAssetFolderCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	world.Room.NotifyLibraryChanged("assets")
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
 }
 
@@ -172,6 +176,7 @@ func (a *API) handleAssetFolderDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("assets")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -196,5 +201,6 @@ func (a *API) handleAssetDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyLibraryChanged("assets")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

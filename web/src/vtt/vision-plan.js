@@ -7,23 +7,30 @@
 // createVisionFogLayer, накрыть его тестом было нечем — и регрессия
 // (сборка фронта, отставшая от исходников) доехала до боевого стола.
 //
-// Что видит игрок = (объединение обзора токенов ПАРТИИ) ∩
-// (объединение всех источников света + опциональный глобальный свет на всю
-// карту). Оба множителя по отдельности — обычный raycasting от точки,
-// ограниченный стенами и радиусом (computeVisibilityPolygon), просто теперь
-// их два разных смысла (обзор и свет), а не один. Нет ни одного источника
-// света — пересечение пустое — игрок не видит НИЧЕГО, даже там, куда
-// дотягивается обзор токена (нечего освещать — нечего видеть).
+// Что видит игрок = (объединение обзора токенов ПАРТИИ) ∩ (объединение всех
+// источников света + опциональный глобальный свет на всю карту), плюс зоны
+// ТЁМНОГО ЗРЕНИЯ наблюдателей (domain.TokenVision) — единственное, что видно
+// без света вообще. Все слагаемые — обычный raycasting от точки,
+// ограниченный стенами и радиусом (computeVisibilityPolygon).
 //
 // "Обзор" у токена не ограничен константным радиусом — единственная граница
 // обзора это стены (см. SIGHT_MARGIN: радиус берётся с запасом больше
 // диагонали карты, то есть фактически "докуда видно по прямой"). Это
-// осознанно ближе к дефолтному поведению Foundry VTT (без дарквижна и
-// настройки "Sight Range" на токене видно ровно то, что освещено и не
-// закрыто стеной — отдельного "радиуса зрения" сверху нет).
+// осознанно ближе к дефолтному поведению Foundry VTT: без тёмного зрения
+// видно ровно то, что освещено и не закрыто стеной.
 import { computeVisibilityPolygon, weldWalls, pointInPolygon, wallBlocksSight, wallBlocksLight } from "../geometry.js";
 import { worldSize } from "./camera.js";
-import { unionAll, intersectMulti, differenceMulti, subtractNested, unionMulti, worldRect, gridUnitsToWorld, quantizePoints } from "./light-geometry.js";
+import {
+  unionAll,
+  intersectMulti,
+  differenceMulti,
+  subtractNested,
+  unionMulti,
+  worldRect,
+  gridUnitsToWorld,
+  quantizePoints,
+  sectorPoints,
+} from "./light-geometry.js";
 
 export const SIGHT_MARGIN = 50; // запас поверх диагонали карты — чисто чтобы raycasting не срезал луч точно на границе
 
@@ -126,8 +133,11 @@ export function computeVisionPlanWithFallback(scene, isDM, memo) {
 // прошлый кадр освещения и не заметить этого (кадр-то валидный, просто
 // устаревший).
 function planInputKey(scene, isDM) {
-  if (isDM || scene.fogOfWar === false) return "skip"; // расчёта нет вовсе — вход неважен
-  const parts = [scene.width, scene.height, scene.globalLight || ""];
+  const skipDark = isDM || scene.fogOfWar === false;
+  // Тьмы нет, но цветной свет рисуется и там (см. computeVisionPlan) —
+  // тогда вход зависит от источников, и подписать его надо честно.
+  if (skipDark && !hasColoredLight(scene)) return "skip";
+  const parts = [scene.width, scene.height, scene.globalLight || "", skipDark ? "nodark" : ""];
   const grid = scene.grid;
   if (grid) parts.push(grid.size, grid.unitsPerCell);
   for (const id in scene.tokens || {}) {
@@ -142,7 +152,10 @@ function planInputKey(scene, isDM) {
     // сбрасывал бы кэш плана впустую.
     if (!lights && !observes) continue;
     parts.push("T", id, t.x, t.y, observes ? 1 : 0);
-    if (lights) parts.push(light.bright || 0, light.dim || 0);
+    // Цвет и конус тоже меняют картинку: без них смена оттенка не сбрасывала
+    // кэш плана, и заливка обновлялась только со следующей правкой сцены.
+    if (lights) parts.push(light.bright || 0, light.dim || 0, light.color || "", light.angle || 0, light.direction || 0);
+    if (observes && t.vision) parts.push(t.vision.mode || "", t.vision.range || 0);
   }
   parts.push(wallsSignature(scene));
   for (const id in scene.buildings || {}) {
@@ -150,6 +163,18 @@ function planInputKey(scene, isDM) {
     for (const p of scene.buildings[id].points) parts.push(p.x, p.y);
   }
   return parts.join("|");
+}
+
+// hasColoredLight — есть ли на сцене хоть один горящий цветной источник.
+// Проверка дешёвая и решает, платить ли за расчёт слоя света там, где тьму
+// не рисуют вовсе (ДМ, выключенный туман войны).
+function hasColoredLight(scene) {
+  for (const id in scene.tokens || {}) {
+    const t = scene.tokens[id];
+    if (t.hidden || !t.light || !t.light.enabled || !t.light.color) continue;
+    if ((t.light.bright || 0) > 0 || (t.light.dim || 0) > 0) return true;
+  }
+  return false;
 }
 
 // ladderFrom — QUANTUM_LADDER, но начиная с ранее сработавшего кванта:
@@ -168,11 +193,17 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
   // зависимости от света (ориентир для редактирования, как и со стенами/
   // hidden-токенами). Ручные fogAreas (layers/manual-fog.js) рисуются
   // независимо от этого тумблера, отдельным слоем поверх этого.
-  if (isDM) return { skip: true };
-  if (scene.fogOfWar === false) return { skip: true };
-
   const { w, h } = worldSize(scene);
-  const empty = { skip: false, w, h, dimIslands: [], rings: [] };
+  // Тьму рисуем только игроку, но цветную заливку — всем: ДМ должен видеть,
+  // куда и каким цветом светит фонарь, не заходя глазами игрока.
+  if (isDM || scene.fogOfWar === false) {
+    if (!hasColoredLight(scene)) return { skip: true };
+    const lit = Object.values(scene.tokens || {}).filter((t) => !t.hidden);
+    const { tints } = cachedLightLayer(scene, quantum, lit, w, h, memo);
+    return { skip: true, w, h, tints };
+  }
+
+  const empty = { skip: false, w, h, dimIslands: [], rings: [], tints: [] };
 
   // weldWalls — склеивает почти-совпадающие концы стен ПЕРЕД raycasting'ом
   // (см. geometry.js): без этого щель в пару пикселей на углу комнаты
@@ -241,13 +272,22 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
   const visionMulti = unionAll(visionPolys);
   if (!visionMulti.length) return empty;
 
+  // darkMulti — что видно ТЁМНЫМ ЗРЕНИЕМ: свой луч от каждого наблюдателя с
+  // domain.TokenVision, радиусом в его Range. Свет тут не при чём — это
+  // единственный способ увидеть что-то на неосвещённой карте.
+  const darkPolys = cachedDarkPolys(sightTokens, scene.grid, quantum, ray, memo, wallsSignature(scene)).filter((p) => p.length >= 3);
+  const darkMulti = darkPolys.length ? unionAll(darkPolys) : [];
+
   // Слой света считаем через memo (см. computeVisionPlanWithFallback): он не
   // зависит от того, где стоят наблюдатели, и при таскании токена по карте
   // не меняется вообще.
-  const { dimMulti, ringMultis } = cachedLightLayer(scene, quantum, tokens, w, h, memo);
-  if (!dimMulti.length) return empty; // ни одного источника света на карте — игроки не видят НИЧЕГО (п.2 ТЗ)
+  const { dimMulti, ringMultis, tints: layerTints } = cachedLightLayer(scene, quantum, tokens, w, h, memo);
+  if (!dimMulti.length && !darkMulti.length) return empty; // ни света, ни тёмного зрения — игроки не видят НИЧЕГО (п.2 ТЗ)
 
-  const revealDim = intersectMulti(visionMulti, dimMulti);
+  const revealLight = dimMulti.length ? intersectMulti(visionMulti, dimMulti) : [];
+  // Пересекать darkMulti с обзором незачем: он и построен лучом от самого
+  // наблюдателя, то есть уже ограничен теми же стенами.
+  const revealDim = darkMulti.length ? unionMulti(revealLight, darkMulti) : revealLight;
   if (!revealDim.length) return empty;
 
   // dimIslands — revealDim по отдельным "островам" (одна дыра могла
@@ -278,7 +318,33 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
     if (reveal.length) rings.push({ level, multi: reveal });
   }
 
-  return { skip: false, w, h, dimIslands, rings };
+  // Зона тёмного зрения — с той же поволокой, что и внешний край тусклого
+  // света (level 0): по правилам 5e в темноте видно приглушённо. Освещённую
+  // часть вычитаем — кольца не должны перекрываться (см. ringMultis), иначе
+  // на стыке поволока ляжет дважды и получится тёмная кайма.
+  if (darkMulti.length) {
+    try {
+      const darkOnly = revealLight.length ? differenceMulti(darkMulti, revealLight) : darkMulti;
+      if (darkOnly.length) rings.push({ level: 0, multi: darkOnly });
+    } catch {
+      // как и со световым кольцом выше: без поволоки зона просто будет ярче
+    }
+  }
+
+  // Цвет ложится только на то, что игрок реально видит: сама зона источника
+  // уже посчитана слоем света, здесь остаётся пересечь её с обзором.
+  const tints = [];
+  for (const { color, multi } of layerTints) {
+    let visible = null;
+    try {
+      visible = intersectMulti(visionMulti, multi);
+    } catch {
+      continue; // как и с кольцами: без заливки зона просто останется белой
+    }
+    if (visible.length) tints.push({ color, multi: visible });
+  }
+
+  return { skip: false, w, h, dimIslands, rings, tints };
 }
 
 // ---- слой света ----
@@ -313,7 +379,7 @@ function lightLayerKey(scene, quantum, tokens) {
   const parts = [quantum, scene.globalLight || "", scene.grid && scene.grid.size, scene.grid && scene.grid.unitsPerCell];
   for (const t of tokens) {
     if (!t.light || !t.light.enabled) continue;
-    parts.push("L", t.x, t.y, t.light.bright || 0, t.light.dim || 0);
+    parts.push("L", t.x, t.y, t.light.bright || 0, t.light.dim || 0, t.light.color || "", t.light.angle || 0, t.light.direction || 0);
   }
   parts.push(wallsSignature(scene));
   for (const id in scene.buildings || {}) {
@@ -371,6 +437,37 @@ function cachedSightPolys(sightTokens, radius, quantum, ray, memo, wallsKey) {
   return out;
 }
 
+// cachedDarkPolys — лучи тёмного зрения, по одному на наблюдателя с ним (см.
+// domain.TokenVision). Радиус у каждого свой, поэтому в ключе кэша, кроме
+// позиции, ещё и он: сменил ДМ радиус — пересчитали только этот токен.
+function cachedDarkPolys(sightTokens, grid, quantum, ray, memo, wallsKey) {
+  const entries = [];
+  for (const [id, t] of sightTokens) {
+    const v = t.vision;
+    if (!v || v.mode !== "dark") continue;
+    const radius = gridUnitsToWorld(grid, v.range || 0);
+    if (radius > 0) entries.push([id, t, radius]);
+  }
+  if (!entries.length) return [];
+  if (!memo) return entries.map(([, t, radius]) => ray(t.x, t.y, radius));
+
+  const key = `${quantum}|${wallsKey}`;
+  if (memo.darkKey !== key) {
+    memo.darkKey = key;
+    memo.dark = new Map();
+  }
+  const fresh = new Map();
+  const out = [];
+  for (const [id, t, radius] of entries) {
+    const hit = memo.dark.get(id);
+    const poly = hit && hit.x === t.x && hit.y === t.y && hit.radius === radius ? hit.poly : ray(t.x, t.y, radius);
+    fresh.set(id, { x: t.x, y: t.y, radius, poly });
+    out.push(poly);
+  }
+  memo.dark = fresh;
+  return out;
+}
+
 // computeLightLayer — { dimMulti, brightMulti }: где на карте есть тусклый и
 // где яркий свет, уже с учётом стен и зданий, но БЕЗ обзора. МОЖЕТ КИНУТЬ —
 // как и computeVisionPlan, ловит computeVisionPlanWithFallback.
@@ -386,6 +483,25 @@ export function computeLightLayer(scene, quantum, tokens, w, h) {
   // держит (geometry.js:wallBlocksLight и коммент там же про иглы у окон).
   const walls = weldWalls(Object.values(scene.walls || {}).filter(wallBlocksLight));
   const ray = (x, y, radius) => quantizePoints(computeVisibilityPolygon(x, y, radius, walls), quantum);
+
+  // sectorOf — сектор направленного источника (domain.TokenLight.Angle/
+  // Direction), один на источник: полосы затухания режутся по РАДИУСУ, а
+  // угол у них общий, поэтому строим по самому дальнему радиусу и потом
+  // просто пересекаем с каждой полосой.
+  const sectorOf = (t) => {
+    const angle = t.light.angle || 0;
+    if (angle <= 0 || angle >= 360) return null; // круг — резать нечем
+    const radius = gridUnitsToWorld(grid, Math.max(t.light.dim || 0, t.light.bright || 0));
+    return unionAll([quantizePoints(sectorPoints(t.x, t.y, radius, t.light.direction || 0, angle), quantum)]);
+  };
+  const sectors = new Map(lightTokens.map((t) => [t, sectorOf(t)]));
+  // clipToSector — то же место, где раньше был просто poly: направленный
+  // источник светит только внутри своего сектора.
+  const clipToSector = (t, poly) => {
+    const sector = sectors.get(t);
+    if (!sector || poly.length < 3) return poly.length >= 3 ? unionAll([poly]) : [];
+    return intersectMulti(unionAll([poly]), sector);
+  };
 
   // buildings/buildingsMulti — контуры зданий для clipLightByBuildings
   // ниже (НЕ для raycasting'а, см. коммент у walls в computeVisionPlan).
@@ -408,20 +524,41 @@ export function computeLightLayer(scene, quantum, tokens, w, h) {
   // здания (не светит наружу через стену); источники СНАРУЖИ — из их
   // объединения вычитается объединение ВСЕХ зданий разом (не светят внутрь
   // ни одного из них).
-  function clipLightByBuildings(entries) {
-    if (!buildings.length) return unionAll(entries.map((e) => e.poly));
-    const outsidePolys = [];
-    let insideMulti = [];
-    for (const { token, poly } of entries) {
-      const home = buildings.find((b) => pointInPolygon(token.x, token.y, b.points));
-      if (home) {
-        insideMulti = unionMulti(insideMulti, intersectMulti(unionAll([poly]), unionAll([home.points])));
-      } else {
-        outsidePolys.push(poly);
-      }
+  //
+  // entries несут уже готовый MultiPolygon (сектор направленного источника
+  // применён до этого), а не список точек: круг и сектор дальше по коду
+  // ничем не отличаются.
+  //
+  // withParts — вернуть ещё и обрезанный кусок КАЖДОГО источника (нужен
+  // цветной заливке, см. tints ниже). Даром это не даётся: источникам
+  // снаружи зданий приходится вычитать здания по одному вместо одной общей
+  // разности, поэтому просим части, только когда цветной свет на сцене
+  // действительно есть.
+  function clipLightByBuildings(entries, withParts) {
+    if (!buildings.length) {
+      const multi = entries.reduce((acc, e) => unionMulti(acc, e.multi), []);
+      return { multi, parts: withParts ? entries : [] };
     }
-    const outsideMulti = differenceMulti(unionAll(outsidePolys), buildingsMulti);
-    return unionMulti(outsideMulti, insideMulti);
+    if (!withParts) {
+      const outside = [];
+      let insideMulti = [];
+      for (const { token, multi } of entries) {
+        const home = buildings.find((b) => pointInPolygon(token.x, token.y, b.points));
+        if (home) insideMulti = unionMulti(insideMulti, intersectMulti(multi, unionAll([home.points])));
+        else outside.push(multi);
+      }
+      const outsideMulti = differenceMulti(outside.reduce((acc, m) => unionMulti(acc, m), []), buildingsMulti);
+      return { multi: unionMulti(outsideMulti, insideMulti), parts: [] };
+    }
+    const parts = [];
+    let all = [];
+    for (const { token, multi } of entries) {
+      const home = buildings.find((b) => pointInPolygon(token.x, token.y, b.points));
+      const clipped = home ? intersectMulti(multi, unionAll([home.points])) : differenceMulti(multi, buildingsMulti);
+      parts.push({ token, multi: clipped });
+      all = unionMulti(all, clipped);
+    }
+    return { multi: all, parts };
   }
 
   // bandAt — «докуда достаёт свет», если каждому источнику урезать радиус с
@@ -430,22 +567,44 @@ export function computeLightLayer(scene, quantum, tokens, w, h) {
   // СВОЙ (у факела и у костра затухание своей ширины), поэтому доля
   // применяется к каждому по отдельности, а объединяются уже готовые
   // многоугольники.
+  const hasTints = lightTokens.some((t) => t.light.color);
   const bandAt = (k) => {
-    if (globalLight === "bright") return worldRect(w, h);
-    if (globalLight === "dim") return k === 0 ? worldRect(w, h) : [];
+    if (globalLight === "bright") return { multi: worldRect(w, h), parts: [] };
+    if (globalLight === "dim") return { multi: k === 0 ? worldRect(w, h) : [], parts: [] };
     const entries = lightTokens
       .map((t) => {
         const dim = gridUnitsToWorld(grid, Math.max(t.light.dim || 0, t.light.bright || 0));
         const bright = gridUnitsToWorld(grid, t.light.bright || 0);
         const radius = dim - (dim - bright) * (k / LIGHT_STEPS);
-        return { token: t, poly: radius > 0 ? ray(t.x, t.y, radius) : [] };
+        return { token: t, multi: radius > 0 ? clipToSector(t, ray(t.x, t.y, radius)) : [] };
       })
-      .filter((e) => e.poly.length >= 3);
-    return clipLightByBuildings(entries);
+      .filter((e) => e.multi.length);
+    // Части нужны только у самой дальней полосы: цвет заливает весь тусклый
+    // радиус источника целиком.
+    return clipLightByBuildings(entries, hasTints && k === 0);
   };
 
   const bands = [];
-  for (let k = 0; k <= LIGHT_STEPS; k++) bands.push(bandAt(k));
+  const bandParts = [];
+  for (let k = 0; k <= LIGHT_STEPS; k++) {
+    const band = bandAt(k);
+    bands.push(band.multi);
+    bandParts.push(band.parts);
+  }
+
+  // tints — цветные зоны, сгруппированные ПО ЦВЕТУ: два факела одного
+  // оттенка объединяются в одну фигуру, иначе на их пересечении заливка
+  // легла бы дважды и пятно вышло бы вдвое насыщеннее.
+  const tints = [];
+  if (hasTints) {
+    const byColor = new Map();
+    for (const { token, multi } of bandParts[0]) {
+      const color = token.light.color;
+      if (!color || !multi.length) continue;
+      byColor.set(color, unionMulti(byColor.get(color) || [], multi));
+    }
+    for (const [color, multi] of byColor) if (multi.length) tints.push({ color, multi });
+  }
 
   // ringMultis — КОЛЬЦА между соседними полосами, то есть фигуры, которые
   // НЕ ПЕРЕСЕКАЮТСЯ между собой. Это и есть весь фокус мягкого света: тьма
@@ -475,5 +634,5 @@ export function computeLightLayer(scene, quantum, tokens, w, h) {
     if (multi.length) ringMultis.push({ level: k / LIGHT_STEPS, multi });
   }
 
-  return { dimMulti: bands[0], ringMultis };
+  return { dimMulti: bands[0], ringMultis, tints };
 }

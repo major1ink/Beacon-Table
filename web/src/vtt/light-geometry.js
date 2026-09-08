@@ -76,6 +76,32 @@ export function quantizePoints(points, quantum) {
   return out;
 }
 
+// sectorPoints — веер точек сектора: центр, дуга от direction-angle/2 до
+// direction+angle/2, обратно в центр. Нужен направленному источнику
+// (domain.TokenLight.Angle/Direction): готовый круг видимости источника
+// просто пересекается с этим сектором, и ни одного лишнего луча
+// raycasting'а считать не приходится.
+//
+// Углы — как у ДМ в меню: 0° вверх (север), дальше по часовой. Экранные
+// координаты растут вниз, поэтому направление d — это (sin d, -cos d).
+//
+// STEP — шаг дуги: 3° даёт от 3 до 120 точек на сектор, на глаз дуга
+// неотличима от гладкой, а точек мало настолько, что булева алгебра их не
+// замечает.
+const SECTOR_STEP_DEG = 3;
+
+export function sectorPoints(x, y, radius, direction, angle) {
+  const half = (angle / 2) * (Math.PI / 180);
+  const dir = (direction - 90) * (Math.PI / 180); // -90: 0° смотрит вверх
+  const steps = Math.max(2, Math.ceil(angle / SECTOR_STEP_DEG));
+  const pts = [{ x, y }];
+  for (let i = 0; i <= steps; i++) {
+    const a = dir - half + ((half * 2) / steps) * i;
+    pts.push({ x: x + Math.cos(a) * radius, y: y + Math.sin(a) * radius });
+  }
+  return pts;
+}
+
 // ringFromPoints — {x,y}[] (уже отсортированный по углу результат
 // computeVisibilityPolygon) -> замкнутое кольцо [[x,y],...,[x0,y0]] в
 // формате polygon-clipping (Ring = Point[], Point = [x,y]).

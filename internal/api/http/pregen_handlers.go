@@ -101,6 +101,7 @@ func (a *API) handlePregenClaim(w http.ResponseWriter, r *http.Request) {
 		writePregenErr(w, err)
 		return
 	}
+	world.Room.NotifyCharactersChanged()
 	writeJSON(w, http.StatusCreated, characterFullJSON(c))
 }
 
@@ -214,6 +215,9 @@ func (a *API) handleAdminPregenAssign(w http.ResponseWriter, r *http.Request) {
 		writePregenErr(w, err)
 		return
 	}
+	// Игрок, которому назначили персонажа, узнаёт об этом сразу — до этого
+	// фишка появлялась у него только после перезагрузки страницы.
+	world.Room.NotifyCharactersChanged()
 	writeJSON(w, http.StatusOK, characterFullJSON(c))
 }
 
@@ -229,6 +233,7 @@ func (a *API) handleAdminPregenRelease(w http.ResponseWriter, r *http.Request) {
 		writePregenErr(w, err)
 		return
 	}
+	world.Room.NotifyCharactersChanged()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

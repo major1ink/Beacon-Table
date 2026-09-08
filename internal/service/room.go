@@ -53,6 +53,17 @@ type RoomService interface {
 	// панель "Плейлисты" (см. web/src/pages/dm.js) должна перечитать список
 	// сама, без ручной перезагрузки страницы.
 	NotifyPlaylistsChanged()
+	// NotifyCharactersChanged — состав персонажей поменялся мимо WS (ДМ
+	// назначил игроку заготовку, отобрал её, удалил персонажа): открытые
+	// клиенты перечитывают свои списки сами, без перезагрузки страницы.
+	NotifyCharactersChanged()
+	// NotifyLibraryChanged — поменялось содержимое одной из библиотек мира:
+	// "compendium" (карточки бестиария/заклинаний/предметов/справочника/
+	// состояний), "assets" (загруженные файлы) или "foundry" (список
+	// импортированных модулей). Открытые списки перечитывают себя сами —
+	// раньше это делала только перезагрузка страницы. kind нужен, чтобы
+	// клиент не дёргал сервер за всем разом из-за правки одной карточки.
+	NotifyLibraryChanged(kind string)
 	// SpawnPlayerToken ставит на активную сцену токен персонажа игрока —
 	// нужен входу в публичное демо игроком, где ДМ-а, который перетащил бы
 	// фишку на карту, может не быть вовсе (см. room_guest.go).
@@ -151,6 +162,15 @@ type Room struct {
 	// NotifyPlaylistsChanged: admin-CRUD плейлистов и импорт Foundry) — тот
 	// же принцип и те же свойства, что journalChanged выше.
 	playlistsChanged chan struct{}
+	// charactersChanged — «состав персонажей поменялся» из HTTP-хендлера
+	// (см. NotifyCharactersChanged) — тот же принцип и те же свойства, что
+	// journalChanged выше.
+	charactersChanged chan struct{}
+	// libraryChanged — «библиотека мира изменилась» из HTTP-хендлера (см.
+	// NotifyLibraryChanged) — тот же принцип и те же свойства, что
+	// journalChanged выше. Буфер побольше: импорт модуля Foundry сыплет
+	// такими событиями пачками.
+	libraryChanged chan string
 	// announce — текстовое сообщение всем за столом мимо клиента (см.
 	// Announce): сейчас единственный отправитель — demoResetter
 	// (cmd/beacon-table/demo.go), предупреждающий за пару минут до сброса
@@ -236,6 +256,8 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 
 		characterSheetChanged: make(chan string, 32),
 		playlistsChanged:      make(chan struct{}, 4),
+		charactersChanged:     make(chan struct{}, 4),
+		libraryChanged:        make(chan string, 16),
 		announce:              make(chan string, 4),
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
@@ -690,9 +712,16 @@ func (r *Room) run() {
 
 		case characterID := <-r.characterSheetChanged:
 			r.applyCharacterSheetHP(characterID)
+			r.broadcastCharacterSheetChanged(characterID)
 
 		case <-r.playlistsChanged:
 			r.broadcastPlaylistsChanged()
+
+		case <-r.charactersChanged:
+			r.broadcastCharactersChanged()
+
+		case kind := <-r.libraryChanged:
+			r.broadcastLibraryChanged(kind)
 
 		case text := <-r.announce:
 			r.broadcastAnnounce(text)
@@ -1156,6 +1185,52 @@ func (r *Room) broadcastPlaylistsChanged() {
 	payload := map[string]any{"type": "playlists_changed"}
 	for c := range r.clients {
 		if c.Role() == domain.RoleDM {
+			c.Send(payload)
+		}
+	}
+}
+
+// NotifyCharactersChanged — см. RoomService. Те же свойства, что у
+// NotifyPlaylistsChanged: подсказка «перечитай список», потерять её не
+// страшно.
+func (r *Room) NotifyCharactersChanged() {
+	select {
+	case r.charactersChanged <- struct{}{}:
+	default:
+	}
+}
+
+// broadcastCharactersChanged — уже внутри горутины run(). ДМ и игрокам (TV
+// персонажей не показывает): у игрока обновляется ряд его фишек в топбаре и
+// окно «Мои персонажи», у ДМ — панель «Персонажи». Кому что реально видно,
+// решает сервер, когда клиент придёт перечитывать список.
+func (r *Room) broadcastCharactersChanged() {
+	payload := map[string]any{"type": "characters_changed"}
+	for c := range r.clients {
+		if c.Role() != domain.RoleTV {
+			c.Send(payload)
+		}
+	}
+}
+
+// NotifyLibraryChanged — см. RoomService. Те же свойства, что у
+// NotifyCharactersChanged: подсказка «перечитай список», потерять её не
+// страшно.
+func (r *Room) NotifyLibraryChanged(kind string) {
+	select {
+	case r.libraryChanged <- kind:
+	default:
+	}
+}
+
+// broadcastLibraryChanged — уже внутри горутины run(). Компендиум открыт и у
+// игроков (справочник, заклинания), поэтому шлём всем, кроме TV; библиотека
+// загрузок и модули — панели ДМ, но отдельная рассылка ради них не окупается:
+// клиент, которому это не нужно, просто игнорирует сообщение.
+func (r *Room) broadcastLibraryChanged(kind string) {
+	payload := map[string]any{"type": "library_changed", "kind": kind}
+	for c := range r.clients {
+		if c.Role() != domain.RoleTV {
 			c.Send(payload)
 		}
 	}

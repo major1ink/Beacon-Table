@@ -28,6 +28,11 @@ import { attachTooltip } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import { isPlayer } from "../roles.js";
 import { uploadAvatarFile } from "../avatar-cropper.js";
+import { installErrorCapture, openBugReport } from "../bug-report.js";
+
+// Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
+// сессии, а не с момента нажатия кнопки.
+installErrorCapture();
 
 // openCharacterSheet — лист персонажа у игрока по умолчанию открывается в
 // БОКОВОЙ КОЛОНКЕ слева от карты (см. sheet-dock.js): за столом лист держат
@@ -322,8 +327,8 @@ rulerBtn.onclick = () => setPlayerTool(playerTool === "ruler" ? "select" : "rule
 attachTooltip(rulerBtn, TOOL_HELP.ruler);
 
 // ================= "Настройки" =================
-// Пока единственное поле — версия сервера (short commit hash, см.
-// cmd/beacon-table/version.go); раздел заведён отдельно, чтобы будущим
+// Версия сервера (см. cmd/beacon-table/version.go) и кнопка «Сообщить о
+// баге» (см. web/src/bug-report.js); раздел заведён отдельно, чтобы будущим
 // общим настройкам приложения было куда встать.
 const settingsOverlay = document.getElementById("settingsOverlay");
 document.getElementById("settingsBtn").onclick = async () => {
@@ -337,6 +342,7 @@ document.getElementById("settingsBtn").onclick = async () => {
   }
 };
 document.getElementById("settingsCloseBtn").onclick = () => settingsOverlay.classList.remove("open");
+document.getElementById("bugReportBtn").onclick = () => openBugReport();
 settingsOverlay.addEventListener("mousedown", (e) => {
   if (e.target === settingsOverlay) settingsOverlay.classList.remove("open");
 });
@@ -531,6 +537,13 @@ document.getElementById("charsBtn").onclick = async () => {
   charsOverlay.classList.add("open");
   await renderChars();
 };
+// ДМ назначил (или отобрал) персонажа — обновляемся сами, без F5. Ряд фишек
+// в топбаре перерисовываем всегда, список в модалке — только пока она
+// открыта, чтобы не дёргать сервер зря.
+document.addEventListener("vtt:charactersChanged", () => {
+  if (charsOverlay.classList.contains("open")) renderChars();
+  else renderCharDock();
+});
 document.getElementById("charsCloseBtn").onclick = () => charsOverlay.classList.remove("open");
 charsOverlay.addEventListener("mousedown", (e) => {
   if (e.target === charsOverlay) charsOverlay.classList.remove("open");

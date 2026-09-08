@@ -131,6 +131,16 @@ export function createNet(ctx, audio) {
       // ДМ, импорт Foundry — см. RoomService.NotifyPlaylistsChanged): панель
       // "Плейлисты" (pages/dm.js) сама перечитает список по этому событию.
       document.dispatchEvent(new CustomEvent("vtt:playlistsChanged"));
+    } else if (data.type === "library_changed") {
+      // Библиотеки мира: компендиум, загруженные файлы, модули Foundry (см.
+      // RoomService.NotifyLibraryChanged). Кому что из этого интересно,
+      // решают сами страницы.
+      document.dispatchEvent(new CustomEvent("vtt:libraryChanged", { detail: { kind: data.kind } }));
+    } else if (data.type === "characters_changed") {
+      // Состав персонажей поменялся мимо этой вкладки (ДМ назначил или
+      // отобрал персонажа — см. RoomService.NotifyCharactersChanged):
+      // страницы игрока и ДМ перечитывают свои списки по этому событию.
+      document.dispatchEvent(new CustomEvent("vtt:charactersChanged"));
     } else if (data.type === "table_notice") {
       // Текст сервера для всех за столом (см. Room.Announce) — сейчас
       // только предупреждение демо о скором сбросе. connection-banner.js

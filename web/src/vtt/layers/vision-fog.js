@@ -22,6 +22,20 @@ const DARK_ALPHA = 0.96; // совсем не освещено
 const DIM_ALPHA = 0.55; // самый край тусклого света — не тьма, но и не "видно как есть"
 const DARK_COLOR = 0x06060a;
 
+// TINT_ALPHA — насколько густо ложится цвет источника. Плёнка, а не заливка:
+// карта под цветным фонарём должна оставаться читаемой, цвет тут — подсказка
+// «что это за свет», а не перекраска местности.
+const TINT_ALPHA = 0.22;
+
+// parseColor — "#ff9d3c" -> 0xff9d3c. Цвет приходит из настроек токена, то
+// есть из чужих рук (импорт Foundry, правка мира руками) — мусор не должен
+// ронять отрисовку целого слоя, поэтому непонятное значение просто не
+// красится.
+function parseColor(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+  return m ? parseInt(m[1], 16) : null;
+}
+
 // alphaForLevel — линейный спад от DIM_ALPHA на внешнем краю тусклого света
 // до нуля в ярком. Линейный, а не квадратичный (как затухание настоящего
 // источника): поволока тут не имитация физики, а читаемость карты — на
@@ -59,11 +73,13 @@ export function createVisionFogLayer(ctx) {
   const container = new Container();
   const darkness = new Graphics(); // тьма + вырезанные "видно хотя бы тускло" дыры
   const dimTint = new Graphics(); // полупрозрачная дымка поверх тускло освещённого (не яркого)
-  container.addChild(darkness, dimTint);
+  const colorTint = new Graphics(); // оттенок цветных источников (domain.TokenLight.Color)
+  container.addChild(darkness, dimTint, colorTint);
 
   function clearAll() {
     darkness.clear();
     dimTint.clear();
+    colorTint.clear();
   }
 
   // memo — то, что расчёту незачем делать заново на каждый кадр: сработавший
@@ -109,7 +125,12 @@ export function createVisionFogLayer(ctx) {
   // провалидирована) — сюда долетает только safe-часть (Pixi Graphics-вызовы).
   function paintPlan(plan) {
     clearAll();
-    if (plan.skip) return; // DM/выключенный туман войны — совсем без тьмы
+    if (plan.skip) {
+      // DM/выключенный туман войны — тьмы нет, но цветные пятна источников
+      // рисуем: по ним видно, куда и чем светит фонарь.
+      paintTints(plan);
+      return;
+    }
 
     const { w, h, dimIslands, rings } = plan;
     darkness.rect(0, 0, w, h).fill({ color: DARK_COLOR, alpha: DARK_ALPHA });
@@ -135,6 +156,22 @@ export function createVisionFogLayer(ctx) {
     // они как посчитаны — от края к центру.
     for (const { level, multi } of rings) {
       fillMulti(dimTint, multi, w, h, { color: DARK_COLOR, alpha: alphaForLevel(level) });
+    }
+
+    paintTints(plan);
+  }
+
+  // paintTints — цветные зоны поверх всего остального. Зоны одного цвета уже
+  // объединены расчётом (см. tints в vision-plan.js), поэтому каждая
+  // рисуется независимо; зоны РАЗНЫХ цветов пересекаться могут, и там их
+  // плёнки смешиваются — ровно то, чего ждёшь от двух фонарей.
+  function paintTints(plan) {
+    const { w, h, tints } = plan;
+    if (!tints || !tints.length) return;
+    for (const { color, multi } of tints) {
+      const value = parseColor(color);
+      if (value === null) continue;
+      fillMulti(colorTint, multi, w, h, { color: value, alpha: TINT_ALPHA });
     }
   }
 

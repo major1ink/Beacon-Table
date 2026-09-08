@@ -67,6 +67,11 @@ import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabel } from "../roles.js";
+import { installErrorCapture, openBugReport } from "../bug-report.js";
+
+// Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
+// сессии, а не с момента нажатия кнопки.
+installErrorCapture();
 
 // ================= сессия ДМ =================
 // /ws/dm, /upload, /assets проверяют cookie сессии на сервере
@@ -726,6 +731,17 @@ const tokenMenuLightLabel = document.getElementById("tokenMenuLightLabel");
 const tokenMenuHidden = document.getElementById("tokenMenuHidden");
 const tokenMenuShape = document.getElementById("tokenMenuShape");
 const tokenMenuLight = document.getElementById("tokenMenuLight");
+const tokenMenuLightColorField = document.getElementById("tokenMenuLightColorField");
+const tokenMenuLightColor = document.getElementById("tokenMenuLightColor");
+const tokenMenuLightPresets = document.getElementById("tokenMenuLightPresets");
+const tokenMenuLightAngleField = document.getElementById("tokenMenuLightAngleField");
+const tokenMenuLightAngle = document.getElementById("tokenMenuLightAngle");
+const tokenMenuLightDirectionField = document.getElementById("tokenMenuLightDirectionField");
+const tokenMenuLightDirection = document.getElementById("tokenMenuLightDirection");
+const tokenMenuVisionRow = document.getElementById("tokenMenuVisionRow");
+const tokenMenuVision = document.getElementById("tokenMenuVision");
+const tokenMenuVisionRange = document.getElementById("tokenMenuVisionRange");
+const tokenMenuVisionRangeField = document.getElementById("tokenMenuVisionRangeField");
 const tokenMenuLightBright = document.getElementById("tokenMenuLightBright");
 const tokenMenuLightDim = document.getElementById("tokenMenuLightDim");
 const tokenMenuLightBrightField = document.getElementById("tokenMenuLightBrightField");
@@ -764,6 +780,9 @@ let menuMonsterId = ""; // monsterId токена в открытом сейча
 // tokenMenuLight.checked, когда меню в этом режиме.
 let menuIsLightOnly = false;
 let menuLightEnabled = false;
+// menuLightColor — выбранный оттенок открытого меню ("" = без оттенка).
+// Отдельно от значения input type=color: тот всегда держит какой-то цвет.
+let menuLightColor = "";
 // menuTokenLocked — заперт ли токен в ОТКРЫТОМ СЕЙЧАС меню (см.
 // domain.Token.Locked и web/src/vtt/map-objects.js). Меню запертого токена
 // открывается как обычно — иначе замок было бы нечем снять, — но всё, что
@@ -785,12 +804,23 @@ function closeTokenMenu() {
   menuTokenLoot = [];
 }
 
-// Поля "ярк."/"тускл." в меню токена видимы только пока включён источник
-// света — переключается тем же чекбоксом (см. вызовы ниже).
-function syncLightFieldsVisibility(checkbox, brightField, dimField) {
-  const on = checkbox.checked;
-  brightField.classList.toggle("visible", on);
-  dimField.classList.toggle("visible", on);
+// Настройки источника (радиусы, цвет, конус) в меню токена видимы только
+// пока свет включён — переключается тем же чекбоксом (см. вызовы ниже).
+function lightFields() {
+  return [
+    tokenMenuLightBrightField,
+    tokenMenuLightDimField,
+    tokenMenuLightColorField,
+    tokenMenuLightPresets,
+    tokenMenuLightAngleField,
+    tokenMenuLightDirectionField,
+  ];
+}
+function setLightFieldsVisible(on) {
+  for (const el of lightFields()) el.classList.toggle("visible", on);
+}
+function syncLightFieldsVisibility(checkbox) {
+  setLightFieldsVisible(checkbox.checked);
 }
 
 // ================= меню точки стены (ПКМ по концу стены) =================
@@ -1128,6 +1158,14 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   const canOwn = !menuIsMulti && !menuIsLightOnly && !token.decor;
   tokenMenuOwnerRow.style.display = canOwn ? "flex" : "none";
   if (canOwn) fillTokenOwnerSelect(id, token);
+  // Зрение — только у существа: лампочка (LightOnly) не смотрит, а в пачке
+  // читать не с кого (у каждого своё), поэтому там строка тоже скрыта.
+  tokenMenuVisionRow.style.display = menuIsMulti || menuIsLightOnly ? "none" : "flex";
+  if (!menuIsMulti && !menuIsLightOnly) {
+    tokenMenuVision.value = token.vision && token.vision.mode === "dark" ? "dark" : "";
+    tokenMenuVisionRange.value = (token.vision && token.vision.range) || 0;
+  }
+  syncVisionFieldVisibility();
   tokenMenuLightRow.style.display = menuIsLightOnly ? "none" : "flex";
   tokenMenuLightToggleBtn.style.display = menuIsLightOnly ? "flex" : "none";
   // У токена персонажа игрока свет — это не "токен-лампочка", а факел/фонарь
@@ -1141,20 +1179,27 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
 
   tokenMenuLightBright.value = menuIsMulti ? 0 : (token.light && token.light.bright) || 0;
   tokenMenuLightDim.value = menuIsMulti ? 0 : (token.light && token.light.dim) || 0;
+  // Пустой цвет в domain.TokenLight — «без оттенка», но input type=color
+  // пустым быть не умеет: показываем дефолтный тёплый, а «без цвета»
+  // отдельной кнопкой пресетов (menuLightColor помнит, что выбрано).
+  menuLightColor = menuIsMulti ? "" : (token.light && token.light.color) || "";
+  tokenMenuLightColor.value = menuLightColor || "#ffcc66";
+  syncLightPresets();
+  tokenMenuLightAngle.value = menuIsMulti ? 0 : (token.light && token.light.angle) || 0;
+  tokenMenuLightDirection.value = menuIsMulti ? 0 : (token.light && token.light.direction) || 0;
 
   if (menuIsMulti) {
     tokenMenuLight.checked = false;
-    syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+    syncLightFieldsVisibility(tokenMenuLight);
   } else if (menuIsLightOnly) {
     menuLightEnabled = !!(token.light && token.light.enabled);
     updateLightToggleBtnLabel();
-    tokenMenuLightBrightField.classList.add("visible");
-    tokenMenuLightDimField.classList.add("visible");
+    setLightFieldsVisible(true);
   } else {
     tokenMenuHidden.checked = !!token.hidden;
     tokenMenuShape.value = token.shape === "square" ? "square" : "circle";
     tokenMenuLight.checked = !!(token.light && token.light.enabled);
-    syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+    syncLightFieldsVisibility(tokenMenuLight);
   }
 
   // "Копировать" — снимок токена вставляется ПКМ по пустому месту карты
@@ -1195,10 +1240,29 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLockLabel.textContent = menuTokenLocked ? "Разблокировать" : "Заблокировать";
   applyTokenMenuLockState();
 
-  tokenMenu.style.left = pageX + "px";
-  tokenMenu.style.top = pageY + "px";
-  tokenMenu.style.display = "block";
+  placeTokenMenu(pageX, pageY);
 });
+
+// placeTokenMenu — меню у курсора, но целиком в пределах окна. Раньше оно
+// ставилось строго в точку клика и у нижнего/правого края уезжало за экран:
+// пунктов в нём прибавилось (зрение, цвет, конус), и на ноутбучном экране
+// нижняя половина оказывалась недосягаема.
+function placeTokenMenu(pageX, pageY) {
+  const margin = 8;
+  tokenMenu.style.visibility = "hidden";
+  tokenMenu.style.left = "0px";
+  tokenMenu.style.top = "0px";
+  tokenMenu.style.display = "block";
+  const { width, height } = tokenMenu.getBoundingClientRect();
+  // По вертикали: не влезло вниз — поднимаем так, чтобы низ меню был у края
+  // окна; не влезло вообще (меню выше экрана) — прижимаем к верху, дальше
+  // работает собственная прокрутка меню (см. max-height в dm.html).
+  const left = Math.max(margin, Math.min(pageX, window.innerWidth - width - margin));
+  const top = Math.max(margin, Math.min(pageY, window.innerHeight - height - margin));
+  tokenMenu.style.left = left + "px";
+  tokenMenu.style.top = top + "px";
+  tokenMenu.style.visibility = "";
+}
 
 // applyTokenMenuLockState — гасит в открытом меню всё, что правит запертый
 // токен. Список исключений короткий и осознанный: сама кнопка замка (иначе
@@ -1211,9 +1275,15 @@ function applyTokenMenuLockState() {
     tokenMenuLootBtn,
     tokenMenuHiddenRow,
     tokenMenuShapeRow,
+    tokenMenuVisionRow,
+    tokenMenuVisionRangeField,
     tokenMenuLightRow,
     tokenMenuLightBrightField,
     tokenMenuLightDimField,
+    tokenMenuLightColorField,
+    tokenMenuLightPresets,
+    tokenMenuLightAngleField,
+    tokenMenuLightDirectionField,
     tokenMenuLightToggleBtn,
     tokenMenuCopyBtn,
     tokenMenuDelete,
@@ -1490,17 +1560,86 @@ tokenMenuShape.onchange = () => {
 function sendTokenMenuLight() {
   if (!menuTokenIds.length) return;
   const enabled = menuIsLightOnly ? menuLightEnabled : tokenMenuLight.checked;
-  const light = { enabled, bright: +tokenMenuLightBright.value || 0, dim: +tokenMenuLightDim.value || 0 };
+  const angle = Math.min(360, Math.max(0, +tokenMenuLightAngle.value || 0));
+  const light = {
+    enabled,
+    bright: +tokenMenuLightBright.value || 0,
+    dim: +tokenMenuLightDim.value || 0,
+    color: menuLightColor,
+    angle,
+    // Направление у круга смысла не имеет — не храним, чтобы оно не
+    // всплыло, когда ДМ потом сделает из этого источника конус.
+    direction: angle > 0 && angle < 360 ? Math.min(359, Math.max(0, +tokenMenuLightDirection.value || 0)) : 0,
+  };
   for (const id of menuTokenIds) {
     document.dispatchEvent(new CustomEvent("vtt:setTokenLight", { detail: { id, light } }));
   }
 }
 tokenMenuLight.onchange = () => {
-  syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+  syncLightFieldsVisibility(tokenMenuLight);
   sendTokenMenuLight();
 };
-tokenMenuLightBright.onchange = sendTokenMenuLight;
-tokenMenuLightDim.onchange = sendTokenMenuLight;
+// Радиус показываем только у тёмного зрения — обычному он не нужен, а
+// пустое поле рядом с «обычное» читается как «сюда что-то надо ввести».
+function syncVisionFieldVisibility() {
+  const on = tokenMenuVisionRow.style.display !== "none" && tokenMenuVision.value === "dark";
+  tokenMenuVisionRangeField.classList.toggle("visible", on);
+}
+
+function sendTokenMenuVision() {
+  if (!menuTokenId) return;
+  const mode = tokenMenuVision.value === "dark" ? "dark" : "";
+  const vision = { mode, range: mode ? +tokenMenuVisionRange.value || 0 : 0 };
+  document.dispatchEvent(new CustomEvent("vtt:setTokenVision", { detail: { id: menuTokenId, vision } }));
+}
+tokenMenuVision.onchange = () => {
+  // Радиус по умолчанию — 60 фт: тёмное зрение большинства рас и монстров 5e,
+  // иначе ДМ включает зрение и не понимает, почему ничего не изменилось.
+  if (tokenMenuVision.value === "dark" && !(+tokenMenuVisionRange.value > 0)) tokenMenuVisionRange.value = 60;
+  syncVisionFieldVisibility();
+  sendTokenMenuVision();
+};
+let visionSendTimer = null;
+tokenMenuVisionRange.oninput = () => {
+  clearTimeout(visionSendTimer);
+  visionSendTimer = setTimeout(sendTokenMenuVision, 150);
+};
+
+// oninput, а не onchange: change у number-поля срабатывает только по потере
+// фокуса или Enter, и правка радиуса/угла как будто «не применялась», пока
+// ДМ не кликнет мимо. Отправку придерживаем, чтобы набор «120» не улетел
+// тремя сообщениями подряд.
+let lightSendTimer = null;
+function sendTokenMenuLightSoon() {
+  clearTimeout(lightSendTimer);
+  lightSendTimer = setTimeout(sendTokenMenuLight, 150);
+}
+tokenMenuLightBright.oninput = sendTokenMenuLightSoon;
+tokenMenuLightDim.oninput = sendTokenMenuLightSoon;
+// syncLightPresets — подсветка выбранного пресета: без неё по меню не
+// понять, какой оттенок стоит сейчас (сам квадратик палитры показывает цвет,
+// но «без цвета» от тёплого дефолта в нём не отличить).
+function syncLightPresets() {
+  for (const btn of tokenMenuLightPresets.querySelectorAll("button")) {
+    btn.classList.toggle("active", (btn.dataset.lightColor || "").toLowerCase() === menuLightColor.toLowerCase());
+  }
+}
+
+tokenMenuLightColor.oninput = () => {
+  menuLightColor = tokenMenuLightColor.value;
+  syncLightPresets();
+  sendTokenMenuLight();
+};
+tokenMenuLightAngle.oninput = sendTokenMenuLightSoon;
+tokenMenuLightDirection.oninput = sendTokenMenuLightSoon;
+for (const btn of tokenMenuLightPresets.querySelectorAll("button")) {
+  btn.onclick = () => {
+    menuLightColor = btn.dataset.lightColor || "";
+    if (menuLightColor) tokenMenuLightColor.value = menuLightColor;
+    syncLightPresets();
+    sendTokenMenuLight();
+  };
+}
 tokenMenuLightToggleBtn.onclick = () => {
   if (!menuTokenId) return;
   // Не шлём "просто инвертированный menuLightEnabled" — эта локальная
@@ -1718,6 +1857,8 @@ async function loadSettingsTab(tab) {
       break; // «Стол» — тумблеры, они приходят со снапшотом сцены
   }
 }
+
+document.getElementById("bugReportBtn").onclick = () => openBugReport();
 
 async function renderAppVersion() {
   const el = document.getElementById("appVersion");
@@ -2525,6 +2666,24 @@ async function renderDmCharacters() {
   }
 }
 onPanelOpen("characters", renderDmCharacters);
+// Список персонажей поменялся мимо этой вкладки (другая сессия ДМ, игрок
+// завёл своего) — открытая панель перечитывает его сама.
+// Библиотека загрузок и список модулей Foundry поменялись мимо этой вкладки
+// (вторая сессия ДМ, импорт или снос модуля — см.
+// RoomService.NotifyLibraryChanged): панели перечитывают себя сами.
+document.addEventListener("vtt:libraryChanged", (e) => {
+  const kind = e.detail && e.detail.kind;
+  if (kind === "assets") refreshLibrary();
+  if (kind === "foundry" && document.querySelector('[data-settab-panel="modules"]')?.classList.contains("active")) {
+    renderFoundryModules();
+  }
+});
+
+document.addEventListener("vtt:charactersChanged", () => {
+  // Активность панели читаем из DOM, а не из openPanelSection: та объявлена
+  // ниже по файлу, и порядок инициализации тут не должен иметь значения.
+  if (document.querySelector('.panel-section[data-panel="characters"]')?.classList.contains("active")) renderDmCharacters();
+});
 
 
 // ---- перетаскивание персонажа из панели на карту — создаёт токен ----
@@ -4237,6 +4396,36 @@ function renderAssetTable() {
       updateBgPreview();
       renderAssetTable();
     };
+    // Удаление файла с диска: без него uploads/maps копится вечно. Сцены с
+    // mapUrl на удалённый файл остаются без фона, но не ломаются (см.
+    // vtt/layers/background.js).
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "asset-row-del";
+    del.title = "Удалить карту из библиотеки";
+    del.innerHTML = icon("trash", { size: 12 });
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      const isCurrent = a.url === fMapUrl.value;
+      const msg =
+        `Удалить «${a.name}» из библиотеки? Файл будет стёрт с диска.` +
+        (isCurrent
+          ? " Сейчас он выбран фоном этой сцены — поле URL очистится."
+          : " Сцены, где он стоит фоном, останутся без фона.");
+      if (!(await showConfirm(msg, { title: "Удалить карту", okLabel: "Удалить", danger: true }))) return;
+      try {
+        await deleteAsset("maps", a.url);
+        if (isCurrent) {
+          fMapUrl.value = "";
+          updateBgPreview();
+        }
+        await refreshLibrary();
+        renderAssetTable();
+      } catch (err) {
+        showAlert("Не удалось удалить карту: " + err.message);
+      }
+    };
+    row.appendChild(del);
     wrap.appendChild(row);
   }
 }

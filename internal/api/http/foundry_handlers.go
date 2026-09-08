@@ -141,6 +141,11 @@ func (a *API) handleFoundryModuleDelete(w http.ResponseWriter, r *http.Request) 
 		writeFoundryErr(w, err)
 		return
 	}
+	// Снос модуля уносит карточки и файлы разом — открытые списки должны
+	// узнать об этом, а не показывать удалённое до перезагрузки.
+	world.Room.NotifyLibraryChanged("compendium")
+	world.Room.NotifyLibraryChanged("assets")
+	world.Room.NotifyLibraryChanged("foundry")
 	writeJSON(w, http.StatusOK, result)
 }
 

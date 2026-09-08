@@ -2587,8 +2587,14 @@ async function saveNow() {
 // без этого закрытие окна в момент «уже шлём» убило бы запрос.
 let saveInFlight = null;
 
+// lastOwnSaveAt — когда это окно само сохраняло лист. Сервер рассылает
+// character_sheet_changed всем, включая автора правки, и без этой отметки
+// бланк перечитывал бы себя после каждого автосейва.
+let lastOwnSaveAt = 0;
+
 async function doSave() {
   if (!dirty || readOnly) return;
+  lastOwnSaveAt = Date.now();
   dirty = false;
   setSaveStatus("saving");
   const p = isPregenAdmin
@@ -2690,6 +2696,15 @@ function connectRollSocket() {
     if (data.type === "character_inventory" && data.characterId === charId) {
       loadInventory();
     }
+    // Бланк переписали снаружи: ДМ правит лист игрока из своей панели, или
+    // тот же лист открыт во втором окне. Раньше правка доезжала только
+    // перезагрузкой страницы.
+    if (data.type === "character_sheet_changed" && data.characterId === charId) {
+      // Своё же сохранение (сервер шлёт и автору) и режим правки пропускаем:
+      // в первом случае перечитывать нечего, во втором подмена разметки
+      // съела бы недописанное — как и у хитов ниже.
+      if (mode === "view" && Date.now() - lastOwnSaveAt > 2000 && !dirty) reloadSheet();
+    }
     if (data.type === "character_hp" && data.characterId === charId && sheet) {
       sheet.combat.hpCurrent = data.hpCurrent;
       sheet.combat.hpTemp = data.hpTemp;
@@ -2701,6 +2716,25 @@ function connectRollSocket() {
     }
     },
   });
+}
+
+// reloadSheet — перечитать бланк с сервера и перерисовать режим чтения.
+// Имя и аватар тоже могли поменяться (ДМ правит их в своей панели), поэтому
+// обновляем и заголовок окна.
+async function reloadSheet() {
+  let fresh;
+  try {
+    fresh = isAdminView ? await fetchAdminCharacter(charId) : await fetchCharacter(charId);
+  } catch {
+    return; // сеть моргнула — оставляем то, что на экране
+  }
+  character = fresh;
+  sheet = normalizeSheet(character.sheet);
+  document.getElementById("charTitle").textContent = character.name;
+  // renderView, а не refreshView: последняя обновляет только «живые» числа
+  // (опыт, хиты), а класс, уровень и прочая шапка строятся при сборке
+  // разметки — их правку было бы не видно.
+  if (mode === "view") renderView();
 }
 
 function sendRoll(formula, label) {

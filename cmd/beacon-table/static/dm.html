@@ -244,10 +244,23 @@
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
+      /* Меню длинное (зрение, свет, цвет, конус) и на невысоком экране в него
+         не влезает — своя прокрутка вместо уезжающих за край пунктов.
+         Позицию при этом зажимает placeTokenMenu в pages/dm.js. */
+      box-sizing: border-box; max-height: calc(100vh - 16px); overflow-y: auto;
     }
     #tokenMenu label { display: flex; gap: 6px; padding: 4px 2px; cursor: pointer; }
     #tokenMenu .light-field { display: none; }
     #tokenMenu .light-field.visible { display: flex; }
+    #tokenMenu .light-field input[type="color"] { width: 42px; height: 22px; padding: 0; border: none; background: none; cursor: pointer; }
+    /* Пресеты цвета — узкий ряд кнопок, а не полноширинные, как остальные в меню. */
+    #tokenMenu .light-presets { gap: 4px; flex-wrap: wrap; padding: 2px 2px 4px; }
+    #tokenMenu .light-presets button {
+      width: auto; margin: 0; padding: 3px 7px; font-size: 11px;
+      background: var(--surface-hover); color: var(--text);
+    }
+    #tokenMenu .light-presets button:hover { background: var(--accent); }
+    #tokenMenu .light-presets button.active { background: var(--accent); box-shadow: 0 0 0 1px var(--text) inset; }
     #tokenMenu button { width: 100%; margin-top: 6px; background: var(--danger); }
     #tokenMenu button:hover { background: var(--danger-hover); }
     #tokenMenuLightHeader {
@@ -474,12 +487,20 @@
 
     /* список ассетов (карты/аудио) — вертикальные строки вместо широкой таблицы */
     .asset-list { max-height: 180px; overflow-y: auto; border: 1px solid #3a3a45; border-radius: 8px; }
-    .asset-row { padding: 6px 8px; border-bottom: 1px solid #2a2a35; cursor: pointer; font-size: 12px; }
+    .asset-row { position: relative; padding: 6px 32px 6px 8px; border-bottom: 1px solid #2a2a35; cursor: pointer; font-size: 12px; }
     .asset-row:last-child { border-bottom: none; }
     .asset-row:hover { background: #26262f; }
     .asset-row.selected { background: #1f6b3a33; }
     .asset-row .asset-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .asset-row .asset-meta { display: block; opacity: 0.55; font-size: 11px; margin-top: 1px; }
+    /* кнопка удаления файла — как .asset-tile-del на плитках «Ассетов» */
+    .asset-row .asset-row-del {
+      position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+      width: 22px; height: 22px; padding: 0; border-radius: 7px;
+      background: rgba(10,10,14,0.65); color: #fff; display: none; align-items: center; justify-content: center;
+    }
+    .asset-row:hover .asset-row-del { display: flex; }
+    .asset-row .asset-row-del:hover { background: var(--danger-hover); }
 
     .color-row { display: flex; align-items: center; gap: 8px; }
     .color-row input[type="color"] { width: 32px; height: 30px; padding: 0; border: none; background: none; }
@@ -927,26 +948,26 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BnVkTwOy.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
+  <script type="module" crossorigin src="/assets/dm-BG-Tx95Q.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-2Z6wmMg5.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-B298ffJA.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-3HDMXlsV.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CbF4yb8e.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DEcdH8fP.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-ByB5M8qg.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-CKrWa4YK.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-E56Mtlvm.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-DfZk5zO_.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-O1GKBlkj.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-BvoXd5fx.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-CJTtgGmZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-DIaNTmKg.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-DJ8ZLfU0.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-D6G4JUSQ.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
@@ -1268,6 +1289,17 @@
 
           <!-- Сервер: то же, что лежит в beacon.conf. -->
           <div class="set-tab-panel" data-settab-panel="server">
+            <!-- Версия и отчёт о баге (см. web/src/bug-report.js) — первым
+                 блоком: ниже длинный список настроек, за которым их не
+                 находили. -->
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Версия <b id="appVersion">…</b></span>
+                <button id="bugReportBtn" type="button">Сообщить о баге</button>
+              </div>
+              <p class="hint">Соберём версию, браузер и последние ошибки в консоли в готовый текст и откроем форму нового issue на GitHub — останется вычитать и отправить. Если GitHub'а нет, отчёт можно просто скопировать.</p>
+            </div>
+            <div class="section-divider"></div>
             <div class="field-block">
               <div class="field-label-row">
                 <span class="field-label">Настройки сервера</span>
@@ -1286,11 +1318,6 @@
                 <button id="shutdownBtn" type="button" class="danger">Выключить</button>
               </div>
               <p class="hint">Мир сохранится, стол закроется у всех — программу придётся запустить заново.</p>
-            </div>
-            <div class="section-divider"></div>
-            <div class="field-block">
-              <span class="field-label">Версия</span>
-              <span id="appVersion">…</span>
             </div>
           </div>
 
@@ -1395,12 +1422,39 @@
     <aside id="sheetDock"></aside>
 
     </select></label>
+    <!-- Зрение токена (domain.TokenVision) — рядом со светом, но это другое:
+         свет видят все, тёмное зрение — только партия. -->
+    <label id="tokenMenuVisionRow" title="Тёмное зрение — видно в темноте без всякого источника света, приглушённо, в пределах радиуса">зрение: <select id="tokenMenuVision">
+      <option value="">обычное</option>
+      <option value="dark">тёмное</option>
+    </select></label>
+    <label id="tokenMenuVisionRangeField" class="light-field" title="Радиус тёмного зрения в единицах линейки сцены (по умолчанию фт, см. настройку сетки)">
+      радиус <input type="number" id="tokenMenuVisionRange" min="0" step="5" value="0" />
+    </label>
     <label id="tokenMenuLightRow"><input type="checkbox" id="tokenMenuLight" /> <span id="tokenMenuLightLabel">источник света</span></label>
     <label id="tokenMenuLightBrightField" class="light-field" title="Радиус яркого света в единицах линейки сцены (по умолчанию фт, см. настройку сетки) — 0: без яркого ядра, только тусклая кайма">
       ярк. <input type="number" id="tokenMenuLightBright" min="0" step="5" value="0" />
     </label>
     <label id="tokenMenuLightDimField" class="light-field" title="Радиус тусклого света в единицах линейки сцены (по умолчанию фт) — дальняя граница, видно приглушённо">
       тускл. <input type="number" id="tokenMenuLightDim" min="0" step="5" value="0" />
+    </label>
+    <!-- Цвет и конус источника (domain.TokenLight.Color/Angle/Direction) —
+         видны вместе с радиусами, только когда свет включён. -->
+    <label id="tokenMenuLightColorField" class="light-field" title="Оттенок света — заливка ложится плёнкой поверх освещённого, карта остаётся читаемой">
+      цвет <input type="color" id="tokenMenuLightColor" value="#ffcc66" />
+    </label>
+    <div id="tokenMenuLightPresets" class="light-field light-presets">
+      <button type="button" data-light-color="#ff9d3c" title="Факел">факел</button>
+      <button type="button" data-light-color="#fff4d6" title="Фонарь">фонарь</button>
+      <button type="button" data-light-color="#a8c8ff" title="Лунный">лунный</button>
+      <button type="button" data-light-color="#9b7cff" title="Магический">маг.</button>
+      <button type="button" data-light-color="" title="Без оттенка — как было">без цвета</button>
+    </div>
+    <label id="tokenMenuLightAngleField" class="light-field" title="Ширина конуса в градусах: 0 или 360 — обычный круг на все стороны">
+      угол <input type="number" id="tokenMenuLightAngle" min="0" max="360" step="5" value="0" />
+    </label>
+    <label id="tokenMenuLightDirectionField" class="light-field" title="Куда смотрит конус: 0° вверх, дальше по часовой стрелке">
+      поворот <input type="number" id="tokenMenuLightDirection" min="0" max="359" step="5" value="0" />
     </label>
     <button id="tokenMenuLightToggleBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> Включить свет</button>
     <button id="tokenMenuCopyBtn" style="display:none;" title="Скопировать источник света — потом ПКМ по пустому месту карты и «Вставить»"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 15V5a2 2 0 012-2h10"/></svg> Копировать</button>
