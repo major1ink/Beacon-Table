@@ -537,6 +537,13 @@ document.getElementById("charsBtn").onclick = async () => {
   charsOverlay.classList.add("open");
   await renderChars();
 };
+// ДМ назначил (или отобрал) персонажа — обновляемся сами, без F5. Ряд фишек
+// в топбаре перерисовываем всегда, список в модалке — только пока она
+// открыта, чтобы не дёргать сервер зря.
+document.addEventListener("vtt:charactersChanged", () => {
+  if (charsOverlay.classList.contains("open")) renderChars();
+  else renderCharDock();
+});
 document.getElementById("charsCloseBtn").onclick = () => charsOverlay.classList.remove("open");
 charsOverlay.addEventListener("mousedown", (e) => {
   if (e.target === charsOverlay) charsOverlay.classList.remove("open");

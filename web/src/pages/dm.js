@@ -2666,6 +2666,13 @@ async function renderDmCharacters() {
   }
 }
 onPanelOpen("characters", renderDmCharacters);
+// Список персонажей поменялся мимо этой вкладки (другая сессия ДМ, игрок
+// завёл своего) — открытая панель перечитывает его сама.
+document.addEventListener("vtt:charactersChanged", () => {
+  // Активность панели читаем из DOM, а не из openPanelSection: та объявлена
+  // ниже по файлу, и порядок инициализации тут не должен иметь значения.
+  if (document.querySelector('.panel-section[data-panel="characters"]')?.classList.contains("active")) renderDmCharacters();
+});
 
 
 // ---- перетаскивание персонажа из панели на карту — создаёт токен ----

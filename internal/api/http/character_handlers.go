@@ -121,6 +121,7 @@ func (a *API) handleCharacterCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyCharactersChanged()
 	writeJSON(w, http.StatusCreated, map[string]string{"id": c.ID, "name": c.Name, "avatarUrl": c.AvatarURL, "system": c.System})
 }
 
@@ -172,5 +173,6 @@ func (a *API) handleCharacterDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	world.Room.NotifyCharactersChanged()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
