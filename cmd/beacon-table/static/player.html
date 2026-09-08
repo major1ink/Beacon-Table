@@ -190,6 +190,11 @@
     #settingsModal .field-block { display: flex; align-items: center; gap: 8px; font-size: 13px; }
     #settingsModal .field-label { opacity: 0.7; }
     #settingsModal .hint { font-size: 12px; opacity: 0.6; margin-top: 12px; }
+    #settingsModal button#bugReportBtn {
+      cursor: pointer; padding: 7px 12px; margin-top: 14px; border: none; border-radius: var(--radius);
+      font-size: 12px; background: var(--surface-hover); color: var(--text);
+    }
+    #settingsModal button#bugReportBtn:hover { background: #3c3c48; }
 
     #authFailedOverlay {
       display: none; position: fixed; inset: 0; z-index: 50; background: rgba(10,10,14,0.92);
@@ -264,17 +269,17 @@
       #combatBarMount { order: 3; flex: 1 1 100%; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/player-C-PSOjPp.js"></script>
+  <script type="module" crossorigin src="/assets/player-BttgXJHN.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-B298ffJA.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-CJG2bdfF.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-menu-CJTtgGmZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-CEXLVQk_.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="modulepreload" crossorigin href="/assets/avatar-cropper-CbSnpori.js">
@@ -349,7 +354,8 @@
         <span class="field-label">Версия</span>
         <span id="appVersion">…</span>
       </div>
-      <p class="hint">Раздел общих настроек приложения — здесь появятся будущие опции.</p>
+      <button id="bugReportBtn" type="button">Сообщить о баге</button>
+      <p class="hint">Отчёт соберётся сам — версия, браузер и последние ошибки; текст откроется формой issue на GitHub, отправлять его или нет, решаете вы.</p>
     </div>
   </div>
 

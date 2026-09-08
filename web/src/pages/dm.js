@@ -67,6 +67,11 @@ import { initItemPicker } from "../item-picker.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabel } from "../roles.js";
+import { installErrorCapture, openBugReport } from "../bug-report.js";
+
+// Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
+// сессии, а не с момента нажатия кнопки.
+installErrorCapture();
 
 // ================= сессия ДМ =================
 // /ws/dm, /upload, /assets проверяют cookie сессии на сервере
@@ -1718,6 +1723,8 @@ async function loadSettingsTab(tab) {
       break; // «Стол» — тумблеры, они приходят со снапшотом сцены
   }
 }
+
+document.getElementById("bugReportBtn").onclick = () => openBugReport();
 
 async function renderAppVersion() {
   const el = document.getElementById("appVersion");
@@ -4237,6 +4244,36 @@ function renderAssetTable() {
       updateBgPreview();
       renderAssetTable();
     };
+    // Удаление файла с диска: без него uploads/maps копится вечно. Сцены с
+    // mapUrl на удалённый файл остаются без фона, но не ломаются (см.
+    // vtt/layers/background.js).
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "asset-row-del";
+    del.title = "Удалить карту из библиотеки";
+    del.innerHTML = icon("trash", { size: 12 });
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      const isCurrent = a.url === fMapUrl.value;
+      const msg =
+        `Удалить «${a.name}» из библиотеки? Файл будет стёрт с диска.` +
+        (isCurrent
+          ? " Сейчас он выбран фоном этой сцены — поле URL очистится."
+          : " Сцены, где он стоит фоном, останутся без фона.");
+      if (!(await showConfirm(msg, { title: "Удалить карту", okLabel: "Удалить", danger: true }))) return;
+      try {
+        await deleteAsset("maps", a.url);
+        if (isCurrent) {
+          fMapUrl.value = "";
+          updateBgPreview();
+        }
+        await refreshLibrary();
+        renderAssetTable();
+      } catch (err) {
+        showAlert("Не удалось удалить карту: " + err.message);
+      }
+    };
+    row.appendChild(del);
     wrap.appendChild(row);
   }
 }

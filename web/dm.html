@@ -475,12 +475,20 @@
 
     /* список ассетов (карты/аудио) — вертикальные строки вместо широкой таблицы */
     .asset-list { max-height: 180px; overflow-y: auto; border: 1px solid #3a3a45; border-radius: 8px; }
-    .asset-row { padding: 6px 8px; border-bottom: 1px solid #2a2a35; cursor: pointer; font-size: 12px; }
+    .asset-row { position: relative; padding: 6px 32px 6px 8px; border-bottom: 1px solid #2a2a35; cursor: pointer; font-size: 12px; }
     .asset-row:last-child { border-bottom: none; }
     .asset-row:hover { background: #26262f; }
     .asset-row.selected { background: #1f6b3a33; }
     .asset-row .asset-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .asset-row .asset-meta { display: block; opacity: 0.55; font-size: 11px; margin-top: 1px; }
+    /* кнопка удаления файла — как .asset-tile-del на плитках «Ассетов» */
+    .asset-row .asset-row-del {
+      position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+      width: 22px; height: 22px; padding: 0; border-radius: 7px;
+      background: rgba(10,10,14,0.65); color: #fff; display: none; align-items: center; justify-content: center;
+    }
+    .asset-row:hover .asset-row-del { display: flex; }
+    .asset-row .asset-row-del:hover { background: var(--danger-hover); }
 
     .color-row { display: flex; align-items: center; gap: 8px; }
     .color-row input[type="color"] { width: 32px; height: 30px; padding: 0; border: none; background: none; }
@@ -1265,6 +1273,15 @@
                 <button id="shutdownBtn" type="button" class="danger">Выключить</button>
               </div>
               <p class="hint">Мир сохранится, стол закроется у всех — программу придётся запустить заново.</p>
+            </div>
+            <div class="section-divider"></div>
+            <!-- Отчёт о баге, см. web/src/bug-report.js -->
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Нашли баг?</span>
+                <button id="bugReportBtn" type="button">Сообщить о баге</button>
+              </div>
+              <p class="hint">Соберём версию, браузер и последние ошибки в консоли в готовый текст и откроем форму нового issue на GitHub — останется вычитать и отправить. Если GitHub'а нет, отчёт можно просто скопировать.</p>
             </div>
             <div class="section-divider"></div>
             <div class="field-block">
