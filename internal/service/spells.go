@@ -65,7 +65,11 @@ func sanitizeSpell(s domain.Spell) domain.Spell {
 	s.MaterialNote = clampRunes(s.MaterialNote, maxSpellLongText)
 	s.Duration = clampRunes(s.Duration, maxSpellShortText)
 	s.SavingThrow = clampRunes(s.SavingThrow, maxSpellShortText)
+	if !domain.ValidSpellAttack(s.Attack) {
+		s.Attack = ""
+	}
 	s.Damage = clampRunes(s.Damage, maxSpellLongText)
+	s.Upcast = clampRunes(strings.TrimSpace(s.Upcast), maxSpellShortText)
 	s.Classes = clampRunes(s.Classes, maxSpellLongText)
 	s.Description = clampRunes(s.Description, maxSpellLongText)
 	if len(s.Tags) > maxSpellTags {

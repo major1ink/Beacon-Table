@@ -307,7 +307,15 @@
     .v-spell-lvl:first-child { margin-top: 0; }
     .v-spell { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 12px; flex-wrap: wrap; }
     .v-spell-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    /* Заклинание с карточкой в библиотеке — ссылка на неё (см. vSpellName). */
+    .catalog-ref { color: var(--blue); text-decoration: none; border-bottom: 1px solid var(--blue); cursor: pointer; }
+    .catalog-ref:hover { color: #fff; background: var(--blue); border-radius: 3px; border-bottom-color: transparent; }
     .v-spell-meta { flex: 0 0 auto; font-size: 10.5px; color: var(--text-dim); }
+    /* Круг ячейки рядом с уроном (см. vSpellsCard): выбор живёт до перерисовки. */
+    .v-spell-slot {
+      flex: 0 0 auto; font-size: 10px; padding: 1px 3px; border-radius: 4px;
+      background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);
+    }
     .v-tag {
       display: inline-block; font-size: 9.5px; line-height: 1; padding: 3px 6px; border-radius: var(--radius-pill);
       background: var(--surface); color: var(--text-dim);

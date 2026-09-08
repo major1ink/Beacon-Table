@@ -99,6 +99,33 @@ function selectInput(get, set, options) {
   return sel;
 }
 
+// ATTACK_OPTIONS — вид броска атаки (см. domain.Spell.Attack): код и подпись.
+const ATTACK_OPTIONS = [
+  { value: "", label: "нет (спасбросок или без броска)" },
+  { value: "melee", label: "рукопашная" },
+  { value: "ranged", label: "дистанционная" },
+];
+
+function attackLabel(value) {
+  const opt = ATTACK_OPTIONS.find((o) => o.value === value);
+  return value && opt ? opt.label : "";
+}
+
+// stringSelectInput — как selectInput, но без parseInt (тот держит уровень).
+function stringSelectInput(get, set, options) {
+  const sel = h(
+    "select",
+    {},
+    options.map((o) => h("option", { value: o.value, text: o.label }))
+  );
+  sel.value = String(get() || "");
+  sel.addEventListener("change", () => {
+    set(sel.value);
+    scheduleSave();
+  });
+  return sel;
+}
+
 function checkboxField(labelText, get, set) {
   const cb = h("input", { type: "checkbox" });
   cb.checked = !!get();
@@ -177,8 +204,18 @@ function renderEditView(root) {
     h("div", { class: "section" }, [
       h("h3", { text: "Эффект" }),
       h("div", { class: "row" }, [
+        field(
+          "Атака заклинанием",
+          stringSelectInput(() => spell.attack, (v) => (spell.attack = v), ATTACK_OPTIONS),
+          "Бьёт броском атаки, а не спасброском цели. По этому полю лист персонажа рисует кнопку броска."
+        ),
         field("Спасбросок", textInput(() => spell.savingThrow, (v) => (spell.savingThrow = v), { placeholder: "Тел" })),
         field("Урон", textInput(() => spell.damage, (v) => (spell.damage = v), { placeholder: "8к6 (огонь)" })),
+        field(
+          "За круг ячейки выше",
+          textInput(() => spell.upcast, (v) => (spell.upcast = v), { placeholder: "1к6" }),
+          "Прибавка за каждый круг ячейки выше своего. По ней лист считает урон с ячейки повыше."
+        ),
         field("Классы", textInput(() => spell.classes, (v) => (spell.classes = v), { placeholder: "Волшебник, Чародей" })),
       ]),
       statusesField(),
@@ -242,8 +279,10 @@ function readCastingGrid() {
   add("Дистанция", spell.range);
   add("Компоненты", componentsText(spell));
   add("Длительность", spell.duration);
+  add("Атака заклинанием", attackLabel(spell.attack));
   add("Спасбросок", spell.savingThrow);
   add("Урон", spell.damage);
+  add("За круг ячейки выше", spell.upcast ? "+" + spell.upcast : "");
   add("Классы", spell.classes);
   return wrap;
 }

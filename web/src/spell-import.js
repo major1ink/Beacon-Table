@@ -195,8 +195,14 @@ function damagePartText(part) {
 // (см. system.activities — их может быть несколько: сотвори эффект/урони/
 // вылечи и т.п.), у которой damage.parts непустой, независимо от типа
 // активности (damage/save/attack — Магическая стрела, например, наносит
-// урон activity-типом "damage", без атаки и спасброска).
+// урон activity-типом "damage", без атаки и спасброска). Ссылки на данные
+// движка разворачиваем в читаемую запись — см. humanizeDamage ниже.
 function buildDamage(sys) {
+  return humanizeDamage(buildDamageRaw(sys));
+}
+
+// buildDamageRaw — урон как он записан в экспорте, до разбора прогрессии.
+function buildDamageRaw(sys) {
   if (sys.damage && Array.isArray(sys.damage.parts)) {
     return sys.damage.parts
       .map((p) => {
@@ -211,6 +217,51 @@ function buildDamage(sys) {
   const act = activities.find((a) => a && a.damage && Array.isArray(a.damage.parts) && a.damage.parts.length);
   if (!act) return "";
   return act.damage.parts.map(damagePartText).filter(Boolean).join("; ");
+}
+
+// CANTRIP_SCALING_RE — прогрессия заговора, как её пишет dnd5e прямо в
+// формулу урона: "(floor((@details.level+1)/6)+1)d8" — +1 кубик на 5/11/17
+// уровнях. Наш бросок @details.level не понимает (см. service/dice.go), да и
+// игроку эта запись ничего не говорит.
+const CANTRIP_SCALING_RE = /\(\s*floor\(\s*\(\s*@details\.level\s*\+\s*1\s*\)\s*\/\s*6\s*\)\s*\+\s*1\s*\)\s*[dк](\d{1,3})/i;
+
+// SPELL_MOD_RE — "@mod": модификатор заклинательной характеристики. Число
+// подставить неоткуда (карточка общая на стол), но назвать словами можно.
+const SPELL_MOD_RE = /\s*\+\s*@mod\b/gi;
+
+function expandCantripScaling(text) {
+  const m = CANTRIP_SCALING_RE.exec(text);
+  if (!m) return text;
+  const faces = m[1];
+  return text.replace(CANTRIP_SCALING_RE, `1к${faces}`) + `, +1к${faces} на 5/11/17 ур.`;
+}
+
+// humanizeDamage — развернуть ссылки на данные Foundry, у которых есть общий
+// смысл. Счётчики конкретного заклинания (@item.uses.value) остаются
+// формулой — зато больше не рассыпаются на ссылки-броски.
+function humanizeDamage(text) {
+  return expandCantripScaling(text).replace(SPELL_MOD_RE, " + мод. заклинательной характеристики");
+}
+
+// buildUpcast — прибавка за круг ячейки выше (см. domain.Spell.Upcast).
+// v2/v3: system.scaling {mode:"level", formula}. v4: damage.parts[].scaling —
+// "+N кубиков той же грани". mode "cantrip" не сюда: заговоры растут от
+// уровня персонажа и уже вписаны в формулу урона.
+function buildUpcast(sys) {
+  const scaling = sys.scaling;
+  if (scaling && scaling.mode === "level" && scaling.formula) {
+    return String(scaling.formula).replace(/d/gi, "к").trim();
+  }
+  const activities = sys.activities && typeof sys.activities === "object" ? Object.values(sys.activities) : [];
+  for (const act of activities) {
+    const parts = act && act.damage && Array.isArray(act.damage.parts) ? act.damage.parts : [];
+    for (const part of parts) {
+      const sc = part && part.scaling;
+      if (!sc || sc.mode === "cantrip" || !sc.number || !part.denomination) continue;
+      return `${sc.number}к${part.denomination}`;
+    }
+  }
+  return "";
 }
 
 // buildSavingThrow — dnd5e v2/v3: system.save.ability — строка. v4/2024:
@@ -228,6 +279,20 @@ function buildSavingThrow(sys) {
   if (!act) return "";
   const abilities = Array.isArray(act.save.ability) ? act.save.ability : [act.save.ability];
   return abilities.map((a) => ru(ABILITY_RU, a) || a).join("/");
+}
+
+// buildAttack — бьёт ли заклинание броском атаки (см. domain.Spell.Attack).
+// v2/v3: system.actionType "msak"/"rsak". v4: активность type "attack" — та
+// же миграция полей в activities, что у урона и спасброска.
+function buildAttack(sys) {
+  const action = String(sys.actionType || "").toLowerCase();
+  if (action === "msak") return "melee";
+  if (action === "rsak") return "ranged";
+  const activities = sys.activities && typeof sys.activities === "object" ? Object.values(sys.activities) : [];
+  const act = activities.find((a) => a && a.type === "attack");
+  if (!act) return "";
+  const type = (act.attack && act.attack.type) || {};
+  return type.value === "melee" ? "melee" : "ranged";
 }
 
 // buildComponents — dnd5e v2/v3: system.components = {vocal,somatic,
@@ -279,7 +344,9 @@ export function mapFoundrySpellJson(raw) {
     duration: buildDuration(sys.duration),
     concentration: components.concentration,
     savingThrow: buildSavingThrow(sys),
+    attack: buildAttack(sys),
     damage: buildDamage(sys),
+    upcast: buildUpcast(sys),
     description: cleanFoundryText(sys.description && sys.description.value, name),
     statuses: mapFoundrySpellStatuses(raw),
   };

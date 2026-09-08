@@ -233,6 +233,46 @@ func TestExpandAdventure(t *testing.T) {
 	}
 }
 
+// TestActorSpellsToLibrary — заклинания актёра (и готового персонажа, и
+// существа) лежат внутри него самого: без их извлечения в листе и статблоке
+// остаются имена без единой карточки, по которой их можно прочитать (см.
+// actorSpells). Одноимённые копии у разных актёров и дубль карточки из
+// item-пака отсеиваются.
+func TestActorSpellsToLibrary(t *testing.T) {
+	adventure := Doc{
+		"name": "Шахта",
+		"actors": []any{
+			map[string]any{"type": "character", "name": "Престо", "items": []any{
+				map[string]any{"type": "spell", "name": "Свет [Light]"},
+				map[string]any{"type": "spell", "name": "Сон [Sleep]"},
+				map[string]any{"type": "weapon", "name": "Посох"},
+			}},
+			map[string]any{"type": "character", "name": "Шила", "items": []any{
+				map[string]any{"type": "spell", "name": "свет [light]"},
+			}},
+			map[string]any{"type": "npc", "name": "Гоблин", "items": []any{
+				map[string]any{"type": "spell", "name": "Тьма [Darkness]"},
+			}},
+		},
+		"items": []any{map[string]any{"type": "spell", "name": "Сон [Sleep]"}},
+	}
+	names := []string{}
+	for _, e := range Expand([]Doc{adventure}, "Adventure") {
+		if e.Target == TargetSpells {
+			names = append(names, asString(e.Doc["name"]))
+		}
+	}
+	want := []string{"Свет [Light]", "Тьма [Darkness]", "Сон [Sleep]"}
+	if len(names) != len(want) {
+		t.Fatalf("заклинания разъехались не так: %v", names)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("заклинания разъехались не так: %v", names)
+		}
+	}
+}
+
 func TestSafeJoin(t *testing.T) {
 	dir := filepath.Join("a", "b")
 	if _, ok := safeJoin(dir, "../../etc/passwd"); ok {
