@@ -1973,12 +1973,12 @@ export function createInteraction(ctx) {
     // toggleTokenLight — общая логика вкл/выкл источника света у токена
     // света: дёргается и двойным кликом по канвасу (см. dblclick выше), и
     // кнопкой "Включить/Выключить свет" в контекстном меню (см. dm.js).
-    // Радиусы (bright/dim) не трогает — тушит/зажигает уже настроенный
-    // факел, а не сбрасывает его параметры.
+    // Остальные настройки (радиусы, цвет, конус) не трогает — тушит/зажигает
+    // уже настроенный факел, а не сбрасывает его параметры.
     function toggleTokenLight(id) {
       const t = ctx.scene.tokens[id];
       if (!t) return;
-      const light = { enabled: !(t.light && t.light.enabled), bright: (t.light && t.light.bright) || 0, dim: (t.light && t.light.dim) || 0 };
+      const light = { ...(t.light || {}), enabled: !(t.light && t.light.enabled) };
       ctx.send({ type: "move_token", token: { ...t, light } });
     }
     document.addEventListener("vtt:toggleTokenLight", (e) => toggleTokenLight(e.detail.id));

@@ -1,4 +1,4 @@
-import{a as B}from"./floating-window-zi4VPPbZ.js";import{i as C,b as W,s as E,o as O,a as ne}from"./modal-BWmvgheC.js";import{b as A,S as oe,u as ae}from"./showcase-overlay-CnxRRECk.js";import{aX as se,b as ce,aY as ie,aO as re,aZ as le,a_ as de,a$ as ue,b0 as me,aP as pe,aa as fe}from"./api-BGI9yKRW.js";import{I as he}from"./compendium-taxonomy-BHoDJPfw.js";const Y="beacon:sheetDockWidth",we=300,be=.72;let F=!1;function xe(){if(F)return;F=!0;const n=document.createElement("style");n.textContent=`
+import{a as B}from"./floating-window-zi4VPPbZ.js";import{i as C,b as W,s as E,o as O,a as ne}from"./modal-BWmvgheC.js";import{b as A,S as oe,u as ae}from"./showcase-overlay-BMsFffZ8.js";import{aX as se,b as ce,aY as ie,aO as re,aZ as le,a_ as de,a$ as ue,b0 as me,aP as pe,aa as fe}from"./api-BGI9yKRW.js";import{I as he}from"./compendium-taxonomy-BHoDJPfw.js";const Y="beacon:sheetDockWidth",we=300,be=.72;let F=!1;function xe(){if(F)return;F=!0;const n=document.createElement("style");n.textContent=`
     .sheet-dock {
       flex: 0 0 auto; position: relative; display: none; flex-direction: column;
       min-width: 0; background: var(--panel-bg, #1c1c25);

@@ -153,6 +153,85 @@ test("одни lightOnly-факелы без наблюдателя не рас�
   assert.equal(plan.dimIslands.length, 0);
 });
 
+// ---- цветной и направленный свет (domain.TokenLight.Color/Angle/Direction) ----
+
+test("конус светит только в свою сторону", () => {
+  // Источник в центре, наблюдатель рядом; конус смотрит вверх (0°), значит
+  // точка НАД источником освещена, а под ним — нет.
+  const at = (angle, direction) => ({
+    x: 800,
+    y: 800,
+    lightOnly: true,
+    light: { enabled: true, bright: 30, dim: 60, angle, direction },
+  });
+  const hero = { x: 800, y: 800, ownerId: "p1" };
+  const round = computeVisionPlan(makeScene([hero, at(0, 0)], ""), false, WORKING_QUANTUM);
+  const cone = computeVisionPlan(makeScene([hero, at(90, 0)], ""), false, WORKING_QUANTUM);
+
+  const lit = (plan, x, y) => plan.dimIslands.some(({ poly }) => multiContains([poly], x, y));
+  assert.ok(lit(round, 800, 700) && lit(round, 800, 900), "круглый источник вдруг перестал светить во все стороны");
+  assert.ok(lit(cone, 800, 700), "конус не светит туда, куда направлен");
+  assert.ok(!lit(cone, 800, 900), "конус светит назад");
+});
+
+test("угол 0 и 360 — обычный круг", () => {
+  const area = (angle) => {
+    const light = { enabled: true, bright: 30, dim: 60, angle, direction: 45 };
+    const plan = computeVisionPlan(
+      makeScene([{ x: 800, y: 800, ownerId: "p1" }, { x: 800, y: 800, lightOnly: true, light }], ""),
+      false,
+      WORKING_QUANTUM
+    );
+    return areaOfPlan(plan);
+  };
+  assert.equal(area(0), area(360));
+  assert.ok(area(90) < area(0), "конус на 90° осветил не меньше круга");
+});
+
+test("цвет источника приезжает в план зонами по цветам", () => {
+  const torch = (x, color) => ({ x, y: 800, lightOnly: true, light: { enabled: true, bright: 20, dim: 40, color } });
+  const hero = { x: 800, y: 800, ownerId: "p1" };
+  const plan = computeVisionPlan(makeScene([hero, torch(760, "#ff9d3c"), torch(840, "#ff9d3c"), torch(900, "#a8c8ff")], ""), false, WORKING_QUANTUM);
+  const colors = plan.tints.map((t) => t.color).sort();
+  // Два факела одного цвета — одна зона: иначе на их перекрытии плёнка легла
+  // бы дважды и пятно вышло бы вдвое насыщеннее.
+  assert.deepEqual(colors, ["#a8c8ff", "#ff9d3c"]);
+});
+
+test("цветная заливка не выходит за пределы обзора игрока", () => {
+  // Наблюдатель справа от стены видит левую комнату только через окно
+  // (узкая полоса на его высоте). Факел горит в дальнем нижнем углу той
+  // комнаты — в эту полосу он не попадает, красить нечего.
+  const scene = roomWithWindow();
+  scene.tokens = {
+    hero: { x: 700, y: 220, size: 20, ownerId: "p1" },
+    torch: { x: 100, y: 700, size: 20, lightOnly: true, light: { enabled: true, bright: 5, dim: 10, color: "#ff0000" } },
+  };
+  const plan = computeVisionPlan(scene, false, WORKING_QUANTUM);
+  const painted = plan.tints.reduce((sum, t) => sum + t.multi.length, 0);
+  assert.equal(painted, 0, "цвет закрасил то, чего игрок не видит");
+
+  // А тот же факел на линии окна — виден, и цвет ложится.
+  scene.tokens.torch.y = 220;
+  scene.tokens.torch.x = 300;
+  const visible = computeVisionPlan(scene, false, WORKING_QUANTUM);
+  assert.ok(visible.tints.length > 0, "цвет пропал там, где свет игроку виден");
+});
+
+test("у ДМ тьмы нет, но цветные пятна считаются", () => {
+  const hero = { x: 800, y: 800, ownerId: "p1" };
+  const plain = computeVisionPlan(makeScene([hero, { x: 800, y: 800, lightOnly: true, light: { enabled: true, bright: 20, dim: 40 } }], ""), true, WORKING_QUANTUM);
+  assert.deepEqual(plain, { skip: true }, "без цветных источников ДМ считает лишнее");
+
+  const colored = computeVisionPlan(
+    makeScene([hero, { x: 800, y: 800, lightOnly: true, light: { enabled: true, bright: 20, dim: 40, color: "#ff9d3c" } }], ""),
+    true,
+    WORKING_QUANTUM
+  );
+  assert.equal(colored.skip, true, "ДМ вдруг получил тьму");
+  assert.ok(colored.tints.length > 0, "ДМ не видит цветных пятен");
+});
+
 // ---- тёмное зрение (domain.TokenVision) ----
 
 // areaOfPlan — площадь раскрытого куска карты; сравнивать планы удобнее ею,

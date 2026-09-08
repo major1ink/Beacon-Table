@@ -229,12 +229,23 @@ func mapLight(l map[string]any, offsetX, offsetY, gridSize float64) *domain.Toke
 	cfg := asMap(l["config"])
 	bright := num(l["bright"], 0)
 	dim := num(l["dim"], 0)
+	color := asString(l["tintColor"])
 	if cfg != nil {
 		bright = num(cfg["bright"], bright)
 		dim = num(cfg["dim"], dim)
+		if c := asString(cfg["color"]); c != "" {
+			color = c
+		}
 	}
 	if bright <= 0 && dim <= 0 {
 		return nil
+	}
+	// Конус: у Foundry angle — та же ширина сектора в градусах, rotation —
+	// поворот, и отсчёт у обоих совпадает с нашим (0° вверх, по часовой),
+	// см. domain.TokenLight.
+	angle := num(l["angle"], 0)
+	if angle >= 360 {
+		angle = 0
 	}
 	size := gridSize / 2
 	if size <= 0 {
@@ -247,7 +258,14 @@ func mapLight(l map[string]any, offsetX, offsetY, gridSize float64) *domain.Toke
 		Size:      size,
 		Color:     "#ffcc66",
 		LightOnly: true,
-		Light:     &domain.TokenLight{Enabled: !asBool(l["hidden"]), Bright: bright, Dim: dim},
+		Light: &domain.TokenLight{
+			Enabled:   !asBool(l["hidden"]),
+			Bright:    bright,
+			Dim:       dim,
+			Color:     color,
+			Angle:     angle,
+			Direction: num(l["rotation"], 0),
+		},
 	}
 }
 

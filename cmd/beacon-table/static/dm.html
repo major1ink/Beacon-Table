@@ -248,6 +248,14 @@
     #tokenMenu label { display: flex; gap: 6px; padding: 4px 2px; cursor: pointer; }
     #tokenMenu .light-field { display: none; }
     #tokenMenu .light-field.visible { display: flex; }
+    #tokenMenu .light-field input[type="color"] { width: 42px; height: 22px; padding: 0; border: none; background: none; cursor: pointer; }
+    /* Пресеты цвета — узкий ряд кнопок, а не полноширинные, как остальные в меню. */
+    #tokenMenu .light-presets { gap: 4px; flex-wrap: wrap; padding: 2px 2px 4px; }
+    #tokenMenu .light-presets button {
+      width: auto; margin: 0; padding: 3px 7px; font-size: 11px;
+      background: var(--surface-hover); color: var(--text);
+    }
+    #tokenMenu .light-presets button:hover { background: var(--accent); }
     #tokenMenu button { width: 100%; margin-top: 6px; background: var(--danger); }
     #tokenMenu button:hover { background: var(--danger-hover); }
     #tokenMenuLightHeader {
@@ -935,14 +943,14 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-C-FxIJhy.js"></script>
+  <script type="module" crossorigin src="/assets/dm-B7YQJLbc.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-BGI9yKRW.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
   <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-CnxRRECk.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-BMsFffZ8.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-links-CbF4yb8e.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
@@ -953,7 +961,7 @@
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
   <link rel="modulepreload" crossorigin href="/assets/combat-panel-O1GKBlkj.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-BywBsTzy.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-UeWazbcD.js">
   <link rel="modulepreload" crossorigin href="/assets/item-picker-DIaNTmKg.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
@@ -1424,6 +1432,24 @@
     </label>
     <label id="tokenMenuLightDimField" class="light-field" title="Радиус тусклого света в единицах линейки сцены (по умолчанию фт) — дальняя граница, видно приглушённо">
       тускл. <input type="number" id="tokenMenuLightDim" min="0" step="5" value="0" />
+    </label>
+    <!-- Цвет и конус источника (domain.TokenLight.Color/Angle/Direction) —
+         видны вместе с радиусами, только когда свет включён. -->
+    <label id="tokenMenuLightColorField" class="light-field" title="Оттенок света — заливка ложится плёнкой поверх освещённого, карта остаётся читаемой">
+      цвет <input type="color" id="tokenMenuLightColor" value="#ffcc66" />
+    </label>
+    <div id="tokenMenuLightPresets" class="light-field light-presets">
+      <button type="button" data-light-color="#ff9d3c" title="Факел">факел</button>
+      <button type="button" data-light-color="#fff4d6" title="Фонарь">фонарь</button>
+      <button type="button" data-light-color="#a8c8ff" title="Лунный">лунный</button>
+      <button type="button" data-light-color="#9b7cff" title="Магический">маг.</button>
+      <button type="button" data-light-color="" title="Без оттенка — как было">без цвета</button>
+    </div>
+    <label id="tokenMenuLightAngleField" class="light-field" title="Ширина конуса в градусах: 0 или 360 — обычный круг на все стороны">
+      угол <input type="number" id="tokenMenuLightAngle" min="0" max="360" step="5" value="0" />
+    </label>
+    <label id="tokenMenuLightDirectionField" class="light-field" title="Куда смотрит конус: 0° вверх, дальше по часовой стрелке">
+      поворот <input type="number" id="tokenMenuLightDirection" min="0" max="359" step="5" value="0" />
     </label>
     <button id="tokenMenuLightToggleBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> Включить свет</button>
     <button id="tokenMenuCopyBtn" style="display:none;" title="Скопировать источник света — потом ПКМ по пустому месту карты и «Вставить»"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 15V5a2 2 0 012-2h10"/></svg> Копировать</button>

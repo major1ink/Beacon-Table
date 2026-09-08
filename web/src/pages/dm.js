@@ -731,6 +731,13 @@ const tokenMenuLightLabel = document.getElementById("tokenMenuLightLabel");
 const tokenMenuHidden = document.getElementById("tokenMenuHidden");
 const tokenMenuShape = document.getElementById("tokenMenuShape");
 const tokenMenuLight = document.getElementById("tokenMenuLight");
+const tokenMenuLightColorField = document.getElementById("tokenMenuLightColorField");
+const tokenMenuLightColor = document.getElementById("tokenMenuLightColor");
+const tokenMenuLightPresets = document.getElementById("tokenMenuLightPresets");
+const tokenMenuLightAngleField = document.getElementById("tokenMenuLightAngleField");
+const tokenMenuLightAngle = document.getElementById("tokenMenuLightAngle");
+const tokenMenuLightDirectionField = document.getElementById("tokenMenuLightDirectionField");
+const tokenMenuLightDirection = document.getElementById("tokenMenuLightDirection");
 const tokenMenuVisionRow = document.getElementById("tokenMenuVisionRow");
 const tokenMenuVision = document.getElementById("tokenMenuVision");
 const tokenMenuVisionRange = document.getElementById("tokenMenuVisionRange");
@@ -773,6 +780,9 @@ let menuMonsterId = ""; // monsterId токена в открытом сейча
 // tokenMenuLight.checked, когда меню в этом режиме.
 let menuIsLightOnly = false;
 let menuLightEnabled = false;
+// menuLightColor — выбранный оттенок открытого меню ("" = без оттенка).
+// Отдельно от значения input type=color: тот всегда держит какой-то цвет.
+let menuLightColor = "";
 // menuTokenLocked — заперт ли токен в ОТКРЫТОМ СЕЙЧАС меню (см.
 // domain.Token.Locked и web/src/vtt/map-objects.js). Меню запертого токена
 // открывается как обычно — иначе замок было бы нечем снять, — но всё, что
@@ -794,12 +804,23 @@ function closeTokenMenu() {
   menuTokenLoot = [];
 }
 
-// Поля "ярк."/"тускл." в меню токена видимы только пока включён источник
-// света — переключается тем же чекбоксом (см. вызовы ниже).
-function syncLightFieldsVisibility(checkbox, brightField, dimField) {
-  const on = checkbox.checked;
-  brightField.classList.toggle("visible", on);
-  dimField.classList.toggle("visible", on);
+// Настройки источника (радиусы, цвет, конус) в меню токена видимы только
+// пока свет включён — переключается тем же чекбоксом (см. вызовы ниже).
+function lightFields() {
+  return [
+    tokenMenuLightBrightField,
+    tokenMenuLightDimField,
+    tokenMenuLightColorField,
+    tokenMenuLightPresets,
+    tokenMenuLightAngleField,
+    tokenMenuLightDirectionField,
+  ];
+}
+function setLightFieldsVisible(on) {
+  for (const el of lightFields()) el.classList.toggle("visible", on);
+}
+function syncLightFieldsVisibility(checkbox) {
+  setLightFieldsVisible(checkbox.checked);
 }
 
 // ================= меню точки стены (ПКМ по концу стены) =================
@@ -1158,20 +1179,26 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
 
   tokenMenuLightBright.value = menuIsMulti ? 0 : (token.light && token.light.bright) || 0;
   tokenMenuLightDim.value = menuIsMulti ? 0 : (token.light && token.light.dim) || 0;
+  // Пустой цвет в domain.TokenLight — «без оттенка», но input type=color
+  // пустым быть не умеет: показываем дефолтный тёплый, а «без цвета»
+  // отдельной кнопкой пресетов (menuLightColor помнит, что выбрано).
+  menuLightColor = menuIsMulti ? "" : (token.light && token.light.color) || "";
+  tokenMenuLightColor.value = menuLightColor || "#ffcc66";
+  tokenMenuLightAngle.value = menuIsMulti ? 0 : (token.light && token.light.angle) || 0;
+  tokenMenuLightDirection.value = menuIsMulti ? 0 : (token.light && token.light.direction) || 0;
 
   if (menuIsMulti) {
     tokenMenuLight.checked = false;
-    syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+    syncLightFieldsVisibility(tokenMenuLight);
   } else if (menuIsLightOnly) {
     menuLightEnabled = !!(token.light && token.light.enabled);
     updateLightToggleBtnLabel();
-    tokenMenuLightBrightField.classList.add("visible");
-    tokenMenuLightDimField.classList.add("visible");
+    setLightFieldsVisible(true);
   } else {
     tokenMenuHidden.checked = !!token.hidden;
     tokenMenuShape.value = token.shape === "square" ? "square" : "circle";
     tokenMenuLight.checked = !!(token.light && token.light.enabled);
-    syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+    syncLightFieldsVisibility(tokenMenuLight);
   }
 
   // "Копировать" — снимок токена вставляется ПКМ по пустому месту карты
@@ -1233,6 +1260,10 @@ function applyTokenMenuLockState() {
     tokenMenuLightRow,
     tokenMenuLightBrightField,
     tokenMenuLightDimField,
+    tokenMenuLightColorField,
+    tokenMenuLightPresets,
+    tokenMenuLightAngleField,
+    tokenMenuLightDirectionField,
     tokenMenuLightToggleBtn,
     tokenMenuCopyBtn,
     tokenMenuDelete,
@@ -1509,13 +1540,23 @@ tokenMenuShape.onchange = () => {
 function sendTokenMenuLight() {
   if (!menuTokenIds.length) return;
   const enabled = menuIsLightOnly ? menuLightEnabled : tokenMenuLight.checked;
-  const light = { enabled, bright: +tokenMenuLightBright.value || 0, dim: +tokenMenuLightDim.value || 0 };
+  const angle = Math.min(360, Math.max(0, +tokenMenuLightAngle.value || 0));
+  const light = {
+    enabled,
+    bright: +tokenMenuLightBright.value || 0,
+    dim: +tokenMenuLightDim.value || 0,
+    color: menuLightColor,
+    angle,
+    // Направление у круга смысла не имеет — не храним, чтобы оно не
+    // всплыло, когда ДМ потом сделает из этого источника конус.
+    direction: angle > 0 && angle < 360 ? Math.min(359, Math.max(0, +tokenMenuLightDirection.value || 0)) : 0,
+  };
   for (const id of menuTokenIds) {
     document.dispatchEvent(new CustomEvent("vtt:setTokenLight", { detail: { id, light } }));
   }
 }
 tokenMenuLight.onchange = () => {
-  syncLightFieldsVisibility(tokenMenuLight, tokenMenuLightBrightField, tokenMenuLightDimField);
+  syncLightFieldsVisibility(tokenMenuLight);
   sendTokenMenuLight();
 };
 // Радиус показываем только у тёмного зрения — обычному он не нужен, а
@@ -1542,6 +1583,19 @@ tokenMenuVisionRange.onchange = sendTokenMenuVision;
 
 tokenMenuLightBright.onchange = sendTokenMenuLight;
 tokenMenuLightDim.onchange = sendTokenMenuLight;
+tokenMenuLightColor.oninput = () => {
+  menuLightColor = tokenMenuLightColor.value;
+  sendTokenMenuLight();
+};
+tokenMenuLightAngle.onchange = sendTokenMenuLight;
+tokenMenuLightDirection.onchange = sendTokenMenuLight;
+for (const btn of tokenMenuLightPresets.querySelectorAll("button")) {
+  btn.onclick = () => {
+    menuLightColor = btn.dataset.lightColor || "";
+    if (menuLightColor) tokenMenuLightColor.value = menuLightColor;
+    sendTokenMenuLight();
+  };
+}
 tokenMenuLightToggleBtn.onclick = () => {
   if (!menuTokenId) return;
   // Не шлём "просто инвертированный menuLightEnabled" — эта локальная

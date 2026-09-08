@@ -194,10 +194,19 @@ type AppliedStatus struct {
 // валидирует). Enabled — отдельный от радиусов флаг: DM может держать
 // настроенные радиусы, но временно погасить источник (потушенный факел),
 // не обнуляя поля.
+//
+// Color — оттенок заливки света (hex "#ff9d3c"), "" — как раньше, без
+// подкраски. Angle/Direction — направленный источник (фонарь, бойница):
+// Angle — ширина сектора в градусах, 0 или >=360 означает обычный круг;
+// Direction — куда сектор смотрит, 0° вверх (север), дальше по часовой.
+// Геометрию сектора считает клиент, см. web/src/vtt/light-geometry.js.
 type TokenLight struct {
-	Enabled bool    `json:"enabled"`
-	Bright  float64 `json:"bright,omitempty"`
-	Dim     float64 `json:"dim,omitempty"`
+	Enabled   bool    `json:"enabled"`
+	Bright    float64 `json:"bright,omitempty"`
+	Dim       float64 `json:"dim,omitempty"`
+	Color     string  `json:"color,omitempty"`
+	Angle     float64 `json:"angle,omitempty"`
+	Direction float64 `json:"direction,omitempty"`
 }
 
 // TokenVision — особое зрение токена. Обычный наблюдатель видит только то,
