@@ -26,9 +26,28 @@ function excalidrawAssets() {
   };
 }
 
+// excalidrawLocales — Excalidraw подгружает переводы динамическим import,
+// и сборка выдавала по чанку на каждый из 54 языков. Доска всегда на
+// ru-RU (см. src/board/editor.js), остальные заменяем одним пустым модулем.
+function excalidrawLocales() {
+  const empty = "\0excalidraw-locale-empty";
+  return {
+    name: "excalidraw-locales",
+    enforce: "pre",
+    resolveId(source, importer) {
+      if (!importer || !importer.includes("@excalidraw/excalidraw")) return null;
+      if (!/\/locales\/[^/]+\.js$/.test(source) || source.includes("/ru-RU-")) return null;
+      return empty;
+    },
+    load(id) {
+      return id === empty ? "export default {};" : null;
+    },
+  };
+}
+
 export default defineConfig({
   root: __dirname,
-  plugins: [excalidrawAssets()],
+  plugins: [excalidrawAssets(), excalidrawLocales()],
   resolve: {
     alias: {
       // См. src/board/mermaid-stub.js.
