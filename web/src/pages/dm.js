@@ -2798,17 +2798,17 @@ sceneCanvasEl.addEventListener("dragover", (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = "copy";
 });
-sceneCanvasEl.addEventListener("drop", async (e) => {
+sceneCanvasEl.addEventListener("drop", (e) => {
   const monsterId = e.dataTransfer.getData("application/x-beacon-monster");
   if (!monsterId) return;
   e.preventDefault();
-  const { x, y } = vtt.pointToWorld(e); // читаем координаты СРАЗУ — e затухает после конца обработчика, а fetch ниже асинхронный
-  // Свежий fetch, а не bestiaryList.find(...): список в панели обновляется
-  // только при открытии панели (onPanelOpen), а редактирование монстра
-  // (включая загрузку токен-арта) идёт в отдельном плавающем окне
-  // (bestiary.html) — без этого перетащенный токен мог получить пустой/
-  // устаревший imageUrl, если DM поменял арт после последнего открытия
-  // панели, не закрывая её.
+  addMonsterToken(monsterId, vtt.pointToWorld(e)); // координаты СРАЗУ — e затухает после обработчика
+});
+
+// addMonsterToken — токен NPC в точке карты. Свежий fetch, а не
+// bestiaryList.find(...): список в панели обновляется только при её
+// открытии, а арт монстра правят в отдельном окне (bestiary.html).
+async function addMonsterToken(monsterId, { x, y }) {
   let m;
   try {
     m = await fetchMonster(monsterId);
@@ -2833,7 +2833,14 @@ sceneCanvasEl.addEventListener("drop", async (e) => {
       monsterId: m.id,
     },
   });
-});
+}
+
+// viewCenterWorld — точка карты под серединой экрана: куда ставить токен,
+// когда его просят не жестом по карте, а кнопкой (карточка на доске).
+function viewCenterWorld() {
+  const r = sceneCanvasEl.getBoundingClientRect();
+  return vtt.pointToWorld({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+}
 
 // ---- перетаскивание плитки ассета (раздел "Ассеты") на карту — создаёт
 // обычный токен-декорацию ----
@@ -3771,6 +3778,11 @@ window.addEventListener("message", async (e) => {
     if (vtt && c && typeof c.url === "string") {
       vtt.send({ type: "play_cue", cue: { url: c.url, name: c.name || "", volume: c.volume, loop: !!c.loop } });
     }
+  } else if (e.data.type === "beacon:placeMonster") {
+    // Карточка монстра на доске: токен в центр текущего вида.
+    if (vtt && typeof e.data.id === "string") addMonsterToken(e.data.id, viewCenterWorld());
+  } else if (e.data.type === "beacon:addCombatant") {
+    if (vtt && typeof e.data.monsterId === "string") vtt.send({ type: "add_combatant", monsterId: e.data.monsterId });
   } else if (e.data.type === "beacon:stopCue") {
     if (vtt) vtt.send({ type: "stop_cue" });
   } else if (e.data.type === "beacon:playSfx") {

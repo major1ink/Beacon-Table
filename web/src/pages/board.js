@@ -180,6 +180,13 @@ function statCell(label, value, key) {
   ]);
 }
 
+function cardButton({ key, icon: name, label, title, onClick }) {
+  return createElement("button", { type: "button", className: "board-card-btn", key, title, onClick }, [
+    iconSpan(name, "i"),
+    " " + label,
+  ]);
+}
+
 function iconSpan(name, key) {
   return createElement("span", {
     className: "board-card-icon",
@@ -262,7 +269,23 @@ function renderMonsterCard(card) {
       createElement("span", { key: "cr" }, "Опасность " + (m.cr || "—")),
       m.proficiencyBonus ? createElement("span", { key: "pb" }, "Мастерство +" + m.proficiencyBonus) : null,
     ]),
+    monsterControls(card, m),
   ]);
+}
+
+// monsterControls — «на стол» для монстра: токен на карту и в инициативу
+// (делает стол, см. pages/dm.js), статблок — у себя.
+function monsterControls(card, m) {
+  if (!gm) return null;
+  const out = [];
+  if (hasHost) {
+    out.push(
+      cardButton({ key: "map", icon: "map", label: "На карту", title: "Токен в центр текущего вида", onClick: () => askHost({ type: "beacon:placeMonster", id: card.id }) }),
+      cardButton({ key: "fight", icon: "sword", label: "В бой", title: "Добавить в трекер инициативы", onClick: () => askHost({ type: "beacon:addCombatant", monsterId: card.id }) })
+    );
+  }
+  out.push(cardButton({ key: "open", icon: "scroll", label: "Статблок", title: "Открыть полную карточку", onClick: () => openMonster(card.id, m.name) }));
+  return createElement("div", { className: "board-card-controls", key: "c" }, out);
 }
 
 function renderCharacterCard(card) {
@@ -302,16 +325,21 @@ function renderCharacterCard(card) {
 // playOnTable — трек всем за столом. Шлёт сам стол (pages/dm.js слушает
 // beacon:playCue/playSfx): у доски сокета сцены нет.
 function playOnTable(card) {
-  if (!gm || !hasHost) return;
-  const msg = card.sfx
-    ? { type: "beacon:playSfx", sfx: { url: card.url, name: card.name, volume: card.volume } }
-    : { type: "beacon:playCue", cue: { url: card.url, name: card.name, volume: card.volume, loop: card.loop } };
-  hostWindow().postMessage(msg, location.origin);
+  askHost(
+    card.sfx
+      ? { type: "beacon:playSfx", sfx: { url: card.url, name: card.name, volume: card.volume } }
+      : { type: "beacon:playCue", cue: { url: card.url, name: card.name, volume: card.volume, loop: card.loop } }
+  );
 }
 
 function stopOnTable() {
+  askHost({ type: "beacon:stopCue" });
+}
+
+// askHost — просьба столу (dm.html); без стола и не у ДМ молча ничего.
+function askHost(msg) {
   if (!gm || !hasHost) return;
-  hostWindow().postMessage({ type: "beacon:stopCue" }, location.origin);
+  hostWindow().postMessage(msg, location.origin);
 }
 
 // renderAudioCard — кнопки «на стол» только у ДМ за столом; <audio> у всех.
@@ -324,21 +352,9 @@ function renderAudioCard(card) {
   const controls = [];
   if (gm && hasHost && !dead) {
     controls.push(
-      createElement(
-        "button",
-        { type: "button", className: "board-card-btn", key: "play", onClick: () => playOnTable(card), title: card.sfx ? "Проиграть всем за столом" : "Включить всем за столом" },
-        [iconSpan("play", "i"), " ", card.sfx ? "Запустить" : "На стол"]
-      )
+      cardButton({ key: "play", icon: "play", label: card.sfx ? "Запустить" : "На стол", title: card.sfx ? "Проиграть всем за столом" : "Включить всем за столом", onClick: () => playOnTable(card) })
     );
-    if (!card.sfx) {
-      controls.push(
-        createElement(
-          "button",
-          { type: "button", className: "board-card-btn", key: "stop", onClick: stopOnTable, title: "Остановить канал ДМ" },
-          [iconSpan("pause", "i"), " Стоп"]
-        )
-      );
-    }
+    if (!card.sfx) controls.push(cardButton({ key: "stop", icon: "pause", label: "Стоп", title: "Остановить канал ДМ", onClick: stopOnTable }));
   }
   controls.push(
     createElement("audio", {
@@ -378,7 +394,7 @@ function renderEmbed(element) {
 
 // CARD_SIZE — размер карточки при вставке.
 const CARD_SIZE = {
-  monster: { width: 320, height: 200 },
+  monster: { width: 320, height: 236 },
   character: { width: 320, height: 176 },
   audio: { width: 300, height: 104 },
 };
