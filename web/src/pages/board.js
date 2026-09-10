@@ -19,6 +19,7 @@ import {
   fetchAdminCharacters,
   fetchAdminCharacter,
   fetchAdminPlaylists,
+  fetchAssets,
 } from "../api.js";
 import { mountBoardEditor } from "../board/editor.js";
 import {
@@ -112,6 +113,8 @@ function renderNote(element) {
 // отрисовки — так подтягивается и карточка, вставленная соседом.
 const cardData = new Map(); // "monster:id" → { card, data } | { card, error }
 const cardLoading = new Set();
+// deadAudio — адреса треков, которые не загрузились: файл удалён из библиотеки.
+const deadAudio = new Set();
 
 function cardKey(card) {
   return card.kind + ":" + card.id;
@@ -316,8 +319,10 @@ function renderAudioCard(card) {
   const tags = [];
   if (card.sfx) tags.push("эффект");
   else if (card.loop) tags.push("зациклен");
+  const dead = deadAudio.has(card.url);
+  if (dead) tags.push("файла нет в загрузках");
   const controls = [];
-  if (gm && hasHost) {
+  if (gm && hasHost && !dead) {
     controls.push(
       createElement(
         "button",
@@ -336,7 +341,19 @@ function renderAudioCard(card) {
     }
   }
   controls.push(
-    createElement("audio", { className: "board-card-audio", controls: true, preload: "none", src: card.url, key: "audio", title: "Слушать у себя" })
+    createElement("audio", {
+      className: "board-card-audio",
+      controls: true,
+      preload: "metadata",
+      src: card.url,
+      key: "audio",
+      title: "Слушать у себя",
+      onError: () => {
+        if (deadAudio.has(card.url)) return;
+        deadAudio.add(card.url);
+        editor?.repaint();
+      },
+    })
   );
   return cardShell("audio", [
     createElement("div", { className: "board-card-head", key: "head" }, [
@@ -449,17 +466,29 @@ async function pickCharacter() {
   return picked ? { link: characterLink(picked.id), ...CARD_SIZE.character } : null;
 }
 
+// Трек, чьего файла уже нет в загрузках (плейлист пережил удаление музыки
+// из библиотеки), не предлагаем: он молчит и в панели плейлистов.
 async function pickTrack() {
-  const playlists = await fetchAdminPlaylists().catch(() => []);
+  const [playlists, assets] = await Promise.all([
+    fetchAdminPlaylists().catch(() => []),
+    fetchAssets().catch(() => null),
+  ]);
+  const known = assets ? new Set((assets.audio || []).map((a) => a.url)) : null;
   const items = [];
+  let dead = 0;
   for (const p of playlists) {
-    for (const t of p.tracks || []) items.push({ playlist: p, track: t });
+    for (const t of p.tracks || []) {
+      if (known && !known.has(t.url)) dead++;
+      else items.push({ playlist: p, track: t });
+    }
   }
   const picked = await pickFromList({
     title: "Музыка на доску",
     okLabel: "Вставить",
     items,
-    empty: "Плейлисты пусты — добавь треки в разделе «Плейлисты».",
+    empty: dead
+      ? "Файлов треков нет в загрузках — плейлисты ссылаются на удалённую музыку."
+      : "Плейлисты пусты — добавь треки в разделе «Плейлисты».",
     render: (row, { playlist, track }) =>
       pickRowText(row, track.name, playlist.name + (playlist.kind === "sfx" ? " · эффект" : "")),
   });
