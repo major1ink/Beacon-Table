@@ -34,3 +34,60 @@ export function findEntryByTitle(entries, title) {
   const want = title.trim().toLowerCase();
   return entries.find((e) => (e.title || "").trim().toLowerCase() === want) || null;
 }
+
+// ---- карточки стола: монстр, персонаж, трек ----
+//
+// Свой протокол beacon://, а не вики-ссылка: в ваулте этих сущностей нет.
+// Трек хранится адресом файла, не id из плейлиста — у игрока к плейлистам
+// доступа нет, а слышать трек он должен.
+const CARD_LINK = /^beacon:\/\/([a-z]+)(?:\/([^?]*))?(?:\?(.*))?$/;
+
+// parseCardLink — «beacon://monster/abc» → { kind, id };
+// «beacon://audio?url=…» → { kind, url, name, volume, loop, sfx }; иначе null.
+export function parseCardLink(link) {
+  if (typeof link !== "string") return null;
+  const m = CARD_LINK.exec(link.trim());
+  if (!m) return null;
+  const [, kind, id, query] = m;
+  if (kind === "monster" || kind === "character") {
+    return id ? { kind, id: decodeURIComponent(id) } : null;
+  }
+  if (kind === "audio") {
+    const q = new URLSearchParams(query || "");
+    const url = q.get("url") || "";
+    if (!url.startsWith("/")) return null;
+    const volume = parseFloat(q.get("volume"));
+    return {
+      kind,
+      url,
+      name: q.get("name") || "Без названия",
+      volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0.8,
+      loop: q.get("loop") === "1",
+      sfx: q.get("sfx") === "1",
+    };
+  }
+  return null;
+}
+
+export function monsterLink(id) {
+  return "beacon://monster/" + encodeURIComponent(id);
+}
+
+export function characterLink(id) {
+  return "beacon://character/" + encodeURIComponent(id);
+}
+
+export function audioLink({ url, name, volume, loop, sfx }) {
+  const q = new URLSearchParams();
+  q.set("url", url);
+  q.set("name", name || "");
+  q.set("volume", String(typeof volume === "number" ? volume : 0.8));
+  if (loop) q.set("loop", "1");
+  if (sfx) q.set("sfx", "1");
+  return "beacon://audio?" + q.toString();
+}
+
+// isBoardLink — врезка, которую доска рисует сама: запись или карточка.
+export function isBoardLink(link) {
+  return parseWikilink(link) !== null || parseCardLink(link) !== null;
+}

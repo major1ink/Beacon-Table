@@ -4,12 +4,38 @@
 // Сохранением страница не занимается вовсе: правки уходят по WebSocket, на
 // диск пишет сервер.
 import { createElement } from "react";
-import { fetchMe, fetchBoard, fetchBoardScene, fetchJournal, fetchJournalEntry, uploadFile, fetchBoardImages } from "../api.js";
+import {
+  fetchMe,
+  fetchBoard,
+  fetchBoardScene,
+  fetchJournal,
+  fetchJournalEntry,
+  uploadFile,
+  fetchBoardImages,
+  fetchBestiary,
+  fetchMonster,
+  fetchCharacters,
+  fetchCharacter,
+  fetchAdminCharacters,
+  fetchAdminCharacter,
+  fetchAdminPlaylists,
+} from "../api.js";
 import { mountBoardEditor } from "../board/editor.js";
-import { parseWikilink, wikilink, findEntryByTitle } from "../board/links.js";
+import {
+  parseWikilink,
+  wikilink,
+  findEntryByTitle,
+  parseCardLink,
+  monsterLink,
+  characterLink,
+  audioLink,
+  isBoardLink,
+} from "../board/links.js";
 import { openModal, showAlert } from "../modal.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { openFloatingWindow } from "../floating-window.js";
+import { icon } from "../icons.js";
+import { isGM } from "../roles.js";
 
 const editorRoot = document.getElementById("editorRoot");
 const statusEl = document.getElementById("status");
@@ -19,6 +45,9 @@ const readonlyBadge = document.getElementById("readonlyBadge");
 const linkState = document.getElementById("linkState");
 const linkBtn = document.getElementById("linkBtn");
 const imageBtn = document.getElementById("imageBtn");
+const monsterBtn = document.getElementById("monsterBtn");
+const charBtn = document.getElementById("charBtn");
+const musicBtn = document.getElementById("musicBtn");
 const peersEl = document.getElementById("peers");
 
 // Доска открывается плавающим окном по ссылке board.html?id=… — см.
@@ -31,6 +60,9 @@ function fail(msg) {
 }
 
 let me = "";
+// gm — ДМ: бестиарий, чужие листы, плейлисты и музыка на стол.
+let gm = false;
+let editor = null;
 // Записи журнала для связывания. Читаются один раз при открытии доски:
 // заводят их редко, а ходить в сеть на каждый клик по ссылке незачем.
 let entries = [];
@@ -74,10 +106,393 @@ function renderNote(element) {
   ]);
 }
 
+// ---- карточки стола: монстр, персонаж, трек (см. board/links.js) ----
+//
+// Данные в кэше: врезка рисуется на каждый кадр. Первый раз грузим прямо из
+// отрисовки — так подтягивается и карточка, вставленная соседом.
+const cardData = new Map(); // "monster:id" → { card, data } | { card, error }
+const cardLoading = new Set();
+
+function cardKey(card) {
+  return card.kind + ":" + card.id;
+}
+
+function cardName(card) {
+  if (card.kind === "audio") return card.name;
+  const got = cardData.get(cardKey(card));
+  return (got && got.data && got.data.name) || (card.kind === "monster" ? "Монстр" : "Персонаж");
+}
+
+// loadCard — монстр или персонаж в кэш и перерисовка. Ошибку (чужой лист
+// игроку) тоже кладём: карточка скажет об этом словами. force — перечитать.
+async function loadCard(card, force = false) {
+  const key = cardKey(card);
+  if (cardLoading.has(key) || (!force && cardData.has(key))) return;
+  cardLoading.add(key);
+  try {
+    let data;
+    if (card.kind === "monster") data = await fetchMonster(card.id);
+    else data = gm ? await fetchAdminCharacter(card.id) : await fetchCharacter(card.id);
+    cardData.set(key, { card, data });
+  } catch (err) {
+    cardData.set(key, { card, error: (err && err.message) || "не удалось загрузить" });
+  } finally {
+    cardLoading.delete(key);
+  }
+  editor?.repaint();
+}
+
+function abilityMod(score) {
+  const n = Math.floor(((score || 0) - 10) / 2);
+  return n >= 0 ? "+" + n : String(n);
+}
+
+const ABILITIES = [
+  ["str", "Сил"],
+  ["dex", "Лов"],
+  ["con", "Тел"],
+  ["int", "Инт"],
+  ["wis", "Муд"],
+  ["cha", "Хар"],
+];
+
+function abilitiesRow(abilities) {
+  return createElement(
+    "div",
+    { className: "board-card-abilities", key: "ab" },
+    ABILITIES.map(([k, label]) => {
+      const v = (abilities && abilities[k]) || 10;
+      return createElement("div", { className: "board-card-ability", key: k }, [
+        createElement("span", { className: "board-card-ability-label", key: "l" }, label),
+        createElement("span", { key: "v" }, v + " (" + abilityMod(v) + ")"),
+      ]);
+    })
+  );
+}
+
+function statCell(label, value, key) {
+  return createElement("div", { className: "board-card-stat", key }, [
+    createElement("span", { className: "board-card-stat-label", key: "l" }, label),
+    createElement("span", { key: "v", title: value }, value),
+  ]);
+}
+
+function iconSpan(name, key) {
+  return createElement("span", {
+    className: "board-card-icon",
+    key,
+    dangerouslySetInnerHTML: { __html: icon(name, { size: 12 }) },
+  });
+}
+
+// cardHead — портрет, имя (кнопка на полную карточку) и подзаголовок.
+function cardHead({ image, name, subtitle, onOpen, openTitle }) {
+  return createElement("div", { className: "board-card-head", key: "head" }, [
+    image
+      ? createElement("img", { className: "board-card-portrait", src: image, alt: "", key: "img" })
+      : createElement("div", { className: "board-card-portrait board-card-portrait-empty", key: "img" }),
+    createElement("div", { className: "board-card-titles", key: "t" }, [
+      createElement(
+        "button",
+        { type: "button", className: "board-card-name", title: openTitle, onClick: onOpen, key: "n" },
+        name || "Без имени"
+      ),
+      subtitle ? createElement("div", { className: "board-card-sub", key: "s" }, subtitle) : null,
+    ]),
+  ]);
+}
+
+function cardShell(kind, children) {
+  return createElement("div", { className: "board-card board-card-" + kind }, children);
+}
+
+function cardMessage(kind, text) {
+  return cardShell(kind, [createElement("div", { className: "board-card-msg", key: "m" }, text)]);
+}
+
+// Значок ссылки есть и у недоступной карточки (чужой лист, бестиарий у
+// игрока) — страница карточки увела бы на «/», лучше сказать здесь.
+function openMonster(id, name) {
+  if (!gm) {
+    showAlert("Статблок открывает только ДМ.");
+    return;
+  }
+  openWindow({ key: "monster-" + id, title: name, url: "/bestiary.html?id=" + encodeURIComponent(id) });
+}
+
+function openCharacter(id, name) {
+  const got = cardData.get("character:" + id);
+  if (got && got.error) {
+    showAlert("Лист недоступен: " + got.error);
+    return;
+  }
+  openWindow({ key: "char-" + id, title: name, url: "/character-sheet.html?id=" + encodeURIComponent(id) });
+}
+
+// renderMonsterCard — сжатый статблок; полный — по имени, окном бестиария.
+function renderMonsterCard(card) {
+  const got = cardData.get(cardKey(card));
+  if (!got) {
+    loadCard(card);
+    return cardMessage("monster", "Загружаю…");
+  }
+  if (got.error) return cardMessage("monster", "Монстр недоступен: " + got.error);
+  const m = got.data;
+  const subtitle = [m.size, m.type].filter(Boolean).join(" ") + (m.alignment ? ", " + m.alignment : "");
+  const hp = m.hp ? String(m.hp) + (m.hitDice ? " (" + m.hitDice + ")" : "") : "—";
+  const ac = m.ac ? String(m.ac) + (m.acNote ? " (" + m.acNote + ")" : "") : "—";
+  return cardShell("monster", [
+    cardHead({
+      image: m.imageUrl,
+      name: m.name,
+      subtitle,
+      onOpen: () => openMonster(card.id, m.name),
+      openTitle: "Открыть статблок",
+    }),
+    createElement("div", { className: "board-card-stats", key: "stats" }, [
+      statCell("КД", ac, "ac"),
+      statCell("Хиты", hp, "hp"),
+      statCell("Скорость", m.speed || "—", "spd"),
+    ]),
+    abilitiesRow(m.abilities),
+    createElement("div", { className: "board-card-foot", key: "foot" }, [
+      createElement("span", { key: "cr" }, "Опасность " + (m.cr || "—")),
+      m.proficiencyBonus ? createElement("span", { key: "pb" }, "Мастерство +" + m.proficiencyBonus) : null,
+    ]),
+  ]);
+}
+
+function renderCharacterCard(card) {
+  const got = cardData.get(cardKey(card));
+  if (!got) {
+    loadCard(card);
+    return cardMessage("character", "Загружаю…");
+  }
+  if (got.error) return cardMessage("character", "Лист недоступен: " + got.error);
+  const c = got.data;
+  const sheet = c.sheet || {};
+  const info = sheet.info || {};
+  const combat = sheet.combat || {};
+  const who = [info.class, info.level ? info.level + " ур." : ""].filter(Boolean).join(" ");
+  const kin = info.species || info.race || "";
+  const player = info.playerName || c.accountUsername || "";
+  const subtitle = [who, kin].filter(Boolean).join(" · ") + (player ? " — " + player : "");
+  let hp = combat.hpMax ? (combat.hpCurrent || 0) + " / " + combat.hpMax : "—";
+  if (combat.hpTemp) hp += " +" + combat.hpTemp;
+  return cardShell("character", [
+    cardHead({
+      image: c.avatarUrl,
+      name: c.name,
+      subtitle,
+      onOpen: () => openCharacter(card.id, c.name),
+      openTitle: "Открыть лист персонажа",
+    }),
+    createElement("div", { className: "board-card-stats", key: "stats" }, [
+      statCell("КД", combat.ac ? String(combat.ac) : "—", "ac"),
+      statCell("Хиты", hp, "hp"),
+      statCell("Скорость", combat.speed ? combat.speed + " фт." : "—", "spd"),
+    ]),
+    abilitiesRow(sheet.abilities),
+  ]);
+}
+
+// playOnTable — трек всем за столом. Шлёт сам стол (pages/dm.js слушает
+// beacon:playCue/playSfx): у доски сокета сцены нет.
+function playOnTable(card) {
+  if (!gm || !hasHost) return;
+  const msg = card.sfx
+    ? { type: "beacon:playSfx", sfx: { url: card.url, name: card.name, volume: card.volume } }
+    : { type: "beacon:playCue", cue: { url: card.url, name: card.name, volume: card.volume, loop: card.loop } };
+  hostWindow().postMessage(msg, location.origin);
+}
+
+function stopOnTable() {
+  if (!gm || !hasHost) return;
+  hostWindow().postMessage({ type: "beacon:stopCue" }, location.origin);
+}
+
+// renderAudioCard — кнопки «на стол» только у ДМ за столом; <audio> у всех.
+function renderAudioCard(card) {
+  const tags = [];
+  if (card.sfx) tags.push("эффект");
+  else if (card.loop) tags.push("зациклен");
+  const controls = [];
+  if (gm && hasHost) {
+    controls.push(
+      createElement(
+        "button",
+        { type: "button", className: "board-card-btn", key: "play", onClick: () => playOnTable(card), title: card.sfx ? "Проиграть всем за столом" : "Включить всем за столом" },
+        [iconSpan("play", "i"), " ", card.sfx ? "Запустить" : "На стол"]
+      )
+    );
+    if (!card.sfx) {
+      controls.push(
+        createElement(
+          "button",
+          { type: "button", className: "board-card-btn", key: "stop", onClick: stopOnTable, title: "Остановить канал ДМ" },
+          [iconSpan("pause", "i"), " Стоп"]
+        )
+      );
+    }
+  }
+  controls.push(
+    createElement("audio", { className: "board-card-audio", controls: true, preload: "none", src: card.url, key: "audio", title: "Слушать у себя" })
+  );
+  return cardShell("audio", [
+    createElement("div", { className: "board-card-head", key: "head" }, [
+      iconSpan(card.sfx ? "zap" : "music", "i"),
+      createElement("div", { className: "board-card-titles", key: "t" }, [
+        createElement("div", { className: "board-card-name", key: "n" }, card.name),
+        tags.length ? createElement("div", { className: "board-card-sub", key: "s" }, tags.join(" · ")) : null,
+      ]),
+    ]),
+    createElement("div", { className: "board-card-controls", key: "c" }, controls),
+  ]);
+}
+
+// renderEmbed — содержимое врезки: запись журнала или карточка.
+function renderEmbed(element) {
+  const card = parseCardLink(element.link);
+  if (!card) return renderNote(element);
+  if (card.kind === "monster") return renderMonsterCard(card);
+  if (card.kind === "character") return renderCharacterCard(card);
+  return renderAudioCard(card);
+}
+
+// CARD_SIZE — размер карточки при вставке.
+const CARD_SIZE = {
+  monster: { width: 320, height: 200 },
+  character: { width: 320, height: 176 },
+  audio: { width: 300, height: 104 },
+};
+
+// pickFromList — диалог выбора: поиск и список.
+async function pickFromList({ title, okLabel, items, empty, render }) {
+  if (!items.length) {
+    showAlert(empty);
+    return null;
+  }
+  let chosen = null;
+  return openModal({
+    title,
+    okLabel,
+    buildBody: (body, submit) => {
+      const search = document.createElement("input");
+      search.type = "search";
+      search.className = "bt-modal-input";
+      search.placeholder = "Поиск";
+      const list = document.createElement("div");
+      list.className = "pick-list";
+      const rows = items.map((item) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "pick-row";
+        render(row, item);
+        row.onclick = () => {
+          chosen = item;
+          for (const r of rows) r.classList.toggle("on", r === row);
+        };
+        row.ondblclick = () => {
+          chosen = item;
+          submit();
+        };
+        list.appendChild(row);
+        return row;
+      });
+      search.oninput = () => {
+        const q = search.value.trim().toLowerCase();
+        for (const row of rows) row.hidden = q !== "" && !row.textContent.toLowerCase().includes(q);
+      };
+      body.append(search, list);
+      return search;
+    },
+    onOk: () => chosen,
+    onCancel: () => null,
+  });
+}
+
+function pickRowText(row, main, meta) {
+  const a = document.createElement("span");
+  a.className = "pick-main";
+  a.textContent = main;
+  row.appendChild(a);
+  if (meta) {
+    const b = document.createElement("span");
+    b.className = "pick-meta";
+    b.textContent = meta;
+    row.appendChild(b);
+  }
+}
+
+async function pickMonster() {
+  const list = await fetchBestiary().catch(() => []);
+  const picked = await pickFromList({
+    title: "Монстр на доску",
+    okLabel: "Вставить",
+    items: list,
+    empty: "Бестиарий пуст — заведи монстра или импортируй модуль.",
+    render: (row, m) =>
+      pickRowText(row, m.name, [m.type, m.cr ? "опасность " + m.cr : ""].filter(Boolean).join(" · ")),
+  });
+  return picked ? { link: monsterLink(picked.id), ...CARD_SIZE.monster } : null;
+}
+
+async function pickCharacter() {
+  const list = await (gm ? fetchAdminCharacters() : fetchCharacters()).catch(() => []);
+  const picked = await pickFromList({
+    title: "Персонаж на доску",
+    okLabel: "Вставить",
+    items: list,
+    empty: gm ? "Персонажей за столом пока нет." : "У тебя пока нет персонажей.",
+    render: (row, c) => pickRowText(row, c.name, c.accountUsername || ""),
+  });
+  return picked ? { link: characterLink(picked.id), ...CARD_SIZE.character } : null;
+}
+
+async function pickTrack() {
+  const playlists = await fetchAdminPlaylists().catch(() => []);
+  const items = [];
+  for (const p of playlists) {
+    for (const t of p.tracks || []) items.push({ playlist: p, track: t });
+  }
+  const picked = await pickFromList({
+    title: "Музыка на доску",
+    okLabel: "Вставить",
+    items,
+    empty: "Плейлисты пусты — добавь треки в разделе «Плейлисты».",
+    render: (row, { playlist, track }) =>
+      pickRowText(row, track.name, playlist.name + (playlist.kind === "sfx" ? " · эффект" : "")),
+  });
+  if (!picked) return null;
+  const { playlist, track } = picked;
+  return {
+    link: audioLink({ url: track.url, name: track.name, volume: track.volume, loop: track.loop, sfx: playlist.kind === "sfx" }),
+    ...CARD_SIZE.audio,
+  };
+}
+
+// hostWindow — окно стола: parent у iframe, opener у вынесенного 🗗 окна
+// (см. floating-window.js). Открытая по прямому адресу доска — сама себе.
+function hostWindow() {
+  if (window.opener && window.opener !== window) return window.opener;
+  return window.parent;
+}
+
+const hasHost = hostWindow() !== window;
+
+// openWindow — окном стола, иначе карточка встала бы внутрь рамки доски.
+function openWindow(spec) {
+  if (hasHost) {
+    hostWindow().postMessage({ type: "beacon:openFloatingWindow", ...spec }, location.origin);
+  } else {
+    openFloatingWindow(spec);
+  }
+}
+
 // openJournal — то же окно журнала, что открывают значки заметок на карте и
 // боковое меню (key "journal", см. pages/dm.js).
 function openJournal(entryId) {
-  openFloatingWindow({
+  openWindow({
     key: "journal",
     title: "Журнал стола",
     url: "/journal.html?id=" + encodeURIComponent(entryId),
@@ -88,9 +503,16 @@ function openJournal(entryId) {
   });
 }
 
-// followLink — true, если ссылку разобрали и открыли сами. Всё, что не
-// [[Заметка]], пусть открывает Excalidraw как обычный адрес.
+// followLink — true, если ссылку разобрали и открыли сами; прочие адреса
+// открывает Excalidraw.
 function followLink(link) {
+  const card = parseCardLink(link);
+  if (card) {
+    if (card.kind === "monster") openMonster(card.id, cardName(card));
+    else if (card.kind === "character") openCharacter(card.id, cardName(card));
+    else if (card.kind === "audio") playOnTable(card);
+    return true;
+  }
   const title = parseWikilink(link);
   if (!title) return false;
   const entry = findEntryByTitle(entries, title);
@@ -108,6 +530,8 @@ function showSelection(el) {
   selected = el;
   linkBtn.hidden = !el;
   if (!el) return;
+  // У карточки ссылка занята.
+  linkBtn.hidden = parseCardLink(el.link) !== null;
   const title = parseWikilink(el.link);
   linkBtn.textContent = title ? "Связано: " + title : "Связать с журналом";
 }
@@ -266,7 +690,9 @@ async function pickImage() {
   let scene;
   try {
     // Свой id нужен, чтобы не показывать себя же в списке соседей.
-    me = (await fetchMe())?.id || "";
+    const account = await fetchMe();
+    me = account?.id || "";
+    gm = isGM(account?.role);
     board = await fetchBoard(boardId);
     scene = await fetchBoardScene(boardId);
   } catch (err) {
@@ -288,7 +714,7 @@ async function pickImage() {
   entries = await fetchJournal().catch(() => []);
 
   statusEl.style.display = "none";
-  const editor = mountBoardEditor(editorRoot, {
+  editor = mountBoardEditor(editorRoot, {
     boardId,
     scene,
     readOnly,
@@ -296,14 +722,15 @@ async function pickImage() {
     onPeers: showPeers,
     onSelection: readOnly ? undefined : showSelection,
     onLinkOpen: followLink,
-    renderNote,
-    isNoteLink: (link) => parseWikilink(link) !== null,
+    renderEmbed,
+    isEmbedLink: isBoardLink,
     uploadImage,
   });
 
-  // Тексты врезок перечитываем при возврате в окно: запись правят в журнале,
-  // и доска не должна показывать вчерашний текст.
+  // Записи и карточки перечитываем при возврате в окно: их правят в других
+  // окнах.
   async function refreshNotes() {
+    for (const { card } of cardData.values()) loadCard(card, true);
     const wanted = new Set();
     for (const e of scene.elements || []) {
       const title = e && parseWikilink(e.link);
@@ -326,6 +753,18 @@ async function pickImage() {
     const picked = await pickImage();
     if (picked) await editor.insertImage(picked);
   };
+
+  // Бестиарий и плейлисты — только у ДМ; своих персонажей игрок кладёт сам.
+  monsterBtn.hidden = readOnly || !gm;
+  charBtn.hidden = readOnly;
+  musicBtn.hidden = readOnly || !gm;
+  const insertCard = (pick) => async () => {
+    const picked = await pick();
+    if (picked) editor.insertCard(picked);
+  };
+  monsterBtn.onclick = insertCard(pickMonster);
+  charBtn.onclick = insertCard(pickCharacter);
+  musicBtn.onclick = insertCard(pickTrack);
 
   linkBtn.onclick = async () => {
     if (!selected) return;

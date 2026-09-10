@@ -36,11 +36,27 @@
     #linkState { color: var(--text-dim); font-size: 11px; }
     #linkState.err { color: var(--danger, #e5484d); }
     #peers { color: var(--text-dim); font-size: 11px; }
-    #linkBtn, #imageBtn {
+    .topbar-btn {
       cursor: pointer; padding: 4px 10px; border: none; border-radius: var(--radius);
       background: var(--surface); color: var(--text); font: inherit; font-size: 11px;
     }
-    #linkBtn:hover, #imageBtn:hover { background: var(--surface-hover); }
+    .topbar-btn:hover { background: var(--surface-hover); }
+
+    /* Выбор из списка: монстр, персонаж, трек. */
+    .pick-list {
+      display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto;
+      margin-top: 8px;
+    }
+    .pick-row {
+      cursor: pointer; display: flex; align-items: baseline; gap: 8px; text-align: left;
+      padding: 6px 8px; border: 1px solid transparent; border-radius: var(--radius);
+      background: var(--surface); color: var(--text); font: inherit; font-size: 12px;
+    }
+    .pick-row[hidden] { display: none; }
+    .pick-row:hover { background: var(--surface-hover); }
+    .pick-row.on { border-color: var(--accent, #7c6cf0); }
+    .pick-main { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pick-meta { flex: 0 0 auto; color: var(--text-dim); font-size: 11px; }
 
     /* Выбор картинки из уже загруженных. */
     .image-grid {
@@ -88,6 +104,54 @@
     .board-note-body table { border-collapse: collapse; }
     .board-note-body :where(td, th) { border: 1px solid var(--border); padding: 2px 6px; }
 
+    /* Карточка стола во врезке (монстр, персонаж, трек) — см. renderEmbed в
+       src/pages/board.js. */
+    .board-card {
+      width: 100%; height: 100%; box-sizing: border-box; overflow: auto;
+      display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+      background: var(--panel-bg); color: var(--text); font-size: 12px; line-height: 1.35;
+    }
+    .board-card-msg { color: var(--text-dim); }
+    .board-card-head { display: flex; align-items: center; gap: 10px; min-height: 0; }
+    .board-card-portrait {
+      flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
+      background: var(--surface);
+    }
+    .board-card-portrait-empty { border: 1px dashed var(--border); box-sizing: border-box; }
+    .board-card-titles { flex: 1 1 auto; min-width: 0; }
+    .board-card-name {
+      display: block; max-width: 100%; padding: 0; border: none; background: none;
+      color: var(--text); font: inherit; font-size: 14px; font-weight: 600; text-align: left;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    button.board-card-name { cursor: pointer; }
+    button.board-card-name:hover { text-decoration: underline; }
+    .board-card-sub {
+      color: var(--text-dim); font-size: 11px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .board-card-stats { display: flex; gap: 12px; }
+    .board-card-stat { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+    .board-card-stat > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .board-card-stat-label, .board-card-ability-label {
+      color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .board-card-abilities {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; text-align: center;
+    }
+    .board-card-ability { display: flex; flex-direction: column; white-space: nowrap; }
+    .board-card-foot { display: flex; gap: 12px; color: var(--text-dim); font-size: 11px; }
+    .board-card-icon { display: inline-flex; align-items: center; flex: 0 0 auto; }
+    .board-card-audio .board-card-head > .board-card-icon { width: 28px; height: 28px; justify-content: center; }
+    .board-card-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .board-card-btn {
+      cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 9px; border: none; border-radius: var(--radius);
+      background: var(--surface); color: var(--text); font: inherit; font-size: 11px;
+    }
+    .board-card-btn:hover { background: var(--surface-hover); }
+    .board-card-audio audio { flex: 1 1 140px; min-width: 0; height: 28px; }
+
     #status {
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
       color: var(--text-dim); font-size: 13px; text-align: center; line-height: 1.5;
@@ -103,16 +167,17 @@
       #boardName { flex: 1 1 100%; }
       #boardMeta { display: none; }
       #topbarRight { margin-left: 0; flex: 1 1 100%; }
-      #linkBtn, #imageBtn { padding: 7px 12px; font-size: 12px; }
+      .topbar-btn { padding: 7px 12px; font-size: 12px; }
       .image-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 46dvh; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/board-B8ENHWMn.js"></script>
+  <script type="module" crossorigin src="/assets/board-B8ZH2wym.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-zhgPl-72.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-egQBZsV9.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
   <link rel="modulepreload" crossorigin href="/assets/floating-window-BvBPWx1q.js">
+  <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
   <link rel="stylesheet" crossorigin href="/assets/board-BcAUh2Nm.css">
 </head>
@@ -121,8 +186,11 @@
     <span id="boardName">Доска</span>
     <span id="boardMeta"></span>
     <div id="topbarRight">
-      <button type="button" id="imageBtn" hidden>Картинка</button>
-      <button type="button" id="linkBtn" hidden>Связать с журналом</button>
+      <button type="button" class="topbar-btn" id="imageBtn" hidden>Картинка</button>
+      <button type="button" class="topbar-btn" id="monsterBtn" hidden>Монстр</button>
+      <button type="button" class="topbar-btn" id="charBtn" hidden>Персонаж</button>
+      <button type="button" class="topbar-btn" id="musicBtn" hidden>Музыка</button>
+      <button type="button" class="topbar-btn" id="linkBtn" hidden>Связать с журналом</button>
       <span id="peers"></span>
       <span id="linkState"></span>
       <span id="readonlyBadge">только чтение</span>

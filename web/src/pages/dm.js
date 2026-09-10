@@ -3765,6 +3765,19 @@ window.addEventListener("message", async (e) => {
       );
       if (row) row.scrollIntoView({ block: "center" });
     }
+  } else if (e.data.type === "beacon:playCue") {
+    // Карточка трека на доске (pages/board.js): сокет сцены есть только здесь.
+    const c = e.data.cue;
+    if (vtt && c && typeof c.url === "string") {
+      vtt.send({ type: "play_cue", cue: { url: c.url, name: c.name || "", volume: c.volume, loop: !!c.loop } });
+    }
+  } else if (e.data.type === "beacon:stopCue") {
+    if (vtt) vtt.send({ type: "stop_cue" });
+  } else if (e.data.type === "beacon:playSfx") {
+    const s = e.data.sfx;
+    if (vtt && s && typeof s.url === "string") {
+      vtt.send({ type: "play_sfx", sfx: { url: s.url, name: s.name || "", volume: s.volume } });
+    }
   } else if (e.data.type === "beacon:characterSaved") {
     // Имя/аватар поменяли в листе — dmCharacters держит свою копию (она же
     // источник drag&drop на карту), перечитываем.

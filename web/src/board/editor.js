@@ -114,7 +114,7 @@ function makeBoundText(el, text) {
 
 // mountBoardEditor монтирует редактор в el. scene — холст, прочитанный по
 // HTTP для первой отрисовки; дальше всё идёт через WebSocket.
-export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen, renderNote, isNoteLink, uploadImage } = {}) {
+export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen, renderEmbed, isEmbedLink, uploadImage } = {}) {
   const root = createRoot(el);
 
   let api = null;
@@ -327,13 +327,13 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       UIOptions: UI_OPTIONS,
       // Ходит на oss-ai.excalidraw.com.
       aiEnabled: false,
-      // Врезки пускаем только свои — ссылки на записи журнала. Всё чужое
-      // (YouTube, Figma) осталось запрещённым: тянуть посторонние страницы в
-      // iframe столу незачем. В файле такие элементы сохраняются, просто не
-      // отрисовываются.
-      validateEmbeddable: (link) => !!isNoteLink?.(link),
-      // Содержимое врезки рисуем сами — см. renderNote в pages/board.js.
-      renderEmbeddable: (element) => renderNote?.(element) ?? null,
+      // Врезки пускаем только свои — записи журнала и карточки стола. Всё
+      // чужое (YouTube, Figma) осталось запрещённым: тянуть посторонние
+      // страницы в iframe столу незачем. В файле такие элементы сохраняются,
+      // просто не отрисовываются.
+      validateEmbeddable: (link) => !!isEmbedLink?.(link),
+      // Содержимое врезки рисуем сами — см. renderEmbed в pages/board.js.
+      renderEmbeddable: (element) => renderEmbed?.(element) ?? null,
     })
   );
 
@@ -380,6 +380,25 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       ]);
       api.updateScene({
         elements: [...api.getSceneElementsIncludingDeleted(), ...made],
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+      handleChange();
+    },
+    // insertCard — врезка-карточка (см. board/links.js) в центре экрана.
+    // Рамку берём у прямоугольника: заготовки для embeddable у конвертера нет.
+    insertCard({ link, width, height }) {
+      if (!api || readOnly) return;
+      const state = api.getAppState();
+      const at = viewportCoordsToSceneCoords(
+        { clientX: state.width / 2, clientY: state.height / 2 },
+        state
+      );
+      const [rect] = convertToExcalidrawElements([
+        { type: "rectangle", x: at.x - width / 2, y: at.y - height / 2, width, height },
+      ]);
+      const card = newElementWith(rect, { type: "embeddable", link });
+      api.updateScene({
+        elements: [...api.getSceneElementsIncludingDeleted(), card],
         captureUpdate: CaptureUpdateAction.IMMEDIATELY,
       });
       handleChange();
