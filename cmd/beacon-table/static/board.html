@@ -150,6 +150,9 @@
       background: var(--surface); color: var(--text); font: inherit; font-size: 11px;
     }
     .board-card-btn:hover { background: var(--surface-hover); }
+    /* Excalidraw глушит клики по врезке, пока её не активируют двойным
+       кликом; кнопкам и плееру это ни к чему. */
+    .board-card-btn, button.board-card-name, .board-card-audio audio { pointer-events: auto; }
     .board-card-audio audio { flex: 1 1 140px; min-width: 0; height: 28px; }
 
     #status {
