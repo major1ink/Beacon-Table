@@ -238,6 +238,9 @@ type TokenVision struct {
 // web/src/geometry.js:wallBlocksSight), во всём остальном обычная стена.
 // Door и Window взаимоисключающие — сервер сам сбрасывает одно при
 // выставлении другого (см. room.go: "set_wall_door"/"set_wall_window").
+//
+// DoorSound — звук этой двери при открытии/закрытии; пусто — берётся
+// SceneState.DoorSoundURL.
 
 type Wall struct {
 	ID           string  `json:"id"`
@@ -249,6 +252,7 @@ type Wall struct {
 	DoorState    string  `json:"doorState,omitempty"`
 	Window       bool    `json:"window,omitempty"`
 	LightThrough bool    `json:"lightThrough,omitempty"`
+	DoorSound    string  `json:"doorSound,omitempty"`
 }
 
 // Point — вершина многоугольника FogArea.
@@ -381,6 +385,8 @@ type SceneState struct {
 	Grid          GridSettings `json:"grid"`
 	AmbientURL    string       `json:"ambientUrl,omitempty"`
 	AmbientVolume float64      `json:"ambientVolume,omitempty"`
+	// DoorSoundURL — звук дверей сцены по умолчанию (см. Wall.DoorSound).
+	DoorSoundURL string `json:"doorSoundUrl,omitempty"`
 	// GlobalLight — освещение на ВСЮ карту (кнопки тулбара ДМ), независимо от
 	// расставленных источников света на токенах: "" — выключено (карта
 	// освещена только тем, что расставил DM — см. Token.Light), "dim" —
@@ -488,6 +494,7 @@ type PublicScene struct {
 	Grid          GridSettings           `json:"grid"`
 	AmbientURL    string                 `json:"ambientUrl,omitempty"`
 	AmbientVolume float64                `json:"ambientVolume,omitempty"`
+	DoorSoundURL  string                 `json:"doorSoundUrl,omitempty"`
 	GlobalLight   string                 `json:"globalLight,omitempty"`
 	Tokens        map[string]*Token      `json:"tokens"`
 	NoteMarkers   map[string]*NoteMarker `json:"noteMarkers"`

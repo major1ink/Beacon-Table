@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"beacon-table/internal/domain"
@@ -497,6 +498,23 @@ func (r *Room) run() {
 				r.cue = nil
 				r.broadcastCue()
 				continue
+			case "play_sfx":
+				// эфемерно, как animate_attack
+				if im.msg.Sfx != nil {
+					r.broadcastSfx(im.msg.Sfx.URL, im.msg.Sfx.Name, im.msg.Sfx.Volume)
+				}
+				continue
+			case "stop_sfx":
+				r.broadcastSfxStop()
+				continue
+			case "set_door_sound":
+				// не applyMutation: нужна проверка, что стена — дверь
+				if w, ok := r.scene.Walls[im.msg.ID]; ok && w.Door != "" {
+					w.DoorSound = strings.TrimSpace(im.msg.DoorSound)
+					r.markDirty(r.currentSceneID)
+					r.broadcastAll()
+				}
+				continue
 			case "set_cue_volume":
 				// живая правка громкости уже играющего трека — НЕ трогает
 				// StartedAtMs, иначе у всех перематывало бы трек на каждый
@@ -843,6 +861,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 		Grid:          r.scene.Grid,
 		AmbientURL:    r.scene.AmbientURL,
 		AmbientVolume: r.scene.AmbientVolume,
+		DoorSoundURL:  r.scene.DoorSoundURL,
 		GlobalLight:   r.scene.GlobalLight,
 		Tokens:        tokens,
 		NoteMarkers:   noteMarkers,
@@ -876,6 +895,31 @@ func (r *Room) snapshotPayload(c RoomClient) map[string]any {
 func (r *Room) broadcastAll() {
 	for c := range r.clients {
 		c.Send(r.snapshotPayload(c))
+	}
+}
+
+// doorSoundVolume — у двери своей громкости нет, клиент поправит локальным
+// ползунком «Эффекты».
+const doorSoundVolume = 0.8
+
+// broadcastSfx — одноразовый звук всем; громкость 0 клиент счёл бы тишиной,
+// поэтому clampVolume.
+func (r *Room) broadcastSfx(url, name string, volume float64) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return
+	}
+	payload := map[string]any{"type": "audio_sfx", "sfx": &domain.SfxEvent{URL: url, Name: name, Volume: clampVolume(volume)}}
+	for c := range r.clients {
+		c.Send(payload)
+	}
+}
+
+// broadcastSfxStop — оборвать все эффекты у всех.
+func (r *Room) broadcastSfxStop() {
+	payload := map[string]any{"type": "audio_sfx_stop"}
+	for c := range r.clients {
+		c.Send(payload)
 	}
 }
 
@@ -1036,6 +1080,12 @@ func (r *Room) handleToggleDoor(from RoomClient, msg domain.ClientMsg) {
 	}
 	r.markDirty(r.currentSceneID)
 	r.broadcastAll()
+	// звук с сервера: дверь открывает и игрок, а слышать должны все
+	if url := w.DoorSound; url != "" {
+		r.broadcastSfx(url, "", doorSoundVolume)
+	} else if r.scene.DoorSoundURL != "" {
+		r.broadcastSfx(r.scene.DoorSoundURL, "", doorSoundVolume)
+	}
 }
 
 // handleSetDoorLock — запереть/отпереть дверь, только ДМ (authorize не
@@ -2584,6 +2634,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		}
 		s.AmbientURL = msg.AmbientURL
 		s.AmbientVolume = msg.AmbientVolume
+		s.DoorSoundURL = strings.TrimSpace(msg.DoorSoundURL)
 		if oldW > 0 && oldH > 0 && (s.Width != oldW || s.Height != oldH) {
 			s.RescaleGeometry(oldW, oldH)
 		}

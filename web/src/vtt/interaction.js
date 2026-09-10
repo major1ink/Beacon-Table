@@ -1001,6 +1001,9 @@ export function createInteraction(ctx) {
           width: ctx.scene.width,
           height: ctx.scene.height,
           fogOfWar: ctx.scene.fogOfWar !== false,
+          ambientUrl: ctx.scene.ambientUrl || "",
+          ambientVolume: ctx.scene.ambientVolume || 0,
+          doorSoundUrl: ctx.scene.doorSoundUrl || "",
           grid: ctx.scene.grid,
         },
         overrides
@@ -1943,6 +1946,9 @@ export function createInteraction(ctx) {
     });
     document.addEventListener("vtt:setDoorLock", (e) => {
       ctx.send({ type: "set_door_lock", id: e.detail.id, locked: e.detail.locked });
+    });
+    document.addEventListener("vtt:setDoorSound", (e) => {
+      ctx.send({ type: "set_door_sound", id: e.detail.id, doorSound: e.detail.url });
     });
 
     // команды из контекстного меню токена (см. web/dm.html)

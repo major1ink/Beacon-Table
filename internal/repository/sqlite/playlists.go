@@ -39,8 +39,8 @@ func scanPlaylistTrack(row interface{ Scan(...any) error }) (*domain.PlaylistTra
 }
 
 // Create implements repository.PlaylistRepository.
-func (s *PlaylistStore) Create(ctx context.Context, id, name string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO playlists (id, name, company_id, created_at) VALUES (?, ?, ?, ?)`, id, name, s.companyID, time.Now().Format(timeLayout))
+func (s *PlaylistStore) Create(ctx context.Context, id, name, kind string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO playlists (id, name, kind, company_id, created_at) VALUES (?, ?, ?, ?, ?)`, id, name, kind, s.companyID, time.Now().Format(timeLayout))
 	return err
 }
 
@@ -65,7 +65,7 @@ func (s *PlaylistStore) Delete(ctx context.Context, id string) error {
 // единицы-десятки, дешевле отдать всё разом, чем городить N+1 запросов с
 // клиента на каждое открытие модалки "Плейлисты".
 func (s *PlaylistStore) List(ctx context.Context) ([]*domain.Playlist, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, created_at FROM playlists WHERE company_id = ? ORDER BY created_at`, s.companyID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, kind, created_at FROM playlists WHERE company_id = ? ORDER BY created_at`, s.companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (s *PlaylistStore) List(ctx context.Context) ([]*domain.Playlist, error) {
 	for rows.Next() {
 		var p domain.Playlist
 		var createdAt string
-		if err := rows.Scan(&p.ID, &p.Name, &createdAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Kind, &createdAt); err != nil {
 			rows.Close()
 			return nil, err
 		}

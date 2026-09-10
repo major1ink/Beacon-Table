@@ -667,7 +667,7 @@ func (s *foundryService) applyPlaylist(ctx context.Context, p *foundry.Playlist)
 	if p == nil || len(p.Tracks) == 0 {
 		return nil
 	}
-	created, err := s.playlists.Create(ctx, p.Name)
+	created, err := s.playlists.Create(ctx, p.Name, p.Kind)
 	if err != nil {
 		return fmt.Errorf("плейлист «%s»: %w", p.Name, err)
 	}

@@ -40,6 +40,7 @@ type migration struct {
 // как выглядит схема сегодня и как до неё дойти с любой прошлой версии.
 var schemaMigrations = []migration{
 	{version: 1, name: "исходная схема", apply: migrateV1},
+	{version: 2, name: "тип плейлиста (панель эффектов)", apply: migrateV2},
 }
 
 // sqlExec — общее у *sql.DB и *sql.Tx: чтобы вспомогательные функции
@@ -105,6 +106,11 @@ func applyOne(db *sql.DB, m migration) error {
 		return fmt.Errorf("миграция %d (%s): %w", m.version, m.name, err)
 	}
 	return nil
+}
+
+// migrateV2 — playlists.kind (см. domain.PlaylistKindSFX).
+func migrateV2(tx *sql.Tx) error {
+	return addColumnIfMissing(tx, "playlists", "kind", `TEXT NOT NULL DEFAULT ''`)
 }
 
 func userVersion(db *sql.DB) (int, error) {

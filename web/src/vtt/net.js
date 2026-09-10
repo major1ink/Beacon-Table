@@ -98,6 +98,10 @@ export function createNet(ctx, audio) {
     } else if (data.type === "audio_cue") {
       if (typeof data.serverNow === "number") ctx.clockOffsetMs = data.serverNow - Date.now();
       audio.applyCue(data.cue);
+    } else if (data.type === "audio_sfx") {
+      audio.playSfx(data.sfx);
+    } else if (data.type === "audio_sfx_stop") {
+      audio.stopSfx();
     } else if (data.type === "combat_state") {
       // Трекер инициативы (см. internal/service/room.go: combatPayload) —
       // не часть сцены (живёт вне r.scene, переживает switch_scene), поэтому

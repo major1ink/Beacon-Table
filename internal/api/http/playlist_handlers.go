@@ -40,7 +40,7 @@ func (a *API) handleAdminPlaylistsList(w http.ResponseWriter, r *http.Request) {
 			trackList = append(trackList, trackJSON(t))
 		}
 		out = append(out, map[string]any{
-			"id": p.ID, "name": p.Name, "createdAt": p.CreatedAt.Format(time.RFC3339), "tracks": trackList,
+			"id": p.ID, "name": p.Name, "kind": p.Kind, "createdAt": p.CreatedAt.Format(time.RFC3339), "tracks": trackList,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -54,12 +54,12 @@ func (a *API) handleAdminPlaylistCreate(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	var req struct{ Name string }
+	var req struct{ Name, Kind string }
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
-	p, err := world.Playlists.Create(r.Context(), req.Name)
+	p, err := world.Playlists.Create(r.Context(), req.Name, req.Kind)
 	if err != nil {
 		var verr *domain.ValidationError
 		if errors.As(err, &verr) {
@@ -70,7 +70,7 @@ func (a *API) handleAdminPlaylistCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	notifyPlaylists(world)
-	writeJSON(w, http.StatusCreated, map[string]any{"id": p.ID, "name": p.Name, "tracks": []any{}})
+	writeJSON(w, http.StatusCreated, map[string]any{"id": p.ID, "name": p.Name, "kind": p.Kind, "tracks": []any{}})
 }
 
 func (a *API) handleAdminPlaylistRename(w http.ResponseWriter, r *http.Request) {

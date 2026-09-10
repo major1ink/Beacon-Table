@@ -336,8 +336,9 @@ export async function deleteAdminPregen(id) {
 export async function fetchAdminPlaylists() {
   return apiFetch("/api/admin/playlists");
 }
-export async function createPlaylist(name) {
-  return apiFetch("/api/admin/playlists", { method: "POST", body: JSON.stringify({ name }) });
+// kind — "" | "sfx" (панель эффектов)
+export async function createPlaylist(name, kind = "") {
+  return apiFetch("/api/admin/playlists", { method: "POST", body: JSON.stringify({ name, kind }) });
 }
 export async function renamePlaylist(id, name) {
   return apiFetch(`/api/admin/playlists/${id}`, { method: "PUT", body: JSON.stringify({ name }) });

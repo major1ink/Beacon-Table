@@ -935,6 +935,7 @@ fogAreaMenuDelete.onclick = () => {
 const wallMenu = document.getElementById("wallMenu");
 const wallMenuToggleOpen = document.getElementById("wallMenuToggleOpen");
 const wallMenuToggleLock = document.getElementById("wallMenuToggleLock");
+const wallMenuDoorSound = document.getElementById("wallMenuDoorSound");
 const wallMenuMakeDoor = document.getElementById("wallMenuMakeDoor");
 const wallMenuMakeWindow = document.getElementById("wallMenuMakeWindow");
 const wallMenuMakeSecret = document.getElementById("wallMenuMakeSecret");
@@ -980,6 +981,7 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   wallMenuToggleOpen.textContent = menuWall && menuWall.doorState === "open" ? "🚪 Закрыть" : "🚪 Открыть";
   wallMenuToggleLock.style.display = isSelectMode && isDoor ? "flex" : "none";
   wallMenuToggleLock.textContent = menuWall && menuWall.doorState === "locked" ? "🔓 Отпереть" : "🔒 Запереть";
+  wallMenuDoorSound.style.display = isSelectMode && isDoor ? "flex" : "none";
   wallMenuMakeDoor.style.display = isWallMode && isPlain ? "flex" : "none";
   wallMenuMakeWindow.style.display = isWallMode && isPlain ? "flex" : "none";
   wallMenuMakeSecret.style.display = isWallMode && isDoor && !isSecret ? "flex" : "none";
@@ -1002,6 +1004,37 @@ wallMenuToggleLock.onclick = () => {
   const locked = menuWall.doorState !== "locked";
   document.dispatchEvent(new CustomEvent("vtt:setDoorLock", { detail: { id: menuWallId, locked } }));
   closeWallMenu();
+};
+// звук отдельной двери перекрывает общий звук дверей сцены (fDoorSoundUrl)
+wallMenuDoorSound.onclick = async () => {
+  if (!menuWallId || !menuWall) return;
+  const wallId = menuWallId;
+  const current = menuWall.doorSound || "";
+  closeWallMenu();
+  let select;
+  await openModal({
+    title: "Звук двери",
+    okLabel: "Сохранить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const field = document.createElement("div");
+      field.className = "field";
+      field.innerHTML = "<label>Играет при открытии и закрытии</label>";
+      select = document.createElement("select");
+      fillDoorSoundSelect(select, current, "— как у всей сцены —");
+      field.appendChild(select);
+      body.appendChild(field);
+      const hint = document.createElement("p");
+      hint.className = "bt-modal-text dim";
+      hint.textContent = "Загрузить новый файл можно в «Плейлисты» или «Настроить сцену → Аудио».";
+      body.appendChild(hint);
+      return select;
+    },
+    onOk: () => {
+      document.dispatchEvent(new CustomEvent("vtt:setDoorSound", { detail: { id: wallId, url: select.value } }));
+    },
+    onCancel: () => undefined,
+  });
 };
 wallMenuMakeDoor.onclick = () => {
   if (!menuWallId) return;
@@ -2878,6 +2911,7 @@ sceneCanvasEl.addEventListener("drop", (e) => {
 // постоянно занимающую место форму внизу панели. Порядок треков — drag-and-
 // drop (см. renderTrackRow) вместо кнопок вверх/вниз.
 const playlistAccordion = document.getElementById("playlistAccordion");
+const sfxBoards = document.getElementById("sfxBoards");
 const nowPlayingLabel = document.getElementById("nowPlayingLabel");
 const nowPlayingProgressBar = document.getElementById("nowPlayingProgressBar");
 const nowPlayingProgressFill = document.getElementById("nowPlayingProgressFill");
@@ -2958,9 +2992,155 @@ function cueBtnState(active) {
   return { icon: "pause", title: "Пауза", action: "pause" };
 }
 
+// isSfx — панель эффектов: не в аккордеоне, а сеткой кнопок (renderSfxBoards)
+function isSfx(p) {
+  return p.kind === "sfx";
+}
+
 function renderPlaylistAccordion() {
   playlistAccordion.innerHTML = "";
-  for (const p of playlists) playlistAccordion.appendChild(renderPlaylistItem(p));
+  for (const p of playlists) if (!isSfx(p)) playlistAccordion.appendChild(renderPlaylistItem(p));
+  renderSfxBoards();
+}
+
+// playlistHeaderButtons — «+ / переименовать / удалить», общие для плейлиста и панели эффектов
+function playlistHeaderButtons(p, { addTitle, renameTitle, delTitle, delMsg }) {
+  const addBtn = document.createElement("button");
+  addBtn.className = "icon-btn";
+  addBtn.title = addTitle;
+  addBtn.innerHTML = icon("plus", { size: 13 });
+  addBtn.onclick = (e) => {
+    e.stopPropagation();
+    openTrackModal({ playlist: p });
+  };
+
+  const renameBtn = document.createElement("button");
+  renameBtn.className = "icon-btn";
+  renameBtn.title = renameTitle;
+  renameBtn.innerHTML = icon("pencil", { size: 13 });
+  renameBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const newName = await showPrompt("Новое название:", { title: renameTitle, value: p.name, okLabel: "Переименовать" });
+    if (!newName) return;
+    try {
+      await renamePlaylist(p.id, newName);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = delTitle;
+  delBtn.innerHTML = icon("trash", { size: 13 });
+  delBtn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!(await showConfirm(delMsg, { title: delTitle, okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylist(p.id);
+      openPlaylistIds.delete(p.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+  return [addBtn, renameBtn, delBtn];
+}
+
+// ---- панель эффектов: кнопка = трек, play_sfx у всех поверх музыки ----
+function renderSfxBoards() {
+  sfxBoards.innerHTML = "";
+  for (const p of playlists) {
+    if (!isSfx(p)) continue;
+    const wrap = document.createElement("div");
+    wrap.className = "bt-sfx-board";
+
+    const header = document.createElement("div");
+    header.className = "bt-sfx-header";
+    const name = document.createElement("span");
+    name.className = "bt-playlist-name";
+    name.textContent = p.name;
+    const count = document.createElement("span");
+    count.className = "bt-playlist-count";
+    count.textContent = (p.tracks || []).length;
+    header.append(
+      name,
+      count,
+      ...playlistHeaderButtons(p, {
+        addTitle: "Добавить эффект",
+        renameTitle: "Переименовать панель",
+        delTitle: "Удалить панель",
+        delMsg: `Удалить панель «${p.name}» вместе со всеми эффектами?`,
+      })
+    );
+    wrap.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.className = "bt-sfx-grid";
+    const tracks = p.tracks || [];
+    if (!tracks.length) {
+      const hint = document.createElement("div");
+      hint.className = "bt-playlist-empty-hint";
+      hint.style.padding = "2px 4px 6px";
+      hint.textContent = "Нет эффектов — добавь через +";
+      grid.appendChild(hint);
+    }
+    for (const t of tracks) grid.appendChild(renderSfxButton(p, t));
+    wrap.appendChild(grid);
+    sfxBoards.appendChild(wrap);
+  }
+}
+
+function renderSfxButton(playlist, t) {
+  const btn = document.createElement("div");
+  btn.className = "bt-sfx-btn";
+  btn.title = t.name;
+  btn.tabIndex = 0;
+  const label = document.createElement("span");
+  label.className = "bt-sfx-label";
+  label.textContent = t.name;
+  const fire = () => {
+    vtt.send({ type: "play_sfx", sfx: { url: t.url, name: t.name, volume: t.volume } });
+    btn.classList.remove("fired");
+    void btn.offsetWidth; // перезапуск анимации вспышки
+    btn.classList.add("fired");
+  };
+  btn.onclick = fire;
+  btn.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      fire();
+    }
+  };
+
+  const tools = document.createElement("span");
+  tools.className = "bt-sfx-tools";
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.title = "Изменить";
+  editBtn.innerHTML = icon("pencil", { size: 11 });
+  editBtn.onclick = (e) => {
+    e.stopPropagation();
+    openTrackModal({ playlist, track: t });
+  };
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = "Удалить";
+  delBtn.innerHTML = icon("trash", { size: 11 });
+  delBtn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!(await showConfirm(`Удалить эффект «${t.name}»?`, { title: "Удалить эффект", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylistTrack(playlist.id, t.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+  tools.append(editBtn, delBtn);
+  btn.append(label, tools);
+  return btn;
 }
 
 function renderPlaylistItem(p) {
@@ -3008,48 +3188,18 @@ function renderPlaylistItem(p) {
   count.className = "bt-playlist-count";
   count.textContent = (p.tracks || []).length;
 
-  const addBtn = document.createElement("button");
-  addBtn.className = "icon-btn";
-  addBtn.title = "Добавить трек";
-  addBtn.innerHTML = icon("plus", { size: 13 });
-  addBtn.onclick = (e) => {
-    e.stopPropagation();
-    openTrackModal({ playlist: p });
-  };
-
-  const renameBtn = document.createElement("button");
-  renameBtn.className = "icon-btn";
-  renameBtn.title = "Переименовать плейлист";
-  renameBtn.innerHTML = icon("pencil", { size: 13 });
-  renameBtn.onclick = async (e) => {
-    e.stopPropagation();
-    const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
-    if (!newName) return;
-    try {
-      await renamePlaylist(p.id, newName);
-      await refreshPlaylists();
-    } catch (err) {
-      showAlert(err.message);
-    }
-  };
-
-  const delBtn = document.createElement("button");
-  delBtn.className = "icon-btn";
-  delBtn.title = "Удалить плейлист";
-  delBtn.innerHTML = icon("trash", { size: 13 });
-  delBtn.onclick = async (e) => {
-    e.stopPropagation();
-    if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
-    try {
-      await deletePlaylist(p.id);
-      openPlaylistIds.delete(p.id);
-      await refreshPlaylists();
-    } catch (err) {
-      showAlert(err.message);
-    }
-  };
-
-  header.append(caret, playBtn, name, count, addBtn, renameBtn, delBtn);
+  header.append(
+    caret,
+    playBtn,
+    name,
+    count,
+    ...playlistHeaderButtons(p, {
+      addTitle: "Добавить трек",
+      renameTitle: "Переименовать плейлист",
+      delTitle: "Удалить плейлист",
+      delMsg: `Удалить плейлист «${p.name}» вместе со всеми треками?`,
+    })
+  );
   wrap.appendChild(header);
   if (expanded) wrap.appendChild(renderTrackList(p));
   return wrap;
@@ -3241,13 +3391,16 @@ async function reorderPlaylistTrack(playlist, trackId, targetId, before) {
 // нет), и для правки существующей (задан track): url трека неизменяем после
 // создания (см. updatePlaylistTrack — там нет параметра url), поэтому в
 // режиме правки вместо загрузки/библиотеки показывается имя файла как текст.
+// Для панели эффектов — без «зациклен», зато с локальным «прослушать».
 function openTrackModal({ playlist, track }) {
   const isEdit = !!track;
+  const sfx = isSfx(playlist);
   let pendingUrl = "";
   let nameInput, librarySelect, volumeInput, loopInput, msgEl;
+  let preview = null; // <audio> локального прослушивания эффекта
 
   openModal({
-    title: isEdit ? "Изменить трек" : "Добавить трек",
+    title: sfx ? (isEdit ? "Изменить эффект" : "Добавить эффект") : isEdit ? "Изменить трек" : "Добавить трек",
     okLabel: isEdit ? "Сохранить" : "Добавить",
     cancelLabel: "Отмена",
     buildBody: (body) => {
@@ -3319,13 +3472,30 @@ function openTrackModal({ playlist, track }) {
       volField.appendChild(volumeInput);
       body.appendChild(volField);
 
-      const loopRow = document.createElement("label");
-      loopRow.className = "checkbox-row";
-      loopInput = document.createElement("input");
-      loopInput.type = "checkbox";
-      loopInput.checked = track ? track.loop : false;
-      loopRow.append(loopInput, " зациклен");
-      body.appendChild(loopRow);
+      if (sfx) {
+        const previewBtn = document.createElement("button");
+        previewBtn.type = "button";
+        previewBtn.className = "bt-modal-btn";
+        previewBtn.innerHTML = icon("play", { size: 12 }) + " Прослушать";
+        previewBtn.title = "Только у тебя — игроки не услышат";
+        previewBtn.onclick = () => {
+          const url = isEdit ? track.url : pendingUrl || (librarySelect && librarySelect.value);
+          if (!url) return;
+          if (preview) preview.pause();
+          preview = new Audio(url);
+          preview.volume = volumeInput.value / 100;
+          preview.play().catch(() => undefined);
+        };
+        body.appendChild(previewBtn);
+      } else {
+        const loopRow = document.createElement("label");
+        loopRow.className = "checkbox-row";
+        loopInput = document.createElement("input");
+        loopInput.type = "checkbox";
+        loopInput.checked = track ? track.loop : false;
+        loopRow.append(loopInput, " зациклен");
+        body.appendChild(loopRow);
+      }
 
       msgEl = document.createElement("p");
       msgEl.className = "bt-modal-text dim";
@@ -3341,7 +3511,8 @@ function openTrackModal({ playlist, track }) {
         return;
       }
       const volume = volumeInput.value / 100;
-      const loop = loopInput.checked;
+      const loop = loopInput ? loopInput.checked : false;
+      if (preview) preview.pause();
       try {
         if (isEdit) {
           await updatePlaylistTrack(playlist.id, track.id, name, volume, loop);
@@ -3360,13 +3531,27 @@ function openTrackModal({ playlist, track }) {
         showAlert(err.message);
       }
     },
-    onCancel: () => undefined,
+    onCancel: () => {
+      if (preview) preview.pause();
+    },
   });
 }
 
 onPanelOpen("playlists", async () => {
   await refreshPlaylists();
 });
+
+// Вкладки «Плейлисты | Эффекты»; выбор запоминаем — в бою нужны эффекты.
+const AUDIO_TAB_KEY = "beacon-dm-audio-tab";
+const audioTabButtons = [...document.querySelectorAll(".audio-tabs .audio-tab")];
+const audioTabPanels = [...document.querySelectorAll(".audio-tab-panel")];
+function switchAudioTab(name) {
+  audioTabButtons.forEach((b) => b.classList.toggle("active", b.dataset.audioTab === name));
+  audioTabPanels.forEach((p) => p.classList.toggle("active", p.dataset.audioPanel === name));
+  localStorage.setItem(AUDIO_TAB_KEY, name);
+}
+audioTabButtons.forEach((b) => (b.onclick = () => switchAudioTab(b.dataset.audioTab)));
+if (localStorage.getItem(AUDIO_TAB_KEY) === "sfx") switchAudioTab("sfx");
 
 // Плейлисты поменялись мимо этой вкладки — другая вкладка ДМ или импорт
 // Foundry (см. RoomService.NotifyPlaylistsChanged/net.js: "playlists_changed").
@@ -3383,6 +3568,20 @@ document.getElementById("newPlaylistForm").addEventListener("submit", async (e) 
     const p = await createPlaylist(name);
     nameInput.value = "";
     if (p && p.id) openPlaylistIds.add(p.id); // сразу разворачиваем новый — добавлять треки некуда, кроме как внутрь
+    await refreshPlaylists();
+  } catch (err) {
+    showAlert(err.message);
+  }
+});
+document.getElementById("sfxStopBtn").onclick = () => vtt.send({ type: "stop_sfx" });
+document.getElementById("newSfxBoardForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nameInput = document.getElementById("newSfxBoardName");
+  const name = nameInput.value.trim();
+  if (!name) return;
+  try {
+    await createPlaylist(name, "sfx");
+    nameInput.value = "";
     await refreshPlaylists();
   } catch (err) {
     showAlert(err.message);
@@ -3415,7 +3614,7 @@ document.addEventListener("vtt:cueChanged", (e) => {
   if (currentCue) {
     // авто-разворачиваем плейлист с играющим треком — как и в Foundry, сразу
     // видно, что и где сейчас звучит, не нужно искать вручную.
-    const owner = playlists.find((pl) => (pl.tracks || []).some((t) => t.url === currentCue.url));
+    const owner = playlists.find((pl) => !isSfx(pl) && (pl.tracks || []).some((t) => t.url === currentCue.url));
     if (owner) openPlaylistIds.add(owner.id);
   }
   renderPlaylistAccordion();
@@ -3450,7 +3649,7 @@ function updateCueProgress() {
 // когда vtt уже существует). Работает, пока открыта вкладка ДМ.
 function handleCueEnded() {
   if (!currentCue) return;
-  const playlist = playlists.find((p) => (p.tracks || []).some((t) => t.url === currentCue.url));
+  const playlist = playlists.find((p) => !isSfx(p) && (p.tracks || []).some((t) => t.url === currentCue.url));
   if (!playlist) return;
   const tracks = playlist.tracks;
   const idx = tracks.findIndex((t) => t.url === currentCue.url);
@@ -4324,6 +4523,32 @@ const gridEditorBtn = document.getElementById("gridEditorBtn");
 const fAmbientUrl = document.getElementById("fAmbientUrl");
 const fAmbientVolume = document.getElementById("fAmbientVolume");
 const fAmbientVolumeLabel = document.getElementById("fAmbientVolumeLabel");
+const fDoorSoundUrl = document.getElementById("fDoorSoundUrl");
+
+// fillDoorSoundSelect — выбор звука дверей из библиотеки; current остаётся,
+// даже если файла уже нет, иначе форма молча сбросила бы настройку.
+function fillDoorSoundSelect(select, current, emptyLabel) {
+  select.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = emptyLabel;
+  select.appendChild(none);
+  let found = !current;
+  for (const a of latestAssets.audio || []) {
+    const opt = document.createElement("option");
+    opt.value = a.url;
+    opt.textContent = a.name;
+    if (a.url === current) found = true;
+    select.appendChild(opt);
+  }
+  if (!found) {
+    const opt = document.createElement("option");
+    opt.value = current;
+    opt.textContent = decodeURIComponent(current.split("/").pop()) + " (нет в библиотеке)";
+    select.appendChild(opt);
+  }
+  select.value = current;
+}
 
 function switchTab(name) {
   tabButtons.forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
@@ -4344,6 +4569,7 @@ function fillSceneSettingsFrom(s) {
   const ambientPct = Math.round((s.ambientVolume == null ? 0.6 : s.ambientVolume) * 100);
   fAmbientVolume.value = ambientPct;
   fAmbientVolumeLabel.textContent = ambientPct + "%";
+  fillDoorSoundSelect(fDoorSoundUrl, s.doorSoundUrl || "", "— нет —");
   const g = s.grid || {};
   fGridSize.value = g.size || 0;
   fGridOffX.value = g.offsetX || 0;
@@ -4476,6 +4702,7 @@ document.getElementById("bgUpload").onchange = async (e) => {
 function renderAudioAssetTable() {
   const wrap = document.getElementById("audioAssetTableWrap");
   wrap.innerHTML = "";
+  fillDoorSoundSelect(fDoorSoundUrl, fDoorSoundUrl.value, "— нет —");
   for (const a of latestAssets.audio || []) {
     const row = document.createElement("div");
     row.className = "asset-row" + (a.url === fAmbientUrl.value ? " selected" : "");
@@ -4591,6 +4818,7 @@ document.getElementById("modalSaveBtn").onclick = () => {
     fogOfWar: fFogOfWar.checked,
     ambientUrl: fAmbientUrl.value.trim(),
     ambientVolume: (parseFloat(fAmbientVolume.value) || 0) / 100,
+    doorSoundUrl: fDoorSoundUrl.value,
     grid: {
       size: parseFloat(fGridSize.value) || 0,
       offsetX: parseFloat(fGridOffX.value) || 0,

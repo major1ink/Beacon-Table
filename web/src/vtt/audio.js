@@ -1,4 +1,5 @@
-// Аудио: амбиент сцены + канал ДМ (cue). Перенесено из static/js/app.js
+// Аудио: амбиент сцены + канал ДМ (cue) + одноразовые эффекты (sfx).
+// Перенесено из static/js/app.js
 // почти без изменений — это обычные DOM <audio> элементы и математика
 // синхронизации по timestamp'ам, никакого отношения к canvas/WebGL-рендеру
 // не имеющая, так что переезд на PixiJS её не касается.
@@ -15,6 +16,7 @@ import { PANEL_HELP } from "../tool-help.js";
 
 const LOCAL_VOL_KEY_AMBIENT = "beacon-vol-ambient";
 const LOCAL_VOL_KEY_CUE = "beacon-vol-cue";
+const LOCAL_VOL_KEY_SFX = "beacon-vol-sfx";
 
 function readLocalVol(key) {
   const v = parseFloat(localStorage.getItem(key));
@@ -35,6 +37,7 @@ export function createAudio(ctx, sideMenu) {
 
   let localAmbientVol = readLocalVol(LOCAL_VOL_KEY_AMBIENT);
   let localCueVol = readLocalVol(LOCAL_VOL_KEY_CUE);
+  let localSfxVol = readLocalVol(LOCAL_VOL_KEY_SFX);
   let lastCueVolume = 0.8; // последняя громкость канала ДМ, заданная сервером
 
   let lastAmbientUrl = null;
@@ -183,6 +186,28 @@ export function createAudio(ctx, sideMenu) {
     }
   }
 
+  // playSfx — на каждый эффект свой <audio>, чтобы накладывались; activeSfx —
+  // чтобы ползунок «Эффекты» и стоп действовали на уже играющие.
+  const activeSfx = new Map(); // HTMLAudioElement → громкость с сервера
+  function playSfx(sfx) {
+    if (!sfx || !sfx.url) return;
+    const el = new Audio(sfx.url);
+    el.volume = Math.max(0, Math.min(1, (sfx.volume || 0.8) * localSfxVol));
+    activeSfx.set(el, sfx.volume || 0.8);
+    const done = () => activeSfx.delete(el);
+    el.addEventListener("ended", done, { once: true });
+    el.addEventListener("error", done, { once: true });
+    tryPlay(el);
+  }
+
+  function stopSfx() {
+    for (const el of activeSfx.keys()) {
+      el.pause();
+      el.removeAttribute("src");
+    }
+    activeSfx.clear();
+  }
+
   // ---- иконка громкости в общей боковой колонке ----
   // Колонку (позиционирование у правого края канваса, клик-панели вместо
   // hover) заводит sideMenu — см. side-menu.js. Кубы (pages/dm.js) вешают
@@ -201,8 +226,10 @@ export function createAudio(ctx, sideMenu) {
   }
   const ambientVolSlider = addVolumeRow(icon("music", { size: 13 }), "Сцена", "Громкость сцены — амбиент-трек и звук видео-фона карты, только у тебя, на других клиентов не влияет");
   const cueVolSlider = addVolumeRow(icon("headphones", { size: 13 }), "ДМ", "Громкость канала ДМ (плейлисты) — только у тебя");
+  const sfxVolSlider = addVolumeRow(icon("zap", { size: 13 }), "Эффекты", "Громкость одноразовых эффектов (панель эффектов, звук дверей) — только у тебя");
   ambientVolSlider.value = Math.round(localAmbientVol * 100);
   cueVolSlider.value = Math.round(localCueVol * 100);
+  sfxVolSlider.value = Math.round(localSfxVol * 100);
   ctx.localAmbientVol = localAmbientVol;
   ambientVolSlider.oninput = () => {
     localAmbientVol = ambientVolSlider.value / 100;
@@ -216,6 +243,11 @@ export function createAudio(ctx, sideMenu) {
     localStorage.setItem(LOCAL_VOL_KEY_CUE, localCueVol);
     cueAudio.volume = Math.max(0, Math.min(1, lastCueVolume * localCueVol));
   };
+  sfxVolSlider.oninput = () => {
+    localSfxVol = sfxVolSlider.value / 100;
+    localStorage.setItem(LOCAL_VOL_KEY_SFX, localSfxVol);
+    for (const [el, vol] of activeSfx) el.volume = Math.max(0, Math.min(1, vol * localSfxVol));
+  };
 
-  return { ambientAudio, cueAudio, applyAmbient, applyCue };
+  return { ambientAudio, cueAudio, applyAmbient, applyCue, playSfx, stopSfx };
 }

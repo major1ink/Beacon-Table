@@ -12,7 +12,9 @@ import (
 // не domain.Playlist: у нашего плейлиста id треков раздаёт сервис при
 // добавлении, собирать их здесь было бы вранье.
 type Playlist struct {
-	Name   string
+	Name string
+	// Kind — PlaylistKindSFX для soundboard (mode -1), иначе пусто.
+	Kind   string
 	Tracks []Track
 }
 
@@ -34,6 +36,9 @@ func MapPlaylist(ctx context.Context, d Doc, assets *Assets) *Playlist {
 		name = "Плейлист из Foundry"
 	}
 	p := &Playlist{Name: name}
+	if num(d["mode"], 0) == -1 {
+		p.Kind = domain.PlaylistKindSFX
+	}
 	for _, raw := range asSlice(d["sounds"]) {
 		sound := asMap(raw)
 		if sound == nil {

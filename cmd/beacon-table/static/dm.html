@@ -872,9 +872,43 @@
     .bt-track .icon-btn:hover { opacity: 1; background: #3a3a45; }
     .bt-track .icon-btn.active { opacity: 1; color: var(--green-bright); }
 
-    #newPlaylistForm { display: flex; gap: 4px; margin-top: 8px; }
-    #newPlaylistForm input { flex: 1 1 auto; min-width: 0; background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
-    #newPlaylistForm button { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+    .new-playlist-form { display: flex; gap: 4px; margin-top: 8px; }
+    .new-playlist-form input { flex: 1 1 auto; min-width: 0; background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+    .new-playlist-form button { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+
+    /* .audio-tabs — «Плейлисты | Эффекты»; свой класс, не .modal-tabs (см. .set-tabs) */
+    .audio-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .audio-tabs .audio-tab { flex: 1 1 auto; background: var(--surface); border-radius: 8px; font-size: 12px; padding: 7px 8px; }
+    .audio-tabs .audio-tab.active { background: var(--accent); color: #fff; }
+    .audio-tab-panel { display: none; }
+    .audio-tab-panel.active { display: block; }
+
+    /* ---- панель эффектов (renderSfxBoards): крупные кнопки, правка/удаление
+       в углу при наведении, .fired — вспышка по нажатию ---- */
+    /* #sfxBar — как #nowPlayingBar у плейлистов */
+    #sfxBar { background: var(--surface); border-radius: 12px; padding: 8px 10px; margin-bottom: 10px; font-size: 12px; }
+    #sfxBarLabel { opacity: 0.85; }
+    #sfxBoards { display: flex; flex-direction: column; gap: 6px; }
+    .bt-sfx-board { background: var(--surface); border-radius: 10px; overflow: hidden; }
+    .bt-sfx-header { display: flex; align-items: center; gap: 6px; padding: 7px 8px; font-size: 12px; }
+    .bt-sfx-header .icon-btn { padding: 4px 5px; font-size: 12px; background: none; opacity: 0.6; flex-shrink: 0; }
+    .bt-sfx-header .icon-btn:hover { opacity: 1; background: #3a3a45; }
+    .bt-sfx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; padding: 0 8px 8px; }
+    .bt-sfx-btn {
+      position: relative; min-height: 44px; padding: 6px 8px; border-radius: 8px; cursor: pointer; user-select: none;
+      display: flex; align-items: center; justify-content: center; text-align: center;
+      background: var(--surface-hover); font-size: 12px; line-height: 1.25; transition: background .1s;
+    }
+    .bt-sfx-btn:hover { background: #3a3a45; }
+    .bt-sfx-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .bt-sfx-btn:active { transform: scale(0.97); }
+    .bt-sfx-btn.fired { animation: sfxFlash .35s ease-out; }
+    @keyframes sfxFlash { from { background: var(--green); color: #fff; } to { background: var(--surface-hover); } }
+    .bt-sfx-label { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+    .bt-sfx-tools { position: absolute; top: 1px; right: 1px; display: flex; opacity: 0; transition: opacity .1s; }
+    .bt-sfx-btn:hover .bt-sfx-tools, .bt-sfx-btn:focus-within .bt-sfx-tools { opacity: 1; }
+    .bt-sfx-tools .icon-btn { padding: 3px 4px; background: none; opacity: 0.6; }
+    .bt-sfx-tools .icon-btn:hover { opacity: 1; background: #4a4a58; }
 
     /* ---- лог бросков кубов: правый верхний угол, поверх канваса (общий
        виджет .roll-log--plate, см. web/src/roll-log.js и theme.css); здесь
@@ -951,26 +985,26 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-CfxosLDs.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-2Z6wmMg5.js">
+  <script type="module" crossorigin src="/assets/dm-BzeNupTs.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-zhgPl-72.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-zi4VPPbZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-D8gUcLRo.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-egQBZsV9.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-BvBPWx1q.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-OgB1xGhO.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-3HDMXlsV.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-D0dydr5L.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DEcdH8fP.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-hJii8VNI.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-E56Mtlvm.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-DfZk5zO_.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIm7h9yh.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-BvoXd5fx.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-CCj7ifKp.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-DPNMbm1g.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-rpgtL48Q.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-5u9zK1IF.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-DJ8ZLfU0.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-D6G4JUSQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-DLDSra7B.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-CQ8cg_CV.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
@@ -1171,6 +1205,9 @@
               <input type="range" id="fAmbientVolume" min="0" max="100" step="1" />
             </div>
             <div class="hint">Трек всегда зациклен и стартует у всех (ДМ, TV, игроки) при открытии этой сцены. Пустой URL — амбиента нет.</div>
+            <div class="modal-section-title" style="margin-top: 14px;">Звук дверей</div>
+            <div class="field"><label>Для всех дверей сцены</label><select id="fDoorSoundUrl"></select></div>
+            <div class="hint">Играет у всех при открытии и закрытии любой двери. Отдельной двери можно назначить свой звук — ПКМ по двери в режиме «Выбор».</div>
           </div>
 
           <div class="modal-tab-panel" data-panel="grid">
@@ -1365,6 +1402,11 @@
       <section class="panel-section" data-panel="playlists">
         <header class="panel-header"><h3>Плейлисты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
+          <div class="audio-tabs">
+            <button type="button" class="audio-tab active" data-audio-tab="playlists">Плейлисты</button>
+            <button type="button" class="audio-tab" data-audio-tab="sfx">Эффекты</button>
+          </div>
+          <div class="audio-tab-panel active" data-audio-panel="playlists">
           <p class="hint">Отдельный канал ДМ — играет поверх амбиента сцены, не прерывая его.</p>
           <div id="nowPlayingBar">
             <div class="now-playing-top">
@@ -1378,10 +1420,27 @@
 
           <div id="playlistAccordion"></div>
 
-          <form id="newPlaylistForm">
+          <form id="newPlaylistForm" class="new-playlist-form">
             <input type="text" id="newPlaylistName" placeholder="Новый плейлист" maxlength="60" />
             <button type="submit" title="Создать плейлист"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
           </form>
+          </div>
+
+          <div class="audio-tab-panel" data-audio-panel="sfx">
+          <p class="hint">Одноразовые звуки — гром, скрип двери, удар: играют один раз у всех поверх музыки, не прерывая её. Звук дверей — в «Настроить сцену → Аудио» или на самой двери (ПКМ).</p>
+          <div id="sfxBar">
+            <div class="now-playing-top">
+              <button id="sfxStopBtn" class="now-playing-btn" title="Оборвать все играющие эффекты у всех"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></button>
+              <span id="sfxBarLabel">Остановить все эффекты</span>
+            </div>
+          </div>
+          <div id="sfxBoards"></div>
+
+          <form id="newSfxBoardForm" class="new-playlist-form">
+            <input type="text" id="newSfxBoardName" placeholder="Новая панель эффектов" maxlength="60" />
+            <button type="submit" title="Создать панель эффектов"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          </form>
+          </div>
         </div>
       </section>
     </aside>
@@ -1494,6 +1553,7 @@
   <div id="wallMenu">
     <button id="wallMenuToggleOpen">🚪 Открыть</button>
     <button id="wallMenuToggleLock">🔒 Запереть</button>
+    <button id="wallMenuDoorSound">🔊 Звук двери…</button>
     <button id="wallMenuMakeDoor">🚪 Сделать дверью</button>
     <button id="wallMenuMakeWindow">🪟 Сделать окном</button>
     <button id="wallMenuMakeSecret">🕵️ Сделать секретной</button>

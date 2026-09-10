@@ -72,6 +72,7 @@ type worldManifestMeta struct {
 type exportPlaylist struct {
 	ID        string                `json:"id"`
 	Name      string                `json:"name"`
+	Kind      string                `json:"kind,omitempty"`
 	CreatedAt time.Time             `json:"createdAt"`
 	Tracks    []exportPlaylistTrack `json:"tracks"`
 }
@@ -250,7 +251,7 @@ func (m *CompanyManager) ExportWorld(ctx context.Context, companyID, beaconVersi
 	}
 	pls := make([]exportPlaylist, 0, len(playlists))
 	for _, p := range playlists {
-		ep := exportPlaylist{ID: p.ID, Name: p.Name, CreatedAt: p.CreatedAt}
+		ep := exportPlaylist{ID: p.ID, Name: p.Name, Kind: p.Kind, CreatedAt: p.CreatedAt}
 		for _, t := range p.Tracks {
 			ep.Tracks = append(ep.Tracks, exportPlaylistTrack{URL: t.URL, Name: t.Name, Volume: t.Volume, Loop: t.Loop})
 		}
@@ -607,7 +608,7 @@ func (m *CompanyManager) importWorldDB(ctx context.Context, companyID, system st
 			// бы столкнуться с уже существующим. Перекрёстных ссылок на него
 			// нет — треки адресуются через тот id, что мы тут и создаём.
 			id := newID()
-			if err := store.Create(ctx, id, p.Name); err != nil {
+			if err := store.Create(ctx, id, p.Name, p.Kind); err != nil {
 				return out, err
 			}
 			for _, t := range p.Tracks {

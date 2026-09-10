@@ -110,8 +110,8 @@ func (f *fakeRoom) LinkTokensToMonsters(_ context.Context, monsterByActor map[st
 type fakePlaylists struct{ lists []*domain.Playlist }
 
 func (f *fakePlaylists) List(context.Context) ([]*domain.Playlist, error) { return f.lists, nil }
-func (f *fakePlaylists) Create(_ context.Context, name string) (*domain.Playlist, error) {
-	p := &domain.Playlist{ID: name, Name: name}
+func (f *fakePlaylists) Create(_ context.Context, name, kind string) (*domain.Playlist, error) {
+	p := &domain.Playlist{ID: name, Name: name, Kind: kind}
 	f.lists = append(f.lists, p)
 	return p, nil
 }

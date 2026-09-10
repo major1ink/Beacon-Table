@@ -52,6 +52,7 @@ type ClientMsg struct {
 	FogOfWar      bool    `json:"fogOfWar,omitempty"`
 	AmbientURL    string  `json:"ambientUrl,omitempty"`    // только для "update_scene"
 	AmbientVolume float64 `json:"ambientVolume,omitempty"` // только для "update_scene"
+	DoorSoundURL  string  `json:"doorSoundUrl,omitempty"`  // только для "update_scene"
 
 	// GlobalLight — только для "set_global_light": "" | "dim" | "bright" (см.
 	// SceneState.GlobalLight). Отдельное сообщение, а не поле "update_scene" —
@@ -79,6 +80,10 @@ type ClientMsg struct {
 	Label string `json:"label,omitempty"`
 
 	Cue *CueState `json:"cue,omitempty"`
+	// Sfx — только для "play_sfx" (см. SfxEvent).
+	Sfx *SfxEvent `json:"sfx,omitempty"`
+	// DoorSound — только для "set_door_sound"; пусто — снять (см. Wall.DoorSound).
+	DoorSound string `json:"doorSound,omitempty"`
 
 	// ImageURL — только для "show_image": какую картинку ДМ выводит «поверх
 	// всего» на экраны игроков и трансляции (раздел «Показ», см.
@@ -272,6 +277,14 @@ type CueState struct {
 	StartedAtMs int64   `json:"startedAtMs"`
 	Paused      bool    `json:"paused"`
 	PositionMs  int64   `json:"positionMs"`
+}
+
+// SfxEvent — одноразовый звук ("audio_sfx"): кнопка панели эффектов или
+// дверь. Эфемерно, в отличие от CueState: синхронизировать и досылать нечего.
+type SfxEvent struct {
+	URL    string  `json:"url"`
+	Name   string  `json:"name,omitempty"`
+	Volume float64 `json:"volume"`
 }
 
 // ShowcaseState — картинка, которую ДМ вывел «поверх всего» на экраны
