@@ -187,7 +187,6 @@ let isDemoGuest = false;
   boardsClose.title = "Закрыть";
   boardsClose.innerHTML = icon("close", { size: 13 });
   boardsClose.onclick = () => boardsPanel.close();
-  boardsPanel.style.position = "relative";
   boardsPanel.appendChild(boardsClose);
 
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });
@@ -254,10 +253,8 @@ function hideOwnerOnlyUI() {
 // стол закрывается, игроки отключаются, рестарт сервера не поднимет мир сам —
 // ДМ вернётся и выберет мир заново. Единственное место, где стол снимается;
 // сам заход на worlds.html его не трогает.
-// Полный экран (см. src/fullscreen.js) — в рейле значок без подписи.
-initFullscreenButton(document.getElementById("fullscreenBtn"), (active) =>
-  `<span class="rail-icon">${icon(active ? "fullscreen-exit" : "fullscreen", { size: 20 })}</span>`
-);
+// Полный экран (см. src/fullscreen.js) — в HUD зума.
+initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
 
 document.getElementById("worldsBtn")?.addEventListener("click", async () => {
   if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;

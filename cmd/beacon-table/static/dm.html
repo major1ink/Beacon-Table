@@ -196,12 +196,12 @@
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
     /* Плашка "сцена · игроки · ДМ" стоит в нижнем правом углу, в одном ряду
-       с зумом (#zoomHud правее её, отсюда right: 118px = 10 + ширина зума
-       100 + зазор 8). Раньше она жила в верхнем левом углу, но там её
+       с зумом (#zoomHud правее её, отсюда right: 150px = 10 + ширина зума
+       132 + зазор 8). Раньше она жила в верхнем левом углу, но там её
        зажало между колонкой со статблоком и полосой хода — а низ справа
        занят только зумом и от боя не зависит вообще. */
     #statusBar {
-      position: absolute; right: 118px; bottom: 10px; z-index: 5;
+      position: absolute; right: 150px; bottom: 10px; z-index: 5;
       background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;
@@ -442,6 +442,7 @@
       border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
     }
     #zoomHud button { width: 28px; height: 28px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    #zoomHud #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
 
     /* ---- переключатель сцен (панель "Сцена") ---- */
     .scene-row { padding: 9px 11px 9px 6px; cursor: pointer; font-size: 13px; }
@@ -986,8 +987,8 @@
       /* Плашка уезжает из правого нижнего угла — там зум. */
       #statusBar {
         left: 68px; right: auto; bottom: 6px;
-        /* 68 слева + ~116 на HUD зума справа + зазоры. */
-        max-width: calc(100vw - 196px);
+        /* 68 слева + ~168 на HUD зума справа + зазоры. */
+        max-width: calc(100vw - 248px);
         padding: 5px 11px; font-size: 11px;
       }
       #zoomHud { right: 6px; bottom: 6px; }
@@ -1004,7 +1005,7 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-tkIvUPce.js"></script>
+  <script type="module" crossorigin src="/assets/dm-BXMwyNsG.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/icons-4St96Wvj.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-CMhepKYJ.js">
@@ -1048,7 +1049,6 @@
         <button class="rail-btn" id="playlistsBtn" data-section="playlists" title="Аудио / плейлисты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg></span></button>
       </div>
       <div class="rail-bottom">
-        <button class="rail-btn" id="fullscreenBtn" type="button"></button>
         <button class="rail-btn" id="worldsBtn" title="Миры — переключить или создать другой стол"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 010 18 14 14 0 010-18z"/></svg></span></button>
         <button class="rail-btn" id="accountsBtn" data-section="accounts" title="Аккаунты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z"/><circle cx="12" cy="10" r="2.1"/><path d="M9 15.4c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg></span><span id="accountsBadge">0</span></button>
         <button class="rail-btn" id="settingsBtn" data-section="settings" title="Настройки"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg></span></button>
@@ -1484,6 +1484,7 @@
         <span id="dmUsername"></span>
       </div>
       <div id="zoomHud">
+        <button id="fullscreenBtn" type="button"></button>
         <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         <button id="zoomResetBtn" title="Сбросить вид"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>
         <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
