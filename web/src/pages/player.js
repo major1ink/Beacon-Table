@@ -230,7 +230,6 @@ const PLAYER_DRAW_HELP = {
   boardsClose.title = "Закрыть";
   boardsClose.innerHTML = icon("close", { size: 13 });
   boardsClose.onclick = () => boardsPanel.close();
-  boardsPanel.style.position = "relative";
   boardsPanel.appendChild(boardsClose);
 
   // Журнал стола — та же страница, что и у ДМ (см. web/journal.html):
@@ -296,12 +295,7 @@ diceBtn.onclick = () => {
   diceBtn.classList.toggle("open", open);
 };
 
-initFullscreenButton(
-  document.getElementById("fullscreenBtn"),
-  (active) =>
-    icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }) +
-    `<span class="tb-label">${active ? "Свернуть" : "Во весь экран"}</span>`
-);
+initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
 
 // ================= инструменты карты =================
 // Линейка живёт в топбаре, пометки — иконкой в боковой колонке над канвасом
