@@ -757,6 +757,7 @@ async function pickEntry(current) {
       asNote.style.cssText = "display:flex;align-items:center;gap:8px;";
       const box = document.createElement("input");
       box.type = "checkbox";
+      box.className = "switch";
       const cap = document.createElement("span");
       cap.textContent = "Показывать текст записи прямо на доске";
       asNote.append(box, cap);

@@ -201,9 +201,10 @@ function askExportOptions() {
       p.textContent = "Скачать мир одним .zip: сцены, журнал, библиотеки, плейлисты, загрузки.";
       body.appendChild(p);
       const label = document.createElement("label");
-      label.style.cssText = "display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:6px;cursor:pointer;";
+      label.style.cssText = "display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px;cursor:pointer;";
       cb = document.createElement("input");
       cb.type = "checkbox";
+      cb.className = "switch";
       label.append(cb, document.createTextNode(" Перенести аккаунты игроков с персонажами"));
       body.appendChild(label);
       const hint = document.createElement("p");

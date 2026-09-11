@@ -188,6 +188,7 @@ function checkRow(body, label, on) {
   wrap.style.cssText = "display:flex;align-items:center;gap:8px;margin-top:8px;";
   const box = document.createElement("input");
   box.type = "checkbox";
+  box.className = "switch";
   box.checked = on;
   const cap = document.createElement("span");
   cap.textContent = label;

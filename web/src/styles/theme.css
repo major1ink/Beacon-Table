@@ -148,6 +148,33 @@
 .pill-badge.gold { color: var(--gold); background: rgba(181, 137, 31, 0.16); }
 .pill-badge.on { color: var(--green-bright); background: rgba(31, 107, 58, 0.22); }
 
+/* ---- .switch — тумблер вместо квадратной галки для настроек «вкл/выкл»
+   (настройки ДМ, сцена, меню токена, опции в модалках). Обычный
+   <input type="checkbox" class="switch">: события/checked те же, меняется
+   только вид. Списки множественного выбора остаются галками. ---- */
+input[type="checkbox"].switch {
+  appearance: none; -webkit-appearance: none;
+  position: relative; flex-shrink: 0; vertical-align: middle;
+  width: 34px; height: 18px; margin: 0; padding: 0;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer; outline: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+input[type="checkbox"].switch::before {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: rgba(238, 238, 238, 0.55);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+input[type="checkbox"].switch:hover { border-color: rgba(255, 255, 255, 0.18); }
+input[type="checkbox"].switch:checked { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"].switch:checked::before { background: #fff; transform: translateX(16px); }
+input[type="checkbox"].switch:focus-visible { box-shadow: var(--ring-accent); }
+input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
+
 /* ---- .item-picker — поиск по каталогу предметов + количество + добавить
    (см. web/src/item-picker.js) — используется в инвентаре персонажа,
    инвентаре монстра (бестиарий) и хабе лута ДМ ---- */

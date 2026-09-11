@@ -3664,6 +3664,7 @@ function openTrackModal({ playlist, track }) {
         loopRow.className = "checkbox-row";
         loopInput = document.createElement("input");
         loopInput.type = "checkbox";
+        loopInput.className = "switch";
         loopInput.checked = track ? track.loop : false;
         loopRow.append(loopInput, " зациклен");
         body.appendChild(loopRow);

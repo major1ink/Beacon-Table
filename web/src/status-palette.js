@@ -499,6 +499,7 @@ function detailBlock(cond, applied, state) {
   hiddenRow.className = "status-palette-row";
   const hidden = document.createElement("input");
   hidden.type = "checkbox";
+  hidden.className = "switch";
   hidden.checked = !!applied.hidden;
   // Перевесить метку с теми же параметрами, но с другим флагом — отдельной
   // команды «сменить скрытность» нет: apply_status по существующему slug'у
