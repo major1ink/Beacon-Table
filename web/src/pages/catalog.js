@@ -50,6 +50,20 @@ function spellLevelLabel(lvl) {
   return lvl ? lvl + "-й круг" : "Заговор";
 }
 
+function spellGroupLabel(lvl) {
+  return lvl ? lvl + "-й круг" : "Заговоры";
+}
+
+// «Адское возмездие [Hellish Rebuke]» → { ru, en }.
+function splitSpellName(name) {
+  const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name || "");
+  return m ? { ru: m[1], en: m[2] } : { ru: name || "", en: "" };
+}
+
+function spellClasses(s) {
+  return String(s.classes || "").split(/[,;/]/).map((c) => c.trim()).filter(Boolean);
+}
+
 // ==================== per-type конфигурация ====================
 
 let spellTargets = { characters: [], monsters: [] };
@@ -83,12 +97,15 @@ async function addSpellToMyCharacter(spell, characterId) {
   await updateCharacterSheet(characterId, sheet);
 }
 
-function renderSpellAddWidget(row, s) {
+// Один виджет «кому добавить» на весь список, по «+» переезжает в строку.
+let spellAddWidget = null;
+
+function buildSpellAddWidget() {
   const addWrap = document.createElement("div");
   addWrap.className = "catalog-target";
   const select = document.createElement("select");
   if (role === "dm") {
-    select.appendChild(new Option("Добавить…", ""));
+    select.appendChild(new Option("Кому…", ""));
     if (spellTargets.characters.length) {
       const g = document.createElement("optgroup");
       g.label = "Персонажи";
@@ -102,25 +119,27 @@ function renderSpellAddWidget(row, s) {
       select.appendChild(g);
     }
   } else {
-    select.appendChild(new Option("Добавить моему персонажу…", ""));
+    select.appendChild(new Option("Моему персонажу…", ""));
     for (const c of spellTargets.characters) select.appendChild(new Option(c.name, c.id));
   }
   const addBtn = document.createElement("button");
   addBtn.type = "button";
-  addBtn.innerHTML = icon("plus", { size: 13 });
-  addBtn.title = role === "dm" ? "Добавить это заклинание выбранной цели" : "Добавить заклинание в лист выбранного персонажа";
+  addBtn.innerHTML = icon("check", { size: 13 });
+  addBtn.title = "Добавить";
   addBtn.onclick = async () => {
-    if (!select.value) return;
+    const spell = addWrap.spell;
+    if (!select.value || !spell) return;
     addBtn.disabled = true;
     try {
       if (role === "dm") {
         const [k, id] = select.value.split(":");
         if (!k || !id) return;
-        await addSpellToTarget(s, k, id);
+        await addSpellToTarget(spell, k, id);
       } else {
-        await addSpellToMyCharacter(s, select.value);
+        await addSpellToMyCharacter(spell, select.value);
       }
       select.value = "";
+      addWrap.remove();
     } catch (err) {
       showAlert("Не удалось добавить: " + err.message);
     } finally {
@@ -128,7 +147,28 @@ function renderSpellAddWidget(row, s) {
     }
   };
   addWrap.append(select, addBtn);
-  row.appendChild(addWrap);
+  addWrap.select = select;
+  return addWrap;
+}
+
+function renderSpellAddWidget(row, s) {
+  const openBtn = document.createElement("button");
+  openBtn.type = "button";
+  openBtn.className = "icon-btn";
+  openBtn.innerHTML = icon("plus", { size: 13 });
+  openBtn.title = role === "dm" ? "Добавить это заклинание персонажу или существу" : "Добавить заклинание в лист персонажа";
+  openBtn.onclick = () => {
+    if (!spellAddWidget) spellAddWidget = buildSpellAddWidget();
+    if (spellAddWidget.parentNode === row) {
+      spellAddWidget.remove();
+      return;
+    }
+    spellAddWidget.spell = s;
+    spellAddWidget.select.value = "";
+    row.appendChild(spellAddWidget);
+    spellAddWidget.select.focus();
+  };
+  row.appendChild(openBtn);
 }
 
 const CONFIGS = {
@@ -160,7 +200,14 @@ const CONFIGS = {
     mapOne: mapFoundrySpellJson,
     avatar: false,
     searchHay: (s) => [s.name, s.school, s.classes, ...(s.tags || [])],
-    badge: (s) => spellLevelLabel(s.level),
+    badge: (s) => (s.source || "").trim(),
+    badgeTitle: (s) => spellLevelLabel(s.level),
+    nameText: (s) => splitSpellName(s.name).ru,
+    subText: (s) => splitSpellName(s.name).en,
+    flags: (s) => [s.concentration && ["К", "Концентрация"], s.ritual && ["Р", "Ритуал"]].filter(Boolean),
+    sidebar: true,
+    groupKey: (s) => s.level || 0,
+    groupLabel: spellGroupLabel,
     createPlaceholder: "Имя нового заклинания",
     emptyUser: "Своих заклинаний пока нет — создай или импортируй первое ниже.",
     deleteConfirm: (s) => `Удалить «${s.name}» из библиотеки?`,
@@ -241,6 +288,78 @@ const systemHintEl = document.getElementById("catalogSystemHint");
 document.getElementById("catalogTitle").textContent = title;
 document.title = "Beacon Table — " + title;
 
+// ==================== боковые фильтры (cfg.sidebar) ====================
+// levels: пусто = все; cls — из свободного текста карточки, секция скрыта без данных.
+const sideFilter = { levels: new Set(), props: new Set(), cls: "" };
+const SPELL_PROPS = [
+  { key: "concentration", label: "Концентрация", icon: "eye" },
+  { key: "ritual", label: "Ритуал", icon: "scroll" },
+];
+
+function sideButton(label, on, onClick, className) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = className + (on ? " on" : "");
+  b.textContent = label;
+  b.onclick = onClick;
+  return b;
+}
+
+function initSidebar() {
+  if (!cfg || !cfg.sidebar) return;
+  document.body.classList.add("has-side");
+  document.getElementById("catalogSideSearch").appendChild(searchEl);
+
+  const levels = document.querySelector("#catalogSideLevel .side-chips");
+  for (let lvl = 0; lvl <= 9; lvl++) {
+    levels.appendChild(sideButton(String(lvl), false, (e) => {
+      if (sideFilter.levels.has(lvl)) sideFilter.levels.delete(lvl);
+      else sideFilter.levels.add(lvl);
+      e.currentTarget.classList.toggle("on", sideFilter.levels.has(lvl));
+      renderRows();
+    }, "side-chip"));
+  }
+
+  const props = document.querySelector("#catalogSideProps .side-list");
+  for (const p of SPELL_PROPS) {
+    const b = sideButton("", false, (e) => {
+      if (sideFilter.props.has(p.key)) sideFilter.props.delete(p.key);
+      else sideFilter.props.add(p.key);
+      e.currentTarget.classList.toggle("on", sideFilter.props.has(p.key));
+      renderRows();
+    }, "side-item");
+    b.innerHTML = icon(p.icon, { size: 13 });
+    b.append(p.label);
+    props.appendChild(b);
+  }
+}
+
+function renderClassFilter(onScope) {
+  if (!cfg.sidebar) return;
+  const wrap = document.getElementById("catalogSideClass");
+  const names = new Set();
+  for (const x of onScope) for (const c of spellClasses(x)) names.add(c);
+  const sorted = [...names].sort((a, b) => a.localeCompare(b, "ru"));
+  if (sideFilter.cls && !names.has(sideFilter.cls)) sideFilter.cls = "";
+  wrap.style.display = sorted.length ? "" : "none";
+  const list = wrap.querySelector(".side-list");
+  list.innerHTML = "";
+  for (const c of sorted) {
+    list.appendChild(sideButton(c, sideFilter.cls === c, () => {
+      sideFilter.cls = sideFilter.cls === c ? "" : c;
+      renderRows();
+    }, "side-item"));
+  }
+}
+
+function passesSidebar(x) {
+  if (!cfg.sidebar) return true;
+  if (sideFilter.levels.size && !sideFilter.levels.has(x.level || 0)) return false;
+  for (const key of sideFilter.props) if (!x[key]) return false;
+  if (sideFilter.cls && !spellClasses(x).includes(sideFilter.cls)) return false;
+  return true;
+}
+
 function openDetail(record, opts) {
   window.parent.postMessage(
     { type: "beacon:openFloatingWindow", key: cfg.keyPrefix + "-" + record.id, title: record.name, url: cfg.detailUrl(record.id, opts) },
@@ -283,13 +402,29 @@ function buildRow(x) {
   name.textContent = cfg.nameText ? cfg.nameText(x) : x.name;
   name.title = x.name;
   name.onclick = () => openDetail(x);
+  const subText = cfg.subText ? cfg.subText(x) : "";
+  if (subText) {
+    const sub = document.createElement("div");
+    sub.className = "catalog-sub";
+    sub.textContent = subText;
+    name.appendChild(sub);
+  }
   row.appendChild(name);
+
+  for (const [text, hint] of cfg.flags ? cfg.flags(x) : []) {
+    const flag = document.createElement("span");
+    flag.className = "catalog-flag";
+    flag.textContent = text;
+    flag.title = hint;
+    row.appendChild(flag);
+  }
 
   const badgeText = cfg.badge ? cfg.badge(x) : "";
   if (badgeText) {
     const badge = document.createElement("span");
     badge.className = "catalog-badge";
     badge.textContent = badgeText;
+    if (cfg.badgeTitle) badge.title = cfg.badgeTitle(x);
     row.appendChild(badge);
   }
 
@@ -328,7 +463,9 @@ function renderRows() {
   rowsEl.innerHTML = "";
   let onScope = list.filter((x) => !!x.system === systemScope);
   if (cfg.extraFilter) onScope = onScope.filter(cfg.extraFilter);
+  renderClassFilter(onScope);
   const filtered = onScope.filter((x) => {
+    if (!passesSidebar(x)) return false;
     if (!filter) return true;
     return cfg.searchHay(x).join(" ").toLowerCase().includes(filter);
   });
@@ -339,9 +476,29 @@ function renderRows() {
     rowsEl.appendChild(empty);
     return;
   }
-  for (const x of filtered) rowsEl.appendChild(buildRow(x));
+  if (!cfg.groupKey) {
+    for (const x of filtered) rowsEl.appendChild(buildRow(x));
+    return;
+  }
+  const groups = new Map();
+  for (const x of filtered) {
+    const k = cfg.groupKey(x);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(x);
+  }
+  for (const k of [...groups.keys()].sort((a, b) => a - b)) {
+    const group = document.createElement("div");
+    group.className = "catalog-group";
+    const head = document.createElement("div");
+    head.className = "catalog-group-title";
+    head.textContent = cfg.groupLabel(k);
+    group.appendChild(head);
+    for (const x of groups.get(k).sort((a, b) => a.name.localeCompare(b.name, "ru"))) group.appendChild(buildRow(x));
+    rowsEl.appendChild(group);
+  }
 }
 searchEl.oninput = renderRows;
+initSidebar();
 
 // ==================== создание ====================
 
