@@ -372,6 +372,32 @@ type NoteMarker struct {
 	FoundryFolder string `json:"foundryFolder,omitempty"`
 }
 
+// Teleport — портал на карте. Токен, вставший на него, с подтверждения ДМ
+// переносится на сцену TargetSceneID (см. service/room_teleports.go). Label
+// — снимок имени сцены назначения для подписи. Size — диаметр в мировых px,
+// 0 — клетка сетки сцены.
+type Teleport struct {
+	ID            string  `json:"id"`
+	X             float64 `json:"x"`
+	Y             float64 `json:"y"`
+	Size          float64 `json:"size,omitempty"`
+	Label         string  `json:"label"`
+	TargetSceneID string  `json:"targetSceneId"`
+	// Locked — см. Token.Locked.
+	Locked bool `json:"locked,omitempty"`
+}
+
+// Radius — половина Size, либо половина клетки сетки cell.
+func (t *Teleport) Radius(cell float64) float64 {
+	if t.Size > 0 {
+		return t.Size / 2
+	}
+	if cell <= 0 {
+		cell = 48
+	}
+	return cell / 2
+}
+
 // SceneState — состояние ОДНОЙ сцены: имя, фон, размер холста, туман войны,
 // сетка и все объекты на ней. Сцена — самостоятельная именованная сущность
 // со своим ID, НЕ привязанная к URL фона.
@@ -400,6 +426,7 @@ type SceneState struct {
 	FogAreas    map[string]*FogArea    `json:"fogAreas"`
 	Buildings   map[string]*Building   `json:"buildings"`
 	Drawings    map[string]*Drawing    `json:"drawings"`
+	Teleports   map[string]*Teleport   `json:"teleports"`
 }
 
 // NewScene создаёт пустую сцену с разумными дефолтами "из коробки".
@@ -427,6 +454,7 @@ func NewScene(id, name string) *SceneState {
 		FogAreas:    make(map[string]*FogArea),
 		Buildings:   make(map[string]*Building),
 		Drawings:    make(map[string]*Drawing),
+		Teleports:   make(map[string]*Teleport),
 	}
 }
 
@@ -502,6 +530,7 @@ type PublicScene struct {
 	FogAreas      map[string]*FogArea    `json:"fogAreas"`
 	Buildings     map[string]*Building   `json:"buildings"`
 	Drawings      map[string]*Drawing    `json:"drawings"`
+	Teleports     map[string]*Teleport   `json:"teleports"`
 }
 
 // SceneListEntry — одна строка в переключателе сцен DM. ViewerCount

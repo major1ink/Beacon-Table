@@ -561,6 +561,22 @@ export function noteMarkerAt(x, y, noteMarkers, minRadius = 16, filter) {
   return null;
 }
 
+// teleportAt — id портала (domain.Teleport) под точкой, либо null. Радиус —
+// половина size, без него — половина клетки сетки, тот же, что у сервера.
+// filter — как у noteMarkerAt.
+export function teleportAt(x, y, teleports, grid, filter) {
+  const ids = Object.keys(teleports || {});
+  const cell = grid && grid.size > 0 ? grid.size : 48;
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const t = teleports[ids[i]];
+    const r = (t.size > 0 ? t.size : cell) / 2;
+    if (Math.hypot(t.x - x, t.y - y) > r) continue;
+    if (filter && !filter(t, ids[i])) continue;
+    return ids[i];
+  }
+  return null;
+}
+
 // snapToGrid — ближайший центр клетки сетки к точке (x,y). grid: {size,offsetX,offsetY}.
 export function snapToGrid(x, y, grid) {
   if (!grid || !grid.size || grid.size <= 0) return { x, y };

@@ -876,13 +876,12 @@ document.addEventListener("vtt:wallPointContextMenu", (e) => {
   closeCanvasMenu();
   closeTokenMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
   menuWallIds = [...new Set(e.detail.refs.map((r) => r.wallId))];
-  wallPointMenu.style.left = e.detail.pageX + "px";
-  wallPointMenu.style.top = e.detail.pageY + "px";
-  wallPointMenu.style.display = "block";
+  placeMenu(wallPointMenu, e.detail.pageX, e.detail.pageY);
 });
 
 wallPointMenuDelete.onclick = () => {
@@ -914,9 +913,7 @@ document.addEventListener("vtt:fogAreaContextMenu", (e) => {
   closeBuildingMenu();
   menuFogAreaId = e.detail.id;
   wireMapObjectLock("fogArea", menuFogAreaId, fogAreaMenuLockBtn, fogAreaMenuLockLabel, [fogAreaMenuDelete], closeFogAreaMenu);
-  fogAreaMenu.style.left = e.detail.pageX + "px";
-  fogAreaMenu.style.top = e.detail.pageY + "px";
-  fogAreaMenu.style.display = "block";
+  placeMenu(fogAreaMenu, e.detail.pageX, e.detail.pageY);
 });
 
 fogAreaMenuDelete.onclick = () => {
@@ -959,6 +956,7 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeBuildingMenu();
   menuWallId = e.detail.id;
@@ -992,9 +990,7 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   wallMenuUnsetSpecial.style.display = isWallMode && (isDoor || isWindow) ? "flex" : "none";
   wallMenuDelete.style.display = isWallMode ? "flex" : "none";
 
-  wallMenu.style.left = e.detail.pageX + "px";
-  wallMenu.style.top = e.detail.pageY + "px";
-  wallMenu.style.display = "block";
+  placeMenu(wallMenu, e.detail.pageX, e.detail.pageY);
 });
 
 wallMenuToggleOpen.onclick = () => {
@@ -1096,13 +1092,12 @@ document.addEventListener("vtt:buildingContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   menuBuildingId = e.detail.id;
   wireMapObjectLock("building", menuBuildingId, buildingMenuLockBtn, buildingMenuLockLabel, [buildingMenuDelete], closeBuildingMenu);
-  buildingMenu.style.left = e.detail.pageX + "px";
-  buildingMenu.style.top = e.detail.pageY + "px";
-  buildingMenu.style.display = "block";
+  placeMenu(buildingMenu, e.detail.pageX, e.detail.pageY);
 });
 
 buildingMenuDelete.onclick = () => {
@@ -1140,14 +1135,12 @@ document.addEventListener("vtt:noteMarkerContextMenu", (e) => {
     [noteMarkerResizeBtn, noteMarkerDeleteBtn],
     closeNoteMarkerMenu
   );
-  noteMarkerMenu.style.left = e.detail.pageX + "px";
-  noteMarkerMenu.style.top = e.detail.pageY + "px";
-  noteMarkerMenu.style.display = "flex";
+  placeMenu(noteMarkerMenu, e.detail.pageX, e.detail.pageY, "flex");
 });
 
 noteMarkerResizeBtn.onclick = () => {
   if (!menuNoteMarkerId) return;
-  document.dispatchEvent(new CustomEvent("vtt:armNoteMarkerResize", { detail: { id: menuNoteMarkerId } }));
+  document.dispatchEvent(new CustomEvent("vtt:armMapObjectResize", { detail: { kind: "noteMarker", id: menuNoteMarkerId } }));
   closeNoteMarkerMenu();
   showAlert("Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер значка" });
 };
@@ -1158,6 +1151,170 @@ noteMarkerDeleteBtn.onclick = () => {
   closeNoteMarkerMenu();
 };
 
+// ================= порталы (ПКМ по порталу, «Телепорт сюда…» на пустом месте) =================
+// Портал ведёт только на сцену, связанную с текущей на доске (sceneLinksOf);
+// перенос делает сервер (room_teleports.go).
+const teleportMenu = document.getElementById("teleportMenu");
+const teleportMenuLockBtn = document.getElementById("teleportMenuLockBtn");
+const teleportMenuLockLabel = document.getElementById("teleportMenuLockLabel");
+const teleportMoveAllBtn = document.getElementById("teleportMoveAllBtn");
+const teleportTargetBtn = document.getElementById("teleportTargetBtn");
+const teleportResizeBtn = document.getElementById("teleportResizeBtn");
+const teleportDeleteBtn = document.getElementById("teleportDeleteBtn");
+let menuTeleportId = null;
+
+function closeTeleportMenu() {
+  teleportMenu.style.display = "none";
+  menuTeleportId = null;
+}
+
+document.addEventListener("vtt:teleportContextMenu", (e) => {
+  closeCanvasMenu();
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeTeleportMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  closeBuildingMenu();
+  menuTeleportId = e.detail.id;
+  wireMapObjectLock("teleport", menuTeleportId, teleportMenuLockBtn, teleportMenuLockLabel, [teleportTargetBtn, teleportResizeBtn, teleportDeleteBtn], closeTeleportMenu);
+  placeMenu(teleportMenu, e.detail.pageX, e.detail.pageY, "flex");
+});
+
+// linkedScenesOf — соседи сцены по стрелкам на всех досках:
+// [{scene, boards}], boards — названия досок, где связь нарисована.
+async function linkedScenesOf(sceneId) {
+  let boards = [];
+  try {
+    boards = await fetchBoards();
+  } catch {
+    boards = [];
+  }
+  const via = new Map();
+  await Promise.all(
+    boards.map(async (b) => {
+      let scene;
+      try {
+        scene = await fetchBoardScene(b.id);
+      } catch {
+        return;
+      }
+      for (const to of sceneLinksOf(scene.elements).get(sceneId) || []) {
+        if (!via.has(to)) via.set(to, []);
+        via.get(to).push(b.name);
+      }
+    })
+  );
+  return [...via]
+    .map(([id, names]) => ({ scene: sceneList.find((s) => s.id === id), boards: names }))
+    .filter((r) => r.scene);
+}
+
+// pickLinkedScene — выбор сцены назначения среди связанных с текущей.
+async function pickLinkedScene(current) {
+  const linked = await linkedScenesOf(currentSceneId);
+  if (!linked.length) {
+    showAlert("Эта сцена ни с чем не связана. Свяжи её стрелкой с другой сценой на доске — тогда портал будет куда вести.", { title: "Телепорт" });
+    return null;
+  }
+  let select;
+  return openModal({
+    title: "Куда ведёт портал",
+    okLabel: "Готово",
+    buildBody: (body) => {
+      select = document.createElement("select");
+      select.className = "bt-modal-input";
+      for (const { scene, boards } of linked) {
+        const opt = document.createElement("option");
+        opt.value = scene.id;
+        opt.textContent = scene.name + " · " + boards.join(", ");
+        select.appendChild(opt);
+      }
+      if (current && linked.some((l) => l.scene.id === current)) select.value = current;
+      body.appendChild(select);
+      return select;
+    },
+    onOk: () => linked.find((l) => l.scene.id === select.value)?.scene || null,
+    onCancel: () => null,
+  });
+}
+
+async function placeTeleportAt(x, y) {
+  const scene = await pickLinkedScene();
+  if (!scene) return;
+  counter++;
+  vtt.send({ type: "add_teleport", teleport: { id: "tp-" + Date.now() + "-" + counter, x, y, label: scene.name, targetSceneId: scene.id } });
+}
+
+teleportTargetBtn.onclick = async () => {
+  const t = menuTeleportId && vtt.getScene().teleports?.[menuTeleportId];
+  closeTeleportMenu();
+  if (!t) return;
+  const scene = await pickLinkedScene(t.targetSceneId);
+  if (!scene) return;
+  vtt.send({ type: "move_teleport", teleport: { ...t, label: scene.name, targetSceneId: scene.id } });
+};
+
+teleportResizeBtn.onclick = () => {
+  if (!menuTeleportId) return;
+  document.dispatchEvent(new CustomEvent("vtt:armMapObjectResize", { detail: { kind: "teleport", id: menuTeleportId } }));
+  closeTeleportMenu();
+  showAlert("Теперь потяни от центра портала на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер портала" });
+};
+
+teleportDeleteBtn.onclick = () => {
+  if (!menuTeleportId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeTeleport", { detail: { id: menuTeleportId } }));
+  closeTeleportMenu();
+};
+
+// teleportStillLinked — портал на месте и его сцена ещё связана с текущей.
+async function teleportStillLinked(teleportId) {
+  const t = vtt.getScene().teleports?.[teleportId];
+  if (!t) {
+    showAlert("Портала на карте уже нет.", { title: "Телепорт" });
+    return null;
+  }
+  const linked = await linkedScenesOf(currentSceneId);
+  if (!linked.some((l) => l.scene.id === t.targetSceneId)) {
+    showAlert(`Сцена «${t.label}» больше не связана с текущей на доске — портал не работает.`, { title: "Телепорт" });
+    return null;
+  }
+  return t;
+}
+
+// «Переместить всех персонажей» — токены игроков и персонажей текущей сцены.
+teleportMoveAllBtn.onclick = async () => {
+  const id = menuTeleportId;
+  closeTeleportMenu();
+  if (!id) return;
+  const t = await teleportStillLinked(id);
+  if (!t) return;
+  const tokens = Object.values(vtt.getScene().tokens || {}).filter((tok) => tok.ownerId || tok.characterId);
+  if (!tokens.length) {
+    showAlert("На сцене нет ни одного персонажа.", { title: "Телепорт" });
+    return;
+  }
+  const ok = await showConfirm(`Переместить ${tokens.length} перс. на сцену «${t.label}»? Стол переключится туда же.`, { title: "Телепорт", okLabel: "Переместить" });
+  if (!ok) return;
+  vtt.send({ type: "teleport_tokens", id, tokenIds: tokens.map((tok) => tok.id) });
+};
+
+// Игрок встал на портал (см. room_teleports.go: noticeTeleport) — спросить ДМ.
+document.addEventListener("vtt:teleportRequest", async (e) => {
+  const d = e.detail;
+  if (d.targetSceneId === currentSceneId) return;
+  const ok = await showConfirm(
+    `${d.playerName || "Игрок"}: «${d.tokenLabel || "токен"}» встал на портал в сцену «${d.targetSceneName}». Переместить? Стол переключится туда же.`,
+    { title: "Телепорт", okLabel: "Переместить", cancelLabel: "Не пускать" }
+  );
+  if (!ok) return;
+  const t = await teleportStillLinked(d.teleportId);
+  if (!t) return;
+  vtt.send({ type: "teleport_tokens", id: d.teleportId, tokenIds: [d.tokenId] });
+});
+
 function updateLightToggleBtnLabel() {
   tokenMenuLightToggleBtn.innerHTML = icon("bulb", { size: 14 }) + " " + (menuLightEnabled ? "Выключить свет" : "Включить свет");
 }
@@ -1166,6 +1323,7 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   closeCanvasMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
@@ -1308,28 +1466,25 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLockLabel.textContent = menuTokenLocked ? "Разблокировать" : "Заблокировать";
   applyTokenMenuLockState();
 
-  placeTokenMenu(pageX, pageY);
+  placeMenu(tokenMenu, pageX, pageY);
 });
 
-// placeTokenMenu — меню у курсора, но целиком в пределах окна. Раньше оно
-// ставилось строго в точку клика и у нижнего/правого края уезжало за экран:
-// пунктов в нём прибавилось (зрение, цвет, конус), и на ноутбучном экране
-// нижняя половина оказывалась недосягаема.
-function placeTokenMenu(pageX, pageY) {
+// placeMenu — любое ПКМ-меню у курсора, но целиком в пределах окна: не
+// влезло вниз/вправо — сдвигаем к краю; выше экрана — прижимаем к верху,
+// дальше работает прокрутка самого меню. display — "block"/"flex", как у
+// меню в dm.html.
+function placeMenu(menu, pageX, pageY, display = "block") {
   const margin = 8;
-  tokenMenu.style.visibility = "hidden";
-  tokenMenu.style.left = "0px";
-  tokenMenu.style.top = "0px";
-  tokenMenu.style.display = "block";
-  const { width, height } = tokenMenu.getBoundingClientRect();
-  // По вертикали: не влезло вниз — поднимаем так, чтобы низ меню был у края
-  // окна; не влезло вообще (меню выше экрана) — прижимаем к верху, дальше
-  // работает собственная прокрутка меню (см. max-height в dm.html).
+  menu.style.visibility = "hidden";
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  menu.style.display = display;
+  const { width, height } = menu.getBoundingClientRect();
   const left = Math.max(margin, Math.min(pageX, window.innerWidth - width - margin));
   const top = Math.max(margin, Math.min(pageY, window.innerHeight - height - margin));
-  tokenMenu.style.left = left + "px";
-  tokenMenu.style.top = top + "px";
-  tokenMenu.style.visibility = "";
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  menu.style.visibility = "";
 }
 
 // applyTokenMenuLockState — гасит в открытом меню всё, что правит запертый
@@ -1394,6 +1549,7 @@ let mapClipboard = null;
 const canvasMenu = document.getElementById("canvasMenu");
 const canvasMenuPasteBtn = document.getElementById("canvasMenuPasteBtn");
 const canvasMenuPasteLabel = document.getElementById("canvasMenuPasteLabel");
+const canvasMenuTeleportBtn = document.getElementById("canvasMenuTeleportBtn");
 let canvasMenuAt = null; // мировые координаты ПКМ — точка вставки
 
 function closeCanvasMenu() {
@@ -1472,23 +1628,29 @@ tokenMenuCopyBtn.onclick = () => {
   closeTokenMenu();
 };
 
-// ПКМ по пустому месту карты (см. interaction.js: vtt:canvasContextMenu) —
-// меню появляется, только если есть что вставлять: пустое меню на каждый
-// промах мимо токена раздражало бы сильнее, чем помогало.
+// ПКМ по пустому месту карты (см. interaction.js: vtt:canvasContextMenu):
+// портал сюда и, если есть что, вставка из буфера.
 document.addEventListener("vtt:canvasContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
-  if (!mapClipboard) return;
+  closeTeleportMenu();
   canvasMenuAt = { x: e.detail.x, y: e.detail.y };
-  canvasMenuPasteLabel.textContent = "Вставить: " + (mapClipboard.object.label || "объект");
-  canvasMenu.style.left = e.detail.pageX + "px";
-  canvasMenu.style.top = e.detail.pageY + "px";
-  canvasMenu.style.display = "block";
+  canvasMenuPasteBtn.hidden = !mapClipboard;
+  if (mapClipboard) canvasMenuPasteLabel.textContent = "Вставить: " + (mapClipboard.object.label || "объект");
+  placeMenu(canvasMenu, e.detail.pageX, e.detail.pageY);
 });
+
+canvasMenuTeleportBtn.onclick = () => {
+  if (!canvasMenuAt) return;
+  const at = canvasMenuAt;
+  closeCanvasMenu();
+  placeTeleportAt(at.x, at.y);
+};
 
 canvasMenuPasteBtn.onclick = () => {
   if (!mapClipboard || !canvasMenuAt) return;
@@ -4126,6 +4288,7 @@ document.addEventListener("mousedown", (e) => {
   if (tokenMenu.style.display === "block" && !tokenMenu.contains(e.target)) closeTokenMenu();
   if (wallPointMenu.style.display === "block" && !wallPointMenu.contains(e.target)) closeWallPointMenu();
   if (noteMarkerMenu.style.display === "flex" && !noteMarkerMenu.contains(e.target)) closeNoteMarkerMenu();
+  if (teleportMenu.style.display === "flex" && !teleportMenu.contains(e.target)) closeTeleportMenu();
   if (fogAreaMenu.style.display === "block" && !fogAreaMenu.contains(e.target)) closeFogAreaMenu();
   if (wallMenu.style.display === "block" && !wallMenu.contains(e.target)) closeWallMenu();
   if (buildingMenu.style.display === "block" && !buildingMenu.contains(e.target)) closeBuildingMenu();
@@ -4536,31 +4699,9 @@ async function renderTeleport() {
   const from = currentSceneId;
   teleportList.innerHTML = "";
   if (!from) return;
-  let boards = [];
-  try {
-    boards = await fetchBoards();
-  } catch {
-    boards = [];
-  }
-  // id сцены → названия досок, где связь нарисована
-  const via = new Map();
-  await Promise.all(
-    boards.map(async (b) => {
-      let scene;
-      try {
-        scene = await fetchBoardScene(b.id);
-      } catch {
-        return;
-      }
-      for (const to of sceneLinksOf(scene.elements).get(from) || []) {
-        if (!via.has(to)) via.set(to, []);
-        via.get(to).push(b.name);
-      }
-    })
-  );
+  const rows = await linkedScenesOf(from);
   if (seq !== teleportSeq) return; // сцену уже переключили
   teleportList.innerHTML = "";
-  const rows = [...via].map(([id, names]) => ({ scene: sceneList.find((s) => s.id === id), names })).filter((r) => r.scene);
   if (!rows.length) {
     const hint = document.createElement("p");
     hint.className = "hint";
@@ -4568,7 +4709,7 @@ async function renderTeleport() {
     teleportList.appendChild(hint);
     return;
   }
-  for (const { scene, names } of rows) {
+  for (const { scene, boards: names } of rows) {
     const row = document.createElement("div");
     row.className = "scene-row row-card";
     row.innerHTML = icon("arrow-right", { size: 14 });

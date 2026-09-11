@@ -13,6 +13,7 @@ import {
   buildingAt,
   buildingVertexNear,
   noteMarkerAt,
+  teleportAt,
   gridHandleCell,
   drawingAt,
   formatDistance,
@@ -21,7 +22,6 @@ import {
   trackMovementStep,
   clampMoveByWalls,
 } from "../geometry.js";
-import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
 import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
 import { paintDrawing, drawingHandles, canEditDrawing, widthForKind, sliderForWidth } from "./layers/drawings.js";
@@ -273,14 +273,33 @@ export function createInteraction(ctx) {
   // тот же приём, что dragTokenId: mousemove мутирует сцену на месте и шлёт
   // move_note_marker на каждый шаг.
   let dragNoteMarkerId = null;
-  // resizeArmedNoteMarkerId — значок, для которого ПКМ-меню "📏 Изменить
-  // размер" (см. pages/dm.js) включило режим резайза: следующий mousedown
-  // ИМЕННО на этом значке начинает драг размера вместо перемещения (см.
-  // resizingNoteMarkerId ниже), одноразово — снимается сразу, как только
-  // драг начался. Отдельная переменная, а не сразу resizingNoteMarkerId,
-  // чтобы клик мимо значка/смена инструмента не запускали резайз случайно.
-  let resizeArmedNoteMarkerId = null;
-  let resizingNoteMarkerId = null;
+  // dragTeleportId — перетаскивание портала (см. layers/teleports.js).
+  let dragTeleportId = null;
+  // resizeArmed — {kind, id}, для которого ПКМ-меню включило резайз
+  // (vtt:armMapObjectResize); следующий mousedown по нему начинает resizing
+  // вместо перемещения. Правила размера — MAP_OBJECT_KINDS[kind].resize.
+  let resizeArmed = null;
+  let resizing = null;
+
+  // takeArmedResize — начать армированный резайз объекта под mousedown.
+  function takeArmedResize(kind, id) {
+    if (!id || !resizeArmed || resizeArmed.kind !== kind || resizeArmed.id !== id) return false;
+    resizing = resizeArmed;
+    resizeArmed = null;
+    return true;
+  }
+
+  // applyResize — шаг резайза: size = fromDist(расстояние от центра до курсора).
+  function applyResize(x, y) {
+    const meta = MAP_OBJECT_KINDS[resizing.kind];
+    const obj = mapObjectsOf(ctx.scene, resizing.kind)[resizing.id];
+    if (!meta || !meta.resize || !obj) return;
+    const { min, max, fromDist } = meta.resize;
+    obj.size = Math.min(max, Math.max(min, Math.round(fromDist(Math.hypot(x - obj.x, y - obj.y)))));
+    ctx.dirty.tokens = true;
+    ctx.render();
+    ctx.send({ type: meta.saveType, [meta.payload]: obj });
+  }
 
   // ---- превью-оверлей для инструментов "Стены"/"Туман" (эфемерно, не
   // проходит через dirty-слои — рисуется/чистится прямо на mousemove) ----
@@ -1191,14 +1210,13 @@ export function createInteraction(ctx) {
       // токен выше, чтобы не мешать рисованию стен/тумана/здания.
       if (tool === "select") {
         const markerId = noteMarkerAt(x, y, ctx.scene.noteMarkers, 16, (m) => !isLocked(m));
-        if (markerId && markerId === resizeArmedNoteMarkerId) {
-          // Резайз армирован ИМЕННО для этого значка (см. vtt:armNoteMarkerResize
-          // ниже) и mousedown попал по нему — начинаем драг размера, а не
-          // перемещения; армирование одноразовое, снимаем сразу.
-          resizingNoteMarkerId = markerId;
-          resizeArmedNoteMarkerId = null;
+        const teleportId = markerId ? null : teleportAt(x, y, ctx.scene.teleports, ctx.scene.grid, (t) => !isLocked(t));
+        if (takeArmedResize("noteMarker", markerId) || takeArmedResize("teleport", teleportId)) {
+          // резайз армирован именно для этого объекта — драг размера вместо перемещения
         } else if (markerId) {
           dragNoteMarkerId = markerId;
+        } else if (teleportId) {
+          dragTeleportId = teleportId;
         } else {
           // Пусто под курсором — начинаем резиновую рамку множественного
           // выделения (см. mousemove/mouseup ниже). additive — зажат ли
@@ -1420,18 +1438,8 @@ export function createInteraction(ctx) {
         return;
       }
 
-      if (resizingNoteMarkerId) {
-        const m = ctx.scene.noteMarkers[resizingNoteMarkerId];
-        if (!m) return;
-        // Размер = расстояние от НЕПОДВИЖНОГО центра значка до курсора —
-        // тащишь дальше от иконки, она растёт, тащишь ближе — сжимается.
-        // Никакой отдельной "ручки" на краю не нужно: сам значок маленький,
-        // и такая схема прощает неточный клик лучше, чем резайз за грань.
-        const dist = Math.hypot(x - m.x, y - m.y);
-        m.size = Math.min(NOTE_MARKER_MAX_SIZE, Math.max(NOTE_MARKER_MIN_SIZE, Math.round(dist)));
-        ctx.dirty.tokens = true;
-        ctx.render();
-        ctx.send({ type: "move_note_marker", noteMarker: m });
+      if (resizing) {
+        applyResize(x, y);
         return;
       }
 
@@ -1443,6 +1451,17 @@ export function createInteraction(ctx) {
         ctx.dirty.tokens = true;
         ctx.render();
         ctx.send({ type: "move_note_marker", noteMarker: m });
+        return;
+      }
+
+      if (dragTeleportId) {
+        const t = ctx.scene.teleports[dragTeleportId];
+        if (!t) return;
+        t.x = x;
+        t.y = y;
+        ctx.dirty.tokens = true;
+        ctx.render();
+        ctx.send({ type: "move_teleport", teleport: t });
         return;
       }
 
@@ -1637,7 +1656,8 @@ export function createInteraction(ctx) {
       groupDragOrigins = null;
       distanceLabel.hide();
       dragNoteMarkerId = null;
-      resizingNoteMarkerId = null; // одноразовый резайз — один драг и всё, армировать заново через меню
+      dragTeleportId = null;
+      resizing = null; // одноразовый резайз — один драг и всё, армировать заново через меню
     });
 
     // Escape во время рисования цепочки стен — закончить её без удаления уже
@@ -1878,6 +1898,15 @@ export function createInteraction(ctx) {
         return;
       }
 
+      // Портал — своё меню (см. web/dm.html #teleportMenu).
+      const teleportId = teleportAt(x, y, ctx.scene.teleports, ctx.scene.grid);
+      if (teleportId) {
+        document.dispatchEvent(
+          new CustomEvent("vtt:teleportContextMenu", { detail: { id: teleportId, pageX: e.clientX, pageY: e.clientY } })
+        );
+        return;
+      }
+
       // Здание (клик внутри контура, в отличие от стен — отдельной точки
       // "конца" тут нет) — ПКМ открывает меню (см. web/dm.html
       // #buildingMenu), как у фигуры тумана/стены, а не удаляет сразу —
@@ -2017,12 +2046,17 @@ export function createInteraction(ctx) {
       ctx.send({ type: meta.saveType, [meta.payload]: { ...obj, locked: !!locked } });
     });
 
-    // команды из меню значка заметки (см. web/dm.html #noteMarkerMenu, pages/dm.js)
-    document.addEventListener("vtt:armNoteMarkerResize", (e) => {
-      resizeArmedNoteMarkerId = e.detail.id;
+    // "Изменить размер" из ПКМ-меню любого объекта с MAP_OBJECT_KINDS[kind].resize
+    // (значок заметки, портал — см. pages/dm.js).
+    document.addEventListener("vtt:armMapObjectResize", (e) => {
+      resizeArmed = MAP_OBJECT_KINDS[e.detail.kind]?.resize ? { kind: e.detail.kind, id: e.detail.id } : null;
     });
+    // команды из меню значка заметки (см. web/dm.html #noteMarkerMenu, pages/dm.js)
     document.addEventListener("vtt:removeNoteMarker", (e) => {
       ctx.send({ type: "remove_note_marker", id: e.detail.id });
+    });
+    document.addEventListener("vtt:removeTeleport", (e) => {
+      ctx.send({ type: "remove_teleport", id: e.detail.id });
     });
 
     // "📍 Поставить на карту" в панели "Заметки" (см. pages/dm.js) — тот же

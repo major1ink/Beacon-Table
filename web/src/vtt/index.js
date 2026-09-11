@@ -10,6 +10,7 @@ import { createBackgroundLayer } from "./layers/background.js";
 import { createGridLayer } from "./layers/grid.js";
 import { createTokensLayer } from "./layers/tokens.js";
 import { createNoteMarkersLayer } from "./layers/note-markers.js";
+import { createTeleportsLayer } from "./layers/teleports.js";
 import { createWallsLayer } from "./layers/walls.js";
 import { createDoorsLayer } from "./layers/doors.js";
 import { createWindowsLayer } from "./layers/windows.js";
@@ -125,6 +126,9 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   // и в Canvas2D-фолбэке, без промежуточного рендер-таргета.
   const background = createBackgroundLayer(ctx);
   const grid = createGridLayer(ctx);
+  // teleports — порталы (см. layers/teleports.js) ПОД токенами: токен
+  // стоит на портале, а не под ним.
+  const teleports = createTeleportsLayer(ctx);
   const tokens = createTokensLayer(ctx);
   const noteMarkers = createNoteMarkersLayer(ctx);
   const walls = createWallsLayer(ctx);
@@ -152,6 +156,7 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   world.addChild(
     background.container,
     grid.container,
+    teleports.container,
     tokens.container,
     noteMarkers.container,
     walls.container,
@@ -165,7 +170,7 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   );
   ctx.spawnFx = fx.spawnFx;
 
-  const layers = [background, grid, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, drawings, fx];
+  const layers = [background, grid, teleports, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, drawings, fx];
 
   // render — вызывается на каждый WS-снапшот и на каждое локальное
   // взаимодействие (драг токена/камера/инструменты ДМ), НЕ на каждый кадр

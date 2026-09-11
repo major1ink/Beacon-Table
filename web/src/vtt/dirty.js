@@ -60,6 +60,9 @@ export function diffAndMarkDirty(dirty, prevScene, nextScene) {
   if (!prevScene || prevScene.noteMarkers !== nextScene.noteMarkers) {
     dirty.tokens = true; // значки заметок (layers/note-markers.js) обновляются тем же битом, что и токены — отдельный не нужен, обновление дешёвое
   }
+  if (!prevScene || prevScene.teleports !== nextScene.teleports) {
+    dirty.tokens = true; // порталы (layers/teleports.js) — тем же битом
+  }
   if (!prevScene || prevScene.fogOfWar !== nextScene.fogOfWar) {
     dirty.vision = true;
   }

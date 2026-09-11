@@ -16,6 +16,11 @@ type ClientMsg struct {
 	// их проставляет сервер по отправителю.
 	Drawing *Drawing      `json:"drawing,omitempty"`
 	Grid    *GridSettings `json:"grid,omitempty"`
+	// Teleport — "add_teleport"/"move_teleport": портал целиком, апсерт по ID
+	// (см. Teleport). "remove_teleport" — ID; "teleport_tokens" — ID портала
+	// и TokenIDs, кого переносить.
+	Teleport *Teleport `json:"teleport,omitempty"`
+	TokenIDs []string  `json:"tokenIds,omitempty"`
 
 	// поля редактирования точек стен (см. web/src/vtt/interaction.js) —
 	// "точка" не отдельная сущность с ID, а координата, к которой привязан

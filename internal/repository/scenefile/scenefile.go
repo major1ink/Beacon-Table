@@ -404,6 +404,9 @@ func sanitizeScene(s *domain.SceneState) {
 	if s.Drawings == nil {
 		s.Drawings = make(map[string]*domain.Drawing)
 	}
+	if s.Teleports == nil {
+		s.Teleports = make(map[string]*domain.Teleport)
+	}
 	if s.Width <= 0 {
 		s.Width = 1280
 	}

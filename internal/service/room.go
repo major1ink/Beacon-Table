@@ -154,6 +154,9 @@ type Room struct {
 	// listScenes — «дай список сцен» из HTTP-хендлера (см. ListScenes):
 	// свой канал по той же причине, что и spawnToken выше.
 	listScenes chan chan []domain.SceneCard
+	// teleportArmed — id токена → id портала, на котором он стоит и о котором
+	// ДМ уже спросили (см. room_teleports.go: noticeTeleport).
+	teleportArmed map[string]string
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -719,6 +722,12 @@ func (r *Room) run() {
 			r.applyMutation(im.msg)
 			r.broadcastAll()
 			r.broadcastSceneList()
+			// ДМ поставил токен на портал — тот же вопрос, что и у игрока.
+			if im.msg.Type == "move_token" && im.msg.Token != nil {
+				if tok, ok := r.scene.Tokens[im.msg.Token.ID]; ok {
+					r.noticeTeleport("ДМ", tok)
+				}
+			}
 
 		case req := <-r.importScenes:
 			req.reply <- r.addScenes(req.scenes)
@@ -879,6 +888,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 		FogAreas:      r.scene.FogAreas,
 		Buildings:     r.scene.Buildings,
 		Drawings:      r.scene.Drawings,
+		Teleports:     r.scene.Teleports,
 	}
 }
 
@@ -1066,6 +1076,7 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	existing.Y = msg.Token.Y
 	r.markDirty(r.currentSceneID)
 	r.broadcastAll()
+	r.noticeTeleport(c.PlayerName(), existing)
 }
 
 // handleToggleDoor переключает дверь closed<->open. Разрешено и ДМ, и
@@ -1307,6 +1318,19 @@ func (r *Room) Announce(text string) {
 	case r.announce <- text:
 	default:
 	}
+}
+
+// switchScene — сделать сцену активной; неизвестный id молча пропускается.
+func (r *Room) switchScene(id string) {
+	s, ok := r.scenes[id]
+	if !ok {
+		return
+	}
+	r.currentSceneID = id
+	r.scene = s
+	r.dirty = true                                // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
+	r.ambientStartedAtMs = time.Now().UnixMilli() // новая активная сцена — амбиент (если есть) стартует заново у всех
+	r.mapStartedAtMs = time.Now().UnixMilli()     // и видео-фон (если есть) — аналогично
 }
 
 // ListScenes — см. RoomService. ctx — чтобы не залипнуть на остановленной
@@ -2453,7 +2477,15 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 
 	case "remove_token":
 		delete(r.scene.Tokens, msg.ID)
+		delete(r.teleportArmed, msg.ID)
 		r.markDirty(r.currentSceneID)
+
+	case "add_teleport", "move_teleport":
+		r.handleTeleportUpsert(msg.Teleport)
+	case "remove_teleport":
+		r.handleTeleportRemove(msg.ID)
+	case "teleport_tokens":
+		r.handleTeleportTokens(msg)
 
 	case "reveal_token":
 		if t, ok := r.scene.Tokens[msg.ID]; ok {
@@ -2641,13 +2673,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		}
 
 	case "switch_scene":
-		if s, ok := r.scenes[msg.SceneID]; ok {
-			r.currentSceneID = msg.SceneID
-			r.scene = s
-			r.dirty = true                                // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
-			r.ambientStartedAtMs = time.Now().UnixMilli() // новая активная сцена — амбиент (если есть) стартует заново у всех
-			r.mapStartedAtMs = time.Now().UnixMilli()     // и видео-фон (если есть) — аналогично
-		}
+		r.switchScene(msg.SceneID)
 
 	case "update_scene":
 		s, ok := r.scenes[msg.SceneID]

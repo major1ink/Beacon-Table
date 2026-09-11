@@ -67,6 +67,7 @@ export function createNet(ctx, audio) {
       if (!nextScene.fogAreas) nextScene.fogAreas = {};
       if (!nextScene.buildings) nextScene.buildings = {};
       if (!nextScene.drawings) nextScene.drawings = {};
+      if (!nextScene.teleports) nextScene.teleports = {};
       if (!nextScene.grid) nextScene.grid = { size: 0, offsetX: 0, offsetY: 0 };
       diffAndMarkDirty(ctx.dirty, ctx.scene, nextScene);
       ctx.scene = nextScene;
@@ -145,6 +146,10 @@ export function createNet(ctx, audio) {
       // отобрал персонажа — см. RoomService.NotifyCharactersChanged):
       // страницы игрока и ДМ перечитывают свои списки по этому событию.
       document.dispatchEvent(new CustomEvent("vtt:charactersChanged"));
+    } else if (data.type === "teleport_request") {
+      // Игрок встал на портал (см. service/room_teleports.go) — решает ДМ
+      // (pages/dm.js).
+      document.dispatchEvent(new CustomEvent("vtt:teleportRequest", { detail: data }));
     } else if (data.type === "table_notice") {
       // Текст сервера для всех за столом (см. Room.Announce) — сейчас
       // только предупреждение демо о скором сбросе. connection-banner.js
