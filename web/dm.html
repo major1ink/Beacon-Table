@@ -120,6 +120,8 @@
     .field-label { font-size: 11px; opacity: 0.6; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .field-label-row button { padding: 4px 8px; font-size: 11px; width: auto; }
+    .contact-links a { color: var(--accent); text-decoration: none; }
+    .contact-links a:hover { text-decoration: underline; }
     /* Пара кнопок в строку под полем (ссылка на трансляцию): делят ширину
        поровну, панель узкая — в одну строку с меткой они не помещаются. */
     .row-inline { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
@@ -1347,7 +1349,8 @@
                 <span class="field-label">Версия <b id="appVersion">…</b></span>
                 <button id="bugReportBtn" type="button">Сообщить о баге</button>
               </div>
-              <p class="hint">Соберём версию, браузер и последние ошибки в консоли в готовый текст и откроем форму нового issue на GitHub — останется вычитать и отправить. Если GitHub'а нет, отчёт можно просто скопировать.</p>
+              <p class="hint">Соберём версию, браузер и последние ошибки в консоли в готовый текст и откроем форму нового issue на GitHub или письмо — останется вычитать и отправить. Если не подходит ни то, ни другое, отчёт можно просто скопировать.</p>
+              <p class="hint contact-links">Сайт: <a href="https://beacontable.ru/" target="_blank" rel="noopener">beacontable.ru</a> · Почта: <a href="mailto:info@beacontable.ru">info@beacontable.ru</a></p>
             </div>
             <div class="section-divider"></div>
             <div class="field-block">

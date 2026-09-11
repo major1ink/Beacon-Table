@@ -9,6 +9,7 @@ import { openModal, showAlert } from "./modal.js";
 import { fetchVersion } from "./api.js";
 
 const REPO_URL = "https://github.com/major1ink/Beacon-Table";
+export const SUPPORT_EMAIL = "info@beacontable.ru";
 
 // Буфер живёт всю сессию стола (часы), а issue с мегабайтом стектрейсов
 // никто не прочитает.
@@ -150,19 +151,39 @@ function issueURL(title, body) {
   return url.toString();
 }
 
-// issueURLFitting — режет отчёт с конца (там техданные, описание человека
-// важнее), пока ссылка не уложится в MAX_URL_LEN.
-export function issueURLFitting(title, body) {
+// mailtoURL — письмо на почту проекта. Тело кодируется через
+// encodeURIComponent, а не URLSearchParams: та превращает пробелы в «+», и
+// почтовые клиенты их так и показывают.
+function mailtoURL(title, body) {
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("[Beacon Table] " + title)}&body=${encodeURIComponent(body)}`;
+}
+
+// fitURL — режет отчёт с конца (там техданные, описание человека важнее),
+// пока ссылка не уложится в MAX_URL_LEN.
+function fitURL(build, title, body) {
   let text = body;
-  let url = issueURL(title, text);
+  let url = build(title, text);
   let trimmed = false;
   while (url.length > MAX_URL_LEN && text.length > 200) {
     text = text.slice(0, Math.floor(text.length * 0.8));
     trimmed = true;
-    url = issueURL(title, text + "\n…(отчёт обрезан по длине ссылки)");
+    url = build(title, text + "\n…(отчёт обрезан по длине ссылки)");
   }
   return { url, trimmed };
 }
+
+export function issueURLFitting(title, body) {
+  return fitURL(issueURL, title, body);
+}
+
+export function mailtoURLFitting(title, body) {
+  return fitURL(mailtoURL, title, body);
+}
+
+const TARGETS = {
+  github: { label: "Issue на GitHub", okLabel: "Открыть на GitHub", fit: issueURLFitting },
+  mail: { label: `Письмо на ${SUPPORT_EMAIL}`, okLabel: "Открыть в почте", fit: mailtoURLFitting },
+};
 
 function textarea(parent, label, placeholder, rows) {
   const wrap = document.createElement("label");
@@ -187,6 +208,7 @@ function textarea(parent, label, placeholder, rows) {
 export async function openBugReport() {
   let tech = "собираю…";
   let what, steps, expected, withTech, techBox;
+  let target = "github";
 
   const techPromise = collectTech().then((t) => {
     tech = t;
@@ -195,13 +217,13 @@ export async function openBugReport() {
 
   const send = await openModal({
     title: "Сообщить о баге",
-    okLabel: "Открыть на GitHub",
+    okLabel: TARGETS[target].okLabel,
     cancelLabel: "Закрыть",
     buildBody: (body) => {
       const intro = document.createElement("p");
       intro.className = "bt-modal-text dim";
       intro.textContent =
-        "Опишите, что пошло не так. Ничего никуда не уходит само: по кнопке откроется форма нового issue на GitHub с уже заполненным текстом — его можно вычитать и поправить.";
+        "Опишите, что пошло не так. Ничего никуда не уходит само: по кнопке откроется форма нового issue на GitHub или письмо в вашей почте с уже заполненным текстом — его можно вычитать и поправить.";
       body.appendChild(intro);
 
       what = textarea(body, "Что сломалось", "Карта у игроков осталась чёрной после смены сцены", 3);
@@ -231,7 +253,36 @@ export async function openBugReport() {
       techRow.append(withTech, techLabel);
       body.appendChild(techRow);
 
-      // Для тех, у кого нет GitHub: отчёт в буфер, дальше как удобно.
+      // Куда отправлять. Подпись кнопки «ОК» меняется вместе с выбором —
+      // сама кнопка появляется в подвале после buildBody, поэтому ищем её
+      // в момент переключения.
+      const targetRow = document.createElement("div");
+      targetRow.style.cssText = "display:flex;flex-direction:column;gap:6px;font-size:12px;";
+      const targetCap = document.createElement("span");
+      targetCap.style.cssText = "opacity:0.75;text-align:left;";
+      targetCap.textContent = "Куда отправить";
+      targetRow.appendChild(targetCap);
+      for (const [key, t] of Object.entries(TARGETS)) {
+        const opt = document.createElement("label");
+        opt.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "bugReportTarget";
+        radio.value = key;
+        radio.checked = key === target;
+        radio.onchange = () => {
+          target = key;
+          const okBtn = body.closest(".bt-modal")?.querySelector(".bt-modal-foot .bt-modal-btn.primary");
+          if (okBtn) okBtn.textContent = t.okLabel;
+        };
+        const text = document.createElement("span");
+        text.textContent = t.label;
+        opt.append(radio, text);
+        targetRow.appendChild(opt);
+      }
+      body.appendChild(targetRow);
+
+      // Для тех, кому не подходит ни то, ни другое: отчёт в буфер, дальше как удобно.
       const copyBtn = document.createElement("button");
       copyBtn.type = "button";
       copyBtn.className = "bt-modal-btn";
@@ -271,13 +322,19 @@ export async function openBugReport() {
     tech,
     withTech: withTech.checked,
   });
-  const { url, trimmed } = issueURLFitting(title, body);
-  const win = window.open(url, "_blank", "noopener");
-  if (!win) {
-    showAlert("Браузер заблокировал новое окно. Разрешите всплывающие окна для этого адреса или скопируйте отчёт кнопкой «Скопировать отчёт».");
-    return;
+  const { url, trimmed } = TARGETS[target].fit(title, body);
+  if (target === "mail") {
+    // mailto не открывает окно — браузер отдаёт ссылку почтовому клиенту;
+    // window.open тут вернул бы пустую вкладку.
+    location.href = url;
+  } else {
+    const win = window.open(url, "_blank", "noopener");
+    if (!win) {
+      showAlert("Браузер заблокировал новое окно. Разрешите всплывающие окна для этого адреса или скопируйте отчёт кнопкой «Скопировать отчёт».");
+      return;
+    }
   }
   if (trimmed) {
-    showAlert("Отчёт длинный — в ссылку уместилась только часть. Полный текст можно взять кнопкой «Скопировать отчёт» и вставить в issue.");
+    showAlert("Отчёт длинный — в ссылку уместилась только часть. Полный текст можно взять кнопкой «Скопировать отчёт» и вставить вручную.");
   }
 }

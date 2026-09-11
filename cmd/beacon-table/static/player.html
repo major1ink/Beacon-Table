@@ -195,6 +195,8 @@
       font-size: 12px; background: var(--surface-hover); color: var(--text);
     }
     #settingsModal button#bugReportBtn:hover { background: #3c3c48; }
+    #settingsModal .contact-links a { color: var(--accent); text-decoration: none; }
+    #settingsModal .contact-links a:hover { text-decoration: underline; }
 
     #authFailedOverlay {
       display: none; position: fixed; inset: 0; z-index: 50; background: rgba(10,10,14,0.92);
@@ -269,7 +271,7 @@
       #combatBarMount { order: 3; flex: 1 1 100%; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/player-DW4QeQfn.js"></script>
+  <script type="module" crossorigin src="/assets/player-CMmQVYDr.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/api-D-1quQhq.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-DGzLHKR1.js">
@@ -279,7 +281,7 @@
   <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-DBUk1dIi.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-BKN9BodN.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-Bx4k0HsB.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Dc6dpepd.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="modulepreload" crossorigin href="/assets/avatar-cropper-Dklfm4Mx.js">
@@ -355,7 +357,8 @@
         <span id="appVersion">…</span>
       </div>
       <button id="bugReportBtn" type="button">Сообщить о баге</button>
-      <p class="hint">Отчёт соберётся сам — версия, браузер и последние ошибки; текст откроется формой issue на GitHub, отправлять его или нет, решаете вы.</p>
+      <p class="hint">Отчёт соберётся сам — версия, браузер и последние ошибки; текст откроется формой issue на GitHub или письмом, отправлять его или нет, решаете вы.</p>
+      <p class="hint contact-links">Сайт: <a href="https://beacontable.ru/" target="_blank" rel="noopener">beacontable.ru</a> · Почта: <a href="mailto:info@beacontable.ru">info@beacontable.ru</a></p>
     </div>
   </div>
 

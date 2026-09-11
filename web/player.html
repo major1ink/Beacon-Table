@@ -196,6 +196,8 @@
       font-size: 12px; background: var(--surface-hover); color: var(--text);
     }
     #settingsModal button#bugReportBtn:hover { background: #3c3c48; }
+    #settingsModal .contact-links a { color: var(--accent); text-decoration: none; }
+    #settingsModal .contact-links a:hover { text-decoration: underline; }
 
     #authFailedOverlay {
       display: none; position: fixed; inset: 0; z-index: 50; background: rgba(10,10,14,0.92);
@@ -341,7 +343,8 @@
         <span id="appVersion">…</span>
       </div>
       <button id="bugReportBtn" type="button">Сообщить о баге</button>
-      <p class="hint">Отчёт соберётся сам — версия, браузер и последние ошибки; текст откроется формой issue на GitHub, отправлять его или нет, решаете вы.</p>
+      <p class="hint">Отчёт соберётся сам — версия, браузер и последние ошибки; текст откроется формой issue на GitHub или письмом, отправлять его или нет, решаете вы.</p>
+      <p class="hint contact-links">Сайт: <a href="https://beacontable.ru/" target="_blank" rel="noopener">beacontable.ru</a> · Почта: <a href="mailto:info@beacontable.ru">info@beacontable.ru</a></p>
     </div>
   </div>
 
