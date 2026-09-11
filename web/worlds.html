@@ -44,11 +44,12 @@
     header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
     h1 { font-size: 20px; margin: 0; }
     #subtitle { opacity: 0.6; font-size: 12px; margin: 4px 0 20px; }
-    #logoutBtn {
+    #logoutBtn, #fullscreenBtn {
       background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px;
       padding: 6px 10px; border-radius: var(--radius); transition: background .12s ease, color .12s ease;
     }
-    #logoutBtn:hover { background: var(--surface); color: var(--text); }
+    #logoutBtn:hover, #fullscreenBtn:hover { background: var(--surface); color: var(--text); }
+    #fullscreenBtn { display: flex; align-items: center; }
 
     #list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
     #emptyMsg { font-size: 13px; opacity: 0.6; padding: 10px 2px; }
@@ -148,6 +149,7 @@
         <div id="subtitle">выбери мир, чтобы продолжить — на столе может быть запущен только один</div>
       </div>
       <div id="headerActions">
+        <button id="fullscreenBtn" type="button"></button>
         <button id="logoutBtn">Выйти</button>
         <button id="shutdownBtn" title="Остановить программу: мир сохранится, стол закроется у всех">Выключить сервер</button>
       </div>

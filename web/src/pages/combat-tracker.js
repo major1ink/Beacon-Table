@@ -13,6 +13,9 @@ import { fetchMe } from "../api.js";
 import { openSocket } from "../ws-reconnect.js";
 import { initCombatPanel } from "../combat-panel.js";
 import { isGM } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 (async function boot() {
   const me = await fetchMe();

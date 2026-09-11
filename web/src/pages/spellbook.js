@@ -18,6 +18,7 @@ import { wireCatalogLinks } from "../catalog-links.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -593,6 +594,8 @@ editToggleBtn.onclick = () => {
   updateEditToggleBtn();
   renderApp();
 };
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   // Плавающее окно (обычный случай, см. floating-window.js) — iframe, не

@@ -19,6 +19,7 @@ import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, des
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // ==================== state ====================
 
@@ -421,6 +422,8 @@ editToggleBtn.onclick = () => {
   updateEditToggleBtn();
   renderApp();
 };
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {

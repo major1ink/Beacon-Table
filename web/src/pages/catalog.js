@@ -36,6 +36,7 @@ import { mapFoundryConditionBatch } from "../condition-import.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -429,6 +430,8 @@ importFile.addEventListener("change", async (e) => {
 });
 
 // ==================== закрыть / автообновление ====================
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {

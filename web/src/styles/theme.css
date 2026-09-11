@@ -83,7 +83,7 @@
 .rail-btn .rail-icon { display: flex; }
 .rail-btn svg { display: block; }
 .rail-btn:hover { background: var(--surface); color: var(--text); }
-.rail-btn.active { background: var(--accent-bg); color: var(--accent); }
+.rail-btn.active, .rail-btn.open { background: var(--accent-bg); color: var(--accent); }
 /* Точка на иконке рейла — «здесь что-то ждёт тебя»: сейчас её ставит экран,
    попросившийся на трансляцию (см. web/src/pages/dm.js), пока ДМ смотрит на
    карту, а не в настройки. */

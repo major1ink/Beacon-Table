@@ -32,6 +32,7 @@
     #topbar button svg { flex: 0 0 auto; }
     #topbar button:hover { background: var(--surface); color: var(--text); }
     #topbar button.active { background: #e74c3c; color: #fff; }
+    #topbar #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
     #topbarUsername { opacity: 0.65; padding-left: 6px; flex: 0 0 auto; }
 
     /* ---- #charDock — быстрый доступ к листам своих персонажей: аватар +
@@ -214,12 +215,6 @@
        специфичность больше одиночного id. */
     #topbar #diceBtn { display: none; }
 
-    /* «Во весь экран» (см. src/fullscreen.js) — по pointer: coarse, а не по
-       мобильному брейкпоинту: планшет в ландшафте под тот не попадает. */
-    #topbar #fullscreenBtn { display: none; }
-    @media (pointer: coarse) {
-      #topbar #fullscreenBtn { display: flex; }
-    }
 
     @media (max-width: 860px), (max-height: 500px) {
       #topbar {
@@ -232,7 +227,7 @@
       #topbar > button { padding: 0; width: 38px; height: 38px; justify-content: center; border-radius: 50%; }
       #topbar > button .tb-label { display: none; }
       #topbar #diceBtn { display: flex; }
-      #diceBtn.open, #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
+      #diceBtn.open { background: var(--accent-bg); color: var(--accent); }
 
       #charDock:empty { display: none; }
 
@@ -271,21 +266,22 @@
       #combatBarMount { order: 3; flex: 1 1 100%; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/player-CMmQVYDr.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-D-1quQhq.js">
+  <script type="module" crossorigin src="/assets/player-BAVHE__v.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-WhtgNvzO.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DGzLHKR1.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-tWrXNLOD.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DgwHKoQz.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-Cd_2Sf6-.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-CYOXmh6a.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-t5bc8j4u.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-DBUk1dIi.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-BMp9z77W.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-Bx4k0HsB.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Dc6dpepd.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-DrS4AUlQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-yzm6DpJg.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-BXWAQ-Au.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="modulepreload" crossorigin href="/assets/avatar-cropper-Dklfm4Mx.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
+  <link rel="modulepreload" crossorigin href="/assets/avatar-cropper-ChZNjeGy.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-C_dXvs8g.css">
 </head>
 <body>
   <div id="app">

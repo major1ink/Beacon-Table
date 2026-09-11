@@ -16,6 +16,7 @@ import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // ==================== state ====================
 
@@ -290,6 +291,8 @@ editToggleBtn.onclick = () => {
   updateEditToggleBtn();
   renderApp();
 };
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {
