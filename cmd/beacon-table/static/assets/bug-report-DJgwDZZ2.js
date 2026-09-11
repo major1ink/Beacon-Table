@@ -1,4 +1,4 @@
-import{a as R}from"./floating-window-D8vkCdgv.js";import{i as N,aS as me,b as ue,aT as pe,aR as fe,a2 as he,aU as be,aV as we,aW as xe,aX as ge,ab as ye}from"./icons-4St96Wvj.js";import{b as V,S as Ee,r as ke}from"./showcase-overlay-OtmMJ7fP.js";import{b as J,s as E,o as F,a as ve}from"./modal-CMhepKYJ.js";import{I as Ce}from"./compendium-taxonomy-BHoDJPfw.js";const ce="beacon:sheetDockWidth",Le=300,Ne=.72;let K=!1;function Te(){if(K)return;K=!0;const n=document.createElement("style");n.textContent=`
+import{a as R}from"./floating-window-D8vkCdgv.js";import{i as N,aS as me,b as ue,aT as pe,aR as fe,a2 as he,aU as be,aV as we,aW as xe,aX as ge,ab as ye}from"./icons-4St96Wvj.js";import{b as V,S as Ee,r as ke}from"./showcase-overlay-DD4reSl1.js";import{b as J,s as E,o as F,a as ve}from"./modal-CMhepKYJ.js";import{I as Ce}from"./compendium-taxonomy-BHoDJPfw.js";const ce="beacon:sheetDockWidth",Le=300,Ne=.72;let K=!1;function Te(){if(K)return;K=!0;const n=document.createElement("style");n.textContent=`
     .sheet-dock {
       flex: 0 0 auto; position: relative; display: none; flex-direction: column;
       min-width: 0; background: var(--panel-bg, #1c1c25);

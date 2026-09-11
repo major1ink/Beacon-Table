@@ -678,6 +678,7 @@ const wallBtn = document.getElementById("wallBtn");
 const buildingBtn = document.getElementById("buildingBtn");
 const fogBtn = document.getElementById("fogBtn");
 const rulerBtn = document.getElementById("rulerBtn");
+const teleportBtn = document.getElementById("teleportBtn");
 
 function toggleTool(name) {
   const current = document.querySelector("[data-tool].active");
@@ -688,10 +689,12 @@ wallBtn.dataset.tool = "wall";
 buildingBtn.dataset.tool = "building";
 fogBtn.dataset.tool = "fog";
 rulerBtn.dataset.tool = "ruler";
+teleportBtn.dataset.tool = "teleport";
 wallBtn.onclick = () => toggleTool("wall");
 buildingBtn.onclick = () => toggleTool("building");
 fogBtn.onclick = () => toggleTool("fog");
 rulerBtn.onclick = () => toggleTool("ruler");
+teleportBtn.onclick = () => toggleTool("teleport");
 
 const gridEditDone = document.getElementById("gridEditDone");
 document.addEventListener("vtt:toolChanged", (e) => {
@@ -699,6 +702,7 @@ document.addEventListener("vtt:toolChanged", (e) => {
   buildingBtn.classList.toggle("active", e.detail === "building");
   fogBtn.classList.toggle("active", e.detail === "fog");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
+  teleportBtn.classList.toggle("active", e.detail === "teleport");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
 });
 
@@ -709,6 +713,7 @@ attachTooltip(wallBtn, TOOL_HELP.wall);
 attachTooltip(buildingBtn, TOOL_HELP.building);
 attachTooltip(fogBtn, TOOL_HELP.fog);
 attachTooltip(rulerBtn, TOOL_HELP.ruler);
+attachTooltip(teleportBtn, TOOL_HELP.teleport);
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
   showSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
@@ -1148,9 +1153,9 @@ noteMarkerDeleteBtn.onclick = () => {
   closeNoteMarkerMenu();
 };
 
-// ================= порталы (ПКМ по порталу, «Телепорт сюда…» на пустом месте) =================
-// Портал ведёт только на сцену, связанную с текущей на доске (sceneLinksOf);
-// перенос делает сервер (room_teleports.go).
+// ================= порталы (инструмент «Телепорт», ПКМ по порталу) =================
+// Портал ведёт на сцену, связанную с текущей на доске (sceneLinksOf), либо к
+// порталу этой же карты (targetTeleportId); перенос делает сервер.
 const teleportMenu = document.getElementById("teleportMenu");
 const teleportMenuLockBtn = document.getElementById("teleportMenuLockBtn");
 const teleportMenuLockLabel = document.getElementById("teleportMenuLockLabel");
@@ -1208,13 +1213,39 @@ async function linkedScenesOf(sceneId) {
     .filter((r) => r.scene);
 }
 
-// pickLinkedScene — выбор сцены назначения среди связанных с текущей.
-async function pickLinkedScene(current) {
+// teleportName — подпись портала в списках, как на карте; без подписи — координаты.
+function teleportName(t) {
+  if (!t.label) return `портал (${Math.round(t.x)}; ${Math.round(t.y)})`;
+  return t.targetSceneId && !t.targetTeleportId ? "→ " + t.label : t.label;
+}
+
+// pickTeleportTarget — выбор цели портала: связанная сцена либо портал этой
+// карты. Возвращает {label, targetSceneId, targetTeleportId} или null; self —
+// id правимого портала, исключается из списка.
+async function pickTeleportTarget(current, self) {
   const linked = await linkedScenesOf(currentSceneId);
-  if (!linked.length) {
-    showAlert("Эта сцена ни с чем не связана. Свяжи её стрелкой с другой сценой на доске — тогда портал будет куда вести.", { title: "Телепорт" });
+  const local = Object.values(vtt.getScene().teleports || {}).filter((t) => t.id !== self);
+  if (!linked.length && !local.length) {
+    showAlert(
+      "Порталу некуда вести: на карте нет других порталов, а сцена ни с чем не связана. Поставь пару порталов (Ctrl + перетягивание в инструменте «Телепорт») или свяжи сцену стрелкой с другой на доске.",
+      { title: "Телепорт" }
+    );
     return null;
   }
+  const targets = [
+    ...linked.map(({ scene, boards }) => ({
+      key: "scene:" + scene.id,
+      group: "Сцены",
+      text: scene.name + " · " + boards.join(", "),
+      value: { label: scene.name, targetSceneId: scene.id, targetTeleportId: "" },
+    })),
+    ...local.map((t) => ({
+      key: "tp:" + t.id,
+      group: "Порталы этой карты",
+      text: teleportName(t),
+      value: { label: t.label, targetSceneId: "", targetTeleportId: t.id },
+    })),
+  ];
   let select;
   return openModal({
     title: "Куда ведёт портал",
@@ -1222,35 +1253,62 @@ async function pickLinkedScene(current) {
     buildBody: (body) => {
       select = document.createElement("select");
       select.className = "bt-modal-input";
-      for (const { scene, boards } of linked) {
+      const groups = new Map();
+      for (const t of targets) {
+        if (!groups.has(t.group)) {
+          const g = document.createElement("optgroup");
+          g.label = t.group;
+          groups.set(t.group, g);
+          select.appendChild(g);
+        }
         const opt = document.createElement("option");
-        opt.value = scene.id;
-        opt.textContent = scene.name + " · " + boards.join(", ");
-        select.appendChild(opt);
+        opt.value = t.key;
+        opt.textContent = t.text;
+        groups.get(t.group).appendChild(opt);
       }
-      if (current && linked.some((l) => l.scene.id === current)) select.value = current;
+      const cur = current && (current.targetTeleportId ? "tp:" + current.targetTeleportId : "scene:" + current.targetSceneId);
+      if (cur && targets.some((t) => t.key === cur)) select.value = cur;
       body.appendChild(select);
       return select;
     },
-    onOk: () => linked.find((l) => l.scene.id === select.value)?.scene || null,
+    onOk: () => targets.find((t) => t.key === select.value)?.value || null,
     onCancel: () => null,
   });
 }
 
-async function placeTeleportAt(x, y) {
-  const scene = await pickLinkedScene();
-  if (!scene) return;
+function newTeleportId() {
   counter++;
-  vtt.send({ type: "add_teleport", teleport: { id: "tp-" + Date.now() + "-" + counter, x, y, label: scene.name, targetSceneId: scene.id } });
+  return "tp-" + Date.now() + "-" + counter;
 }
+
+async function placeTeleportAt(x, y) {
+  const target = await pickTeleportTarget();
+  if (!target) return;
+  vtt.send({ type: "add_teleport", teleport: { id: newTeleportId(), x, y, ...target } });
+}
+
+// placeTeleportPair — пара порталов карты, ведущих друг к другу, с общей подписью «Портал N».
+function placeTeleportPair(from, to) {
+  const used = new Set(Object.values(vtt.getScene().teleports || {}).map((t) => t.label));
+  let n = 1;
+  while (used.has("Портал " + n)) n++;
+  const label = "Портал " + n;
+  const a = newTeleportId();
+  const b = newTeleportId();
+  vtt.send({ type: "add_teleport", teleport: { id: a, x: from.x, y: from.y, label, targetSceneId: "", targetTeleportId: b } });
+  vtt.send({ type: "add_teleport", teleport: { id: b, x: to.x, y: to.y, label, targetSceneId: "", targetTeleportId: a } });
+}
+
+document.addEventListener("vtt:placeTeleport", (e) => placeTeleportAt(e.detail.x, e.detail.y));
+document.addEventListener("vtt:placeTeleportPair", (e) => placeTeleportPair(e.detail.from, e.detail.to));
 
 teleportTargetBtn.onclick = async () => {
   const t = menuTeleportId && vtt.getScene().teleports?.[menuTeleportId];
   closeTeleportMenu();
   if (!t) return;
-  const scene = await pickLinkedScene(t.targetSceneId);
-  if (!scene) return;
-  vtt.send({ type: "move_teleport", teleport: { ...t, label: scene.name, targetSceneId: scene.id } });
+  const target = await pickTeleportTarget(t, t.id);
+  if (!target) return;
+  vtt.send({ type: "move_teleport", teleport: { ...t, ...target } });
 };
 
 teleportResizeBtn.onclick = () => {
@@ -1266,12 +1324,19 @@ teleportDeleteBtn.onclick = () => {
   closeTeleportMenu();
 };
 
-// teleportStillLinked — портал на месте и его сцена ещё связана с текущей.
+// teleportStillLinked — портал на месте и его цель (парный портал или связанная сцена) ещё есть.
 async function teleportStillLinked(teleportId) {
   const t = vtt.getScene().teleports?.[teleportId];
   if (!t) {
     showAlert("Портала на карте уже нет.", { title: "Телепорт" });
     return null;
+  }
+  if (t.targetTeleportId) {
+    if (!vtt.getScene().teleports?.[t.targetTeleportId]) {
+      showAlert("Парного портала на карте уже нет — портал не работает.", { title: "Телепорт" });
+      return null;
+    }
+    return t;
   }
   const linked = await linkedScenesOf(currentSceneId);
   if (!linked.some((l) => l.scene.id === t.targetSceneId)) {
@@ -1293,7 +1358,12 @@ teleportMoveAllBtn.onclick = async () => {
     showAlert("На сцене нет ни одного персонажа.", { title: "Телепорт" });
     return;
   }
-  const ok = await showConfirm(`Переместить ${tokens.length} перс. на сцену «${t.label}»? Стол переключится туда же.`, { title: "Телепорт", okLabel: "Переместить" });
+  const ok = await showConfirm(
+    t.targetTeleportId
+      ? `Переместить ${tokens.length} перс. к парному порталу «${teleportName(t)}»?`
+      : `Переместить ${tokens.length} перс. на сцену «${t.label}»? Стол переключится туда же.`,
+    { title: "Телепорт", okLabel: "Переместить" }
+  );
   if (!ok) return;
   vtt.send({ type: "teleport_tokens", id, tokenIds: tokens.map((tok) => tok.id) });
 };
@@ -1301,9 +1371,12 @@ teleportMoveAllBtn.onclick = async () => {
 // Игрок встал на портал (см. room_teleports.go: noticeTeleport) — спросить ДМ.
 document.addEventListener("vtt:teleportRequest", async (e) => {
   const d = e.detail;
-  if (d.targetSceneId === currentSceneId) return;
+  if (!d.targetTeleportId && d.targetSceneId === currentSceneId) return;
+  const who = `${d.playerName || "Игрок"}: «${d.tokenLabel || "токен"}»`;
   const ok = await showConfirm(
-    `${d.playerName || "Игрок"}: «${d.tokenLabel || "токен"}» встал на портал в сцену «${d.targetSceneName}». Переместить? Стол переключится туда же.`,
+    d.targetTeleportId
+      ? `${who} встал на портал «${d.targetLabel || "портал"}». Переместить к парному порталу?`
+      : `${who} встал на портал в сцену «${d.targetSceneName}». Переместить? Стол переключится туда же.`,
     { title: "Телепорт", okLabel: "Переместить", cancelLabel: "Не пускать" }
   );
   if (!ok) return;
@@ -1546,7 +1619,6 @@ let mapClipboard = null;
 const canvasMenu = document.getElementById("canvasMenu");
 const canvasMenuPasteBtn = document.getElementById("canvasMenuPasteBtn");
 const canvasMenuPasteLabel = document.getElementById("canvasMenuPasteLabel");
-const canvasMenuTeleportBtn = document.getElementById("canvasMenuTeleportBtn");
 let canvasMenuAt = null; // мировые координаты ПКМ — точка вставки
 
 function closeCanvasMenu() {
@@ -1626,7 +1698,7 @@ tokenMenuCopyBtn.onclick = () => {
 };
 
 // ПКМ по пустому месту карты (см. interaction.js: vtt:canvasContextMenu):
-// портал сюда и, если есть что, вставка из буфера.
+// вставка из буфера; пусто в буфере — меню не открывается.
 document.addEventListener("vtt:canvasContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
@@ -1636,18 +1708,11 @@ document.addEventListener("vtt:canvasContextMenu", (e) => {
   closeWallMenu();
   closeBuildingMenu();
   closeTeleportMenu();
+  if (!mapClipboard) return;
   canvasMenuAt = { x: e.detail.x, y: e.detail.y };
-  canvasMenuPasteBtn.hidden = !mapClipboard;
-  if (mapClipboard) canvasMenuPasteLabel.textContent = "Вставить: " + (mapClipboard.object.label || "объект");
+  canvasMenuPasteLabel.textContent = "Вставить: " + (mapClipboard.object.label || "объект");
   placeMenu(canvasMenu, e.detail.pageX, e.detail.pageY);
 });
-
-canvasMenuTeleportBtn.onclick = () => {
-  if (!canvasMenuAt) return;
-  const at = canvasMenuAt;
-  closeCanvasMenu();
-  placeTeleportAt(at.x, at.y);
-};
 
 canvasMenuPasteBtn.onclick = () => {
   if (!mapClipboard || !canvasMenuAt) return;
