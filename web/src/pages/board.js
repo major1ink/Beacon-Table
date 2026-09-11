@@ -20,6 +20,7 @@ import {
   fetchAdminCharacter,
   fetchAdminPlaylists,
   fetchAssets,
+  fetchScenes,
 } from "../api.js";
 import { mountBoardEditor } from "../board/editor.js";
 import {
@@ -29,8 +30,10 @@ import {
   parseCardLink,
   monsterLink,
   characterLink,
+  sceneLink,
   audioLink,
   isBoardLink,
+  sceneLinksOf,
 } from "../board/links.js";
 import { openModal, showAlert } from "../modal.js";
 import { renderNoteHtml } from "../notes/markdown.js";
@@ -49,6 +52,8 @@ const imageBtn = document.getElementById("imageBtn");
 const monsterBtn = document.getElementById("monsterBtn");
 const charBtn = document.getElementById("charBtn");
 const musicBtn = document.getElementById("musicBtn");
+const sceneBtn = document.getElementById("sceneBtn");
+const linkScenesBtn = document.getElementById("linkScenesBtn");
 const peersEl = document.getElementById("peers");
 
 // Доска открывается плавающим окном по ссылке board.html?id=… — см.
@@ -122,6 +127,7 @@ function cardKey(card) {
 
 function cardName(card) {
   if (card.kind === "audio") return card.name;
+  if (card.kind === "scene") return sceneName(card.id) || card.name;
   const got = cardData.get(cardKey(card));
   return (got && got.data && got.data.name) || (card.kind === "monster" ? "Монстр" : "Персонаж");
 }
@@ -383,12 +389,129 @@ function renderAudioCard(card) {
   ]);
 }
 
+// ---- сцены ----
+//
+// Список сцен есть только у ДМ (см. handleSceneList): у него имя и фон
+// живые, игрок видит имя из ссылки карточки. Связи между сценами — стрелки
+// между их карточками (см. sceneLinksOf), «телепорт» ходит по ним.
+let scenes = null; // [{id, name, mapUrl, current}] | null — не грузили
+let scenesLoading = false;
+// scenesStale — список не приехал: карточки живут именами из ссылок.
+let scenesStale = false;
+// deadMaps — фоны сцен, которые не загрузились (видео или удалённый файл).
+const deadMaps = new Set();
+
+async function loadScenes(force = false) {
+  if (!gm || scenesLoading || (!force && scenes)) return;
+  scenesLoading = true;
+  try {
+    scenes = await fetchScenes();
+    scenesStale = false;
+  } catch {
+    scenes = scenes || [];
+    scenesStale = true;
+  } finally {
+    scenesLoading = false;
+  }
+  editor?.repaint();
+}
+
+function sceneById(id) {
+  return (scenes || []).find((s) => s.id === id) || null;
+}
+
+// sceneName — живое имя у ДМ, иначе из ссылки любой карточки этой сцены.
+function sceneName(id) {
+  const live = sceneById(id);
+  if (live) return live.name;
+  for (const e of editor?.elements() || []) {
+    const card = parseCardLink(e.link);
+    if (card && card.kind === "scene" && card.id === id) return card.name;
+  }
+  return "";
+}
+
+// goToScene — переключить стол на сцену. Делает стол (pages/dm.js слушает
+// beacon:switchSceneId); у себя отмечаем сразу, не дожидаясь ответа.
+function goToScene(id) {
+  if (!gm || !hasHost) return;
+  askHost({ type: "beacon:switchSceneId", id });
+  if (scenes) {
+    for (const s of scenes) s.current = s.id === id;
+    editor?.repaint();
+  }
+}
+
+const canTeleport = () => gm && hasHost;
+
+// sceneChip — сосед в телепорте: кнопка у ДМ за столом, иначе просто имя.
+function sceneChip(id) {
+  const name = sceneName(id) || "Сцена";
+  if (!canTeleport()) return createElement("span", { className: "board-card-chip", key: id }, name);
+  return createElement(
+    "button",
+    { type: "button", className: "board-card-btn board-card-chip", key: id, title: "Перейти на сцену", onClick: () => goToScene(id) },
+    [iconSpan("arrow-right", "i"), " " + name]
+  );
+}
+
+// renderSceneCard — сцена: фон, имя, «перейти» и телепорт по связанным.
+function renderSceneCard(card) {
+  if (gm && !scenes) {
+    loadScenes();
+    return cardMessage("scene", "Загружаю…");
+  }
+  const live = sceneById(card.id);
+  if (gm && !live && !scenesStale) return cardMessage("scene", "Сцены «" + card.name + "» за столом больше нет.");
+  const name = live ? live.name : card.name;
+  const map = live && live.mapUrl && !deadMaps.has(live.mapUrl) ? live.mapUrl : "";
+  const linked = [...(sceneLinksOf(editor?.elements() || []).get(card.id) || [])];
+  const subtitle = live && live.current ? "сцена на столе сейчас" : "сцена";
+  const head = createElement("div", { className: "board-card-head", key: "head" }, [
+    map
+      ? createElement("img", {
+          className: "board-card-map",
+          src: map,
+          alt: "",
+          key: "img",
+          onError: () => {
+            deadMaps.add(map);
+            editor?.repaint();
+          },
+        })
+      : createElement("div", { className: "board-card-map board-card-portrait-empty", key: "img" }, iconSpan("map", "i")),
+    createElement("div", { className: "board-card-titles", key: "t" }, [
+      canTeleport()
+        ? createElement(
+            "button",
+            { type: "button", className: "board-card-name", title: "Перейти на сцену", onClick: () => goToScene(card.id), key: "n" },
+            name
+          )
+        : createElement("div", { className: "board-card-name", key: "n" }, name),
+      createElement("div", { className: "board-card-sub", key: "s" }, subtitle),
+    ]),
+  ]);
+  const teleport = createElement("div", { className: "board-card-teleport", key: "tp" }, [
+    createElement("span", { className: "board-card-stat-label", key: "l" }, "Телепорт"),
+    linked.length
+      ? createElement("div", { className: "board-card-controls", key: "c" }, linked.map(sceneChip))
+      : createElement("div", { className: "board-card-msg", key: "c" }, "Свяжи стрелкой с другой сценой."),
+  ]);
+  const controls = canTeleport()
+    ? createElement("div", { className: "board-card-controls", key: "c" }, [
+        cardButton({ key: "go", icon: "map", label: "Перейти", title: "Показать эту сцену всем за столом", onClick: () => goToScene(card.id) }),
+      ])
+    : null;
+  return cardShell("scene", [head, teleport, controls]);
+}
+
 // renderEmbed — содержимое врезки: запись журнала или карточка.
 function renderEmbed(element) {
   const card = parseCardLink(element.link);
   if (!card) return renderNote(element);
   if (card.kind === "monster") return renderMonsterCard(card);
   if (card.kind === "character") return renderCharacterCard(card);
+  if (card.kind === "scene") return renderSceneCard(card);
   return renderAudioCard(card);
 }
 
@@ -396,6 +519,7 @@ function renderEmbed(element) {
 const CARD_SIZE = {
   monster: { width: 320, height: 236 },
   character: { width: 320, height: 176 },
+  scene: { width: 300, height: 150 },
   audio: { width: 300, height: 104 },
 };
 
@@ -482,6 +606,18 @@ async function pickCharacter() {
   return picked ? { link: characterLink(picked.id), ...CARD_SIZE.character } : null;
 }
 
+async function pickScene() {
+  await loadScenes(true);
+  const picked = await pickFromList({
+    title: "Сцена на доску",
+    okLabel: "Вставить",
+    items: scenes || [],
+    empty: "Сцен за столом пока нет.",
+    render: (row, s) => pickRowText(row, s.name, s.current ? "на столе сейчас" : ""),
+  });
+  return picked ? { link: sceneLink(picked.id, picked.name), ...CARD_SIZE.scene } : null;
+}
+
 // Трек, чьего файла уже нет в загрузках (плейлист пережил удаление музыки
 // из библиотеки), не предлагаем: он молчит и в панели плейлистов.
 async function pickTrack() {
@@ -555,6 +691,7 @@ function followLink(link) {
   if (card) {
     if (card.kind === "monster") openMonster(card.id, cardName(card));
     else if (card.kind === "character") openCharacter(card.id, cardName(card));
+    else if (card.kind === "scene") goToScene(card.id);
     else if (card.kind === "audio") playOnTable(card);
     return true;
   }
@@ -574,6 +711,9 @@ function followLink(link) {
 function showSelection(el) {
   selected = el;
   linkBtn.hidden = !el;
+  // Две карточки сцен — можно связать стрелкой одной кнопкой.
+  const pair = (editor?.selectedElements() || []).filter((e) => parseCardLink(e.link)?.kind === "scene");
+  linkScenesBtn.hidden = pair.length !== 2;
   if (!el) return;
   // У карточки ссылка занята.
   linkBtn.hidden = parseCardLink(el.link) !== null;
@@ -776,6 +916,7 @@ async function pickImage() {
   // окнах.
   async function refreshNotes() {
     for (const { card } of cardData.values()) loadCard(card, true);
+    if (scenes) loadScenes(true);
     const wanted = new Set();
     for (const e of scene.elements || []) {
       const title = e && parseWikilink(e.link);
@@ -803,6 +944,7 @@ async function pickImage() {
   monsterBtn.hidden = readOnly || !gm;
   charBtn.hidden = readOnly;
   musicBtn.hidden = readOnly || !gm;
+  sceneBtn.hidden = readOnly || !gm;
   const insertCard = (pick) => async () => {
     const picked = await pick();
     if (picked) editor.insertCard(picked);
@@ -810,6 +952,13 @@ async function pickImage() {
   monsterBtn.onclick = insertCard(pickMonster);
   charBtn.onclick = insertCard(pickCharacter);
   musicBtn.onclick = insertCard(pickTrack);
+  sceneBtn.onclick = insertCard(pickScene);
+
+  linkScenesBtn.onclick = () => {
+    const pair = editor.selectedElements().filter((e) => parseCardLink(e.link)?.kind === "scene");
+    if (pair.length !== 2) return;
+    editor.linkCards(pair[0].id, pair[1].id);
+  };
 
   linkBtn.onclick = async () => {
     if (!selected) return;

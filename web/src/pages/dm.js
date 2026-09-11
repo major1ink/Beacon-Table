@@ -15,6 +15,7 @@ import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDrawOptions } from "../draw-options.js";
 import { createBoardList } from "../board-list.js";
+import { sceneLinksOf } from "../board/links.js";
 import { attachTooltip } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import {
@@ -55,6 +56,8 @@ import {
   movePlaylistTrack,
   fetchJournal,
   fetchMonster,
+  fetchBoards,
+  fetchBoardScene,
   fetchFoundryModules,
   checkFoundryModuleUpdates,
   deleteFoundryModule,
@@ -3778,6 +3781,11 @@ window.addEventListener("message", async (e) => {
     if (vtt && c && typeof c.url === "string") {
       vtt.send({ type: "play_cue", cue: { url: c.url, name: c.name || "", volume: c.volume, loop: !!c.loop } });
     }
+  } else if (e.data.type === "beacon:switchSceneId") {
+    // Карточка сцены на доске (pages/board.js): «перейти» и телепорт.
+    if (vtt && typeof e.data.id === "string" && e.data.id !== currentSceneId && sceneList.some((s) => s.id === e.data.id)) {
+      vtt.send({ type: "switch_scene", sceneId: e.data.id });
+    }
   } else if (e.data.type === "beacon:placeMonster") {
     // Карточка монстра на доске: токен в центр текущего вида.
     if (vtt && typeof e.data.id === "string") addMonsterToken(e.data.id, viewCenterWorld());
@@ -4514,7 +4522,73 @@ document.addEventListener("vtt:sceneList", (e) => {
   const active = sceneList.find((s) => s.id === currentSceneId);
   sceneSwitchName.textContent = active ? active.name : "Сцена";
   renderSceneDropdown();
+  if (openPanelSection === "scene") renderTeleport();
 });
+
+// ---- телепорт: соседи активной сцены по стрелкам на досках ----
+// Связи живут в досках (см. board/links.js: sceneLinksOf), а не в сцене:
+// доски читаем заново при каждом показе — их правят в других окнах.
+const teleportList = document.getElementById("teleportList");
+let teleportSeq = 0;
+
+async function renderTeleport() {
+  const seq = ++teleportSeq;
+  const from = currentSceneId;
+  teleportList.innerHTML = "";
+  if (!from) return;
+  let boards = [];
+  try {
+    boards = await fetchBoards();
+  } catch {
+    boards = [];
+  }
+  // id сцены → названия досок, где связь нарисована
+  const via = new Map();
+  await Promise.all(
+    boards.map(async (b) => {
+      let scene;
+      try {
+        scene = await fetchBoardScene(b.id);
+      } catch {
+        return;
+      }
+      for (const to of sceneLinksOf(scene.elements).get(from) || []) {
+        if (!via.has(to)) via.set(to, []);
+        via.get(to).push(b.name);
+      }
+    })
+  );
+  if (seq !== teleportSeq) return; // сцену уже переключили
+  teleportList.innerHTML = "";
+  const rows = [...via].map(([id, names]) => ({ scene: sceneList.find((s) => s.id === id), names })).filter((r) => r.scene);
+  if (!rows.length) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Свяжи сцены стрелками на доске — сюда попадут соседи текущей.";
+    teleportList.appendChild(hint);
+    return;
+  }
+  for (const { scene, names } of rows) {
+    const row = document.createElement("div");
+    row.className = "scene-row row-card";
+    row.innerHTML = icon("arrow-right", { size: 14 });
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "scene-name";
+    nameSpan.textContent = scene.name;
+    const meta = document.createElement("span");
+    meta.className = "pill-badge";
+    meta.textContent = names.join(", ");
+    meta.title = "Доска, где нарисована связь";
+    row.append(nameSpan, meta);
+    row.onclick = () => {
+      vtt.send({ type: "switch_scene", sceneId: scene.id });
+      closeSidePanel();
+    };
+    teleportList.appendChild(row);
+  }
+}
+
+onPanelOpen("scene", renderTeleport);
 
 // ===================================================================
 // ================= раздел "Настроить сцену" ========================

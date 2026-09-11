@@ -154,6 +154,17 @@
        кликом; кнопкам и плееру это ни к чему. */
     .board-card-btn, button.board-card-name, .board-card-audio audio { pointer-events: auto; }
     .board-card-audio audio { flex: 1 1 140px; min-width: 0; height: 28px; }
+    /* Сцена: фон широкой миниатюрой, телепорт — чипы соседей. */
+    .board-card-map {
+      flex: 0 0 auto; width: 64px; height: 44px; border-radius: 6px; object-fit: cover;
+      background: var(--surface); display: flex; align-items: center; justify-content: center;
+      color: var(--text-dim);
+    }
+    .board-card-teleport { display: flex; flex-direction: column; gap: 4px; }
+    span.board-card-chip {
+      display: inline-flex; padding: 4px 9px; border-radius: var(--radius);
+      background: var(--surface); font-size: 11px;
+    }
 
     #status {
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -174,12 +185,13 @@
       .image-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 46dvh; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/board-NrIdFGHu.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-zhgPl-72.js">
+  <script type="module" crossorigin src="/assets/board-C2Yx5vuD.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-nbyIE_fQ.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-egQBZsV9.js">
+  <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DGzLHKR1.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-BvBPWx1q.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-tWrXNLOD.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
   <link rel="stylesheet" crossorigin href="/assets/board-BcAUh2Nm.css">
@@ -193,6 +205,8 @@
       <button type="button" class="topbar-btn" id="monsterBtn" hidden>Монстр</button>
       <button type="button" class="topbar-btn" id="charBtn" hidden>Персонаж</button>
       <button type="button" class="topbar-btn" id="musicBtn" hidden>Музыка</button>
+      <button type="button" class="topbar-btn" id="sceneBtn" hidden>Сцена</button>
+      <button type="button" class="topbar-btn" id="linkScenesBtn" hidden title="Стрелка между двумя выделенными сценами">Связать сцены</button>
       <button type="button" class="topbar-btn" id="linkBtn" hidden>Связать с журналом</button>
       <span id="peers"></span>
       <span id="linkState"></span>

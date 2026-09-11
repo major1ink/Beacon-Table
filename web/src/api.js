@@ -435,6 +435,11 @@ export async function fetchBoardScene(id) {
 export async function fetchBoardImages() {
   return apiFetch("/api/board-images");
 }
+// fetchScenes — сцены стола для карточек на доске: [{id, name, mapUrl,
+// current}]; mapUrl отдаётся только ДМ.
+export async function fetchScenes() {
+  return apiFetch("/api/scenes");
+}
 // importBoard — доска из файла Excalidraw: .excalidraw.md из ваулта Obsidian
 // либо голый .excalidraw. Имя необязательно: без него сервер возьмёт имя
 // файла. Не через apiFetch — тут multipart, а не JSON.

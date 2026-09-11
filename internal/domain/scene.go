@@ -513,6 +513,14 @@ type SceneListEntry struct {
 	ViewerCount int    `json:"viewerCount"`
 }
 
+// SceneCard — сцена для карточки на доске (GET /api/scenes).
+type SceneCard struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	MapURL  string `json:"mapUrl,omitempty"`
+	Current bool   `json:"current"`
+}
+
 // RoomSnapshot — то, что repository.SceneRepository.Load отдаёт сервисному
 // слою при старте: все сцены комнаты плюс какая из них активна и в каком
 // порядке они идут в переключателе DM, плюс трекер инициативы (см.

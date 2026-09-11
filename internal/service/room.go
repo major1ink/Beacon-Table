@@ -78,6 +78,9 @@ type RoomService interface {
 	// стола к эталону
 	// (см. cmd/beacon-table/demo.go: demoResetter).
 	Announce(text string)
+	// ListScenes — все сцены комнаты в порядке переключателя ДМ: карточки
+	// сцен на доске (см. web/src/pages/board.js).
+	ListScenes(ctx context.Context) ([]domain.SceneCard, error)
 }
 
 type inboundMsg struct {
@@ -148,6 +151,9 @@ type Room struct {
 	// room_guest.go: RemoveOwnerTokens): свой канал по той же причине, что и
 	// spawnToken выше — это не команда клиента и роль по ней не проверяется.
 	dropTokens chan dropTokensReq
+	// listScenes — «дай список сцен» из HTTP-хендлера (см. ListScenes):
+	// свой канал по той же причине, что и spawnToken выше.
+	listScenes chan chan []domain.SceneCard
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -253,6 +259,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		linkTokens:     make(chan linkTokensReq),
 		spawnToken:     make(chan spawnTokenReq),
 		dropTokens:     make(chan dropTokensReq),
+		listScenes:     make(chan chan []domain.SceneCard),
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
@@ -724,6 +731,9 @@ func (r *Room) run() {
 
 		case req := <-r.dropTokens:
 			req.reply <- r.removeOwnerTokens(req.ownerID)
+
+		case reply := <-r.listScenes:
+			reply <- r.sceneCards()
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
@@ -1297,6 +1307,36 @@ func (r *Room) Announce(text string) {
 	case r.announce <- text:
 	default:
 	}
+}
+
+// ListScenes — см. RoomService. ctx — чтобы не залипнуть на остановленной
+// комнате, как у ImportScenes.
+func (r *Room) ListScenes(ctx context.Context) ([]domain.SceneCard, error) {
+	reply := make(chan []domain.SceneCard, 1)
+	select {
+	case r.listScenes <- reply:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	select {
+	case cards := <-reply:
+		return cards, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// sceneCards — тело ListScenes уже внутри горутины комнаты.
+func (r *Room) sceneCards() []domain.SceneCard {
+	out := make([]domain.SceneCard, 0, len(r.sceneOrder))
+	for _, id := range r.sceneOrder {
+		s, ok := r.scenes[id]
+		if !ok {
+			continue
+		}
+		out = append(out, domain.SceneCard{ID: s.ID, Name: s.Name, MapURL: s.MapURL, Current: id == r.currentSceneID})
+	}
+	return out
 }
 
 // broadcastAnnounce — уже внутри горутины run(). Всем ролям разом (ДМ,

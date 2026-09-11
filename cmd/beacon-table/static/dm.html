@@ -434,6 +434,10 @@
     .scene-row.active { background: rgba(31,107,58,0.16); box-shadow: 0 0 0 1.5px var(--green) inset; }
     .scene-row .scene-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .scene-row .scene-viewers { flex: 0 0 auto; }
+    /* Телепорт — соседи активной сцены по стрелкам на досках (см. renderTeleport). */
+    #teleport { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .teleport-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 0 6px 6px; }
+    #teleportList .hint { margin: 0 6px; }
     /* "+ Сцена" переехала в шапку панели (#sceneCreateBtn, .panel-add-btn
        в theme.css) — кнопка статична в разметке, dm.js только вешает
        onclick, а не создаёт её заново на каждый renderSceneDropdown(). */
@@ -985,26 +989,27 @@
       #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-COc7IMmg.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-zhgPl-72.js">
+  <script type="module" crossorigin src="/assets/dm-BQrUNp1J.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/api-nbyIE_fQ.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-egQBZsV9.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-BvBPWx1q.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-OgB1xGhO.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DGzLHKR1.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-tWrXNLOD.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DgwHKoQz.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-D0dydr5L.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-BWWkQeUx.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-hJii8VNI.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DLMVBwnP.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-CCj7ifKp.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-DPNMbm1g.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-rpgtL48Q.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-5u9zK1IF.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BMAgZt1Q.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-FdPDAt_f.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Dc6dpepd.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CwXEqfd9.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-DLDSra7B.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-CQ8cg_CV.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-8jMJu1gE.js">
+  <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-CjIBU7XN.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
   <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
 </head>
@@ -1053,6 +1058,10 @@
         </header>
         <div class="panel-body" style="padding: 8px;">
           <div id="sceneDropdown"></div>
+          <div id="teleport">
+            <div class="teleport-title">Телепорт</div>
+            <div id="teleportList"></div>
+          </div>
         </div>
       </section>
 

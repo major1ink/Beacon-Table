@@ -435,6 +435,10 @@
     .scene-row.active { background: rgba(31,107,58,0.16); box-shadow: 0 0 0 1.5px var(--green) inset; }
     .scene-row .scene-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .scene-row .scene-viewers { flex: 0 0 auto; }
+    /* Телепорт — соседи активной сцены по стрелкам на досках (см. renderTeleport). */
+    #teleport { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .teleport-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 0 6px 6px; }
+    #teleportList .hint { margin: 0 6px; }
     /* "+ Сцена" переехала в шапку панели (#sceneCreateBtn, .panel-add-btn
        в theme.css) — кнопка статична в разметке, dm.js только вешает
        onclick, а не создаёт её заново на каждый renderSceneDropdown(). */
@@ -1032,6 +1036,10 @@
         </header>
         <div class="panel-body" style="padding: 8px;">
           <div id="sceneDropdown"></div>
+          <div id="teleport">
+            <div class="teleport-title">Телепорт</div>
+            <div id="teleportList"></div>
+          </div>
         </div>
       </section>
 
