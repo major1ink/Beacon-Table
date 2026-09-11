@@ -42,7 +42,7 @@ function openCategory({ type, system, kind, category, role, label }) {
     key: `catalog-${system ? 1 : 0}-${type}-${kind || category || ""}`,
     title: label,
     url: catalogUrl({ type, system, kind, category, role, label }),
-    width: type === "spells" ? 760 : 480,
+    width: 760,
     height: 640,
   });
 }
