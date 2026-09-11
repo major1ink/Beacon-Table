@@ -669,7 +669,7 @@ async function resolveConflict(target, info) {
 function askConflict(target, { title, where, existingInfo, incomingInfo, allowOverwrite = true }) {
   return new Promise((resolve) => {
     const overlay = h("div", { class: "modal-overlay" });
-    const applyAll = h("input", { type: "checkbox" });
+    const applyAll = h("input", { type: "checkbox", class: "switch" });
 
     const finish = (action) => {
       if (applyAll.checked && action !== "stop") conflictDefaults[target.id] = action;

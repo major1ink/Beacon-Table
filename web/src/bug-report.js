@@ -247,6 +247,7 @@ export async function openBugReport() {
       techRow.style.cssText = "display:flex;align-items:center;gap:8px;font-size:12px;";
       withTech = document.createElement("input");
       withTech.type = "checkbox";
+      withTech.className = "switch";
       withTech.checked = true;
       const techLabel = document.createElement("span");
       techLabel.textContent = "Приложить технические данные";
