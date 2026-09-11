@@ -25,7 +25,7 @@ import {
 import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
 import { paintDrawing, drawingHandles, canEditDrawing, widthForKind, sliderForWidth } from "./layers/drawings.js";
-import { fetchCharacter, fetchMonster } from "../api.js";
+import { fetchCharacter, fetchAdminCharacter, fetchMonster } from "../api.js";
 import { showPrompt } from "../modal.js";
 
 // EDGE_HIT_PX — порог (в экранных px) для попадания в край "ручки"
@@ -686,7 +686,8 @@ export function createInteraction(ctx) {
   }
   function ensureSpeedLoaded(token) {
     if (token.characterId) {
-      fetchCharacter(token.characterId)
+      // Чужой лист ДМ читает через admin-эндпоинт; /api/characters — только свои.
+      (ctx.isDM ? fetchAdminCharacter : fetchCharacter)(token.characterId)
         .then((c) => speedCache.set(token.characterId, (c.sheet && c.sheet.combat && c.sheet.combat.speed) || 0))
         .catch(() => {});
     } else if (token.monsterId) {
