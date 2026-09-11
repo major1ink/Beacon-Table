@@ -112,6 +112,19 @@ export function createInteraction(ctx) {
     { passive: false }
   );
 
+  // Захват указателя: pointerup доходит до канваса, даже если кнопку
+  // отпустили над панелью/модалкой/за окном. Палец браузер захватывает сам.
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.pointerType === "touch") return;
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // указатель уже исчез
+    }
+  });
+  // Отобранный браузером указатель обрывает жест без коммита, как Escape.
+  canvas.addEventListener("pointercancel", () => document.dispatchEvent(new CustomEvent("vtt:cancelGesture")));
+
   let panning = null;
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 1) return;
