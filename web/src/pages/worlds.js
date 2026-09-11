@@ -5,6 +5,7 @@
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
 import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // Версия сервера в углу — как на экране входа (index.js). Молча пусто при ошибке.
 fetchVersion()
@@ -119,6 +120,8 @@ async function render() {
     };
   });
 }
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("logoutBtn").onclick = async () => {
   await apiLogout();

@@ -40,12 +40,14 @@ import { renderNoteHtml } from "../notes/markdown.js";
 import { openFloatingWindow } from "../floating-window.js";
 import { icon } from "../icons.js";
 import { isGM } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 const editorRoot = document.getElementById("editorRoot");
 const statusEl = document.getElementById("status");
 const nameEl = document.getElementById("boardName");
 const metaEl = document.getElementById("boardMeta");
 const readonlyBadge = document.getElementById("readonlyBadge");
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 const linkState = document.getElementById("linkState");
 const linkBtn = document.getElementById("linkBtn");
 const imageBtn = document.getElementById("imageBtn");

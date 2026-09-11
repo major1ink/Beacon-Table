@@ -39,6 +39,7 @@ import { renderNoteHtml } from "../notes/markdown.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM, isPlayer } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -2763,6 +2764,8 @@ function switchTab(n) {
 }
 document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
 document.getElementById("modeBtn").onclick = () => setMode(mode === "view" ? "edit" : "view");
+initFullscreenButton(document.getElementById("fullscreenBtn"));
+
 document.getElementById("closeBtn").onclick = () => {
   // По умолчанию лист открывается ВНУТРИ dm.html/player.html как плавающее
   // окно (см. web/src/floating-window.js) — это iframe, а не отдельная

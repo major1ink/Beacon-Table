@@ -33,6 +33,7 @@
     #topbar button svg { flex: 0 0 auto; }
     #topbar button:hover { background: var(--surface); color: var(--text); }
     #topbar button.active { background: #e74c3c; color: #fff; }
+    #topbar #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
     #topbarUsername { opacity: 0.65; padding-left: 6px; flex: 0 0 auto; }
 
     /* ---- #charDock — быстрый доступ к листам своих персонажей: аватар +
@@ -215,12 +216,6 @@
        специфичность больше одиночного id. */
     #topbar #diceBtn { display: none; }
 
-    /* «Во весь экран» (см. src/fullscreen.js) — по pointer: coarse, а не по
-       мобильному брейкпоинту: планшет в ландшафте под тот не попадает. */
-    #topbar #fullscreenBtn { display: none; }
-    @media (pointer: coarse) {
-      #topbar #fullscreenBtn { display: flex; }
-    }
 
     @media (max-width: 860px), (max-height: 500px) {
       #topbar {
@@ -233,7 +228,7 @@
       #topbar > button { padding: 0; width: 38px; height: 38px; justify-content: center; border-radius: 50%; }
       #topbar > button .tb-label { display: none; }
       #topbar #diceBtn { display: flex; }
-      #diceBtn.open, #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
+      #diceBtn.open { background: var(--accent-bg); color: var(--accent); }
 
       #charDock:empty { display: none; }
 

@@ -41,6 +41,7 @@
       background: var(--surface); color: var(--text); font: inherit; font-size: 11px;
     }
     .topbar-btn:hover { background: var(--surface-hover); }
+    #fullscreenBtn { width: 26px; height: 26px; padding: 0; display: flex; align-items: center; justify-content: center; }
 
     /* Выбор из списка: монстр, персонаж, трек. */
     .pick-list {
@@ -185,15 +186,16 @@
       .image-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 46dvh; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/board-zAWqcUII.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-D-1quQhq.js">
+  <script type="module" crossorigin src="/assets/board-DgyyJshY.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-WhtgNvzO.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DGzLHKR1.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-Cd_2Sf6-.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-tWrXNLOD.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-CYOXmh6a.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-yzm6DpJg.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-C_dXvs8g.css">
   <link rel="stylesheet" crossorigin href="/assets/board-BcAUh2Nm.css">
 </head>
 <body>
@@ -211,6 +213,7 @@
       <span id="peers"></span>
       <span id="linkState"></span>
       <span id="readonlyBadge">только чтение</span>
+      <button type="button" class="topbar-btn" id="fullscreenBtn"></button>
     </div>
   </div>
   <div id="editorWrap">

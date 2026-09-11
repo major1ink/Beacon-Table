@@ -18,6 +18,7 @@ import { initItemPicker } from "../item-picker.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 const ABILITIES = [
   { key: "str", label: "Сил" },
@@ -786,6 +787,8 @@ deleteBtn.onclick = async () => {
     deleteBtn.disabled = false;
   }
 };
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   // Плавающее окно (обычный случай, см. floating-window.js) — iframe, не

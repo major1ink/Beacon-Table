@@ -6,15 +6,29 @@
 // „Домой“» из Safari.
 //
 // renderContent(active) — содержимое кнопки задаёт вызывающий: у игрока с
-// подписью, у ДМ значок рейла.
+// подписью, у ДМ значок рейла; по умолчанию — значок 14px для шапок
+// отдельных страниц (карточки, журнал, доска).
+//
+// Внутри плавающего окна (iframe, см. floating-window.js) во весь экран
+// разворачивается сам iframe — нужен allowfullscreen на нём, иначе
+// fullscreenEnabled=false и кнопка убирается. Флаг восстановления там не
+// трогаем: он про страницу верхнего уровня.
+import { icon } from "./icons.js";
+
 const KEY = "beacon:fullscreen";
 
-export function initFullscreenButton(btn, renderContent) {
+function defaultContent(active) {
+  return icon(active ? "fullscreen-exit" : "fullscreen", { size: 14 });
+}
+
+export function initFullscreenButton(btn, renderContent = defaultContent) {
+  if (!btn) return;
   const root = document.documentElement;
-  if (!root.requestFullscreen) {
+  if (!root.requestFullscreen || !document.fullscreenEnabled) {
     btn.remove();
     return;
   }
+  const embedded = window.parent !== window;
 
   function sync() {
     const active = !!document.fullscreenElement;
@@ -30,18 +44,27 @@ export function initFullscreenButton(btn, renderContent) {
 
   // Состояние и флаг — из события, а не из клика: выйти можно системным
   // жестом «назад». relayout — канвасу перемериться на новую высоту.
+  //
+  // Уход со страницы (миры → стол) тоже выбрасывает из полного экрана и
+  // успевает прислать fullscreenchange — это не выход пользователя, флаг
+  // не сбрасываем, следующая страница восстановит режим первым кликом.
+  let unloading = false;
+  window.addEventListener("beforeunload", () => (unloading = true));
+  window.addEventListener("pagehide", () => (unloading = true));
   document.addEventListener("fullscreenchange", () => {
-    try {
-      localStorage.setItem(KEY, document.fullscreenElement ? "1" : "");
-    } catch {
-      /* приватный режим — просто не запомним */
+    if (!embedded && !unloading) {
+      try {
+        localStorage.setItem(KEY, document.fullscreenElement ? "1" : "");
+      } catch {
+        /* приватный режим — просто не запомним */
+      }
     }
     sync();
     document.dispatchEvent(new CustomEvent("vtt:relayout"));
   });
 
   sync();
-  restore(root);
+  if (!embedded) restore(root);
 }
 
 // restore — вернуть режим тому, кто его уже включал. Прямо на загрузке нельзя:

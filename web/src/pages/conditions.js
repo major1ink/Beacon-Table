@@ -18,6 +18,7 @@ import { mapFoundryConditionBatch } from "../condition-import.js";
 import { normalizeSlug, DEFAULT_ICONS } from "../foundry-conditions.js";
 import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
 import { showAlert, showConfirm } from "../modal.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // ==================== state ====================
 
@@ -649,6 +650,8 @@ editToggleBtn.onclick = () => {
   updateEditToggleBtn();
   renderApp();
 };
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {

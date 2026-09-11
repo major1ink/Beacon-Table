@@ -27,6 +27,7 @@
       flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 10px 16px;
       border-bottom: 1px solid var(--border); background: var(--panel-bg); font-weight: 600; font-size: 15px;
     }
+    #fullscreenBtn { margin-left: auto; width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
     #body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
     #authFailedOverlay {
       display: none; position: fixed; inset: 0; z-index: 50; background: rgba(10,10,14,0.92);
@@ -169,25 +170,26 @@
     .killed-clear-btn { justify-content: center; background: var(--danger); margin-bottom: 10px; }
     .killed-clear-btn:hover { background: var(--danger-hover); }
   </style>
-  <script type="module" crossorigin src="/assets/combatTracker-DERkpDOW.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-D-1quQhq.js">
+  <script type="module" crossorigin src="/assets/combatTracker-0mUxCBq8.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-WhtgNvzO.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-mt3QFYNT.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DGzLHKR1.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-tWrXNLOD.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DgwHKoQz.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CbspmPxD.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-Cd_2Sf6-.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-CYOXmh6a.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-t5bc8j4u.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-FUgFLEuY.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-DV5rXfBk.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-BmTD-G4w.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Dc6dpepd.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DYLwjJA-.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-CFLAVVUz.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-szkEmxds.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-BXWAQ-Au.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DVNejPAV.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-yzm6DpJg.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-C_dXvs8g.css">
 </head>
 <body>
-  <div id="topBar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg>Трекер инициативы</div>
+  <div id="topBar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg>Трекер инициативы<button id="fullscreenBtn" type="button"></button></div>
   <div id="body">
     <div class="combat-tabs">
       <button type="button" id="combatTabTrackerBtn" class="combat-tab active">Инициатива</button>

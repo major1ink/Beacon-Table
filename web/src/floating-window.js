@@ -151,6 +151,7 @@ export function openFloatingWindow({
   body.className = "fw-body";
   const iframe = document.createElement("iframe");
   iframe.className = "fw-iframe";
+  iframe.allowFullscreen = true; // кнопка «во весь экран» внутри страницы, см. fullscreen.js
   iframe.src = url;
   body.appendChild(iframe);
 

@@ -33,6 +33,7 @@ import { wireCatalogLinks } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { showConfirm, showPrompt } from "../modal.js";
 import { isGM } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 const treeEl = document.getElementById("tree");
 const searchEl = document.getElementById("search");
@@ -623,6 +624,8 @@ async function createEntry(def) {
 
 document.getElementById("newEntryBtn").onclick = () => createEntry("none");
 document.getElementById("newSharedBtn").onclick = () => createEntry("observer");
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("newFolderBtn").onclick = async () => {
   const name = await showPrompt("Имя папки:", {

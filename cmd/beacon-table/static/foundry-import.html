@@ -32,7 +32,7 @@
       border-bottom: 1px solid var(--border); background: var(--panel-bg);
     }
     #topBar .title { font-weight: 700; font-size: 15px; margin-right: auto; }
-    #closeBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
+    #closeBtn, #fullscreenBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
 
     #app { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -127,8 +127,8 @@
       100% { margin-left: 100%; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/foundryImport-DbdV7tjT.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-D-1quQhq.js">
+  <script type="module" crossorigin src="/assets/foundryImport-BKwP52Ak.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-WhtgNvzO.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-text-8Hqfz_vU.js">
   <link rel="modulepreload" crossorigin href="/assets/item-import-D5jhMcLo.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-DwlZmB-I.js">
@@ -137,11 +137,13 @@
   <link rel="modulepreload" crossorigin href="/assets/spell-import-DA2ETYNI.js">
   <link rel="modulepreload" crossorigin href="/assets/monster-import-C8RqF1qG.js">
   <link rel="modulepreload" crossorigin href="/assets/reference-import-DZB4I6CS.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-yzm6DpJg.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-C_dXvs8g.css">
 </head>
 <body>
   <div id="topBar">
     <span class="title">Импорт из Foundry VTT</span>
+    <button id="fullscreenBtn" type="button"></button>
     <button id="closeBtn" type="button" title="Закрыть"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
   </div>
   <div id="app">
