@@ -24,8 +24,8 @@ import {
   deleteJournalFolder,
 } from "../api.js";
 import { openSocket } from "../ws-reconnect.js";
-import { renderNoteHtml, wireWikiLinks, markMissingWikiLinks, decorateTags, tagsIn, wikiTargetsIn, resolveWikiTarget, scrollToHeading } from "../notes/markdown.js";
-import { mountHeadingNav } from "../notes/heading-nav.js";
+import { renderNoteHtml, wireWikiLinks, markMissingWikiLinks, decorateTags, tagsIn, wikiTargetsIn, resolveWikiTarget, scrollToHeading, scrollHeadingIntoView } from "../notes/markdown.js";
+import { createNoteEditor } from "../notes/editor.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { attachWikiAutocomplete } from "../notes/wiki-autocomplete.js";
 import { icon } from "../icons.js";
@@ -47,19 +47,35 @@ const entryUpdated = document.getElementById("entryUpdated");
 const folderPicker = document.getElementById("folderPicker");
 const folderSelect = document.getElementById("folderSelect");
 const renderEl = document.getElementById("render");
+const scrollEl = document.getElementById("scroll");
 const editWrap = document.getElementById("editWrap");
-const editArea = document.getElementById("editArea");
+const editorScroll = document.getElementById("editorScroll");
+const titleRow = document.getElementById("titleRow");
+const titleInput = document.getElementById("titleInput");
+const pagesEl = document.getElementById("pages");
+const pagesList = document.getElementById("pagesList");
+const addPageBtn = document.getElementById("addPageBtn");
 const msgEl = document.getElementById("msg");
 const showBtn = document.getElementById("showBtn");
-const tocBtn = document.getElementById("tocBtn");
 const pinBtn = document.getElementById("pinBtn");
 const accessBtn = document.getElementById("accessBtn");
 const editBtn = document.getElementById("editBtn");
 const deleteBtn = document.getElementById("deleteBtn");
-mountNoteToolbar(document.getElementById("toolbar"), editArea);
+// Редактор — WYSIWYG поверх markdown (notes/editor.js), автосохранение.
+const note = createNoteEditor(document.getElementById("editArea"), {
+  onUpdate: () => {
+    scheduleSave();
+    syncTitleFromDoc();
+    schedulePagesRefresh();
+  },
+  onUploadError: (err) => {
+    msgEl.className = "";
+    msgEl.textContent = "Не удалось загрузить файл: " + err.message;
+  },
+});
+mountNoteToolbar(document.getElementById("toolbar"), note);
 // Подсказка записей на [[ — без самой открытой записи.
-attachWikiAutocomplete(editArea, () => entries.filter((e) => !current || e.id !== current.id));
-const headingNav = mountHeadingNav(tocBtn, renderEl);
+attachWikiAutocomplete(note.editor, () => entries.filter((e) => !current || e.id !== current.id));
 
 // ACCESS_LEVELS — те же четыре уровня, что и на сервере
 // (domain.JournalAccess), в порядке возрастания прав. Подписи —
@@ -487,19 +503,19 @@ function renderEntry() {
   renderFolderSelect();
 
   editWrap.style.display = editing ? "flex" : "none";
-  renderEl.style.display = editing ? "none" : "block";
+  titleRow.style.display = editing ? "flex" : "none";
+  scrollEl.style.display = editing ? "none" : "block";
   backlinksEl.replaceChildren(); // упоминания рисуются только в режиме чтения, ниже
   if (editing) {
-    editArea.value = current.content || "";
-    editArea.focus();
-    tocBtn.style.display = "none";
+    note.setMarkdown(current.content || "");
+    titleInput.value = current.title;
+    note.focus("start");
   } else if (current.myAccess === "limited") {
     renderEl.innerHTML = "";
     const hint = document.createElement("p");
     hint.style.opacity = ".6";
     hint.textContent = "Автор открыл тебе только название этой записи.";
     renderEl.appendChild(hint);
-    tocBtn.style.display = "none";
   } else {
     renderEl.innerHTML = renderNoteHtml(current.content || "");
     markMissingWikiLinks(renderEl, entries, current.folder || "");
@@ -511,10 +527,270 @@ function renderEntry() {
     // Картинки из текста записи — кнопка «Показать игрокам» при наведении
     // (только ДМ), см. wireShowcaseImages ниже.
     wireShowcaseImages();
-    headingNav.refresh(); // кнопка «перейти к разделу» — только если разделов ≥2
+    wireTaskCheckboxes();
     scrollToSection();
   }
+  renderPages();
 }
+
+// ---- чекбоксы «- [ ]» в просмотре ----
+//
+// Клик по галке переворачивает «[ ]»/«[x]» в тексте и сохраняет: n-я галка
+// в DOM = n-я строка-задача в markdown (код в ``` пропускаем).
+
+const taskLineRe = /^(\s*(?:[-*+]|\d+[.)])\s+\[)( |x|X)(\])/;
+
+function wireTaskCheckboxes() {
+  const boxes = renderEl.querySelectorAll('input[type="checkbox"]');
+  boxes.forEach((box, index) => {
+    box.disabled = !current.canEdit;
+    box.onchange = () => toggleTask(index, box.checked);
+    // текст пункта (до вложенного списка) в <span> — зачёркивается только он
+    const text = document.createElement("span");
+    text.className = "task-text";
+    let n = box.nextSibling;
+    while (n && !(n.nodeType === 1 && /^(UL|OL)$/.test(n.tagName))) {
+      const next = n.nextSibling;
+      text.appendChild(n);
+      n = next;
+    }
+    box.after(text);
+  });
+}
+
+async function toggleTask(index, checked) {
+  const lines = (current.content || "").split("\n");
+  let n = -1;
+  let fence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i])) {
+      fence = !fence;
+      continue;
+    }
+    if (fence || !taskLineRe.test(lines[i])) continue;
+    if (++n < index) continue;
+    lines[i] = lines[i].replace(taskLineRe, (_, a, __, b) => a + (checked ? "x" : " ") + b);
+    break;
+  }
+  const text = lines.join("\n");
+  if (text === current.content) return;
+  // сразу в current — иначе onJournalChanged перерисует и сбросит прокрутку
+  current.content = text;
+  await guard(async () => {
+    current = await updateJournalEntry(current.id, text);
+    msgEl.className = "ok";
+    msgEl.textContent = "Сохранено";
+  });
+}
+
+// ---- перетаскиваемые границы колонок (ширина — в localStorage) ----
+
+function mountResizer(handle, col, key, min, max) {
+  const saved = Number(localStorage.getItem(key));
+  if (saved >= min && saved <= max) col.style.flexBasis = saved + "px";
+  handle.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = col.getBoundingClientRect().width;
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add("dragging");
+    document.body.classList.add("col-dragging");
+    const move = (ev) => {
+      const w = Math.round(Math.max(min, Math.min(max, startW + ev.clientX - startX)));
+      col.style.flexBasis = w + "px";
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      handle.classList.remove("dragging");
+      document.body.classList.remove("col-dragging");
+      localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width)));
+      updatePageSpy();
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  });
+}
+mountResizer(document.getElementById("dirResizer"), document.getElementById("dir"), "journal.dirWidth", 180, 560);
+mountResizer(document.getElementById("pagesResizer"), pagesEl, "journal.pagesWidth", 120, 420);
+
+// ---- страницы ----
+//
+// Страница — раздел «## …» (как при импорте Foundry). Колонка строится по
+// заголовкам видимого DOM: рендера в просмотре, редактора в правке.
+
+function pagesContainer() {
+  return editing ? note.editor.view.dom : renderEl;
+}
+
+// Заголовки внутри врезок — не разделы.
+function pageHeadings() {
+  return [...pagesContainer().querySelectorAll("h2, h3")].filter(
+    (h) => h.textContent.trim() && !h.closest(".beacon-readaloud, .beacon-dm-note")
+  );
+}
+
+// pageItem — строка колонки; div, потому что внутри кнопка «удалить».
+function pageItem(title, cls, onClick) {
+  const row = document.createElement("div");
+  row.className = "page-item " + cls;
+  row.tabIndex = 0;
+  row.setAttribute("role", "button");
+  const text = document.createElement("span");
+  text.className = "page-item-title";
+  text.textContent = title;
+  row.appendChild(text);
+  row.onclick = onClick;
+  row.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick(e);
+    }
+  };
+  pagesList.appendChild(row);
+  return row;
+}
+
+function renderPages() {
+  pagesList.replaceChildren();
+  const hidden = !current || current.myAccess === "limited";
+  pagesEl.style.display = hidden ? "none" : "";
+  if (hidden) return;
+  addPageBtn.style.display = current.canEdit ? "" : "none";
+
+  // первый пункт — текст до первого раздела
+  pageItem(current.title || "Без названия", "h2 top", () => {
+    if (editing) {
+      note.focus("start");
+      editorScroll.scrollTop = 0;
+    } else {
+      scrollEl.scrollTop = 0;
+    }
+    updatePageSpy();
+  });
+  for (const h of pageHeadings()) {
+    const row = pageItem(h.textContent.trim(), h.tagName.toLowerCase(), () => jumpToHeading(h));
+    row.headingEl = h;
+    if (editing && h.tagName === "H2") {
+      const del = iconBtn("close", "Удалить раздел вместе с текстом", (e) => {
+        e.stopPropagation();
+        deletePage(h);
+      });
+      row.appendChild(del);
+    }
+  }
+  updatePageSpy();
+}
+
+function jumpToHeading(h) {
+  if (!editing) {
+    scrollHeadingIntoView(scrollEl, h);
+    return;
+  }
+  const pos = note.editor.view.posAtDOM(h, 0);
+  note.editor.chain().focus().setTextSelection(pos).run();
+  h.scrollIntoView({ block: "start" });
+}
+
+// updatePageSpy — подсветить последний заголовок выше верхней кромки.
+function updatePageSpy() {
+  const rows = [...pagesList.children];
+  if (!rows.length) return;
+  const box = (editing ? editorScroll : scrollEl).getBoundingClientRect();
+  let active = rows[0];
+  for (const row of rows) {
+    if (row.headingEl && row.headingEl.getBoundingClientRect().top <= box.top + 40) active = row;
+  }
+  for (const row of rows) row.classList.toggle("current", row === active);
+}
+scrollEl.addEventListener("scroll", updatePageSpy, { passive: true });
+editorScroll.addEventListener("scroll", updatePageSpy, { passive: true });
+
+let pagesTimer = null;
+function schedulePagesRefresh() {
+  clearTimeout(pagesTimer);
+  pagesTimer = setTimeout(renderPages, 150);
+}
+
+// lastHeadingRange — последний заголовок уровня level в документе или null.
+function lastHeadingRange(level) {
+  let found = null;
+  note.editor.state.doc.forEach((node, pos) => {
+    if (node.type.name === "heading" && node.attrs.level === level) found = { pos, size: node.nodeSize, content: node.content.size };
+  });
+  return found;
+}
+
+addPageBtn.onclick = async () => {
+  if (!current || !current.canEdit) return;
+  if (!editing) {
+    editing = true;
+    msgEl.textContent = "";
+    renderEntry();
+  }
+  const ed = note.editor;
+  const name = "Новая страница";
+  ed.chain()
+    .focus()
+    .insertContentAt(ed.state.doc.content.size, { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: name }] })
+    .run();
+  // имя выделено — печатается своё
+  const h = lastHeadingRange(2);
+  if (h) ed.chain().focus().setTextSelection({ from: h.pos + 1, to: h.pos + 1 + h.content }).scrollIntoView().run();
+};
+
+// deletePage — убрать заголовок и всё до следующего «## …» или конца.
+async function deletePage(h) {
+  const ed = note.editor;
+  // before(1) — начало верхнеуровневого узла (для вложенного — всей цитаты)
+  const start = ed.state.doc.resolve(ed.view.posAtDOM(h, 0)).before(1);
+  const title = h.textContent.trim();
+  const ok = await showConfirm(`Удалить раздел «${title}» вместе с его текстом?`, {
+    title: "Удалить раздел",
+    okLabel: "Удалить",
+    danger: true,
+  });
+  if (!ok) return;
+  let end = ed.state.doc.content.size;
+  ed.state.doc.forEach((node, pos) => {
+    if (pos > start && end === ed.state.doc.content.size && node.type.name === "heading" && node.attrs.level <= 2) end = pos;
+  });
+  ed.chain().focus().deleteRange({ from: start, to: end }).run();
+}
+
+// ---- поле названия над редактором — правит первую строку «# …» ----
+
+function firstH1() {
+  const first = note.editor.state.doc.firstChild;
+  return first && first.type.name === "heading" && first.attrs.level === 1 ? first : null;
+}
+
+function syncTitleFromDoc() {
+  if (document.activeElement === titleInput) return;
+  const h = firstH1();
+  titleInput.value = h ? h.textContent : "";
+}
+
+titleInput.addEventListener("input", () => {
+  const ed = note.editor;
+  const h = firstH1();
+  const text = titleInput.value;
+  const tr = ed.state.tr;
+  if (h) {
+    tr.insertText(text, 1, 1 + h.content.size);
+  } else {
+    tr.insert(0, ed.schema.nodes.heading.create({ level: 1 }, text ? ed.schema.text(text) : null));
+  }
+  ed.view.dispatch(tr);
+});
+titleInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  note.focus("start");
+});
 
 // ---- правка и автосохранение ----
 //
@@ -536,7 +812,7 @@ async function saveNow() {
   clearTimeout(saveTimer);
   if (!savePending || !current || !current.canEdit) return;
   savePending = false;
-  const text = editArea.value;
+  const text = note.getMarkdown();
   try {
     const saved = await updateJournalEntry(current.id, text);
     current = saved;
@@ -556,11 +832,11 @@ async function flushPendingSave() {
   if (savePending) await saveNow();
 }
 
-editArea.addEventListener("input", scheduleSave);
 // Уход фокуса из текста — тоже повод дописать: окно журнала закрывают, не
 // дожидаясь таймера, куда чаще, чем окно заметки (запись на полстроки —
 // нормальный размер здесь).
-editArea.addEventListener("blur", flushPendingSave);
+note.editor.on("blur", flushPendingSave);
+titleInput.addEventListener("blur", flushPendingSave);
 
 editBtn.onclick = async () => {
   if (!current || !current.canEdit) return;
@@ -918,8 +1194,10 @@ function onJournalChanged(id) {
     // текст, который человек прямо сейчас набирает.
     if (editing || savePending) return;
     try {
-      current = await fetchJournalEntry(current.id);
-      renderEntry();
+      const fresh = await fetchJournalEntry(current.id);
+      const same = fresh.content === current.content && fresh.title === current.title;
+      current = fresh;
+      if (!same) renderEntry(); // своя правка уже на экране — не сбрасывать прокрутку
     } catch {
       // Запись удалили или у нас отобрали доступ, пока она была открыта.
       current = null;

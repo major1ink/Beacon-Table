@@ -176,7 +176,7 @@ export function scrollToHeading(containerEl, section) {
 }
 
 // scrollHeadingIntoView — то же, но заголовок уже известен (клик по пункту
-// оглавления, см. notes/heading-nav.js): по тексту искать нельзя — в
+// колонки страниц, см. pages/journal.js: jumpToHeading): по тексту искать нельзя — в
 // приключениях полно одинаковых «Заключение»/«Введение», и find() увёл бы
 // к первому.
 export function scrollHeadingIntoView(containerEl, heading) {
