@@ -13,8 +13,8 @@ export function teleportSize(t, grid) {
 }
 
 // Порталы (domain.Teleport) — видны всем: игрок должен знать, куда встать.
-// Кольцо с подсветкой и подпись сцены назначения. Тот же retained-mode
-// приём, что и в layers/note-markers.js.
+// Кольцо с подсветкой и подпись («→ сцена» либо имя пары порталов). Тот же
+// retained-mode приём, что и в layers/note-markers.js.
 export function createTeleportsLayer(ctx) {
   const container = new Container();
   const views = new Map(); // id -> view
@@ -40,7 +40,7 @@ export function createTeleportsLayer(ctx) {
     view.ring.circle(0, 0, r * 0.55).fill({ color: 0xc9b8ff, alpha: 0.18 });
     view.ring.circle(0, 0, r).stroke({ width: Math.max(2, r * 0.12), color: 0x9f8cff, alpha: 0.95 });
     view.ring.circle(0, 0, r * 0.7).stroke({ width: Math.max(1, r * 0.06), color: 0xe4dcff, alpha: 0.7 });
-    view.label.text = t.label ? "→ " + t.label : "";
+    view.label.text = t.label ? (t.targetTeleportId ? t.label : "→ " + t.label) : "";
     view.label.style.fontSize = Math.max(10, Math.min(18, Math.round(size * 0.24)));
     view.label.position.set(0, r + 3);
   }

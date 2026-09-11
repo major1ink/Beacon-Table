@@ -98,3 +98,57 @@ func TestTeleportTokensIgnoresBrokenTarget(t *testing.T) {
 		t.Error("портал в удалённую сцену не должен ничего делать")
 	}
 }
+
+// localTeleportRoom — пара порталов в пределах одной сцены и токен игрока.
+func localTeleportRoom() (*Room, *recordingDM) {
+	r := drawingsRoom()
+	r.scene.Teleports["tp-a"] = &domain.Teleport{ID: "tp-a", X: 300, Y: 300, Label: "Портал 1", TargetTeleportID: "tp-b"}
+	r.scene.Teleports["tp-b"] = &domain.Teleport{ID: "tp-b", X: 900, Y: 500, Label: "Портал 1", TargetTeleportID: "tp-a"}
+	r.scene.Tokens["tok-p"] = &domain.Token{ID: "tok-p", Label: "Ари", OwnerID: "p1", CharacterID: "char-1", X: 10, Y: 10}
+	dm := &recordingDM{drawClient: drawClient{role: domain.RoleDM}}
+	r.clients[dm] = true
+	return r, dm
+}
+
+func TestLocalTeleportAsksDMWithTargetPortal(t *testing.T) {
+	r, dm := localTeleportRoom()
+	player := &drawClient{role: domain.RolePlayer, playerID: "p1", name: "Вася"}
+	r.applyOwnTokenMove(player, domain.ClientMsg{Token: &domain.Token{ID: "tok-p", X: 300, Y: 300}})
+	if len(dm.got) != 1 {
+		t.Fatalf("ДМ спрошен %d раз, ожидался один", len(dm.got))
+	}
+	if dm.got[0]["targetTeleportId"] != "tp-b" || dm.got[0]["targetLabel"] != "Портал 1" || dm.got[0]["targetSceneId"] != nil {
+		t.Errorf("запрос: %+v", dm.got[0])
+	}
+}
+
+func TestLocalTeleportMovesWithinScene(t *testing.T) {
+	r, _ := localTeleportRoom()
+	r.applyMutation(domain.ClientMsg{Type: "teleport_tokens", ID: "tp-a", TokenIDs: []string{"tok-p", "tok-none"}})
+	if r.currentSceneID != "scene-1" {
+		t.Fatalf("стол переключился: %q", r.currentSceneID)
+	}
+	tok := r.scene.Tokens["tok-p"]
+	if tok == nil {
+		t.Fatal("токен пропал со сцены")
+	}
+	// Клетка правее второго портала (радиус 24 + полклетки 24).
+	if tok.X != 948 || tok.Y != 500 {
+		t.Errorf("приземлился в (%v, %v)", tok.X, tok.Y)
+	}
+	if !r.dirtyScenes["scene-1"] {
+		t.Error("сцена должна быть помечена грязной")
+	}
+}
+
+func TestRemoveTeleportUnlinksPair(t *testing.T) {
+	r, dm := localTeleportRoom()
+	r.applyMutation(domain.ClientMsg{Type: "remove_teleport", ID: "tp-b"})
+	if r.scene.Teleports["tp-a"].TargetTeleportID != "" {
+		t.Error("у второго конца пары осталась ссылка на удалённый портал")
+	}
+	r.noticeTeleport("ДМ", &domain.Token{ID: "tok-p", X: 300, Y: 300})
+	if len(dm.got) != 0 {
+		t.Errorf("портал без цели не должен спрашивать ДМ: %+v", dm.got)
+	}
+}

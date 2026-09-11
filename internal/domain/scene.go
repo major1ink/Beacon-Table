@@ -372,10 +372,9 @@ type NoteMarker struct {
 	FoundryFolder string `json:"foundryFolder,omitempty"`
 }
 
-// Teleport — портал на карте. Токен, вставший на него, с подтверждения ДМ
-// переносится на сцену TargetSceneID (см. service/room_teleports.go). Label
-// — снимок имени сцены назначения для подписи. Size — диаметр в мировых px,
-// 0 — клетка сетки сцены.
+// Teleport — портал на карте: ведёт на сцену TargetSceneID либо к порталу
+// TargetTeleportID той же сцены (см. service/room_teleports.go). Label —
+// подпись, Size — диаметр в мировых px (0 — клетка сетки).
 type Teleport struct {
 	ID            string  `json:"id"`
 	X             float64 `json:"x"`
@@ -383,8 +382,15 @@ type Teleport struct {
 	Size          float64 `json:"size,omitempty"`
 	Label         string  `json:"label"`
 	TargetSceneID string  `json:"targetSceneId"`
+	// TargetTeleportID — портал той же сцены; TargetSceneID тогда пуст.
+	TargetTeleportID string `json:"targetTeleportId,omitempty"`
 	// Locked — см. Token.Locked.
 	Locked bool `json:"locked,omitempty"`
+}
+
+// Local — портал ведёт к другому порталу той же сцены.
+func (t *Teleport) Local() bool {
+	return t.TargetTeleportID != ""
 }
 
 // Radius — половина Size, либо половина клетки сетки cell.

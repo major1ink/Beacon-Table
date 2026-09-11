@@ -24,6 +24,7 @@ import {
 } from "../geometry.js";
 import { MAP_OBJECT_KINDS, createMapObjectFocus, isLocked, mapObjectsOf } from "./map-objects.js";
 import { createRulerLine, createDistanceLabel } from "./ruler.js";
+import { teleportSize } from "./layers/teleports.js";
 import { paintDrawing, drawingHandles, canEditDrawing, widthForKind, sliderForWidth } from "./layers/drawings.js";
 import { fetchCharacter, fetchAdminCharacter, fetchMonster } from "../api.js";
 import { showPrompt } from "../modal.js";
@@ -769,7 +770,7 @@ export function createInteraction(ctx) {
 
   if (ctx.isDM) {
     // Единый активный инструмент вместо трёх независимых булевых флагов.
-    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'draw' | 'grid-edit' | 'ruler'
+    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'draw' | 'grid-edit' | 'ruler' | 'teleport'
     // ctx.tool — зеркало локальной `tool` наружу: layers/walls.js,
     // layers/manual-fog.js и layers/buildings.js читают его, чтобы решить,
     // рисовать ли кружки-ручки на вершинах (см. setTool ниже — точки
@@ -820,6 +821,10 @@ export function createInteraction(ctx) {
     // неё, не от dragStart — боком/по диагонали тоже прибавляется, а не
     // вычитается), dragTraveled — накопленное расстояние этого жеста.
     let rulerFrom = null;
+    // teleportPairFrom — начало Ctrl-драга пары порталов; teleportClickAt —
+    // mousedown по пустому месту, клик без сдвига ставит один портал.
+    let teleportPairFrom = null;
+    let teleportClickAt = null;
     let dragStart = null;
     let dragLastPos = null;
     let dragTraveled = 0;
@@ -903,6 +908,8 @@ export function createInteraction(ctx) {
       gridDragStart = null;
       marquee = null;
       rulerFrom = null;
+      teleportPairFrom = null;
+      teleportClickAt = null;
       rulerLine.clear();
       distanceLabel.hide();
       preview.clear();
@@ -946,8 +953,11 @@ export function createInteraction(ctx) {
       gridDragStart = null;
       marquee = null;
       rulerFrom = null;
+      teleportPairFrom = null;
+      teleportClickAt = null;
       dragTokenId = null;
       dragNoteMarkerId = null;
+      dragTeleportId = null;
       groupDragOrigins = null;
       rulerLine.clear();
       distanceLabel.hide();
@@ -1171,6 +1181,19 @@ export function createInteraction(ctx) {
         return;
       }
 
+      // Телепорт: Ctrl + драг — пара порталов, клик — один портал, драг за портал — перенос.
+      if (tool === "teleport") {
+        if (createHeld) {
+          teleportPairFrom = { x, y };
+          return;
+        }
+        const teleportId = teleportAt(x, y, ctx.scene.teleports, ctx.scene.grid, (t) => !isLocked(t));
+        if (takeArmedResize("teleport", teleportId)) return;
+        if (teleportId) dragTeleportId = teleportId;
+        else teleportClickAt = { x, y };
+        return;
+      }
+
       if (tool === "select") {
         // Клик по значку двери (см. layers/doors.js) — единственное, что
         // остаётся доступно в "Выбор" без переключения в режим "Стена":
@@ -1270,6 +1293,16 @@ export function createInteraction(ctx) {
         const to = snappedPoint(x, y);
         preview.clear();
         preview.moveTo(from.x, from.y).lineTo(to.x, to.y).stroke({ width: 2 / scale, color: 0x5dd0ff, alpha: 0.9 });
+        return;
+      }
+
+      if (tool === "teleport" && teleportPairFrom) {
+        const to = { x, y };
+        const r = teleportSize({}, ctx.scene.grid) / 2;
+        preview.clear();
+        preview.moveTo(teleportPairFrom.x, teleportPairFrom.y).lineTo(to.x, to.y).stroke({ width: 2 / scale, color: 0x9f8cff, alpha: 0.9 });
+        preview.circle(teleportPairFrom.x, teleportPairFrom.y, r).stroke({ width: 2 / scale, color: 0x9f8cff, alpha: 0.9 });
+        preview.circle(to.x, to.y, r).stroke({ width: 2 / scale, color: 0x9f8cff, alpha: 0.9 });
         return;
       }
 
@@ -1647,6 +1680,24 @@ export function createInteraction(ctx) {
         return;
       }
 
+      if (tool === "teleport" && (teleportPairFrom || teleportClickAt)) {
+        const up = mousePos(e);
+        preview.clear();
+        if (teleportPairFrom) {
+          // Порог клик/драг — как у стены.
+          if (Math.hypot(up.x - teleportPairFrom.x, up.y - teleportPairFrom.y) > 6) {
+            document.dispatchEvent(new CustomEvent("vtt:placeTeleportPair", { detail: { from: teleportPairFrom, to: up } }));
+          }
+          teleportPairFrom = null;
+        } else {
+          if (Math.hypot(up.x - teleportClickAt.x, up.y - teleportClickAt.y) <= 6) {
+            document.dispatchEvent(new CustomEvent("vtt:placeTeleport", { detail: teleportClickAt }));
+          }
+          teleportClickAt = null;
+        }
+        return;
+      }
+
       if (draggingWallPoint) {
         draggingWallPoint = null;
         return;
@@ -1691,6 +1742,11 @@ export function createInteraction(ctx) {
         rulerFrom = null;
         rulerLine.clear();
         distanceLabel.hide();
+      }
+      if (tool === "teleport" && (teleportPairFrom || teleportClickAt)) {
+        teleportPairFrom = null;
+        teleportClickAt = null;
+        preview.clear();
       }
       cancelDraw();
       if (tool === "draw" && selectedDrawingId) setSelectedDrawing(null);
