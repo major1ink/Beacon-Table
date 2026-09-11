@@ -55,13 +55,70 @@ function spellGroupLabel(lvl) {
 }
 
 // «Адское возмездие [Hellish Rebuke]» → { ru, en }.
-function splitSpellName(name) {
+function splitName(name) {
   const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name || "");
   return m ? { ru: m[1], en: m[2] } : { ru: name || "", en: "" };
 }
 
 function spellClasses(s) {
   return String(s.classes || "").split(/[,;/]/).map((c) => c.trim()).filter(Boolean);
+}
+
+const CR_ORDER = ["", "0", "1/8", "1/4", "1/2", ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
+
+function crKey(cr) {
+  return String(cr || "").trim();
+}
+
+function crLabel(cr) {
+  return cr ? "ПО " + cr : "ПО —";
+}
+
+function crGroupLabel(cr) {
+  return cr ? "ПО " + cr : "ПО — (без уровня опасности)";
+}
+
+function crRank(cr) {
+  const i = CR_ORDER.indexOf(cr);
+  return i === -1 ? CR_ORDER.length : i;
+}
+
+function capitalize(t) {
+  t = String(t || "").trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : "";
+}
+
+// «зверь (динозавр)» → «Зверь».
+function monsterBaseType(m) {
+  const t = capitalize(String(m.type || "").replace(/\s*\(.*$/, ""));
+  return t ? [t] : [];
+}
+
+const RARITY_ORDER = ["обычный", "необычный", "редкий", "очень редкий", "легендарный", "артефакт", ""];
+
+function rarityKey(it) {
+  return String(it.rarity || "").trim().toLowerCase();
+}
+
+function rarityRank(r) {
+  const i = RARITY_ORDER.indexOf(r);
+  return i === -1 ? RARITY_ORDER.length - 1 : i;
+}
+
+const KIND_ORDER = ["класс", "архетип", "вид", "черта вида", "происхождение", "черта", "черта класса"];
+
+function kindRank(k) {
+  const i = KIND_ORDER.indexOf(k);
+  return i === -1 ? KIND_ORDER.length : i;
+}
+
+function bySource(x) {
+  const src = String(x.source || "").trim();
+  return src ? [src] : [];
+}
+
+function byTags(x) {
+  return Array.isArray(x.tags) ? x.tags.filter(Boolean) : [];
 }
 
 // ==================== per-type конфигурация ====================
@@ -181,12 +238,20 @@ const CONFIGS = {
     detailUrl: (id, o) => `/bestiary.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     mapOne: mapFoundryMonsterJson,
     avatar: true,
+    avatarIcon: "creature",
     searchHay: (m) => [m.name, m.type, ...(m.tags || [])],
-    badge: (m) => (m.cr ? "CR " + m.cr : "—"),
+    badge: (m) => [crLabel(crKey(m.cr)), (m.source || "").trim()],
+    sidebar: [
+      { id: "cr", title: "ПО", kind: "chips", values: CR_ORDER, label: (v) => v || "—", of: (m) => [crKey(m.cr)] },
+      { id: "type", title: "Тип", kind: "list", of: monsterBaseType },
+    ],
+    groupKey: (m) => crKey(m.cr),
+    groupLabel: crGroupLabel,
+    groupSort: (a, b) => crRank(a) - crRank(b),
     draggable: true,
     dragMime: "application/x-beacon-monster",
     createPlaceholder: "Имя нового монстра",
-    emptyUser: "Своих монстров пока нет — создай первого ниже.",
+    emptyUser: "Своих монстров пока нет — создай первого выше.",
     deleteConfirm: (m) => `Удалить «${m.name}» из бестиария? Это необратимо (уже расставленные токены останутся на карте, но перестанут открывать статблок).`,
     savedMessageType: "beacon:monsterSaved",
   },
@@ -202,14 +267,20 @@ const CONFIGS = {
     searchHay: (s) => [s.name, s.school, s.classes, ...(s.tags || [])],
     badge: (s) => (s.source || "").trim(),
     badgeTitle: (s) => spellLevelLabel(s.level),
-    nameText: (s) => splitSpellName(s.name).ru,
-    subText: (s) => splitSpellName(s.name).en,
     flags: (s) => [s.concentration && ["К", "Концентрация"], s.ritual && ["Р", "Ритуал"]].filter(Boolean),
-    sidebar: true,
+    sidebar: [
+      { id: "level", title: "Круг", kind: "chips", values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], label: String, of: (s) => [s.level || 0] },
+      { id: "props", title: "Свойства", kind: "toggles", items: [
+        { key: "concentration", label: "Концентрация", icon: "eye" },
+        { key: "ritual", label: "Ритуал", icon: "scroll" },
+      ] },
+      { id: "cls", title: "Класс", kind: "list", of: spellClasses },
+    ],
     groupKey: (s) => s.level || 0,
     groupLabel: spellGroupLabel,
+    groupSort: (a, b) => a - b,
     createPlaceholder: "Имя нового заклинания",
-    emptyUser: "Своих заклинаний пока нет — создай или импортируй первое ниже.",
+    emptyUser: "Своих заклинаний пока нет — создай или импортируй первое выше.",
     deleteConfirm: (s) => `Удалить «${s.name}» из библиотеки?`,
     savedMessageType: "beacon:spellSaved",
     extraWidget: renderSpellAddWidget,
@@ -223,10 +294,20 @@ const CONFIGS = {
     detailUrl: (id, o) => `/itembook.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     mapOne: mapFoundryItemJson,
     avatar: true,
+    avatarIcon: "backpack",
     searchHay: (it) => [it.name, it.type, it.rarity, ...(it.tags || [])],
-    badge: (it) => it.rarity || "",
+    badge: (it) => [it.rarity || "", (it.source || "").trim()],
+    flags: (it) => (it.requiresAttunement ? [["Н", "Требует настройки"]] : []),
+    sidebar: [
+      { id: "rarity", title: "Редкость", kind: "list", of: (it) => (rarityKey(it) ? [capitalize(rarityKey(it))] : []) },
+      { id: "props", title: "Свойства", kind: "toggles", items: [{ key: "requiresAttunement", label: "Настройка", icon: "zap" }] },
+      { id: "source", title: "Источник", kind: "list", of: bySource },
+    ],
+    groupKey: rarityKey,
+    groupLabel: (r) => capitalize(r) || "Без редкости",
+    groupSort: (a, b) => rarityRank(a) - rarityRank(b),
     createPlaceholder: "Имя нового предмета",
-    emptyUser: "Своих предметов пока нет — создай или импортируй первый ниже.",
+    emptyUser: "Своих предметов пока нет — создай или импортируй первый выше.",
     deleteConfirm: (it) => `Удалить «${it.name}» из библиотеки?`,
     savedMessageType: "beacon:itemSaved",
     extraFilter: category ? (it) => classifyItemType(it.type) === category : null,
@@ -241,11 +322,20 @@ const CONFIGS = {
     batchMap: mapFoundryReferenceBatch,
     batchEmptyMsg: "Не удалось распознать ни одной записи справочника (нужен класс/архетип/черта Foundry VTT).",
     avatar: true,
+    avatarIcon: "scroll",
     searchHay: (ref) => [ref.name, ref.kind, ref.parentName, ref.source, ...(ref.tags || [])],
-    badge: (ref) => ref.kind || "",
-    nameText: (ref) => (ref.parentName ? `${ref.name} (${ref.parentName})` : ref.name),
+    badge: (ref) => (ref.source || "").trim(),
+    subText: (ref) => [splitName(ref.name).en, ref.parentName].filter(Boolean).join(" · "),
+    sidebar: [
+      { id: "kind", title: "Тип записи", kind: "list", of: (ref) => (ref.kind ? [capitalize(ref.kind)] : []) },
+      { id: "parent", title: "Класс", kind: "list", of: (ref) => (ref.parentName ? [ref.parentName] : []) },
+      { id: "tags", title: "Метки", kind: "list", of: byTags },
+    ],
+    groupKey: (ref) => String(ref.kind || "").trim().toLowerCase(),
+    groupLabel: (k) => capitalize(k) || "Без типа",
+    groupSort: (a, b) => kindRank(a) - kindRank(b) || a.localeCompare(b, "ru"),
     createPlaceholder: "Имя новой записи",
-    emptyUser: "Своих записей пока нет — создай или импортируй первую ниже.",
+    emptyUser: "Своих записей пока нет — создай или импортируй первую выше.",
     deleteConfirm: (ref) => `Удалить «${ref.name}» из библиотеки?`,
     savedMessageType: "beacon:referenceSaved",
     extraFilter: kind ? (ref) => classifyReferenceKind(ref.kind) === kind : null,
@@ -259,15 +349,18 @@ const CONFIGS = {
     detailUrl: (id, o) => `/conditions.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     batchMap: mapFoundryConditionBatch,
     batchEmptyMsg: "Не удалось распознать ни одного эффекта (нужен документ ActiveEffect из Foundry VTT или предмет/существо с массивом effects).",
-    // avatar+avatarText: у состояния картинка чаще всего не загружена, а
-    // задан эмодзи-глиф (domain.Condition.Icon) — показываем в кружке его,
-    // а не прочерк, чтобы список читался так же, как палитра.
+    // avatarText — эмодзи-глиф состояния (domain.Condition.Icon).
     avatar: true,
     avatarText: (c) => c.icon || "❔",
     searchHay: (c) => [c.name, c.slug, c.source, ...(c.tags || [])],
-    badge: (c) => (c.levels > 1 ? `${c.levels} ур.` : c.slug || ""),
+    badge: (c) => [c.levels > 1 ? `${c.levels} ур.` : "", (c.source || "").trim()],
+    subText: (c) => c.slug || "",
+    sidebar: [
+      { id: "source", title: "Источник", kind: "list", of: bySource },
+      { id: "tags", title: "Метки", kind: "list", of: byTags },
+    ],
     createPlaceholder: "Имя нового состояния",
-    emptyUser: "Своих состояний пока нет — создай или импортируй первое ниже.",
+    emptyUser: "Своих состояний пока нет — создай или импортируй первое выше.",
     deleteConfirm: (c) => `Удалить «${c.name}» из библиотеки? Уже наложенные метки останутся висеть на токенах, но потеряют описание.`,
     savedMessageType: "beacon:conditionSaved",
   },
@@ -277,6 +370,7 @@ const cfg = CONFIGS[type];
 // ==================== DOM ====================
 
 const rowsEl = document.getElementById("catalogRows");
+const sideEl = document.getElementById("catalogSide");
 const searchEl = document.getElementById("catalogSearch");
 const createForm = document.getElementById("catalogCreateForm");
 const createNameInput = document.getElementById("catalogCreateName");
@@ -289,12 +383,10 @@ document.getElementById("catalogTitle").textContent = title;
 document.title = "Beacon Table — " + title;
 
 // ==================== боковые фильтры (cfg.sidebar) ====================
-// levels: пусто = все; cls — из свободного текста карточки, секция скрыта без данных.
-const sideFilter = { levels: new Set(), props: new Set(), cls: "" };
-const SPELL_PROPS = [
-  { key: "concentration", label: "Концентрация", icon: "eye" },
-  { key: "ritual", label: "Ритуал", icon: "scroll" },
-];
+// Секции: chips (фиксированные значения), toggles (булевы поля), list
+// (значения из данных, секция скрыта без них). Выбор — Set на секцию, пусто = все.
+const sideFilter = new Map();
+const sideLists = new Map();
 
 function sideButton(label, on, onClick, className) {
   const b = document.createElement("button");
@@ -305,58 +397,62 @@ function sideButton(label, on, onClick, className) {
   return b;
 }
 
+function toggleSide(sec, value, btn) {
+  const set = sideFilter.get(sec.id);
+  if (set.has(value)) set.delete(value);
+  else set.add(value);
+  btn.classList.toggle("on", set.has(value));
+  renderRows();
+}
+
 function initSidebar() {
-  if (!cfg || !cfg.sidebar) return;
-  document.body.classList.add("has-side");
-  document.getElementById("catalogSideSearch").appendChild(searchEl);
-
-  const levels = document.querySelector("#catalogSideLevel .side-chips");
-  for (let lvl = 0; lvl <= 9; lvl++) {
-    levels.appendChild(sideButton(String(lvl), false, (e) => {
-      if (sideFilter.levels.has(lvl)) sideFilter.levels.delete(lvl);
-      else sideFilter.levels.add(lvl);
-      e.currentTarget.classList.toggle("on", sideFilter.levels.has(lvl));
-      renderRows();
-    }, "side-chip"));
-  }
-
-  const props = document.querySelector("#catalogSideProps .side-list");
-  for (const p of SPELL_PROPS) {
-    const b = sideButton("", false, (e) => {
-      if (sideFilter.props.has(p.key)) sideFilter.props.delete(p.key);
-      else sideFilter.props.add(p.key);
-      e.currentTarget.classList.toggle("on", sideFilter.props.has(p.key));
-      renderRows();
-    }, "side-item");
-    b.innerHTML = icon(p.icon, { size: 13 });
-    b.append(p.label);
-    props.appendChild(b);
+  if (!cfg) return;
+  for (const sec of cfg.sidebar || []) {
+    sideFilter.set(sec.id, new Set());
+    const wrap = document.createElement("div");
+    const title = document.createElement("p");
+    title.className = "side-title";
+    title.textContent = sec.title;
+    const body = document.createElement("div");
+    body.className = sec.kind === "chips" ? "side-chips" : "side-list";
+    wrap.append(title, body);
+    sideEl.appendChild(wrap);
+    if (sec.kind === "chips") {
+      for (const v of sec.values) body.appendChild(sideButton(sec.label(v), false, (e) => toggleSide(sec, v, e.currentTarget), "side-chip"));
+    } else if (sec.kind === "toggles") {
+      for (const it of sec.items) {
+        const b = sideButton("", false, (e) => toggleSide(sec, it.key, e.currentTarget), "side-item");
+        b.innerHTML = icon(it.icon, { size: 13 });
+        b.append(it.label);
+        body.appendChild(b);
+      }
+    } else {
+      sideLists.set(sec.id, { sec, wrap, body });
+    }
   }
 }
 
-function renderClassFilter(onScope) {
-  if (!cfg.sidebar) return;
-  const wrap = document.getElementById("catalogSideClass");
-  const names = new Set();
-  for (const x of onScope) for (const c of spellClasses(x)) names.add(c);
-  const sorted = [...names].sort((a, b) => a.localeCompare(b, "ru"));
-  if (sideFilter.cls && !names.has(sideFilter.cls)) sideFilter.cls = "";
-  wrap.style.display = sorted.length ? "" : "none";
-  const list = wrap.querySelector(".side-list");
-  list.innerHTML = "";
-  for (const c of sorted) {
-    list.appendChild(sideButton(c, sideFilter.cls === c, () => {
-      sideFilter.cls = sideFilter.cls === c ? "" : c;
-      renderRows();
-    }, "side-item"));
+function renderSideLists(onScope) {
+  for (const { sec, wrap, body } of sideLists.values()) {
+    const names = new Set();
+    for (const x of onScope) for (const v of sec.of(x)) names.add(v);
+    const set = sideFilter.get(sec.id);
+    for (const v of set) if (!names.has(v)) set.delete(v);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b, "ru"));
+    wrap.style.display = sorted.length ? "" : "none";
+    body.innerHTML = "";
+    for (const v of sorted) body.appendChild(sideButton(v, set.has(v), (e) => toggleSide(sec, v, e.currentTarget), "side-item"));
   }
 }
 
 function passesSidebar(x) {
-  if (!cfg.sidebar) return true;
-  if (sideFilter.levels.size && !sideFilter.levels.has(x.level || 0)) return false;
-  for (const key of sideFilter.props) if (!x[key]) return false;
-  if (sideFilter.cls && !spellClasses(x).includes(sideFilter.cls)) return false;
+  for (const sec of cfg.sidebar || []) {
+    const set = sideFilter.get(sec.id);
+    if (!set.size) continue;
+    if (sec.kind === "toggles") {
+      for (const key of set) if (!x[key]) return false;
+    } else if (!sec.of(x).some((v) => set.has(v))) return false;
+  }
   return true;
 }
 
@@ -394,15 +490,17 @@ function buildRow(x) {
     const avatar = document.createElement("div");
     avatar.className = "catalog-avatar";
     if (x.imageUrl) avatar.style.backgroundImage = `url("${x.imageUrl}")`;
-    else avatar.textContent = cfg.avatarText ? cfg.avatarText(x) : "—";
+    else if (cfg.avatarText) avatar.textContent = cfg.avatarText(x);
+    else avatar.innerHTML = icon(cfg.avatarIcon || "image", { size: 14 });
     row.appendChild(avatar);
   }
+  const parts = splitName(x.name);
   const name = document.createElement("div");
   name.className = "catalog-name";
-  name.textContent = cfg.nameText ? cfg.nameText(x) : x.name;
+  name.textContent = cfg.nameText ? cfg.nameText(x) : parts.ru;
   name.title = x.name;
   name.onclick = () => openDetail(x);
-  const subText = cfg.subText ? cfg.subText(x) : "";
+  const subText = cfg.subText ? cfg.subText(x) : parts.en;
   if (subText) {
     const sub = document.createElement("div");
     sub.className = "catalog-sub";
@@ -419,11 +517,12 @@ function buildRow(x) {
     row.appendChild(flag);
   }
 
-  const badgeText = cfg.badge ? cfg.badge(x) : "";
-  if (badgeText) {
+  const badges = cfg.badge ? [].concat(cfg.badge(x)) : [];
+  for (const text of badges) {
+    if (!text) continue;
     const badge = document.createElement("span");
     badge.className = "catalog-badge";
-    badge.textContent = badgeText;
+    badge.textContent = text;
     if (cfg.badgeTitle) badge.title = cfg.badgeTitle(x);
     row.appendChild(badge);
   }
@@ -463,7 +562,7 @@ function renderRows() {
   rowsEl.innerHTML = "";
   let onScope = list.filter((x) => !!x.system === systemScope);
   if (cfg.extraFilter) onScope = onScope.filter(cfg.extraFilter);
-  renderClassFilter(onScope);
+  renderSideLists(onScope);
   const filtered = onScope.filter((x) => {
     if (!passesSidebar(x)) return false;
     if (!filter) return true;
@@ -486,7 +585,8 @@ function renderRows() {
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(x);
   }
-  for (const k of [...groups.keys()].sort((a, b) => a - b)) {
+  const groupSort = cfg.groupSort || ((a, b) => String(a).localeCompare(String(b), "ru"));
+  for (const k of [...groups.keys()].sort(groupSort)) {
     const group = document.createElement("div");
     group.className = "catalog-group";
     const head = document.createElement("div");
