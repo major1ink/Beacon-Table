@@ -10,10 +10,12 @@ import { attachTooltip, hideTooltip } from "../tooltip.js";
 
 export function createSideMenu(ctx) {
   const column = document.createElement("div");
-  column.className = "vtt-side-menu"; // зацепка для мобильных правил в theme.css
+  // .vtt-side-menu — зацепка для мобильных правил theme.css; .glass-rail —
+  // одна плашка на все иконки, как рейл ДМ.
+  column.className = "vtt-side-menu glass-rail";
   // Без transform: он сделал бы колонку containing block'ом для fixed-панели
   // внутри неё. Центрируем арифметикой в position().
-  column.style.cssText = "position:fixed;z-index:41;display:flex;flex-direction:column;gap:8px;";
+  column.style.cssText = "position:fixed;z-index:41;display:flex;flex-direction:column;gap:2px;padding:6px 5px;box-sizing:border-box;";
   document.body.appendChild(column);
 
   let openPanel = null;
@@ -44,7 +46,10 @@ export function createSideMenu(ctx) {
   }
 
   function closeOpen() {
-    if (openPanel) openPanel.style.display = "none";
+    if (openPanel) {
+      openPanel.style.display = "none";
+      openPanel.host?.querySelector(".vtt-side-menu-btn")?.classList.remove("open");
+    }
     const toggle = openPanelToggle;
     openPanel = null;
     openPanelSticky = false;
@@ -79,14 +84,12 @@ export function createSideMenu(ctx) {
     btn.type = "button";
     // Свой класс, а не `.vtt-side-menu button`: под широкий селектор попали
     // бы и кнопки внутри выезжающей панели.
-    btn.className = "vtt-side-menu-btn";
+    // Вид — .rail-btn из theme.css; свой класс — зацепка для мобильных правил.
+    btn.className = "vtt-side-menu-btn rail-btn";
     btn.innerHTML = icon;
     btn.title = title;
-    btn.style.cssText =
-      "width:34px;height:34px;border:1px solid var(--glass-border,rgba(255,255,255,0.07));border-radius:999px;" +
-      "background:var(--glass-bg,rgba(26,26,34,0.74));backdrop-filter:var(--glass-blur,blur(20px));" +
-      "-webkit-backdrop-filter:var(--glass-blur,blur(20px));color:#eee;cursor:pointer;" +
-      "display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-soft,0 4px 16px rgba(0,0,0,0.35));";
+    btn.setAttribute("aria-label", title);
+    btn.style.cssText = "width:36px;height:36px;border-radius:11px;";
     return btn;
   }
 
@@ -134,6 +137,7 @@ export function createSideMenu(ctx) {
       }
       closeOpen();
       panel.style.display = "flex";
+      btn.classList.add("open");
       // Гасим подсказку явно, а не надеемся на глобальный mousedown-хук:
       // порядок pointerenter и mousedown у синтезированного клика не
       // гарантирован, и подсказка успевала остаться висеть поверх только
@@ -182,7 +186,7 @@ export function createSideMenu(ctx) {
     const rect = ctx.canvas.getBoundingClientRect();
     const h = column.offsetHeight;
     const top = rect.top + rect.height / 2 - h / 2;
-    column.style.left = Math.round(rect.right - 44) + "px";
+    column.style.left = Math.round(rect.right - column.offsetWidth - 10) + "px";
     column.style.top = Math.round(Math.max(8, Math.min(top, window.innerHeight - h - 8))) + "px";
   }
   position();

@@ -84,6 +84,12 @@
 .rail-btn svg { display: block; }
 .rail-btn:hover { background: var(--surface); color: var(--text); }
 .rail-btn.active, .rail-btn.open { background: var(--accent-bg); color: var(--accent); }
+/* Взведённый инструмент — точка, не подложка: иначе неотличим от открытого раздела. */
+.rail-btn.rail-btn--armed.active:not(.open) { background: transparent; color: var(--text-dim); }
+.rail-btn.rail-btn--armed.active::after {
+  content: ""; position: absolute; right: 6px; bottom: 6px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+}
 /* Точка на иконке рейла — «здесь что-то ждёт тебя»: сейчас её ставит экран,
    попросившийся на трансляцию (см. web/src/pages/dm.js), пока ДМ смотрит на
    карту, а не в настройки. */
@@ -111,7 +117,7 @@
 .panel-add-btn {
   display: inline-flex; align-items: center; gap: 4px;
   background: none; border: none; color: var(--green-bright);
-  font: inherit; font-weight: 600; font-size: 12.5px; padding: 4px 6px;
+  font: inherit; font-weight: 600; font-size: 12.5px; padding: 5px 8px; min-height: 24px;
   border-radius: 7px; cursor: pointer; transition: background .12s ease;
 }
 .panel-add-btn svg { display: block; }
@@ -506,6 +512,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
   pointer-events: none; /* подсказка не должна перехватывать курсор у карты */
 }
 .bt-tip.open { display: block; }
+.bt-tip--short { max-width: 300px; }
 .bt-tip-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
 .bt-tip-summary { color: var(--text-dim); margin-bottom: 8px; }
 /* Строка — обычный текстовый поток, а не flex: у flex-строки длинное
@@ -624,7 +631,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 @media (pointer: coarse) {
   /* Именно .vtt-side-menu-btn: панель выезжает ВНУТРИ колонки, и широкий
      селектор ломал бы кнопки её содержимого. */
-  .vtt-side-menu-btn { width: 42px !important; height: 42px !important; }
+  .vtt-side-menu-btn { width: 42px !important; height: 42px !important; border-radius: 13px !important; }
 }
 
 @media (max-width: 860px), (max-height: 500px) {

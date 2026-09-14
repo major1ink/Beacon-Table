@@ -24,9 +24,10 @@ function injectStyle() {
     position: fixed; inset: 0; z-index: 600;
     display: flex; align-items: center; justify-content: center;
     background: rgba(6, 6, 10, 0.94);
-    opacity: 0; pointer-events: none; transition: opacity 0.22s ease;
+    /* visibility: иначе невидимый «✕» остаётся в порядке табуляции. */
+    opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.22s ease, visibility 0.22s;
   }
-  .showcase-overlay.open { opacity: 1; pointer-events: auto; }
+  .showcase-overlay.open { opacity: 1; visibility: visible; pointer-events: auto; }
   .showcase-overlay img {
     max-width: 96vw; max-height: 96vh; object-fit: contain;
     border-radius: 4px; box-shadow: 0 12px 64px rgba(0, 0, 0, 0.6);

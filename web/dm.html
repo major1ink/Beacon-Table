@@ -21,7 +21,12 @@
     }
     button { cursor: pointer; padding: 8px 12px; border: none; border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; transition: background .12s ease; }
     button svg { flex: 0 0 auto; }
-    button.active { background: #e74c3c; }
+    /* «Выбрано» — акцентом; красный только у удаления. */
+    button.active { background: var(--accent-bg); color: var(--accent); }
+    /* Кольцо фокуса — акцентное: браузерное на тёмном стекле не видно. */
+    button:focus-visible, [role="menuitem"]:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
     button:hover { background: var(--surface-hover); }
     button:disabled { opacity: 0.4; cursor: default; }
     button:disabled:hover { background: var(--surface); }
@@ -43,22 +48,60 @@
        плоской заливки. */
     #appBody { flex: 1 1 auto; min-height: 0; display: flex; position: relative; }
 
+    /* Рейл — по содержимому и по центру, как колонка справа (vtt/side-menu.js). */
     #rail {
-      flex: 0 0 auto; width: 60px; margin: 14px 0 14px 14px; padding: 12px 0;
-      display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 6;
+      flex: 0 0 auto; align-self: center; width: 46px; margin: 14px 0 14px 14px; padding: 6px 5px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px; z-index: 6;
       box-sizing: border-box;
     }
-    .rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
-    .rail-bottom { margin-top: auto; }
-    .rail-sep { width: 28px; height: 1px; background: var(--border); margin: 6px 0; }
-    #accountsBadge {
-      display: none; position: absolute; top: 2px; right: 2px; background: #e74c3c; color: #fff; border-radius: 8px;
-      font-size: 9px; line-height: 1; padding: 2px 4px; min-width: 12px; text-align: center;
-    }
-    #accountsBadge.show { display: block; }
+    #rail .rail-btn, #toolsFlyout .rail-btn { width: 36px; height: 36px; border-radius: 11px; }
+    .rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; }
+    .rail-sep { width: 18px; height: 1px; background: var(--border); margin: 5px 0; }
 
+    /* ---- «⋯» внизу рейла: меню служебных пунктов (top ставит dm.js) ---- */
+    #railMenu {
+      position: absolute; left: 70px; z-index: 8;
+      min-width: 200px; padding: 6px; display: flex; flex-direction: column; gap: 1px;
+      border-radius: 14px;
+    }
+    .rail-menu-item {
+      display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+      padding: 8px 10px; border-radius: 9px; background: transparent; color: var(--text);
+      font-size: 13px; white-space: nowrap;
+    }
+    .rail-menu-item svg { color: var(--text-dim); }
+    .rail-menu-item:hover { background: var(--surface); }
+    .rail-menu-item:hover svg { color: var(--text); }
+    .rail-menu-item.active { background: var(--accent-bg); color: var(--text); }
+    .rail-menu-item.active svg { color: var(--accent); }
+    .rail-menu-item.danger svg { color: #e74c3c; opacity: 0.7; }
+    .rail-menu-item.danger:hover { color: #e74c3c; }
+    .rail-menu-item.danger:hover svg { opacity: 1; }
+    /* Экран просится на трансляцию — точка у «Настроек» (dm.js: pollBroadcastRequests). */
+    .rail-menu-item.has-badge::after {
+      content: ""; margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #e74c3c; flex: 0 0 auto;
+    }
+    .rail-menu-sep { height: 1px; background: var(--border); margin: 5px 4px; }
+    /* Счётчик ждущих аккаунтов в пункте меню; на «⋯» — точка .has-badge. */
+    #accountsBadge {
+      display: none; margin-left: auto; background: #e74c3c; color: #fff; border-radius: 999px;
+      font-size: 10px; line-height: 1; padding: 3px 6px; min-width: 10px; text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    #accountsBadge.show { display: inline-block; }
+
+    /* ---- выпадающая колонка инструментов; top ставит dm.js: setToolsFlyout ---- */
+    #toolsFlyout {
+      position: absolute; left: 70px; z-index: 7;
+      display: flex; flex-direction: column; gap: 2px; padding: 6px 5px;
+    }
+
+    /* Панель — по высоте содержимого; длинные разделы прокручиваются в .panel-body. */
     #panel {
       flex: 0 0 0; width: 0; margin: 14px 0; overflow: hidden;
+      /* Центр ставит dm.js (placeSidePanel) один раз в margin-top: живой
+         align-self: center двигал бы панель при смене вкладки. */
+      align-self: flex-start; max-height: calc(100% - 28px);
       background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
       border: 0 solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: none;
       transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
@@ -77,28 +120,41 @@
        канвасом, а не absolute внутри #panel: у панели overflow:hidden, и
        торчащая наружу ручка была бы обрезана. Показывается только при
        открытой панели (класс .visible ставит setSidePanelSection). */
+    /* Ручка — заметная «таблетка» на кромке панели, а не волосок в зазоре. */
     #panelResizer {
-      flex: 0 0 auto; width: 10px; margin: 14px 0; z-index: 6; touch-action: none;
+      flex: 0 0 auto; width: 14px; height: 120px; align-self: flex-start; z-index: 6; touch-action: none;
       display: none; align-items: center; justify-content: center; cursor: col-resize;
+      margin-left: -2px; /* margin-top — по центру панели, ставит placeSidePanel (dm.js) */
     }
     #panelResizer.visible { display: flex; }
     #panelResizer::before {
-      content: ""; width: 3px; height: 42px; border-radius: 2px; background: var(--border);
-      transition: background .12s ease, height .12s ease;
+      content: ""; width: 6px; height: 44px; border-radius: 3px;
+      background: var(--surface-hover); border: 1px solid rgba(255, 255, 255, 0.14); box-sizing: border-box;
+      box-shadow: var(--shadow-soft);
+      transition: background .12s ease, height .12s ease, border-color .12s ease;
     }
-    #panelResizer:hover::before { background: var(--accent); height: 80px; }
+    #panelResizer::after {
+      content: ""; position: absolute; width: 2px; height: 14px;
+      background: radial-gradient(circle, var(--text-dim) 1px, transparent 1.2px) 0 0 / 2px 5px repeat-y;
+      pointer-events: none;
+    }
+    #panelResizer { position: relative; }
+    #panelResizer:hover::before, #panelResizer:focus-visible::before { background: var(--accent); border-color: var(--accent); height: 80px; }
+    #panelResizer:hover::after, #panelResizer:focus-visible::after { display: none; }
+    #panelResizer:focus-visible { outline: none; }
     /* Пока тянем — гасим анимацию ширины (иначе панель едет за курсором с
        задержкой) и выделение текста под курсором. */
     body.panel-resizing { cursor: col-resize; user-select: none; }
     body.panel-resizing #panel { transition: none; }
-    body.panel-resizing #panelResizer::before { background: var(--accent); height: 80px; }
+    body.panel-resizing #panelResizer::before { background: var(--accent); border-color: var(--accent); height: 80px; }
+    body.panel-resizing #panelResizer::after { display: none; }
     .panel-section { display: none; flex-direction: column; min-height: 0; flex: 1 1 auto; }
     .panel-section.active { display: flex; }
     .panel-header {
       flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
-      padding: 14px 16px; border-bottom: 1px solid var(--border); gap: 8px;
+      padding: 12px 14px 10px 18px; border-bottom: 1px solid var(--border); gap: 8px;
     }
-    .panel-header h3 { margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.8; }
+    .panel-header h3 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.7; }
     .panel-header-actions { display: flex; align-items: center; gap: 2px; }
     .panel-close {
       background: none; opacity: 0.55; border-radius: 8px; width: 26px; height: 26px; padding: 0;
@@ -106,7 +162,7 @@
     }
     .panel-close svg { display: block; }
     .panel-close:hover { opacity: 1; background: var(--surface); }
-    .panel-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .panel-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
 
     /* Классы с display перебивают браузерный [hidden] — нужно своё правило. */
     [hidden] { display: none !important; }
@@ -209,7 +265,7 @@
       display: flex; align-items: center; gap: 8px; font-size: 12px; max-width: calc(100% - 240px);
     }
     #statusBar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #sceneSwitchName { font-weight: 600; }
+    #sceneSwitchName { font-weight: 600; flex: 1 0 auto; min-width: 6ch; max-width: 100%; }
     /* Приглушение — на самом счётчике, а не на #playersHint целиком: opacity
        на родителе гасила бы и всплывающий список, который должен читаться. */
     #playersHint { cursor: default; display: inline-flex; align-items: center; gap: 4px; position: relative; }
@@ -446,10 +502,21 @@
     #zoomHud #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
 
     /* ---- переключатель сцен (панель "Сцена") ---- */
-    .scene-row { padding: 9px 11px 9px 6px; cursor: pointer; font-size: 13px; }
-    .scene-row.active { background: rgba(31,107,58,0.16); box-shadow: 0 0 0 1.5px var(--green) inset; }
+    /* Без «хватки» — порядок сцен не перетаскивается; корзина только под курсором. */
+    .scene-row { padding: 0 6px 0 0; gap: 0; font-size: 13px; background: transparent; }
+    .scene-row:hover { background: var(--surface); }
+    .scene-row.active { background: var(--accent-bg); }
+    .scene-row.active .scene-name { color: var(--text); font-weight: 600; }
+    .scene-pick {
+      flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px;
+      padding: 8px 8px 8px 12px; background: transparent; color: var(--text); text-align: left; border-radius: 12px;
+    }
+    .scene-pick:hover { background: transparent; }
     .scene-row .scene-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .scene-row .scene-viewers { flex: 0 0 auto; }
+    .scene-row .scene-gear { opacity: 0; }
+    .scene-row:hover .scene-gear, .scene-row .scene-gear:focus-visible { opacity: 1; }
+    @media (hover: none) { .scene-row .scene-gear { opacity: 0.55; } }
     /* Телепорт — соседи активной сцены по стрелкам на досках (см. renderTeleport). */
     #teleport { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
     .teleport-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 0 6px 6px; }
@@ -459,9 +526,12 @@
        onclick, а не создаёт её заново на каждый renderSceneDropdown(). */
 
     /* ---- раздел "Настроить сцену" (в выезжающей панели, по аналогии с "Освещение") ---- */
-    .modal-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-    .modal-tabs button { background: #2a2a35; font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
-    .modal-tabs button.active { background: var(--green); }
+    /* Вкладки — один сегментный стиль на все разделы. */
+    .modal-tabs, .set-tabs, .cat-tabs, .audio-tabs { background: var(--surface); border-radius: 10px; padding: 3px; }
+    .modal-tabs button:hover, .set-tabs button:hover, .cat-tabs button:hover, .audio-tabs .audio-tab:hover { background: var(--surface-hover); color: var(--text); }
+    .modal-tabs { display: flex; flex-wrap: wrap; gap: 3px; }
+    .modal-tabs button { background: transparent; color: var(--text-dim); font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
+    .modal-tabs button.active { background: var(--accent-bg); color: var(--text); }
     .modal-tab-panel { display: none; flex-direction: column; gap: 10px; }
     .modal-tab-panel.active { display: flex; }
     /* .cat-tabs — переключатель "Свои"/"Каталог" в панелях "Бестиарий"/
@@ -473,26 +543,19 @@
     /* .set-tabs — вкладки раздела «Настройки». Свой класс по той же
        причине, что и у .cat-tabs ниже: глобальный ".modal-tabs button" в
        dm.js перевесил бы на них свои обработчики. */
-    .set-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .set-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 10px; }
     /* Четыре вкладки должны уместиться в одну строку узкой панели, отсюда
        мелкий шрифт и тесные поля. */
-    .set-tabs button { background: #2a2a35; font-size: 11px; padding: 6px 4px; flex: 1 1 0; min-width: 0; white-space: nowrap; }
-    .set-tabs button.active { background: var(--accent); color: #fff; }
+    .set-tabs button { background: transparent; color: var(--text-dim); font-size: 11px; padding: 6px 4px; flex: 1 1 0; min-width: 0; white-space: nowrap; }
+    .set-tabs button.active { background: var(--accent-bg); color: var(--text); }
     .set-tab-panel { display: none; }
     .set-tab-panel.active { display: block; }
     #shutdownBtn { background: var(--danger); color: #fff; }
     #shutdownBtn:hover { background: var(--danger-hover); }
-    /* Кнопка выключения в рейле — обычная иконка, красной становится только
-       под курсором: промахнуться мимо соседнего «Выйти» и не заметить этого
-       нельзя, но и пугать красным весь вечер незачем. */
-    /* Не var(--danger): тот тёмно-бордовый идёт под заливку кнопки, а здесь
-       красным становится сам штрих иконки на тёмном рейле (ср. точку-бейдж
-       в theme.css). */
-    #railShutdownBtn:hover { color: #e74c3c; }
 
-    .cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-    .cat-tabs button { background: #2a2a35; font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
-    .cat-tabs button.active { background: var(--green); }
+    .cat-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
+    .cat-tabs button { background: transparent; color: var(--text-dim); font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
+    .cat-tabs button.active { background: var(--accent-bg); color: var(--text); }
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field label { font-size: 12px; opacity: 0.75; }
     .field input[type="text"], .field input[type="number"], .field select {
@@ -898,9 +961,9 @@
     .new-playlist-form button { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
 
     /* .audio-tabs — «Плейлисты | Эффекты»; свой класс, не .modal-tabs (см. .set-tabs) */
-    .audio-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-    .audio-tabs .audio-tab { flex: 1 1 auto; background: var(--surface); border-radius: 8px; font-size: 12px; padding: 7px 8px; }
-    .audio-tabs .audio-tab.active { background: var(--accent); color: #fff; }
+    .audio-tabs { display: flex; gap: 3px; margin-bottom: 10px; }
+    .audio-tabs .audio-tab { flex: 1 1 auto; background: transparent; color: var(--text-dim); border-radius: 8px; font-size: 12px; padding: 7px 8px; }
+    .audio-tabs .audio-tab.active { background: var(--accent-bg); color: var(--text); }
     .audio-tab-panel { display: none; }
     .audio-tab-panel.active { display: block; }
 
@@ -962,21 +1025,28 @@
 
     @media (max-width: 860px), (max-height: 500px) {
       #rail {
-        width: 56px; margin: 6px 0 6px 6px; padding: 8px 0;
+        margin: 6px 0 6px 6px; max-height: calc(100% - 12px); width: 52px; padding: 5px 5px;
         overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
       }
+      /* Пальцу нужны 42px, а не 36: на тач-экране рейл шире и реже. */
+      #rail .rail-btn, #toolsFlyout .rail-btn { width: 42px; height: 42px; border-radius: 13px; }
+      #rail, .rail-top, .rail-bottom, #toolsFlyout { gap: 4px; }
+      #toolsFlyout { padding: 5px 4px; }
+      /* Полоса хода (z=40) накрывала бы «×» панели. */
+      body.panel-open .vtt-combat-bar { display: none !important; }
       #rail::-webkit-scrollbar { display: none; }
-      /* margin-top:auto дал бы пустой экран под иконками при прокрутке. */
-      .rail-bottom { margin-top: 6px; }
 
       /* Панель поверх карты, left — за рейлом. Ширину, которую ставит
          инлайном dm.js, перебиваем: ручка тут скрыта. */
       #panel {
-        position: absolute; z-index: 7; left: 68px; right: 6px; top: 6px; bottom: 6px;
+        position: absolute; z-index: 7; left: 66px; right: 6px; top: 6px; bottom: auto;
+        max-height: calc(100% - 12px) !important;
         margin: 0; transition: none;
       }
-      #panel.open { margin: 0; width: auto !important; }
+      /* Панель прибита к верху; margin-top от placeSidePanel не нужен. */
+      #panel.open { margin: 0 !important; width: auto !important; }
       #panelResizer { display: none !important; }
+      #toolsFlyout, #railMenu { left: 66px; }
       /* Колонка иконок живёт у правого края канваса, а он под панелью
          полноэкранный (класс ставит setSidePanelSection в dm.js). */
       body.panel-open .vtt-side-menu { display: none !important; }
@@ -987,11 +1057,15 @@
 
       /* Плашка уезжает из правого нижнего угла — там зум. */
       #statusBar {
-        left: 68px; right: auto; bottom: 6px;
-        /* 68 слева + ~168 на HUD зума справа + зазоры. */
-        max-width: calc(100vw - 248px);
+        left: 66px; right: auto; bottom: 6px;
+        /* 66 слева + ~168 на HUD зума справа + зазоры. */
+        max-width: calc(100vw - 246px);
         padding: 5px 11px; font-size: 11px;
       }
+      /* В 150px помещаются имя сцены и «👥 3»; слова и логин ДМ — нет. */
+      #statusBar .status-label, #statusBar #dmUsername, #statusBar > span:nth-of-type(4) { display: none; }
+      /* HUD и плашка просвечивали сквозь панель и не нажимались. */
+      body.panel-open #zoomHud, body.panel-open #statusBar { display: none !important; }
       #zoomHud { right: 6px; bottom: 6px; }
       #zoomHud button { width: 38px; height: 38px; }
       #diceLog { right: 6px; top: 6px; }
@@ -1009,35 +1083,57 @@
 </head>
 <body>
   <div id="appBody">
-    <!-- ---- узкая иконка-панель слева ---- -->
+    <!-- ---- рейл слева: группы сцена · игра · библиотека, служебное в «⋯».
+         Подсказки — RAIL_HELP (tool-help.js), вешает pages/dm.js. -->
     <nav id="rail" class="glass-rail">
       <div class="rail-top">
-        <button class="rail-btn" id="sceneSwitchBtn" data-section="scene" title="Сцена"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></span></button>
-        <button class="rail-btn" id="sceneSettingsBtn" data-section="sceneSettings" title="Настроить сцену"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/></svg></span></button>
-        <button class="rail-btn" id="railAssets" data-section="assets" title="Ассеты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5.5-5.5L9 17"/></svg></span></button>
-        <button class="rail-btn" id="railShowcase" data-section="showcase" title="Показ игрокам"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M12 16v4M8 20h8"/><path d="M7 12l3-3 2 2 3-4 2 3"/></svg></span></button>
-        <button class="rail-btn" id="railTools" data-section="tools" title="Инструменты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 7.4a4.3 4.3 0 01-5.9 4L7 18.2 4.8 16l6.8-7.7a4.3 4.3 0 014-5.9l-3 3 1.4 1.4z"/></svg></span></button>
-        <button class="rail-btn" id="railLight" data-section="light" title="Освещение"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg></span></button>
-        <button class="rail-btn" id="combatBtn" data-section="combat" title="Трекер инициативы"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg></span></button>
+        <button class="rail-btn" id="sceneSwitchBtn" data-section="scene"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></span></button>
+        <button class="rail-btn" id="sceneSettingsBtn" data-section="sceneSettings"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="8" y1="8" x2="8" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/><circle cx="8" cy="10.5" r="1.6" fill="var(--rail-bg)"/><circle cx="16" cy="13.5" r="1.6" fill="var(--rail-bg)"/></svg></span></button>
+        <button class="rail-btn" id="railAssets" data-section="assets"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5.5-5.5L9 17"/></svg></span></button>
+        <button class="rail-btn" id="railLight" data-section="light"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg></span></button>
         <div class="rail-sep"></div>
-        <button class="rail-btn" id="charactersBtn" data-section="characters" title="Персонажи"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg></span></button>
-        <button class="rail-btn" id="journalBtn" title="Журнал стола — общие и игроцкие записи"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4a2 2 0 012-2h11v18H7a2 2 0 00-2 2V4z"/><path d="M5 20a2 2 0 012-2h11"/><circle cx="11.5" cy="8" r="1.8"/><path d="M8.5 13c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg></span></button>
-        <button class="rail-btn" id="lootBtn" data-section="loot" title="Хаб лута"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg></span></button>
-        <button class="rail-btn" id="playlistsBtn" data-section="playlists" title="Аудио / плейлисты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg></span></button>
+        <!-- Инструменты — выпадающая колонка #toolsFlyout, не раздел панели. -->
+        <button class="rail-btn rail-btn--armed" id="railTools" aria-expanded="false" aria-controls="toolsFlyout"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 7.4a4.3 4.3 0 01-5.9 4L7 18.2 4.8 16l6.8-7.7a4.3 4.3 0 014-5.9l-3 3 1.4 1.4z"/></svg></span></button>
+        <button class="rail-btn" id="railShowcase" data-section="showcase"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M12 16v4M8 20h8"/><path d="M7 12l3-3 2 2 3-4 2 3"/></svg></span></button>
+        <button class="rail-btn" id="combatBtn" data-section="combat"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg></span></button>
+        <div class="rail-sep"></div>
+        <button class="rail-btn" id="charactersBtn" data-section="characters"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg></span></button>
+        <button class="rail-btn" id="journalBtn"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4a2 2 0 012-2h11v18H7a2 2 0 00-2 2V4z"/><path d="M5 20a2 2 0 012-2h11"/><circle cx="11.5" cy="8" r="1.8"/><path d="M8.5 13c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg></span></button>
+        <button class="rail-btn" id="lootBtn" data-section="loot"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg></span></button>
+        <button class="rail-btn" id="playlistsBtn" data-section="playlists"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg></span></button>
       </div>
       <div class="rail-bottom">
-        <button class="rail-btn" id="worldsBtn" title="Миры — переключить или создать другой стол"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 010 18 14 14 0 010-18z"/></svg></span></button>
-        <button class="rail-btn" id="accountsBtn" data-section="accounts" title="Аккаунты"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z"/><circle cx="12" cy="10" r="2.1"/><path d="M9 15.4c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg></span><span id="accountsBadge">0</span></button>
-        <button class="rail-btn" id="settingsBtn" data-section="settings" title="Настройки"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg></span></button>
-        <button class="rail-btn" id="logoutBtn" title="Выйти"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span></button>
-        <!-- Выключение сервера прямо со стола: игру заканчивают отсюда, а не
-             с экрана выбора миров, куда за вечер можно не зайти ни разу. Тот
-             же обработчик, что и у кнопки в «Настройки → Сервер» (см.
-             web/src/pages/dm.js). Гостю демо кнопка не показывается —
-             hideOwnerOnlyUI её убирает. -->
-        <button class="rail-btn" id="railShutdownBtn" title="Выключить сервер — программа остановится, стол закроется у всех"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="12"/><path d="M6.8 6.8a7.5 7.5 0 1010.4 0"/></svg></span></button>
+        <div class="rail-sep"></div>
+        <!-- Точка на «⋯»: ждущие аккаунты и экраны на трансляцию. -->
+        <button class="rail-btn" id="railMoreBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="railMenu"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></button>
       </div>
     </nav>
+
+    <!-- ---- меню «⋯»: вне рейла, чтобы на телефоне его не обрезал overflow
+         рейла; id пунктов те же, что были у иконок — обработчики в dm.js не менялись. -->
+    <div id="railMenu" class="glass-panel" role="menu" aria-label="Ещё" hidden>
+      <button class="rail-menu-item" id="worldsBtn" role="menuitem"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 010 18 14 14 0 010-18z"/></svg><span>Миры</span></button>
+      <button class="rail-menu-item" id="accountsBtn" data-section="accounts" role="menuitem"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z"/><circle cx="12" cy="10" r="2.1"/><path d="M9 15.4c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg><span>Аккаунты</span><span id="accountsBadge" aria-label="ждут подтверждения">0</span></button>
+      <button class="rail-menu-item" id="settingsBtn" data-section="settings" role="menuitem"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2"/></svg><span>Настройки</span></button>
+      <div class="rail-menu-sep" role="separator"></div>
+      <button class="rail-menu-item" id="logoutBtn" role="menuitem"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>Выйти</span></button>
+      <!-- Выключение сервера прямо со стола: игру заканчивают отсюда, а не
+           с экрана выбора миров, куда за вечер можно не зайти ни разу. Тот
+           же обработчик, что и у кнопки в «Настройки → Сервер» (см.
+           web/src/pages/dm.js). Гостю демо кнопка не показывается —
+           hideOwnerOnlyUI её убирает. -->
+      <button class="rail-menu-item danger" id="railShutdownBtn" role="menuitem"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="12"/><path d="M6.8 6.8a7.5 7.5 0 1010.4 0"/></svg><span>Выключить сервер</span></button>
+    </div>
+
+    <!-- ---- инструменты карты: колонка на месте панели (вместе не бывают,
+         см. dm.js: setToolsFlyout). -->
+    <div id="toolsFlyout" class="glass-rail" role="toolbar" aria-label="Инструменты карты" hidden>
+      <button id="wallBtn" class="rail-btn" aria-pressed="false"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="10"/><line x1="15" y1="5" x2="15" y2="10"/><line x1="6" y1="10" x2="6" y2="15"/><line x1="12" y1="10" x2="12" y2="15"/><line x1="18" y1="10" x2="18" y2="15"/><line x1="9" y1="15" x2="9" y2="19"/><line x1="15" y1="15" x2="15" y2="19"/></svg></span></button>
+      <button id="buildingBtn" class="rail-btn" aria-pressed="false"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11L12 4l8 7"/><path d="M6 10v10h12V10"/><rect x="10" y="14" width="4" height="6"/></svg></span></button>
+      <button id="fogBtn" class="rail-btn" aria-pressed="false"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01.4-8 5.5 5.5 0 0110.4 1A3.5 3.5 0 0117 16H7z"/><line x1="5" y1="19" x2="19" y2="19"/></svg></span></button>
+      <button id="rulerBtn" class="rail-btn" aria-pressed="false"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg></span></button>
+      <button id="teleportBtn" class="rail-btn" aria-pressed="false"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg></span></button>
+    </div>
 
     <!-- ---- выезжающая секция с содержимым текущего раздела ---- -->
     <aside id="panel">
@@ -1046,10 +1142,10 @@
           <h3>Сцена</h3>
           <div class="panel-header-actions">
             <button id="sceneCreateBtn" class="panel-add-btn" type="button" title="Новая сцена"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Сцена</button>
-            <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+            <button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
           </div>
         </header>
-        <div class="panel-body" style="padding: 8px;">
+        <div class="panel-body" style="padding: 10px; gap: 0;">
           <div id="sceneDropdown"></div>
           <div id="teleport">
             <div class="teleport-title">Телепорт</div>
@@ -1063,7 +1159,7 @@
           <h3>Ассеты</h3>
           <div class="panel-header-actions">
             <button id="assetsNewFolderBtn" class="panel-add-btn" type="button" title="Новая папка в текущем разделе библиотеки"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2.5h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/><line x1="12" y1="11.5" x2="12" y2="16.5"/><line x1="9.5" y1="14" x2="14.5" y2="14"/></svg> Папка</button>
-            <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+            <button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
           </div>
         </header>
         <div class="panel-body">
@@ -1087,7 +1183,7 @@
       <section class="panel-section" data-panel="showcase">
         <header class="panel-header">
           <h3>Показ игрокам</h3>
-          <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+          <button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
         </header>
         <div class="panel-body">
           <div id="showcaseNow" class="showcase-now empty">Сейчас ничего не показывается</div>
@@ -1100,21 +1196,8 @@
         </div>
       </section>
 
-      <section class="panel-section" data-panel="tools">
-        <header class="panel-header"><h3>Инструменты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
-        <div class="panel-body">
-          <button id="wallBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="5" x2="9" y2="10"/><line x1="15" y1="5" x2="15" y2="10"/><line x1="6" y1="10" x2="6" y2="15"/><line x1="12" y1="10" x2="12" y2="15"/><line x1="18" y1="10" x2="18" y2="15"/><line x1="9" y1="15" x2="9" y2="19"/><line x1="15" y1="15" x2="15" y2="19"/></svg> Стены</button>
-          <button id="buildingBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11L12 4l8 7"/><path d="M6 10v10h12V10"/><rect x="10" y="14" width="4" height="6"/></svg> Здание</button>
-          <button id="fogBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01.4-8 5.5 5.5 0 0110.4 1A3.5 3.5 0 0117 16H7z"/><line x1="5" y1="19" x2="19" y2="19"/></svg> Туман</button>
-          <button id="rulerBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/><path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg> Линейка</button>
-          <button id="teleportBtn" class="tool-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg> Телепорт</button>
-          <div class="section-divider"></div>
-          <p class="hint">Наведи на инструмент — подсказка расскажет, что он делает и какими жестами. Мышь: ЛКМ таскает токены · ПКМ на токене — меню · средняя кнопка — пан · колесо — зум. Палец: тащить — токен, два пальца — двигать и масштабировать карту, долгое нажатие — то же меню, что ПКМ.</p>
-        </div>
-      </section>
-
       <section class="panel-section" data-panel="light">
-        <header class="panel-header"><h3>Освещение</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <header class="panel-header"><h3>Освещение</h3><button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <button id="addLightToken" class="primary-btn" title="Добавляет на карту невидимый токен-источник света без арта — перетащи, где нужно, радиусы можно поправить через ПКМ → меню токена"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.6.5 1 1.2 1.1 2h5a3 3 0 011.1-2A6 6 0 0012 3z"/></svg> + Токен света</button>
           <p class="hint">Токен без арта, только источник света. Двигать и править источники на карте можно, ТОЛЬКО пока открыт этот раздел — в остальное время мышь их не видит и не цепляет. Позиция — драгом, радиусы и копирование — через ПКМ на токене.</p>
@@ -1133,7 +1216,7 @@
           <h3>Трекер инициативы</h3>
           <div style="display:flex;gap:2px;">
             <button class="panel-close" id="combatPopoutBtn" title="Открыть в окне поверх карты"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v16h16v-5"/><path d="M13 4h7v7"/><line x1="10" y1="14" x2="20" y2="4"/></svg></button>
-            <button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+            <button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
           </div>
         </header>
         <div class="panel-body">
@@ -1171,7 +1254,7 @@
       </section>
 
       <section class="panel-section" data-panel="sceneSettings">
-        <header class="panel-header"><h3>Настроить сцену</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <header class="panel-header"><h3>Настроить сцену</h3><button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <div class="modal-tabs">
             <button data-tab="basic" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/></svg> Основное</button>
@@ -1249,7 +1332,7 @@
       </section>
 
       <section class="panel-section" data-panel="accounts">
-        <header class="panel-header"><h3>Аккаунты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <header class="panel-header"><h3>Аккаунты</h3><button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <div id="accountsList"></div>
           <div class="section-divider"></div>
@@ -1270,7 +1353,7 @@
       </section>
 
       <section class="panel-section" data-panel="settings">
-        <header class="panel-header"><h3>Настройки</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <header class="panel-header"><h3>Настройки</h3><button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <div class="set-tabs">
             <button type="button" class="active" data-settab="table">Стол</button>
@@ -1386,7 +1469,7 @@
       </section>
 
       <section class="panel-section" data-panel="characters">
-        <header class="panel-header"><h3>Персонажи</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <header class="panel-header"><h3>Персонажи</h3><button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <p class="hint">Сверху — заготовки, ещё никому не назначенные: заполни лист, потом назначь игроку (или игрок сам возьмёт). Ниже — назначенные, по игрокам: перетащи на карту, чтобы поставить токен. 📜 — лист: имя, аватар и характеристики правятся там.</p>
           <div id="dmCharactersList"></div>
@@ -1394,7 +1477,7 @@
       </section>
 
       <section class="panel-section" data-panel="loot">
-        <header class="panel-header"><h3>Хаб лута</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <header class="panel-header"><h3>Хаб лута</h3><button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <p class="hint">Скидывай сюда предметы из каталога — игроки сами заберут их себе через кнопку «Хаб» на своём экране.</p>
           <div id="lootHubPicker"></div>
@@ -1404,7 +1487,7 @@
       </section>
 
       <section class="panel-section" data-panel="playlists">
-        <header class="panel-header"><h3>Плейлисты</h3><button class="panel-close" data-close><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
+        <header class="panel-header"><h3>Плейлисты</h3><button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button></header>
         <div class="panel-body">
           <div class="audio-tabs">
             <button type="button" class="audio-tab active" data-audio-tab="playlists">Плейлисты</button>
@@ -1450,14 +1533,14 @@
     </aside>
 
     <!-- ручка ширины панели: тянуть мышью, двойной клик — вернуть 300px -->
-    <div id="panelResizer" role="separator" aria-orientation="vertical" title="Потяни, чтобы изменить ширину панели (двойной клик — вернуть по умолчанию)"></div>
+    <div id="panelResizer" role="separator" aria-orientation="vertical" aria-label="Ширина панели" tabindex="0"></div>
 
     <div id="canvasWrap">
       <canvas id="scene"></canvas>
       <div id="statusBar">
         <span id="sceneSwitchName">Сцена</span>
         <span class="status-sep">·</span>
-        <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg><span id="playersCount">игроков онлайн: 0</span><span id="playersOnline"></span></span>
+        <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg><span id="playersCount"><span class="status-label">игроков онлайн: </span>0</span><span id="playersOnline"></span></span>
         <span class="status-sep">·</span>
         <span id="dmUsername"></span>
       </div>

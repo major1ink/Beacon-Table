@@ -1727,26 +1727,33 @@ export function createInteraction(ctx) {
 
     // Escape во время рисования цепочки стен — закончить её без удаления уже
     // поставленных сегментов (переключение инструмента и так это делает).
+    // Затем "vtt:escape" {aborted}: следующую ступень (снять инструмент,
+    // свернуть колонку) решает страница — см. pages/dm.js.
     window.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      let aborted = false;
       if (tool === "wall" && (wallChainLast || wallDragFrom)) {
         wallChainLast = null;
         wallDragFrom = null;
         preview.clear();
+        aborted = true;
       }
       if (tool === "building" && buildingChain) {
         buildingChain = null;
         preview.clear();
+        aborted = true;
       }
       if (tool === "ruler" && rulerFrom) {
         rulerFrom = null;
         rulerLine.clear();
         distanceLabel.hide();
+        aborted = true;
       }
       if (tool === "teleport" && (teleportPairFrom || teleportClickAt)) {
         teleportPairFrom = null;
         teleportClickAt = null;
         preview.clear();
+        aborted = true;
       }
       cancelDraw();
       if (tool === "draw" && selectedDrawingId) setSelectedDrawing(null);
@@ -1755,6 +1762,7 @@ export function createInteraction(ctx) {
         preview.clear();
       }
       if (selectedTokenIds.size) setSelection([]);
+      document.dispatchEvent(new CustomEvent("vtt:escape", { detail: { aborted } }));
     });
 
     // isTypingTarget — активный элемент прямо сейчас принимает текстовый

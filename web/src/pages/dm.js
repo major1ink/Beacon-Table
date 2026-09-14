@@ -16,8 +16,8 @@ import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDrawOptions } from "../draw-options.js";
 import { createBoardList } from "../board-list.js";
 import { sceneLinksOf } from "../board/links.js";
-import { attachTooltip } from "../tooltip.js";
-import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
+import { attachTooltip, hideTooltip } from "../tooltip.js";
+import { TOOL_HELP, PANEL_HELP, RAIL_HELP } from "../tool-help.js";
 import {
   fetchMe,
   apiLogout,
@@ -100,6 +100,8 @@ let isDemoGuest = false;
   // и лишь ССЫЛАЮТСЯ на vtt внутри колбэков — к моменту, когда пользователь
   // реально на что-то нажмёт, boot() уже успеет отработать.
   vtt = await initVTT({ canvasId: "scene", role: "dm" });
+  // Полоса хода появилась только сейчас и первый vtt:chromeInset пропустила.
+  updateChromeInset();
   // Плейлист двигает вперёд сам клиент ДМ (см. handleCueEnded ниже) —
   // vtt.cueAudio появляется только сейчас, поэтому слушатель вешаем здесь.
   vtt.cueAudio.addEventListener("ended", handleCueEnded);
@@ -1967,7 +1969,7 @@ const playersCount = document.getElementById("playersCount");
 const playersOnline = document.getElementById("playersOnline");
 
 function renderPlayersOnline(players) {
-  playersCount.textContent = "игроков онлайн: " + players.length;
+  playersCount.innerHTML = '<span class="status-label">игроков онлайн: </span>' + players.length;
   playersOnline.replaceChildren();
   if (!players.length) {
     const empty = document.createElement("span");
@@ -2000,6 +2002,19 @@ document.addEventListener("click", (e) => {
 // ================= управление аккаунтами =================
 const accountsList = document.getElementById("accountsList");
 const accountsBadge = document.getElementById("accountsBadge");
+// Точка на «⋯»: горит, пока горит любой из источников (ждущие аккаунты,
+// экраны на трансляцию) — они гаснут независимо, поэтому множество.
+const railMoreBtn = document.getElementById("railMoreBtn");
+const railMoreBadge = (() => {
+  const lit = new Set();
+  return {
+    set(source, on) {
+      if (on) lit.add(source);
+      else lit.delete(source);
+      railMoreBtn.classList.toggle("has-badge", lit.size > 0);
+    },
+  };
+})();
 
 async function refreshAccountsBadge() {
   try {
@@ -2007,6 +2022,7 @@ async function refreshAccountsBadge() {
     const pending = accs.filter((a) => a.status === "pending").length;
     accountsBadge.textContent = pending;
     accountsBadge.classList.toggle("show", pending > 0);
+    railMoreBadge.set("accounts", pending > 0);
   } catch (err) {
     console.error("не удалось проверить заявки на аккаунты:", err);
   }
@@ -2491,6 +2507,7 @@ async function renderBroadcastRequests() {
   // Точка на иконке рейла — единственный способ узнать о ждущем экране, не
   // открывая раздел; ДМ во время игры смотрит на карту, а не в настройки.
   settingsRailBtn.classList.toggle("has-badge", requests.length > 0);
+  railMoreBadge.set("broadcast", requests.length > 0);
   // Раздел закрыт — перерисовывать нечего, но точку выше обновить надо было.
   if (!broadcastRequestsBox.offsetParent) return;
   drawBroadcastRequests(requests);
@@ -4249,7 +4266,7 @@ function openCardInDock(target) {
     url: target.url,
     // Колонка встаёт между панелью рейла и картой и накрывает канвас —
     // плашке статуса надо отъехать правее, ровно как при открытии панели.
-    onLayoutChange: () => updateChromeInset(panelWidth),
+    onLayoutChange: () => updateChromeInset(),
   });
 }
 setCardOpener(openCardInDock);
@@ -4368,7 +4385,7 @@ document.addEventListener("mousedown", (e) => {
 // он сам подхватит новую ширину родителя канваса).
 const sidePanel = document.getElementById("panel");
 const panelResizer = document.getElementById("panelResizer");
-const railSectionBtns = [...document.querySelectorAll("#rail .rail-btn[data-section]")];
+const railSectionBtns = [...document.querySelectorAll("#rail [data-section], #railMenu [data-section]")];
 const panelSections = [...document.querySelectorAll(".panel-section[data-panel]")];
 let openPanelSection = null;
 
@@ -4378,8 +4395,11 @@ let openPanelSection = null;
 // подгружать/освежать именно в момент открытия, а не заранее. panelOpenHandlers
 // объявлен в самом начале файла (см. onPanelOpen выше) — секции регистрируют
 // коллбэки там же, где определены, вызывается он отсюда.
-function setSidePanelSection(name) {
+function setSidePanelSection(name, { focus = false } = {}) {
   const opening = openPanelSection !== name;
+  // Панель в DOM после рейла: с клавиатуры фокус заводим в неё сами и
+  // возвращаем на иконку при закрытии.
+  const closingBtn = !opening && sidePanel.contains(document.activeElement) ? railSectionBtns.find((b) => b.dataset.section === name) : null;
   openPanelSection = openPanelSection === name ? null : name;
   sidePanel.classList.toggle("open", !!openPanelSection);
   panelResizer.classList.toggle("visible", !!openPanelSection);
@@ -4395,11 +4415,26 @@ function setSidePanelSection(name) {
     sidePanel.style.flexBasis = "";
     sidePanel.style.width = "";
   }
-  updateChromeInset(panelWidth);
-  railSectionBtns.forEach((b) => b.classList.toggle("active", b.dataset.section === openPanelSection));
+  updateChromeInset();
+  if (openPanelSection) placeSidePanel();
+  // Панель и колонка инструментов стоят на одном месте — вместе не бывают.
+  if (openPanelSection) setToolsFlyout(false);
+  closeRailMenu();
+  // Фокус от клика успевает показать подсказку по focus — гасим.
+  hideTooltip();
+  railSectionBtns.forEach((b) => {
+    b.classList.toggle("active", b.dataset.section === openPanelSection);
+    b.setAttribute("aria-expanded", String(b.dataset.section === openPanelSection));
+  });
+  // «⋯» подсвечен, пока открыт один из его разделов (аккаунты, настройки).
+  railMoreBtn.classList.toggle("active", !!openPanelSection && railMenu.querySelector(`[data-section="${openPanelSection}"]`) !== null);
   panelSections.forEach((s) => s.classList.toggle("active", s.dataset.panel === openPanelSection));
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
     panelOpenHandlers[openPanelSection]();
+  }
+  if (closingBtn) closingBtn.focus();
+  if (focus && openPanelSection) {
+    requestAnimationFrame(() => sidePanel.querySelector(".panel-section.active .panel-header button, .panel-section.active button, .panel-section.active input")?.focus());
   }
   // Токены света редактируются на карте ТОЛЬКО пока открыт этот раздел (см.
   // interaction.js: lightEditActive). Событие шлём на каждое переключение
@@ -4407,6 +4442,50 @@ function setSidePanelSection(name) {
   // раздел так же выключает режим, как и закрытие панели.
   document.dispatchEvent(new CustomEvent("vtt:lightEditMode", { detail: { active: openPanelSection === "light" } }));
 }
+
+// placeSidePanel — центр по высоте один раз при открытии, через margin-top:
+// живой align-self: center двигал бы панель при каждой смене вкладки.
+// На телефоне панель прибита к верху (dm.html: @media).
+const MOBILE_MQ = window.matchMedia("(max-width: 860px), (max-height: 500px)");
+function placeSidePanel() {
+  const section = openPanelSection;
+  requestAnimationFrame(() => {
+    if (openPanelSection !== section) return;
+    if (MOBILE_MQ.matches) {
+      sidePanel.style.marginTop = "";
+      sidePanel.style.maxHeight = "";
+      panelResizer.style.marginTop = "";
+      return;
+    }
+    sidePanel.style.maxHeight = ""; // мерить без прошлого потолка
+    // Без transition: иначе ширина ещё едет от нуля и высота меряется с переносами.
+    sidePanel.style.transition = "none";
+    const host = sidePanel.parentElement.clientHeight;
+    const h = sidePanel.offsetHeight;
+    requestAnimationFrame(() => (sidePanel.style.transition = ""));
+    let top = Math.max(14, Math.round((host - h) / 2));
+    // Полоса хода под панель не сдвигается (updateChromeInset) — при
+    // пересечении опускаем панель под неё.
+    const bar = document.querySelector(".vtt-combat-bar");
+    if (bar && bar.style.display !== "none") {
+      const b = bar.getBoundingClientRect();
+      // Целевая ширина: в этот кадр панель ещё едет от нуля.
+      const left = sidePanel.getBoundingClientRect().left;
+      const right = left + panelWidth;
+      const hostTop = sidePanel.parentElement.getBoundingClientRect().top;
+      if (b.width && right > b.left && left < b.right && top + hostTop < b.bottom + 8) top = Math.round(b.bottom + 8 - hostTop);
+    }
+    sidePanel.style.marginTop = top + "px";
+    // Растёт только вниз, до нижнего поля.
+    const maxH = host - top - 14;
+    sidePanel.style.maxHeight = maxH + "px";
+    // Ручка ширины — по середине высоты панели, а не окна.
+    panelResizer.style.marginTop = Math.round(top + Math.min(h, maxH) / 2 - panelResizer.offsetHeight / 2) + "px";
+  });
+}
+window.addEventListener("resize", () => {
+  if (openPanelSection) placeSidePanel();
+});
 
 // showSidePanelSection — «показать раздел», в отличие от setSidePanelSection
 // («переключить»): нужен тем, кто открывает раздел не кликом по рейлу, а по
@@ -4435,8 +4514,112 @@ function refreshOpenPanel(name) {
 function closeSidePanel() {
   if (openPanelSection) setSidePanelSection(openPanelSection);
 }
-railSectionBtns.forEach((b) => (b.onclick = () => setSidePanelSection(b.dataset.section)));
+railSectionBtns.forEach((b) => (b.onclick = (e) => setSidePanelSection(b.dataset.section, { focus: e && e.detail === 0 })));
 document.querySelectorAll(".panel-close[data-close]").forEach((b) => (b.onclick = closeSidePanel));
+
+// ---- «Инструменты»: выпадающая колонка иконок вместо раздела панели ----
+// Клики по карте её не закрывают — инструментом работают на карте. Кнопка
+// рейла .active, пока взведён инструмент, даже при свёрнутой колонке.
+const railToolsBtn = document.getElementById("railTools");
+const toolsFlyout = document.getElementById("toolsFlyout");
+let toolsFlyoutOpen = false;
+
+function setToolsFlyout(open, { focus = false } = {}) {
+  // Колонка в DOM после рейла: фокус с клавиатуры заводим и возвращаем сами.
+  const wasInside = toolsFlyout.contains(document.activeElement);
+  toolsFlyoutOpen = open;
+  toolsFlyout.hidden = !open;
+  if (!open && wasInside) railToolsBtn.focus();
+  if (open && focus) requestAnimationFrame(() => toolsFlyout.querySelector("[data-tool]")?.focus());
+  railToolsBtn.classList.toggle("open", open);
+  railToolsBtn.setAttribute("aria-expanded", String(open));
+  if (!open) return;
+  closeSidePanel();
+  closeRailMenu();
+  hideTooltip();
+  // По центру кнопки; top — относительно #appBody.
+  const host = toolsFlyout.offsetParent || document.body;
+  const btn = railToolsBtn.getBoundingClientRect();
+  const hostRect = host.getBoundingClientRect();
+  const h = toolsFlyout.offsetHeight;
+  const top = btn.top + btn.height / 2 - h / 2 - hostRect.top;
+  toolsFlyout.style.top = Math.round(Math.max(8, Math.min(top, hostRect.height - h - 8))) + "px";
+}
+railToolsBtn.onclick = (e) => setToolsFlyout(!toolsFlyoutOpen, { focus: e && e.detail === 0 });
+document.addEventListener("vtt:toolChanged", (e) => {
+  railToolsBtn.classList.toggle("active", !!toolsFlyout.querySelector(`[data-tool="${e.detail}"]`));
+  for (const b of toolsFlyout.querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", String(b.dataset.tool === e.detail));
+});
+// Esc по ступеням: обрыв цепочки (interaction.js) → снять инструмент → свернуть колонку.
+document.addEventListener("vtt:escape", (e) => {
+  if (e.detail.aborted) return;
+  const active = toolsFlyout.querySelector("[data-tool].active");
+  if (active) document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
+  else if (toolsFlyoutOpen) setToolsFlyout(false);
+});
+window.addEventListener("resize", () => {
+  if (toolsFlyoutOpen) setToolsFlyout(true);
+});
+
+// ---- «⋯»: меню служебных пунктов внизу рейла ----
+const railMenu = document.getElementById("railMenu");
+
+function closeRailMenu() {
+  // Фокус из меню — обратно на кнопку, иначе упадёт на body.
+  const inside = railMenu.contains(document.activeElement);
+  railMenu.hidden = true;
+  railMoreBtn.classList.remove("open");
+  railMoreBtn.setAttribute("aria-expanded", "false");
+  if (inside) railMoreBtn.focus();
+}
+railMoreBtn.onclick = (e) => {
+  if (!railMenu.hidden) return closeRailMenu();
+  // С клавиатуры (detail 0) — фокус на первый пункт.
+  const byKeyboard = e && e.detail === 0;
+  setToolsFlyout(false);
+  // Меню стоит на месте панели и уже её — открытый раздел торчал бы из-под него.
+  closeSidePanel();
+  hideTooltip();
+  railMenu.hidden = false;
+  railMoreBtn.classList.add("open");
+  // Нижний край — по кнопке; top относительно #appBody.
+  const host = railMenu.offsetParent || document.body;
+  const btn = railMoreBtn.getBoundingClientRect();
+  const hostRect = host.getBoundingClientRect();
+  const top = btn.bottom - hostRect.top - railMenu.offsetHeight;
+  railMenu.style.top = Math.round(Math.max(8, top)) + "px";
+  railMoreBtn.setAttribute("aria-expanded", "true");
+  if (byKeyboard) railMenu.querySelector("[role=menuitem]")?.focus();
+};
+// Стрелки и Home/End по пунктам (паттерн WAI-ARIA menu).
+railMenu.addEventListener("keydown", (e) => {
+  const items = [...railMenu.querySelectorAll("[role=menuitem]")];
+  const i = items.indexOf(document.activeElement);
+  const go = (n) => { e.preventDefault(); items[(n + items.length) % items.length].focus(); };
+  if (e.key === "ArrowDown") go(i + 1);
+  else if (e.key === "ArrowUp") go(i - 1);
+  else if (e.key === "Home") go(0);
+  else if (e.key === "End") go(items.length - 1);
+});
+// Пункт выбран — меню закрывается; действие делают свои обработчики.
+railMenu.addEventListener("click", (e) => {
+  if (e.target.closest(".rail-menu-item")) closeRailMenu();
+});
+document.addEventListener("pointerdown", (e) => {
+  if (!railMenu.hidden && !railMenu.contains(e.target) && !railMoreBtn.contains(e.target)) closeRailMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeRailMenu();
+});
+
+// ---- подсказки иконок рейла (RAIL_HELP) ----
+// Пока раздел открыт, его подсказка молчит — накрывала бы панель.
+for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-section]")) {
+  attachTooltip(btn, () => (openPanelSection === btn.dataset.section ? null : RAIL_HELP[btn.dataset.section]));
+}
+attachTooltip(railToolsBtn, () => (toolsFlyoutOpen ? null : RAIL_HELP.tools));
+attachTooltip(document.getElementById("journalBtn"), RAIL_HELP.journal);
+attachTooltip(railMoreBtn, () => (railMenu.hidden ? RAIL_HELP.more : null));
 
 // ---- ширина панели: тянется мышью за #panelResizer ----
 // Ширину ставим inline'ом на сам #panel: это состояние времени выполнения,
@@ -4462,7 +4645,7 @@ function applyPanelWidth(px) {
     sidePanel.style.flexBasis = w + "px";
     sidePanel.style.width = w + "px";
   }
-  updateChromeInset(w);
+  updateChromeInset();
   return w;
 }
 
@@ -4471,21 +4654,21 @@ function applyPanelWidth(px) {
 // не знает, и всё, что центрируется "по карте", обязано узнать это число
 // снаружи. Сегодняшний потребитель один — верхний оверлей хода
 // (vtt/combat-bar.js): без этого он центрировался по всему окну и наезжал на
-// шапку колонки со статблоком. Числа — из тех же margin/border, что в
-// dm.html: рейл 14+60, панель 10 + ширина + 2 (рамка), ручка 10.
-const RAIL_RIGHT = 74;
-function updateChromeInset(width) {
+// шапку колонки со статблоком. Число — рейл 14+46 из dm.html. Ширина панели
+// не входит: полоса не должна прыгать на каждое открытие раздела; если
+// панель до неё дотянулась, placeSidePanel опускает панель.
+const RAIL_RIGHT = 60;
+function updateChromeInset() {
   // Колонка со статблоком (см. openCardInDock) — такой же слой поверх
   // канваса, как рейл и панель, и её ширину ДМ тянет мышью: меряем по факту,
   // а не по константе.
   const dock = document.getElementById("sheetDock");
   const dockWidth = dock && dock.classList.contains("open") ? dock.offsetWidth + 10 : 0;
-  const chromeRight = (openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT) + dockWidth;
-  document.dispatchEvent(new CustomEvent("vtt:chromeInset", { detail: { left: chromeRight + 10 } }));
+  document.dispatchEvent(new CustomEvent("vtt:chromeInset", { detail: { left: RAIL_RIGHT + dockWidth + 10 } }));
 }
 
 let panelWidth = Math.min(Math.max(Number(localStorage.getItem(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN), panelWidthMax());
-updateChromeInset(panelWidth);
+updateChromeInset();
 window.addEventListener("resize", () => {
   panelWidth = applyPanelWidth(panelWidth); // окно сузили — подрезать панель под новый максимум
 });
@@ -4516,6 +4699,36 @@ panelResizer.addEventListener("pointerdown", (e) => {
 panelResizer.addEventListener("dblclick", () => {
   panelWidth = applyPanelWidth(PANEL_WIDTH_DEFAULT);
   localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+});
+
+// Ручка — фокусируемый separator: ширина и с клавиатуры (WCAG 2.5.7).
+const PANEL_WIDTH_STEP = 24;
+function syncResizerAria() {
+  panelResizer.setAttribute("aria-valuemin", String(PANEL_WIDTH_MIN));
+  panelResizer.setAttribute("aria-valuemax", String(panelWidthMax()));
+  panelResizer.setAttribute("aria-valuenow", String(panelWidth));
+}
+panelResizer.addEventListener("keydown", (e) => {
+  const next =
+    e.key === "ArrowRight" ? panelWidth + PANEL_WIDTH_STEP
+    : e.key === "ArrowLeft" ? panelWidth - PANEL_WIDTH_STEP
+    : e.key === "Home" ? PANEL_WIDTH_MIN
+    : e.key === "End" ? panelWidthMax()
+    : e.key === "Enter" ? PANEL_WIDTH_DEFAULT
+    : null;
+  if (next === null) return;
+  e.preventDefault();
+  panelWidth = applyPanelWidth(next);
+  localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+  syncResizerAria();
+});
+panelResizer.addEventListener("focus", syncResizerAria);
+attachTooltip(panelResizer, {
+  title: "Ширина панели",
+  rows: [
+    ["Мышь", "потяни за ручку · двойной [ЛКМ] — вернуть по умолчанию"],
+    ["Клавиатура", "[←] / [→] — шаг, [Home] / [End] — минимум и максимум, [Enter] — по умолчанию"],
+  ],
 });
 
 // ================= токен света: отдельная быстрая кнопка =================
@@ -4699,13 +4912,16 @@ function renderSceneDropdown() {
   for (const s of sceneList) {
     const row = document.createElement("div");
     row.className = "scene-row row-card" + (s.id === currentSceneId ? " active" : "");
-    const handle = document.createElement("span");
-    handle.className = "drag-handle";
-    handle.innerHTML = icon("grip-vertical", { size: 14 });
+    // Переключение — <button> на всю строку, корзина — отдельная кнопка
+    // рядом: вложенные интерактивы недопустимы.
+    const pick = document.createElement("button");
+    pick.type = "button";
+    pick.className = "scene-pick";
+    pick.setAttribute("aria-pressed", String(s.id === currentSceneId));
     const nameSpan = document.createElement("span");
     nameSpan.className = "scene-name";
     nameSpan.textContent = s.name;
-    nameSpan.onclick = () => {
+    pick.onclick = () => {
       if (s.id !== currentSceneId) vtt.send({ type: "switch_scene", sceneId: s.id });
       closeSidePanel();
     };
@@ -4727,7 +4943,8 @@ function renderSceneDropdown() {
       if (!(await showConfirm(`Удалить сцену «${s.name}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
-    row.append(handle, nameSpan, viewers, del);
+    pick.append(nameSpan, viewers);
+    row.append(pick, del);
     sceneDropdown.appendChild(row);
   }
 }
