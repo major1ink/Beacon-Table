@@ -41,6 +41,7 @@ export function createCombatBar(ctx) {
   // конфликтов не создаёт.
   const inline = !!ctx.combatBarMount;
   const bar = document.createElement("div");
+  bar.className = "vtt-combat-bar"; // зацепка для мобильных правил dm.html
   bar.style.cssText = inline
     ? "display:none;align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;" +
       "border-radius:" + (BAR_H / 2 + 2) + "px;flex:0 1 auto;min-width:0;max-width:100%;" +
