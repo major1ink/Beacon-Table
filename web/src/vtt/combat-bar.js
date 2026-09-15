@@ -16,59 +16,47 @@
 // Единственное действие полосы у не-ДМ — клик по фишке бойца: открывает его
 // карточку (статблок монстра у ДМ, лист СВОЕГО персонажа у игрока, см.
 // combatant-card.js — права решаются там).
-// BAR_H — единая высота всех "фишек" полосы (раунд/кнопки/карточки бойцов).
-// Раньше кнопки хода (24px квадраты) и карточки бойцов (variable-height
-// пилюли) были разной высоты — при align-items:center это не ломало
-// раскладку по вертикали, но силуэт полосы получался неровным (кнопки ниже
-// пилюль), из-за чего весь оверлей выглядел "криво". Теперь у всех детей
-// bar одна и та же высота через явные min-height/height, а не "как влезет".
+//
+// Бойцы — столбиками портрет-над-именем: в пилюле имени доставалось ~120px
+// и «Carpet of Flying (3 ур.)» резалось, под портретом — две строки.
+// Текущий крупнее и в кольце, остальные приглушены. Раскладка одна на все
+// три роли.
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "../combatant-card.js";
 import { icon } from "../icons.js";
 
-const BAR_H = 32;
+const PORTRAIT = 30;
+const PORTRAIT_CUR = 40;
+const SLOT_W = 72;
+// Тот же голубой, что у активного бойца в панели «Инициатива».
+const CUR = "#5dd0ff";
 // MIN_FREE_W — ниже этого полосу не ужимаем: если панели съели почти всю
 // ширину, пусть лучше немного зайдёт под них, чем схлопнется в точку.
 const MIN_FREE_W = 240;
 
 export function createCombatBar(ctx) {
-  // inline — режим встраивания в чужой контейнер (топбар игрока, см.
-  // vtt/index.js: ctx.combatBarMount и player.html: #combatBarMount) вместо
-  // собственного плавающего оверлея. Раньше полоса ВСЕГДА была
-  // position:fixed по центру канваса поверх всего — у игрока это накрывало
-  // кнопки топбара (Хаб/Линейка/Настройки), потому что #topbar тоже сидит
-  // у верхнего края. Без mount (ДМ/TV) поведение не меняется — там своя
-  // компоновка (боковой рейл/чистый зритель), и центрированный оверлей
-  // конфликтов не создаёт.
-  const inline = !!ctx.combatBarMount;
   const bar = document.createElement("div");
-  bar.className = "vtt-combat-bar"; // зацепка для мобильных правил dm.html
-  bar.style.cssText = inline
-    ? "display:none;align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;" +
-      "border-radius:" + (BAR_H / 2 + 2) + "px;flex:0 1 auto;min-width:0;max-width:100%;" +
-      "background:var(--surface,rgba(255,255,255,0.07));" +
-      "font:12px/1 sans-serif;color:var(--text,#eee);box-sizing:border-box;overflow-x:auto;overflow-y:hidden;"
-    : "display:none;position:fixed;top:10px;transform:translateX(-50%);z-index:40;" +
-      "align-items:center;gap:8px;height:" + BAR_H + "px;padding:0 10px;border-radius:" + (BAR_H / 2 + 2) + "px;" +
-      "background:var(--glass-bg-strong,rgba(22,22,29,0.88));backdrop-filter:var(--glass-blur,blur(20px));" +
-      "-webkit-backdrop-filter:var(--glass-blur,blur(20px));border:1px solid var(--glass-border,rgba(255,255,255,0.08));" +
-      "box-shadow:var(--shadow-float,0 6px 20px rgba(0,0,0,0.5));" +
-      "font:12px/1 sans-serif;color:#eee;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
-  (inline ? ctx.combatBarMount : document.body).appendChild(bar);
+  // .vtt-combat-bar — зацепка для мобильных правил dm.html/theme.css.
+  bar.className = "vtt-combat-bar glass-panel";
+  bar.style.cssText =
+    "display:none;position:fixed;top:10px;transform:translateX(-50%);z-index:40;" +
+    "align-items:center;gap:8px;padding:6px 12px;" +
+    "font:12px/1 sans-serif;color:var(--text,#eee);box-sizing:border-box;overflow-x:auto;overflow-y:hidden;";
+  document.body.appendChild(bar);
 
   const roundLabel = document.createElement("div");
   roundLabel.style.cssText =
-    "flex:0 0 auto;display:flex;align-items:center;height:100%;font-weight:600;opacity:0.85;white-space:nowrap;";
-
-  const divider = document.createElement("div");
-  divider.style.cssText = "flex:0 0 auto;width:1px;height:60%;background:rgba(255,255,255,0.12);";
+    "flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;" +
+    "padding-right:10px;border-right:1px solid rgba(255,255,255,0.12);white-space:nowrap;";
+  const roundCap = document.createElement("span");
+  roundCap.textContent = "РАУНД";
+  roundCap.style.cssText = "font-size:9px;font-weight:600;letter-spacing:0.08em;opacity:0.55;";
+  const roundNum = document.createElement("span");
+  roundNum.style.cssText = "font-size:18px;font-weight:700;line-height:1;";
+  roundLabel.append(roundCap, roundNum);
 
   const track = document.createElement("div");
-  track.style.cssText = "display:flex;align-items:center;height:100%;gap:6px;";
+  track.style.cssText = "display:flex;align-items:flex-start;gap:2px;";
 
-  // roundBtn — общий вид для ◀/▶/✕: круглые, той же высоты BAR_H, что и
-  // карточки бойцов (см. комментарий у BAR_H) — раньше это были угловатые
-  // квадраты 6px-радиуса вперемешку с круглыми портретами, отсюда и
-  // "неровный" вид.
   function roundBtn(iconHtml, title) {
     const b = document.createElement("button");
     b.type = "button";
@@ -94,9 +82,9 @@ export function createCombatBar(ctx) {
     prevBtn.onclick = () => ctx.send({ type: "prev_turn" });
     nextBtn.onclick = () => ctx.send({ type: "next_turn" });
     endBtn.onclick = () => ctx.send({ type: "end_combat" });
-    bar.append(roundLabel, prevBtn, divider.cloneNode(), track, nextBtn, endBtn);
+    bar.append(roundLabel, prevBtn, track, nextBtn, endBtn);
   } else {
-    bar.append(roundLabel, divider, track);
+    bar.append(roundLabel, track);
   }
 
   // pillLabel — только всплывающая подсказка при наведении (title), сама
@@ -119,8 +107,8 @@ export function createCombatBar(ctx) {
     if (cmb.hpMax == null) return null;
     if ((cmb.hpCurrent || 0) <= 0 && cmb.characterId) {
       // Успехи и провалы — два ОТДЕЛЬНЫХ кластера точек с тонким
-      // разделителем между ними (та же "палочка", что делит раунд/кнопки
-      // хода в самом баре, см. divider выше) — раньше все 6 точек шли одним
+      // разделителем между ними (та же "палочка", что отбивает раунд от
+      // очереди, см. roundLabel выше) — раньше все 6 точек шли одним
       // сплошным рядом, и пока большинство ещё не отмечено (серые), понять,
       // где заканчиваются успехи и начинаются провалы, было невозможно на
       // глаз.
@@ -174,89 +162,100 @@ export function createCombatBar(ctx) {
       return;
     }
     bar.style.display = "flex";
-    roundLabel.textContent = "Раунд " + (state.round || 1);
+    roundNum.textContent = String(state.round || 1);
     track.innerHTML = "";
     for (const cmb of state.combatants) {
-      const pill = document.createElement("div");
+      const slot = document.createElement("div");
       const current = cmb.id === state.currentId;
-      pill.title = pillLabel(cmb);
-      pill.style.cssText =
-        "flex:0 0 auto;display:flex;align-items:center;height:26px;box-sizing:border-box;gap:6px;" +
-        "padding:0 10px 0 3px;border-radius:13px;white-space:nowrap;" +
-        (current
-          ? "background:rgba(93,208,255,0.22);box-shadow:0 0 0 1.5px #5dd0ff inset;"
-          : "background:rgba(255,255,255,0.07);");
+      // Классы cb-* — зацепки для мобильных правил theme.css.
+      slot.className = "cb-slot";
+      slot.title = pillLabel(cmb);
+      slot.style.cssText =
+        "flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;" +
+        "width:" + SLOT_W + "px;padding:2px 0 3px;border-radius:10px;box-sizing:border-box;" +
+        (current ? "" : "opacity:0.55;");
 
+      // Бокс высоты текущего портрета — иначе имена не на одной линии.
+      const portraitBox = document.createElement("div");
+      portraitBox.className = "cb-portrait-box";
+      portraitBox.style.cssText =
+        "flex:0 0 auto;display:flex;align-items:center;justify-content:center;height:" + PORTRAIT_CUR + "px;";
       const portrait = document.createElement("div");
+      portrait.className = "cb-portrait" + (current ? " cb-portrait--cur" : "");
+      const size = current ? PORTRAIT_CUR : PORTRAIT;
       portrait.style.cssText =
-        "flex:0 0 auto;width:20px;height:20px;border-radius:50%;background-size:cover;background-position:center;" +
-        "box-shadow:0 0 0 1px rgba(255,255,255,0.15) inset;";
+        "width:" + size + "px;height:" + size + "px;border-radius:50%;background-size:cover;background-position:center;" +
+        (current
+          ? "box-shadow:0 0 0 2px var(--glass-bg-strong,#16161d),0 0 0 4px " + CUR + ";"
+          : "box-shadow:0 0 0 1px rgba(255,255,255,0.15) inset;");
       if (cmb.image) portrait.style.backgroundImage = `url("${cmb.image}")`;
       else portrait.style.background = cmb.color || "#555";
+      portraitBox.appendChild(portrait);
 
       const name = document.createElement("span");
+      name.className = "cb-name";
       name.textContent = cmb.name;
       name.style.cssText =
-        "max-width:120px;overflow:hidden;text-overflow:ellipsis;line-height:26px;" + (current ? "font-weight:600;" : "");
+        "max-width:100%;font-size:11px;line-height:1.15;text-align:center;overflow:hidden;" +
+        "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;" +
+        (current ? "font-weight:600;" : "");
 
-      pill.append(portrait, name);
+      slot.append(portraitBox, name);
       const hp = hpBadge(cmb);
-      if (hp) pill.appendChild(hp);
+      if (hp) slot.appendChild(hp);
 
-      // Клик по фишке — карточка бойца (статблок монстра у ДМ, лист своего
-      // персонажа у игрока, см. combatant-card.js: права там же). Тот же
-      // быстрый вход, что и в панели "Инициатива", только доступный, когда
-      // панель закрыта или её вовсе нет (игрок/TV) — во время боя это
+      // Клик по столбику — карточка бойца (статблок монстра у ДМ, лист
+      // своего персонажа у игрока, см. combatant-card.js: права там же). Тот
+      // же быстрый вход, что и в панели "Инициатива", только доступный,
+      // когда панель закрыта или её вовсе нет (игрок/TV) — во время боя это
       // единственный список бойцов, который видно всем. У бойца без
-      // карточки (или когда роль её видеть не должна) фишка остаётся
-      // некликабельной: курсор ничего не обещает.
+      // карточки (или когда роль её видеть не должна) столбик остаётся
+      // некликабельным: курсор ничего не обещает.
       const cardOpts = { isDM: ctx.isDM, playerId: ctx.playerId };
       if (combatantCardTarget(cmb, cardOpts)) {
-        pill.style.cursor = "pointer";
-        pill.title = `${pillLabel(cmb)} — ${combatantCardHint(cmb).toLowerCase()}`;
+        slot.style.cursor = "pointer";
+        slot.title = `${pillLabel(cmb)} — ${combatantCardHint(cmb).toLowerCase()}`;
+        slot.onmouseenter = () => (slot.style.background = "rgba(255,255,255,0.07)");
+        slot.onmouseleave = () => (slot.style.background = "");
         // Куда именно ляжет карточка, решает страница (см. combatant-card.js:
         // setCardOpener): у ДМ и у игрока это боковая колонка у карты, а не
         // плавающее окно поверх неё.
-        pill.onclick = () => openCombatantCard(cmb, cardOpts);
+        slot.onclick = () => openCombatantCard(cmb, cardOpts);
       }
 
-      track.appendChild(pill);
+      track.appendChild(slot);
     }
   }
 
   document.addEventListener("vtt:combatState", (e) => render(e.detail));
 
   // ---- где стоит сама полоса ----
-  // Встроенную (inline) полосу в позиционировании не нуждается вовсе: она
-  // обычный flex-ребёнок топбара, ширину/сжатие ему считает сам топбар
-  // (см. player.html: #combatBarMount).
-  if (!inline) {
-    // Центр берём по СВОБОДНОЙ части карты, а не по окну. Слева от карты
-    // лежат панели: у ДМ — рейл, панель рейла и колонка со статблоком (они
-    // канвас не ужимают, а накрывают: #canvasWrap{position:absolute;inset:0}
-    // в dm.html), у игрока — боковой док листа (этот как раз ужимает канвас,
-    // и его видно по rect канваса). Поэтому слагаемых два: rect канваса плюс
-    // отступ, о котором сообщает страница событием "vtt:chromeInset" (шлёт
-    // pages/dm.js: updateChromeInset — тем же числом он двигает плашку
-    // статуса). Без этого полоса центрировалась по всему окну и наезжала на
-    // шапку колонки со статблоком.
-    let leftInset = 0;
-    const position = () => {
-      const rect = ctx.canvas.getBoundingClientRect();
-      const free = Math.max(MIN_FREE_W, rect.width - leftInset);
-      bar.style.left = Math.round(rect.left + leftInset + free / 2) + "px";
-      bar.style.maxWidth = Math.round(free - 24) + "px";
-    };
-    document.addEventListener("vtt:chromeInset", (e) => {
-      leftInset = (e.detail && e.detail.left) || 0;
-      position();
-    });
-    window.addEventListener("resize", position);
-    // Канвас меняет размер и без ресайза окна (у игрока — открытый док листа),
-    // тот же приём, что в side-menu.js.
-    new ResizeObserver(position).observe(ctx.canvas);
+  // Центр берём по СВОБОДНОЙ части карты, а не по окну. Слева от карты
+  // лежат панели: у ДМ — рейл, панель рейла и колонка со статблоком (они
+  // канвас не ужимают, а накрывают: #canvasWrap{position:absolute;inset:0}
+  // в dm.html), у игрока — боковой док листа (этот как раз ужимает канвас,
+  // и его видно по rect канваса) и столбик персонажей в углу карты. Поэтому
+  // слагаемых два: rect канваса плюс отступ, о котором сообщает страница
+  // событием "vtt:chromeInset" (шлёт pages/dm.js: updateChromeInset — тем же
+  // числом он двигает плашку статуса; и pages/player.js — шириной столбика
+  // персонажей). Без этого полоса центрировалась по всему окну и наезжала
+  // на шапку колонки со статблоком.
+  let leftInset = 0;
+  const position = () => {
+    const rect = ctx.canvas.getBoundingClientRect();
+    const free = Math.max(MIN_FREE_W, rect.width - leftInset);
+    bar.style.left = Math.round(rect.left + leftInset + free / 2) + "px";
+    bar.style.maxWidth = Math.round(free - 24) + "px";
+  };
+  document.addEventListener("vtt:chromeInset", (e) => {
+    leftInset = (e.detail && e.detail.left) || 0;
     position();
-  }
+  });
+  window.addEventListener("resize", position);
+  // Канвас меняет размер и без ресайза окна (у игрока — открытый док листа),
+  // тот же приём, что в side-menu.js.
+  new ResizeObserver(position).observe(ctx.canvas);
+  position();
 
   return { render };
 }

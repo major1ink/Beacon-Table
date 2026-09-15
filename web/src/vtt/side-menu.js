@@ -109,6 +109,17 @@ export function createSideMenu(ctx) {
     return btn;
   }
 
+  // addSeparator — черта между группами иконок, как .rail-sep у ДМ: без
+  // групп колонка игрока в дюжину кнопок читается частоколом.
+  function addSeparator() {
+    const sep = document.createElement("div");
+    sep.className = "vtt-side-menu-sep";
+    sep.style.cssText = "flex:0 0 auto;width:18px;height:1px;margin:3px auto;background:var(--border,rgba(255,255,255,0.08));";
+    column.appendChild(sep);
+    position();
+    return sep;
+  }
+
   function addIcon(icon, title, opts) {
     const wrap = document.createElement("div");
     wrap.style.cssText = "position:relative;";
@@ -194,5 +205,5 @@ export function createSideMenu(ctx) {
   new ResizeObserver(position).observe(ctx.canvas);
   new ResizeObserver(position).observe(column);
 
-  return { addIcon, addButton };
+  return { addIcon, addButton, addSeparator };
 }
