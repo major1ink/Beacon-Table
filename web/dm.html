@@ -31,10 +31,6 @@
     button:disabled { opacity: 0.4; cursor: default; }
     button:disabled:hover { background: var(--surface); }
     input[type="file"] { color: var(--text-dim); max-width: 100%; font-size: 12px; }
-    select {
-      background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 7px 8px; font-size: 12px; max-width: 100%; width: 100%; box-sizing: border-box;
-    }
     label { display: flex; align-items: center; gap: 6px; }
     .hint { opacity: 0.55; font-size: 11px; line-height: 1.5; }
     /* подсказки по инструментам рисования — по умолчанию скрыты, показывается только подсказка выбранного инструмента (см. pages/dm.js:vtt:toolChanged) */
@@ -168,7 +164,6 @@
     [hidden] { display: none !important; }
 
     .field-block { display: flex; flex-direction: column; gap: 5px; width: 100%; box-sizing: border-box; }
-    .field-label { font-size: 11px; opacity: 0.6; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .field-label-row button { padding: 4px 8px; font-size: 11px; width: auto; }
     .contact-links a { color: var(--accent); text-decoration: none; }
@@ -198,20 +193,7 @@
        а не под сам тумблер (34px + зазор 8px). */
     .set-tab-panel .checkbox-row + .hint { margin-left: 42px; margin-top: 2px; }
     .set-tab-panel .field-block { margin-bottom: 8px; }
-    .srv-set { margin-bottom: 9px; }
-    .srv-set-title { font-size: 12px; margin-bottom: 3px; }
-    .srv-set input[type="text"], .srv-set select { width: 100%; }
-    /* Закрытое поле не должно выглядеть как обычное: приглушаем и фон, и
-       текст, и курсор — иначе непонятно, почему в него не печатается. */
-    .srv-set input:disabled, .srv-set select:disabled {
-      background: transparent; border-style: dashed; color: var(--text-dim);
-      cursor: not-allowed; opacity: 0.75;
-    }
-    .srv-set-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; line-height: 1.4; }
-    /* Янтарный, а не красный: «задано снаружи» — это не ошибка, а факт,
-       который стоит заметить. Показывается только в этом редком случае. */
-    .srv-set-locked { font-size: 10px; color: #d9a441; margin-top: 3px; line-height: 1.4; }
-    .srv-set.readonly .srv-set-title { color: var(--text-dim); }
+    /* Строки настроек сервера — .settings-row в theme.css. */
     /* Занятое место под загрузками — видно заранее, а не в момент отказа. */
     .assets-storage { font-size: 11px; color: var(--text-dim); margin: 4px 0 6px; }
     .assets-storage.low { color: #e0a94a; }
@@ -225,9 +207,7 @@
     .light-field { display: none; align-items: center; justify-content: space-between; }
     .light-field.visible { display: flex; }
     .light-field .field-label { opacity: 0.75; }
-    .light-field input[type="number"] {
-      width: 64px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); padding: 6px 7px; font: inherit; text-align: right;
-    }
+    .light-field input[type="number"] { width: 64px; --field-h: 30px; padding: 4px 8px; text-align: right; }
     #globalLightBrightBtn.active { background: var(--gold); }
     #globalLightDimBtn.active { background: var(--blue); }
 
@@ -572,24 +552,19 @@
     .cat-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
     .cat-tabs button { background: transparent; color: var(--text-dim); font-size: 12px; padding: 7px 8px; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 5px; }
     .cat-tabs button.active { background: var(--accent-bg); color: var(--text); }
-    .field { display: flex; flex-direction: column; gap: 4px; }
-    .field label { font-size: 12px; opacity: 0.75; }
-    .field input[type="text"], .field input[type="number"], .field select {
-      background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px;
-      padding: 6px 8px; font-size: 13px; width: 100%; box-sizing: border-box;
-    }
+    /* .field и вид полей — общие, theme.css. */
     .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
     .checkbox-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .modal-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.55; }
 
     #bgPreview {
       width: 100%; height: 120px; background: #111 center/contain no-repeat;
-      border: 1px solid #3a3a45; border-radius: 8px;
+      border: 1px solid var(--border); border-radius: var(--radius);
       display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;
     }
 
     /* список ассетов (карты/аудио) — вертикальные строки вместо широкой таблицы */
-    .asset-list { max-height: 180px; overflow-y: auto; border: 1px solid #3a3a45; border-radius: 8px; }
+    .asset-list { max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
     .asset-row { position: relative; padding: 6px 32px 6px 8px; border-bottom: 1px solid #2a2a35; cursor: pointer; font-size: 12px; }
     .asset-row:last-child { border-bottom: none; }
     .asset-row:hover { background: #26262f; }
@@ -743,11 +718,6 @@
     #combatRoundRow button { padding: 5px 10px; }
     #combatRoundLabel { font-size: 12px; font-weight: 600; opacity: 0.85; min-width: 62px; text-align: center; }
     #combatSearchWrap { position: relative; }
-    #combatSearch {
-      width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); color: #eee;
-      border-radius: 8px; padding: 8px 10px; font-size: 12px;
-    }
-    #combatSearch:focus { outline: none; border-color: var(--accent); }
     #combatSearchResults {
       display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 220px; overflow-y: auto;
     }
@@ -805,15 +775,7 @@
        и без того тесной ширины, во-вторых, ширины/паддинги были впритык под
        однозначные числа, а не под "20"/"15" и т.п. Прячем стрелочки и
        считаем ширину так, чтобы 2 цифры + паддинги гарантированно влезали. */
-    .combat-row input[type="number"] {
-      background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px;
-      font: inherit; font-size: 12px; text-align: center; padding: 4px 1px; box-sizing: border-box;
-      -moz-appearance: textfield;
-    }
-    .combat-row input[type="number"]::-webkit-inner-spin-button,
-    .combat-row input[type="number"]::-webkit-outer-spin-button {
-      -webkit-appearance: none; margin: 0;
-    }
+    /* Числовые поля бойца (инициатива/КД/HP) — плотные, см. theme.css. */
     .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
     /* Полоска хитов бойца: тянется мышью (см. web/src/hp-bar.js), за концом
        заливки — хвост временных хитов другим цветом. Рядом узкое поле, куда
@@ -835,11 +797,7 @@
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); pointer-events: none;
     }
-    .combat-row .combat-hp-quick {
-      flex: 0 0 auto; width: 42px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
-      border-radius: 6px; font: inherit; font-size: 11px; text-align: center; padding: 3px 1px; box-sizing: border-box;
-    }
-    .combat-row .combat-hp-quick:focus { outline: none; border-color: var(--accent); }
+    .combat-row .combat-hp-quick { flex: 0 0 auto; width: 42px; font-size: 11px; }
     .combat-row .combat-hp-temp { width: 30px; color: #5dd0ff; }
     .combat-hp-group { display: flex; align-items: center; gap: 3px; }
     .combat-hp-group input { width: 36px; }
@@ -876,10 +834,6 @@
 
     #newAccountForm { display: flex; flex-direction: column; gap: 8px; }
     #newAccountForm label { font-size: 11px; opacity: 0.7; }
-    #newAccountForm input, #newAccountForm select {
-      background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px;
-      padding: 6px 8px; font-size: 12px;
-    }
     #newAccountMsg { font-size: 12px; color: #e74c3c; min-height: 14px; }
 
     /* ---- раздел "Плейлисты" (канал ДМ) — аккордеон в стиле Foundry VTT:
@@ -973,7 +927,7 @@
     .bt-track .icon-btn.active { opacity: 1; color: var(--green-bright); }
 
     .new-playlist-form { display: flex; gap: 4px; margin-top: 8px; }
-    .new-playlist-form input { flex: 1 1 auto; min-width: 0; background: #26262f; border: 1px solid #3a3a45; color: #eee; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+    .new-playlist-form input { flex: 1 1 auto; }
     .new-playlist-form button { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
 
     /* .audio-tabs — «Плейлисты | Эффекты»; свой класс, не .modal-tabs (см. .set-tabs) */
@@ -1091,9 +1045,6 @@
       #tokenMenu, #canvasMenu, #wallMenu, #wallPointMenu, #fogAreaMenu, #buildingMenu, #noteMarkerMenu, #teleportMenu {
         max-width: calc(100vw - 16px);
       }
-
-      /* iOS зумит страницу на фокусе в поле мельче 16px. */
-      #panel input, #panel select, #panel textarea { font-size: 16px; }
     }
   </style>
 </head>
@@ -1452,7 +1403,7 @@
                 <span class="field-label">Настройки сервера</span>
                 <button id="serverSettingsSaveBtn" type="button">Сохранить</button>
               </div>
-              <div id="serverSettings" class="srv-settings"></div>
+              <div id="serverSettings" class="settings-rows"></div>
               <p class="hint" id="serverSettingsMsg"></p>
             </div>
             <div class="section-divider"></div>

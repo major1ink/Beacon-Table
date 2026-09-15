@@ -41,11 +41,6 @@
     #combatRoundRow button { padding: 5px 10px; }
     #combatRoundLabel { font-size: 12px; font-weight: 600; opacity: 0.85; min-width: 62px; text-align: center; }
     #combatSearchWrap { position: relative; }
-    #combatSearch {
-      width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); color: #eee;
-      border-radius: 8px; padding: 8px 10px; font-size: 12px;
-    }
-    #combatSearch:focus { outline: none; border-color: var(--accent); }
     #combatSearchResults {
       display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 220px; overflow-y: auto;
     }
@@ -108,15 +103,7 @@
     .combat-ac-eff { font-size: 11px; color: var(--amber); white-space: nowrap; }
     .combat-stat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
     .combat-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.5; }
-    .combat-row input[type="number"] {
-      background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px;
-      font: inherit; font-size: 12px; text-align: center; padding: 4px 1px; box-sizing: border-box;
-      -moz-appearance: textfield;
-    }
-    .combat-row input[type="number"]::-webkit-inner-spin-button,
-    .combat-row input[type="number"]::-webkit-outer-spin-button {
-      -webkit-appearance: none; margin: 0;
-    }
+    /* Числовые поля бойца (инициатива/КД/HP) — плотные, см. theme.css. */
     .combat-row .combat-init, .combat-row .combat-ac { width: 38px; }
     /* Полоска хитов бойца: тянется мышью (см. web/src/hp-bar.js), за концом
        заливки — хвост временных хитов другим цветом. Рядом узкое поле, куда
@@ -138,11 +125,7 @@
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); pointer-events: none;
     }
-    .combat-row .combat-hp-quick {
-      flex: 0 0 auto; width: 42px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
-      border-radius: 6px; font: inherit; font-size: 11px; text-align: center; padding: 3px 1px; box-sizing: border-box;
-    }
-    .combat-row .combat-hp-quick:focus { outline: none; border-color: var(--accent); }
+    .combat-row .combat-hp-quick { flex: 0 0 auto; width: 42px; font-size: 11px; }
     .combat-row .combat-hp-temp { width: 30px; color: #5dd0ff; }
     .combat-hp-group { display: flex; align-items: center; gap: 3px; }
     .combat-hp-group input { width: 36px; }
@@ -170,23 +153,23 @@
     .killed-clear-btn { justify-content: center; background: var(--danger); margin-bottom: 10px; }
     .killed-clear-btn:hover { background: var(--danger-hover); }
   </style>
-  <script type="module" crossorigin src="/assets/combatTracker-C2uxWphS.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-DjM06ieQ.js">
+  <script type="module" crossorigin src="/assets/combatTracker-CxuFB-Sp.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-X_JFf_6d.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-Q0oFvsOI.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-BldGbu0M.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-QimQPc1v.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DW_jweu8.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-MOBKXf5R.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-ChTmXpD1.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-BcmKsUsH.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-pv-OrPVq.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CVX7_5YD.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-FLZiuvAz.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-BooHEUpG.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-j331XVRd.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DoY62qhK.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifier-editor-BMetjget.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-DC3rIude.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-B5sIGWFb.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DswxZfQR.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DWV3B20T.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-B-cNTE-D.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-wwBDqitP.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-emG2yqwn.css">
 </head>
 <body>
   <div id="topBar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg>Трекер инициативы<button id="fullscreenBtn" type="button"></button></div>

@@ -50,13 +50,8 @@ function injectStyle() {
     .bt-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
     .bt-modal-text { margin: 0; line-height: 1.55; white-space: pre-wrap; overflow-wrap: break-word; }
     .bt-modal-text.dim { color: var(--text-dim, rgba(238,238,238,0.55)); font-size: 12px; }
-    .bt-modal-input, .bt-modal-textarea {
-      width: 100%; box-sizing: border-box; font: inherit; color: var(--text, #eee);
-      background: var(--surface, #26262f); border: 1px solid var(--border, rgba(255,255,255,0.08));
-      border-radius: 8px; padding: 8px 10px;
-    }
-    .bt-modal-textarea { min-height: 110px; resize: vertical; font: 13px/1.6 "Cascadia Code", Consolas, monospace; }
-    .bt-modal-input:focus, .bt-modal-textarea:focus { outline: none; border-color: var(--accent, #7c6cf0); }
+    /* Вид поля — общий из theme.css, здесь только моноширинный textarea. */
+    .bt-modal-textarea { min-height: 110px; font: 13px/1.6 "Cascadia Code", Consolas, monospace; }
     .bt-modal-foot {
       flex: 0 0 auto; display: flex; align-items: center; gap: 8px; justify-content: flex-end;
       padding: 10px 14px; border-top: 1px solid var(--border, rgba(255,255,255,0.08));
