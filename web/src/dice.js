@@ -145,8 +145,17 @@ export function initDiceRoller(controlsContainer, send) {
     renderFromInput();
   }
 
+  function clear() {
+    customInput.value = "";
+    renderFromInput();
+  }
+
+  // После броска пул чистится: выбранные кубы оставались подсвеченными и
+  // следующий бросок случайно складывался с прошлым.
   function roll(formula) {
-    if (formula) send({ type: "roll_dice", formula });
+    if (!formula) return;
+    send({ type: "roll_dice", formula });
+    clear();
   }
 
   for (const btn of dieButtons) {
@@ -161,13 +170,7 @@ export function initDiceRoller(controlsContainer, send) {
     const step = Number(btn.dataset.mod);
     btn.onclick = () => mutate((p) => (p.mod += step));
   }
-  controlsContainer.querySelector("[data-clear]").onclick = () => {
-    customInput.value = "";
-    renderFromInput();
-  };
-
-  // Бросок НЕ чистит пул: за столом один и тот же бросок часто повторяют
-  // подряд (ещё раз то же самое) — сбрасывает пул только кнопка "Сброс".
+  controlsContainer.querySelector("[data-clear]").onclick = clear;
   controlsContainer.querySelector("[data-roll-custom]").onclick = () => roll(customInput.value.trim());
   customInput.addEventListener("input", renderFromInput);
   customInput.addEventListener("keydown", (e) => {
