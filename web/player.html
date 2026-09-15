@@ -118,10 +118,9 @@
        не становится, а километровый инпут вдоль всего экрана только мешает. */
     #diceDock .dice-custom { flex: 0 1 300px; min-width: 170px; }
 
-    /* Лог бросков — плавающая плашка в левом нижнем углу карты (общий виджет
-       .roll-log--plate, см. web/src/roll-log.js и theme.css); здесь только
-       выбор угла. */
-    #diceLog { left: 10px; bottom: 10px; }
+    /* Лог бросков — плавающее окно поверх карты (общий виджет
+       .roll-log--plate, см. web/src/roll-log.js и theme.css); угол кнопки
+       «Чат» выбирает player.js. */
 
     /* ---- модалка "Мои персонажи" ---- */
     #charsOverlay {
@@ -244,9 +243,9 @@
       #diceDock .dice-custom { flex: 1 1 100%; min-width: 0; }
       /* HUD зума под лотком всё равно не виден. */
       body.dice-open #zoomHud { display: none; }
-      /* Лог поднимаем над лотком; 40dvh — тот же потолок, что у лотка. */
-      #diceLog { left: 6px; bottom: 6px; }
-      body.dice-open #diceLog { bottom: calc(40dvh + 6px); }
+      /* Лоток закрывает низ карты — сжимаем область лога, окно само
+         поднимется (см. roll-log.js: place). 40dvh — потолок лотка. */
+      body.dice-open #diceLog { bottom: 40dvh; }
 
       /* Модалки во весь экран: 420px на телефоне и так занимают всё. */
       #charsModal, #settingsModal {

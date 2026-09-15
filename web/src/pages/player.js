@@ -157,7 +157,7 @@ const PLAYER_DRAW_HELP = {
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
   initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg));
-  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate", corner: "bottom-left" });
   document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   renderCharDock();
 
