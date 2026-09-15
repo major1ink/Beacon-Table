@@ -154,6 +154,90 @@
 .pill-badge.gold { color: var(--gold); background: rgba(181, 137, 31, 0.16); }
 .pill-badge.on { color: var(--green-bright); background: rgba(31, 107, 58, 0.22); }
 
+/* ---- поля ввода — один вид на все страницы ----
+   Текстовые input, select и textarea стилизуются по элементу, а не по
+   классу: половину полей создаёт JS (настройки сервера, модалки, пикеры),
+   и класс на каждом пришлось бы помнить. «Мягкое поле»: заливка чуть
+   светлее панели, без обводки в покое; обводка и кольцо — в фокусе.
+   Селекторы через :where() — нулевая специфичность, чтобы плотные места
+   (таблицы листа, строки трекера) перебивали базу обычным классом. ---- */
+:root { --field-h: 36px; }
+input:where([type="text"], [type="number"], [type="password"], [type="email"], [type="url"], [type="search"], :not([type])),
+select, textarea {
+  appearance: none; -webkit-appearance: none;
+  box-sizing: border-box; width: 100%; min-width: 0; margin: 0;
+  min-height: var(--field-h); padding: 7px 12px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid transparent; border-radius: var(--radius);
+  font: inherit; font-size: 13px; line-height: 1.4;
+  transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+input:where([type="text"], [type="number"], [type="password"], [type="email"], [type="url"], [type="search"], :not([type])):where(:hover:not(:disabled):not(:focus)),
+:where(select, textarea):where(:hover:not(:disabled):not(:focus)) { background: var(--surface-hover); }
+input:where([type="text"], [type="number"], [type="password"], [type="email"], [type="url"], [type="search"], :not([type])):where(:focus),
+:where(select, textarea):where(:focus) { outline: none; border-color: var(--accent); box-shadow: var(--ring-accent); }
+:where(input, textarea)::placeholder { color: var(--text-dim); opacity: 1; }
+/* Закрытое поле не должно выглядеть как обычное — иначе непонятно, почему
+   в него не печатается. */
+input:where([type="text"], [type="number"], [type="password"], [type="email"], [type="url"], [type="search"], :not([type])):where(:disabled),
+:where(select, textarea):where(:disabled) {
+  background: transparent; border: 1px dashed rgba(255, 255, 255, 0.14); color: var(--text-dim); cursor: not-allowed;
+}
+/* Своя стрелка вместо системной; option красится сам — в тёмной теме
+   системный список был бы белым. */
+select {
+  padding-right: 34px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23eeeeee' stroke-opacity='0.55' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; background-size: 14px;
+}
+select:where([multiple], [size]) { background-image: none; padding-right: 12px; }
+select option { background: var(--panel-bg); color: var(--text); }
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+textarea { min-height: 72px; resize: vertical; }
+/* iOS зумит страницу на фокусе в поле мельче 16px и назад не отъезжает. */
+@media (pointer: coarse), (max-width: 860px), (max-height: 500px) {
+  input:where([type="text"], [type="number"], [type="password"], [type="email"], [type="url"], [type="search"], :not([type])),
+  select, textarea { font-size: 16px; }
+}
+
+/* ---- .field — подпись над полем (+ подсказка под ним) ---- */
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field > label, .field > span, .field-label { font-size: 11.5px; color: var(--text-dim); }
+.field > label { display: flex; align-items: center; gap: 6px; }
+
+/* ---- .settings-rows / .settings-row — «строка настроек»: подпись и
+   подсказка слева, контрол справа (вкладка «Сервер» в настройках ДМ;
+   строит pages/dm.js: settingField). Поля тут круглые, компактнее
+   обычных. В узкой панели (её ширину тянут мышью) строка складывается в
+   столбик — по ширине контейнера, а не окна. ---- */
+.settings-rows { container-type: inline-size; }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-text { flex: 1 1 auto; min-width: 0; }
+.settings-row-title { font-size: 13px; }
+.settings-row.readonly .settings-row-title { color: var(--text-dim); }
+.settings-row-hint { font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-top: 2px; }
+/* Янтарный, а не красный: «задано снаружи» — не ошибка, а факт. */
+.settings-row-hint.locked { color: #d9a441; }
+.settings-row-control { flex: 0 0 auto; width: 44%; max-width: 220px; min-width: 120px; }
+.settings-row-control :where(input, select) { --field-h: 32px; padding-top: 5px; padding-bottom: 5px; border-radius: var(--radius-pill); }
+.settings-row-control select { padding-left: 14px; }
+@container (max-width: 400px) {
+  .settings-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .settings-row-control { width: 100%; max-width: none; }
+}
+
+/* ---- числовые поля бойца в трекере (инициатива/КД/HP; dm.html и
+   combat-tracker.html) — плотные: две цифры + паддинги, без стрелочек ---- */
+.combat-row input[type="number"], .combat-row .combat-hp-quick {
+  --field-h: 26px; padding: 3px 1px; border-radius: 6px; font-size: 12px; text-align: center;
+  background: var(--bg); border-color: var(--border);
+}
+
 /* ---- .switch — тумблер вместо квадратной галки для настроек «вкл/выкл»
    (настройки ДМ, сцена, меню токена, опции в модалках). Обычный
    <input type="checkbox" class="switch">: события/checked те же, меняется
@@ -185,14 +269,8 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
    (см. web/src/item-picker.js) — используется в инвентаре персонажа,
    инвентаре монстра (бестиарий) и хабе лута ДМ ---- */
 .item-picker-row { display: flex; gap: 6px; margin-bottom: 8px; }
-.item-picker-search {
-  flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--text); font: inherit; padding: 7px 10px;
-}
-.item-picker-qty {
-  width: 56px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--text); font: inherit; padding: 7px 6px; text-align: center;
-}
+.item-picker-search { flex: 1; }
+.item-picker-qty { width: 56px; padding-left: 6px; padding-right: 6px; text-align: center; }
 .item-picker-results { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
 .item-picker-result {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px;
@@ -235,10 +313,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 }
 .loot-modal h2 button:hover { background: var(--surface); }
 .loot-modal-char-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); }
-.loot-modal-char-row select {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
-  color: var(--text); font: inherit; padding: 5px 8px;
-}
+.loot-modal-char-row select { width: auto; flex: 1 1 auto; }
 .loot-modal-body { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
 .loot-modal-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 10px; background: var(--surface); }
 .loot-modal-avatar {
@@ -249,10 +324,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .loot-modal-info { flex: 1; min-width: 0; }
 .loot-modal-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loot-modal-meta { font-size: 11.5px; color: var(--text-dim); }
-.loot-modal-qty {
-  width: 48px; background: var(--surface-hover); border: 1px solid var(--border);
-  border-radius: 7px; color: var(--text); font: inherit; padding: 5px 4px; text-align: center;
-}
+.loot-modal-qty { width: 48px; --field-h: 30px; padding: 4px; text-align: center; background: var(--surface-hover); }
 .loot-modal-take {
   flex: 0 0 auto; background: var(--green); border: none; color: #fff;
   border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 12.5px; cursor: pointer;
@@ -321,7 +393,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .catalog-sys-badge { flex: 0 0 auto; font-size: 10px; color: var(--gold); background: rgba(181,137,31,.16); border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
 .catalog-row button { padding: 4px 7px; font-size: 11px; }
 .catalog-target { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
-.catalog-target select { flex: 1 1 auto; min-width: 0; max-width: 150px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 3px 5px; font-size: 11px; }
+.catalog-target select { flex: 1 1 auto; max-width: 150px; --field-h: 28px; padding: 3px 26px 3px 8px; font-size: 11px; background-position: right 7px center; }
 .catalog-target button { padding: 3px 8px; font-size: 12px; }
 
 /* ---- .dice-tray — общий "лоток" бросков кубов (см. web/src/dice.js):
@@ -363,11 +435,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .dice-tray .dice-mod-value.has { color: var(--text); }
 
 .dice-tray .dice-custom { display: flex; gap: 5px; }
-.dice-tray .dice-custom input {
-  flex: 1 1 auto; min-width: 0; background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
-  border-radius: var(--radius); padding: 6px 8px; font-size: 12px;
-}
-.dice-tray .dice-custom input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring-accent); }
+.dice-tray .dice-custom input { flex: 1 1 auto; --field-h: 32px; padding: 5px 10px; font-size: 12px; }
 .dice-tray .dice-custom [data-roll-custom] {
   cursor: pointer; flex: 0 0 auto; padding: 6px 13px; border: none; border-radius: var(--radius);
   background: var(--accent); color: #fff; font: inherit; font-size: 12px;
@@ -606,11 +674,6 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 
   /* hover пальцем залипает — подсказка висит поверх открытого. */
   .bt-tip { display: none !important; }
-
-  /* iOS зумит страницу на фокусе в поле мельче 16px и назад не отъезжает. */
-  .bt-modal-input, .bt-modal-textarea,
-  .item-picker-search, .item-picker-qty,
-  .dice-tray .dice-custom input { font-size: 16px; }
 }
 
 @media (max-width: 860px), (max-height: 500px) {

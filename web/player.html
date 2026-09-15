@@ -162,10 +162,7 @@
 
     #charForm { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 6px; }
     #charForm label { display: block; font-size: 12px; opacity: 0.7; margin-bottom: 4px; }
-    #charForm input[type="text"] {
-      width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border);
-      color: var(--text); border-radius: var(--radius); padding: 7px 8px; font-size: 13px; margin-bottom: 10px;
-    }
+    #charForm input[type="text"] { margin-bottom: 10px; }
     #charFormButtons { display: flex; gap: 8px; }
     #charFormButtons button {
       cursor: pointer; padding: 7px 12px; border: none; border-radius: var(--radius); font-size: 12px; color: var(--text);
@@ -256,7 +253,6 @@
         width: 100%; max-width: none; height: 100dvh; max-height: none;
         border: none; border-radius: 0; padding: 14px 16px calc(20px + env(safe-area-inset-bottom));
       }
-      #charForm input[type="text"] { font-size: 16px; } /* iOS зумит поля мельче 16px */
     }
 
     /* Вторая строка топбара — только в портрете: в ландшафте ширины хватает

@@ -2204,14 +2204,31 @@ const serverSettingsSaveBtn = document.getElementById("serverSettingsSaveBtn");
 let serverSettingsInputs = new Map();
 let serverSettingsSaved = new Map();
 
+// settingField — строка «подпись и подсказка слева, контрол справа»
+// (.settings-row, theme.css).
 function settingField(setting) {
   const wrap = document.createElement("div");
-  wrap.className = "srv-set" + (setting.editable ? "" : " readonly");
+  wrap.className = "settings-row" + (setting.editable ? "" : " readonly");
 
+  const text = document.createElement("div");
+  text.className = "settings-row-text";
   const title = document.createElement("div");
-  title.className = "srv-set-title";
+  title.className = "settings-row-title";
   title.textContent = setting.title;
-  wrap.appendChild(title);
+  text.appendChild(title);
+  if (setting.hint) {
+    const hint = document.createElement("div");
+    hint.className = "settings-row-hint";
+    hint.textContent = setting.hint;
+    text.appendChild(hint);
+  }
+  if (setting.locked) {
+    const locked = document.createElement("div");
+    locked.className = "settings-row-hint locked";
+    locked.textContent = setting.locked;
+    text.appendChild(locked);
+  }
+  wrap.appendChild(text);
 
   let input;
   if (setting.kind === "bool" || setting.kind === "enum") {
@@ -2230,21 +2247,11 @@ function settingField(setting) {
     input.value = setting.value;
   }
   input.disabled = !setting.editable;
-  wrap.appendChild(input);
+  const control = document.createElement("div");
+  control.className = "settings-row-control";
+  control.appendChild(input);
+  wrap.appendChild(control);
   if (setting.editable) serverSettingsInputs.set(setting.key, input);
-
-  if (setting.hint) {
-    const hint = document.createElement("div");
-    hint.className = "srv-set-hint";
-    hint.textContent = setting.hint;
-    wrap.appendChild(hint);
-  }
-  if (setting.locked) {
-    const locked = document.createElement("div");
-    locked.className = "srv-set-locked";
-    locked.textContent = setting.locked;
-    wrap.appendChild(locked);
-  }
   return wrap;
 }
 
@@ -2820,7 +2827,6 @@ async function assignPregenFlow(pregen) {
       label.textContent = "Игрок:";
       label.style.cssText = "display:block;font-size:12px;opacity:0.7;margin-bottom:6px;";
       select = document.createElement("select");
-      select.style.cssText = "width:100%;padding:7px 8px;font-size:13px;";
       for (const a of accounts) {
         const opt = document.createElement("option");
         opt.value = a.id;

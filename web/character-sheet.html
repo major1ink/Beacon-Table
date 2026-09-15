@@ -17,22 +17,19 @@
     }
     button { cursor: pointer; border: none; border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
     button:hover { background: var(--surface-hover); }
-    input, textarea, select {
-      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
-      border-radius: 5px; padding: 4px 6px; font: inherit; width: 100%;
+    /* Вид полей и .field — общие, theme.css. */
+    /* Лист «только чтение» — поля не пунктирные (так выглядело бы всё
+       подряд), а просто неактивные. */
+    input:disabled, textarea:disabled, select:disabled {
+      border-color: transparent; border-style: solid; background: rgba(255, 255, 255, 0.03);
+      color: var(--text); opacity: 0.8; cursor: default;
     }
-    input:disabled, textarea:disabled, select:disabled { opacity: 0.75; cursor: default; }
-    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
     input[type="checkbox"] { width: auto; accent-color: var(--accent); }
-    input[type="number"] { width: 100%; }
-    label.field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); }
-    label.field > span { padding-left: 1px; }
     /* suggest-wrap — обёртка input+datalist у полей с подсказками из
        справочника (см. pages/character-sheet.js: suggestInput/
        classSubclassFields) — datalist сам невидим, обёртке нужен только
        display:block, чтобы занимать всю ширину колонки, как обычный input. */
     .suggest-wrap { display: block; }
-    textarea { resize: vertical; min-height: 60px; font-family: inherit; line-height: 1.4; }
 
     #topBar {
       flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
@@ -76,6 +73,8 @@
 
     .ability-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-bottom: 8px; background: var(--surface); }
     .ability-box .ability-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    /* Поле на фоне .ability-box того же цвета, что и само поле — темнее. */
+    .ability-box input { background: var(--panel-bg); }
     .ability-box .ability-head input[type="number"] { width: 60px; }
     .ability-box .ability-head .ability-name { font-weight: 700; flex: 1 1 auto; }
     .save-row, .skill-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 11.5px; }
@@ -95,7 +94,8 @@
     table.dyn-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
     table.dyn-table th { text-align: left; font-weight: 600; color: var(--text-dim); font-size: 10px; padding: 2px 4px; }
     table.dyn-table td { padding: 2px 4px; vertical-align: middle; }
-    table.dyn-table input, table.dyn-table select { padding: 3px 5px; font-size: 11.5px; }
+    table.dyn-table input, table.dyn-table select { --field-h: 26px; padding: 3px 5px; font-size: 11.5px; border-radius: 6px; }
+    table.dyn-table select { padding-right: 22px; background-position: right 5px center; }
     .row-del { width: 22px; height: 22px; padding: 0; color: var(--text-dim); }
     .row-del:hover { background: var(--danger); color: #fff; }
     .add-row-btn { margin-top: 6px; font-size: 11px; padding: 5px 10px; }
@@ -447,7 +447,6 @@
       table.dyn-table { min-width: 380px; }
 
       /* iOS зумит страницу на фокусе в поле мельче 16px. */
-      input, textarea, select { font-size: 16px; }
       table.dyn-table input, table.dyn-table select { font-size: 16px; }
     }
 

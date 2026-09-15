@@ -17,15 +17,7 @@
     }
     button { cursor: pointer; border: none; border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
     button:hover { background: var(--surface-hover); }
-    input, textarea, select {
-      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
-      border-radius: 5px; padding: 4px 6px; font: inherit; width: 100%;
-    }
-    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
-    input[type="number"] { width: 100%; }
-    label.field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); }
-    label.field > span { padding-left: 1px; }
-    textarea { resize: vertical; min-height: 60px; font-family: inherit; line-height: 1.4; }
+    /* Вид полей и .field — общие, theme.css. */
 
     #topBar {
       flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
@@ -70,7 +62,7 @@
     .ability-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
     .ability-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; background: var(--surface); text-align: center; }
     .ability-box .ability-name { font-size: 10px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; display: block; }
-    .ability-box input[type="number"] { text-align: center; margin-bottom: 4px; }
+    .ability-box input[type="number"] { text-align: center; margin-bottom: 4px; background: var(--panel-bg); }
     .ability-box .ability-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
 
     .portrait-wrap { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
@@ -155,24 +147,23 @@
       /* Шесть в ряд — по 55px на колонку вместе с подписью. */
       .ability-grid, .sb-ability-grid { grid-template-columns: repeat(3, 1fr); }
       /* iOS зумит страницу на фокусе в поле мельче 16px. */
-      input, textarea, select { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/bestiary-Btt9i12g.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-DjM06ieQ.js">
+  <script type="module" crossorigin src="/assets/bestiary-BqOGlO7R.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-X_JFf_6d.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CVX7_5YD.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-DwlZmB-I.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-text-8Hqfz_vU.js">
   <link rel="modulepreload" crossorigin href="/assets/monster-import-C8RqF1qG.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-Q0oFvsOI.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-DqimWZPg.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-BldGbu0M.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-MOBKXf5R.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-ILYJ4R8b.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-ChTmXpD1.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DWV3B20T.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-B-cNTE-D.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-wwBDqitP.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-emG2yqwn.css">
 </head>
 <body>
   <div id="topBar">
