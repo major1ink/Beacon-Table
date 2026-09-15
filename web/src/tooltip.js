@@ -96,10 +96,15 @@ function place(el, anchor) {
   const gap = 10;
   const margin = 8;
   const rect = anchor.getBoundingClientRect();
+  const preferLeft = rect.left > window.innerWidth / 2;
+  // Мерить с левого края: у правой кромки fixed-плашка ужимается, и
+  // широкая после переноса влево разворачивалась поверх колонки.
+  el.style.left = "0px";
+  // У правой колонки справа места нет — лучше ужаться, чем лечь на неё.
+  el.style.maxWidth = preferLeft ? Math.max(200, rect.left - gap - margin) + "px" : "";
   const { width, height } = el.getBoundingClientRect();
 
   const fitsLeft = rect.left - gap - width >= margin;
-  const preferLeft = rect.left > window.innerWidth / 2;
   const left = preferLeft && fitsLeft ? rect.left - gap - width : rect.right + gap;
 
   let top = rect.top + rect.height / 2 - height / 2;

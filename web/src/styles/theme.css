@@ -745,6 +745,23 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
   /* Лист персонажа раскрыт во весь экран (sheet-dock.js), колонка — прямой
      ребёнок body и легла бы поверх него. */
   body.sheet-dock-open .vtt-side-menu { display: none !important; }
+  /* Трекер боя тоже fixed — накрывал бы шапку листа. */
+  body.sheet-dock-open .vtt-combat-bar { display: none !important; }
+
+  /* У игрока в колонке десяток иконок — в ландшафт телефона не влезает,
+     прокручиваем, как рейл ДМ. Панели на телефоне fixed — их не режет. */
+  .vtt-side-menu { max-height: calc(100dvh - 16px); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+  .vtt-side-menu::-webkit-scrollbar { display: none; }
+  .vtt-side-menu-sep { margin: 1px auto !important; }
+
+  /* Трекер боя (vtt/combat-bar.js, стили инлайновые) компактнее: 88px —
+     четверть ландшафта телефона. */
+  .vtt-combat-bar { top: 6px !important; padding: 4px 8px !important; gap: 6px !important; }
+  .cb-slot { width: 60px !important; }
+  .cb-portrait-box { height: 30px !important; }
+  .cb-portrait { width: 24px !important; height: 24px !important; }
+  .cb-portrait--cur { width: 30px !important; height: 30px !important; }
+  .cb-name { -webkit-line-clamp: 1 !important; }
 
   /* Панель — нижний лист; right: 58px оставляет справа саму колонку, иначе
      закрыть панель её же значком нечем. */
