@@ -265,7 +265,7 @@ document.getElementById("worldsBtn")?.addEventListener("click", async () => {
 });
 
 // ================= выезжающая панель: реестр "открыть → подгрузить данные" =================
-// Разделы "Аккаунты"/"Плейлисты"/"Настроить сцену" регистрируют сюда коллбэк
+// Разделы "Аккаунты"/"Плейлисты"/"Сцена" регистрируют сюда коллбэк
 // сразу при определении (выше по файлу, чем сама механика рейла+панели ниже),
 // поэтому panelOpenHandlers/onPanelOpen объявлены здесь, в самом начале.
 const panelOpenHandlers = {};
@@ -718,8 +718,8 @@ attachTooltip(rulerBtn, TOOL_HELP.ruler);
 attachTooltip(teleportBtn, TOOL_HELP.teleport);
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
-  showSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
-  openSceneSettings("grid");
+  showSidePanelSection("scene"); // вернуться в раздел с уже актуальными offsetX/Y
+  openSceneSettings(currentSceneId, "grid");
 };
 
 // ================= глобальный свет "на всю карту" =================
@@ -1029,7 +1029,7 @@ wallMenuDoorSound.onclick = async () => {
       body.appendChild(field);
       const hint = document.createElement("p");
       hint.className = "bt-modal-text dim";
-      hint.textContent = "Загрузить новый файл можно в «Плейлисты» или «Настроить сцену → Аудио».";
+      hint.textContent = "Загрузить новый файл можно в «Плейлисты» или «Сцена → ⚙ → Аудио».";
       body.appendChild(hint);
       return select;
     },
@@ -4389,7 +4389,7 @@ const railSectionBtns = [...document.querySelectorAll("#rail [data-section], #ra
 const panelSections = [...document.querySelectorAll(".panel-section[data-panel]")];
 let openPanelSection = null;
 
-// Разделы "Настроить сцену" / "Аккаунты" / "Плейлисты" раньше были модалками
+// Разделы "Аккаунты" / "Плейлисты" раньше были модалками
 // со своим открытием (fetch + рендер при клике). Теперь это такие же секции
 // общей выезжающей панели, как "Освещение" — но данные всё ещё нужно
 // подгружать/освежать именно в момент открытия, а не заранее. panelOpenHandlers
@@ -4443,9 +4443,10 @@ function setSidePanelSection(name, { focus = false } = {}) {
   document.dispatchEvent(new CustomEvent("vtt:lightEditMode", { detail: { active: openPanelSection === "light" } }));
 }
 
-// placeSidePanel — центр по высоте один раз при открытии, через margin-top:
-// живой align-self: center двигал бы панель при каждой смене вкладки.
-// На телефоне панель прибита к верху (dm.html: @media).
+// placeSidePanel — центр по высоте через margin-top, а не align-self:
+// center: центр считается от высоты панели, и ниже ResizeObserver зовёт
+// его заново, когда содержимое дорастает (списки приходят с сервера уже
+// после открытия). На телефоне панель прибита к верху (dm.html: @media).
 const MOBILE_MQ = window.matchMedia("(max-width: 860px), (max-height: 500px)");
 function placeSidePanel() {
   const section = openPanelSection;
@@ -4486,6 +4487,14 @@ function placeSidePanel() {
 window.addEventListener("resize", () => {
   if (openPanelSection) placeSidePanel();
 });
+// Тело большинства разделов наполняется после открытия (персонажи,
+// плейлисты, ассеты — fetch; подменю настроек сцены — клик): панель,
+// отцентрованная по пустому телу, потом росла только вниз и висела ниже
+// центра. Повторный вызов при той же высоте ничего не меняет, так что
+// наблюдатель не зацикливается на собственных правках max-height.
+new ResizeObserver(() => {
+  if (openPanelSection) placeSidePanel();
+}).observe(sidePanel);
 
 // showSidePanelSection — «показать раздел», в отличие от setSidePanelSection
 // («переключить»): нужен тем, кто открывает раздел не кликом по рейлу, а по
@@ -4908,10 +4917,14 @@ let sceneList = []; // [{id,name,viewerCount}]
 let currentSceneId = "";
 
 function renderSceneDropdown() {
+  // Подменю настроек — один узел, который живёт под строкой своей сцены;
+  // перед перестройкой списка убираем его в парковку, иначе innerHTML
+  // унесёт его вместе со строками.
+  parkSceneSettingsDrawer();
   sceneDropdown.innerHTML = "";
   for (const s of sceneList) {
     const row = document.createElement("div");
-    row.className = "scene-row row-card" + (s.id === currentSceneId ? " active" : "");
+    row.className = "scene-row row-card" + (s.id === currentSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
     // Переключение — <button> на всю строку, корзина — отдельная кнопка
     // рядом: вложенные интерактивы недопустимы.
     const pick = document.createElement("button");
@@ -4929,10 +4942,20 @@ function renderSceneDropdown() {
     viewers.className = "scene-viewers pill-badge";
     viewers.innerHTML = icon("user", { size: 11 });
     viewers.append(" " + s.viewerCount);
-    // Полные настройки сцены (фон/аудио/сетка) переехали в отдельный раздел
-    // рейла "Настроить сцену" и относятся только к активной сцене (см.
-    // openSceneSettings ниже) — здесь остаётся быстрое удаление ЛЮБОЙ сцены
-    // из списка, не обязательно активной.
+    // Шестерёнка — полные настройки этой сцены (фон/аудио/сетка) подменю
+    // под строкой (см. openSceneSettings ниже); корзина — удаление. Обе —
+    // для ЛЮБОЙ сцены из списка, не обязательно активной.
+    const gear = document.createElement("button");
+    gear.type = "button";
+    gear.className = "scene-gear scene-gear--settings icon-btn";
+    gear.innerHTML = icon("gear", { size: 13 });
+    gear.title = "Настроить сцену";
+    gear.setAttribute("aria-expanded", String(s.id === settingsSceneId));
+    gear.onclick = (ev) => {
+      ev.stopPropagation();
+      if (s.id === settingsSceneId) closeSceneSettings();
+      else openSceneSettings(s.id, "basic");
+    };
     const del = document.createElement("button");
     del.className = "scene-gear icon-btn";
     del.innerHTML = icon("trash", { size: 13 });
@@ -4944,9 +4967,13 @@ function renderSceneDropdown() {
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
     pick.append(nameSpan, viewers);
-    row.append(pick, del);
+    row.append(pick, gear, del);
     sceneDropdown.appendChild(row);
+    if (s.id === settingsSceneId) row.after(sceneSettingsDrawer);
   }
+  // Сцену, которую правили, удалили (в этом или другом окне) — подменю
+  // закрываем, а не оставляем висеть в парковке с чужими полями.
+  if (settingsSceneId && !sceneList.some((x) => x.id === settingsSceneId)) closeSceneSettings();
 }
 
 // "+ Сцена" теперь статична в шапке панели (dm.html), а не пересоздаётся
@@ -5009,15 +5036,19 @@ async function renderTeleport() {
   }
 }
 
-onPanelOpen("scene", renderTeleport);
+// Открыли раздел заново — подменю настроек свёрнуто: за списком сцен
+// приходят чаще, чем за настройками, а нужные — в шестерёнке.
+onPanelOpen("scene", () => {
+  closeSceneSettings();
+  renderTeleport();
+});
 
 // ===================================================================
-// ================= раздел "Настроить сцену" ========================
+// ================= настройки сцены (⚙ в строке списка "Сцена") ==========
 // ===================================================================
-// Раньше это была модалка, открывавшаяся по шестерёнке у ЛЮБОЙ строки в
-// списке сцен (даже неактивной — тогда ждали get_scene с сервера). Теперь
-// это обычный раздел рейла, как "Освещение", и правит он ВСЕГДА активную
-// сцену — данные уже есть локально (vtt.getScene()), round-trip не нужен.
+// Раньше это была модалка по шестерёнке у строки, потом — свой раздел рейла
+// только для активной сцены. Теперь снова у каждой строки, но подменю
+// раскрывается под ней (см. openSceneSettings ниже).
 const tabButtons = [...document.querySelectorAll(".modal-tabs button")];
 const tabPanels = [...document.querySelectorAll(".modal-tab-panel")];
 const bgTab = document.querySelector('.modal-tabs button[data-tab="bg"]');
@@ -5105,18 +5136,54 @@ function fillSceneSettingsFrom(s) {
   document.getElementById("sceneDeleteBtn").disabled = sceneList.length <= 1;
 }
 
-function openSceneSettings(tab) {
-  switchTab(tab || "basic");
-  fillSceneSettingsFrom(vtt.getScene());
-}
-onPanelOpen("sceneSettings", () => openSceneSettings("basic"));
+// ---- подменю настроек под шестерёнкой в строке сцены ----
+// Раньше это был свой раздел рейла (только для активной сцены); теперь
+// раскрывается под строкой любой сцены списка — dm.html держит узел
+// #sceneSettingsDrawer припаркованным перед списком, сюда он переезжает под
+// нужную строку (renderSceneDropdown). Активная сцена есть локально
+// (vtt.getScene()), неактивную просим у сервера (get_scene → scene_detail):
+// snapshot несёт только активную.
+const sceneSettingsDrawer = document.getElementById("sceneSettingsDrawer");
+const sceneSettingsPark = sceneSettingsDrawer.parentElement;
+let settingsSceneId = ""; // чья сцена в подменю; "" — закрыто
 
-// раздел открыт и активная сцена обновилась (например, после drag
-// "Редактора сетки") — держим поля актуальными.
-document.addEventListener("vtt:sceneUpdated", (e) => {
-  if (openPanelSection === "sceneSettings" && e.detail.id === currentSceneId) {
-    fillSceneSettingsFrom(e.detail);
+function parkSceneSettingsDrawer() {
+  if (sceneSettingsDrawer.parentElement !== sceneSettingsPark) sceneSettingsPark.prepend(sceneSettingsDrawer);
+}
+
+function openSceneSettings(sceneId, tab) {
+  settingsSceneId = sceneId;
+  switchTab(tab || "basic");
+  if (sceneId === currentSceneId) {
+    fillSceneSettingsFrom(vtt.getScene());
+  } else {
+    // Пока едет ответ — хотя бы имя из списка, а не поля прошлой сцены.
+    fillSceneSettingsFrom({ name: sceneList.find((x) => x.id === sceneId)?.name || "" });
+    vtt.send({ type: "get_scene", sceneId });
   }
+  // Редактор сетки рисует поверх карты — только для сцены, что на ней.
+  gridEditorBtn.disabled = sceneId !== currentSceneId;
+  gridEditorBtn.title = gridEditorBtn.disabled ? "Редактор сетки работает только на активной сцене — сначала переключись на неё" : "Редактировать сетку прямо на карте";
+  sceneSettingsDrawer.hidden = false;
+  renderSceneDropdown(); // подсветить строку и подставить подменю под неё
+  sceneSettingsDrawer.scrollIntoView({ block: "nearest" });
+}
+
+function closeSceneSettings() {
+  if (!settingsSceneId) return;
+  settingsSceneId = "";
+  sceneSettingsDrawer.hidden = true;
+  renderSceneDropdown();
+}
+
+document.addEventListener("vtt:sceneDetail", (e) => {
+  if (settingsSceneId && e.detail && e.detail.id === settingsSceneId) fillSceneSettingsFrom(e.detail);
+});
+
+// подменю открыто и его сцена обновилась (например, после drag
+// "Редактора сетки" на активной) — держим поля актуальными.
+document.addEventListener("vtt:sceneUpdated", (e) => {
+  if (settingsSceneId && e.detail.id === settingsSceneId) fillSceneSettingsFrom(e.detail);
 });
 
 // ---- вкладка "Фон" ----
@@ -5318,19 +5385,19 @@ gridEditorBtn.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "grid-edit" }));
 };
 
-// ---- удаление / сохранение (всегда активная сцена) ----
+// ---- удаление / сохранение (сцена, чьё подменю открыто) ----
 document.getElementById("sceneDeleteBtn").onclick = async () => {
   if (sceneList.length <= 1) return;
-  const s = sceneList.find((x) => x.id === currentSceneId);
-  if (!(await showConfirm(`Удалить сцену «${s ? s.name : currentSceneId}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
-  vtt.send({ type: "delete_scene", sceneId: currentSceneId });
+  const s = sceneList.find((x) => x.id === settingsSceneId);
+  if (!(await showConfirm(`Удалить сцену «${s ? s.name : settingsSceneId}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
+  vtt.send({ type: "delete_scene", sceneId: settingsSceneId });
   closeSidePanel();
 };
 
 document.getElementById("modalSaveBtn").onclick = () => {
   vtt.send({
     type: "update_scene",
-    sceneId: currentSceneId,
+    sceneId: settingsSceneId,
     sceneName: fName.value.trim() || "Без названия",
     mapUrl: fMapUrl.value.trim(),
     width: parseFloat(fWidth.value) || 1280,
