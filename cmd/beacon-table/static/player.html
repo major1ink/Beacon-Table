@@ -117,10 +117,9 @@
        не становится, а километровый инпут вдоль всего экрана только мешает. */
     #diceDock .dice-custom { flex: 0 1 300px; min-width: 170px; }
 
-    /* Лог бросков — плавающая плашка в левом нижнем углу карты (общий виджет
-       .roll-log--plate, см. web/src/roll-log.js и theme.css); здесь только
-       выбор угла. */
-    #diceLog { left: 10px; bottom: 10px; }
+    /* Лог бросков — плавающее окно поверх карты (общий виджет
+       .roll-log--plate, см. web/src/roll-log.js и theme.css); угол кнопки
+       «Чат» выбирает player.js. */
 
     /* ---- модалка "Мои персонажи" ---- */
     #charsOverlay {
@@ -243,9 +242,9 @@
       #diceDock .dice-custom { flex: 1 1 100%; min-width: 0; }
       /* HUD зума под лотком всё равно не виден. */
       body.dice-open #zoomHud { display: none; }
-      /* Лог поднимаем над лотком; 40dvh — тот же потолок, что у лотка. */
-      #diceLog { left: 6px; bottom: 6px; }
-      body.dice-open #diceLog { bottom: calc(40dvh + 6px); }
+      /* Лоток закрывает низ карты — сжимаем область лога, окно само
+         поднимется (см. roll-log.js: place). 40dvh — потолок лотка. */
+      body.dice-open #diceLog { bottom: 40dvh; }
 
       /* Модалки во весь экран: 420px на телефоне и так занимают всё. */
       #charsModal, #settingsModal {
@@ -262,22 +261,23 @@
       #combatBarMount { order: 3; flex: 1 1 100%; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/player-DgRRsKuy.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-X_JFf_6d.js">
+  <script type="module" crossorigin src="/assets/player-W41Dh_dE.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-D4xMCSmv.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-ChTmXpD1.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-BcmKsUsH.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-pv-OrPVq.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-CNTjDDma.js">
+  <link rel="modulepreload" crossorigin href="/assets/drag-DVDIF09E.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-C-5tymVq.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-BdZgDIWg.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-NL53ipna.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-DLR_jV5J.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-4VtQpbxC.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-DNz0V7mH.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-DoG_8kcg.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-wwBDqitP.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-B5sIGWFb.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-2H0gOWQy.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-bOktyKTE.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DIslyoZK.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
-  <link rel="modulepreload" crossorigin href="/assets/avatar-cropper-DBggWG3i.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-emG2yqwn.css">
+  <link rel="modulepreload" crossorigin href="/assets/avatar-cropper-D7u8Ogyv.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-CNkEBYtj.css">
 </head>
 <body>
   <div id="app">

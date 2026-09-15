@@ -112,13 +112,13 @@ let isDemoGuest = false;
   // (см. vtt/side-menu.js — vtt.sideMenu тоже появляется только теперь).
   // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
   // формулы, "Бросить", см. dice.js); лог результатов — отдельный виджет
-  // (roll-log.js) в плашке #diceLog сверху канваса (см. dm.html).
+  // (roll-log.js) в плавающем окне поверх канваса, хост — #diceLog (см. dm.html).
   const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240, tip: PANEL_HELP.dice });
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
   initDiceRoller(diceControls, (msg) => vtt.send(msg));
-  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate", corner: "top-right" });
   document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   // Справочник — та же боковая колонка, следующая иконка после кубов (см.
   // compendium-menu.js: дерево категорий, само содержимое — отдельные
