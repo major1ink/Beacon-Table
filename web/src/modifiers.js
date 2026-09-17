@@ -104,9 +104,17 @@ export function collectModifiers(sources) {
   const out = [];
   for (const src of sources || []) {
     if (!src || !Array.isArray(src.modifiers)) continue;
+    // Уровень метки умножает perLevel-модификаторы — зеркало
+    // domain.ScaleModifiers (истощение: «−5 скорости за уровень»).
+    const level = Math.max(1, src.level || 1);
     for (const m of src.modifiers) {
       if (!m) continue;
-      out.push(Object.assign({}, m, { sourceName: src.name || m.note || "" }));
+      const scaled = Object.assign({}, m, { sourceName: src.name || m.note || "" });
+      if (m.perLevel && level > 1) {
+        const v = parseValue(m.value);
+        if (v !== null) scaled.value = String(v * level);
+      }
+      out.push(scaled);
     }
   }
   return out;

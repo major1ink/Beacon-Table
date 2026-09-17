@@ -55,6 +55,31 @@ type Modifier struct {
 	// Note — подпись для лога и подсказки («огонь», «от кольчуги»). На
 	// расчёт не влияет.
 	Note string `json:"note,omitempty"`
+	// PerLevel — значение умножается на уровень метки (AppliedStatus.Level):
+	// истощение даёт «−5 скорости за уровень». Только для числовых значений;
+	// у формулы кубов и у меток без уровней множитель 1 (см. ScaleModifiers).
+	PerLevel bool `json:"perLevel,omitempty"`
+}
+
+// ScaleModifiers — модификаторы метки с учётом её уровня: у PerLevel число
+// умножается на level (не меньше 1), остальные копируются как есть. Так и
+// сервер (Room.effectiveStat), и лист персонажа (web/src/modifiers.js:
+// collectModifiers) считают одно и то же. Снимок в метке остаётся
+// неумноженным — уровень ДМ меняет после наложения.
+func ScaleModifiers(mods []Modifier, level int) []Modifier {
+	if level < 1 {
+		level = 1
+	}
+	out := make([]Modifier, 0, len(mods))
+	for _, m := range mods {
+		if m.PerLevel && level > 1 {
+			if v, ok := ParseModifierValue(m.Value); ok {
+				m.Value = strconv.Itoa(v * level)
+			}
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // Цели модификаторов — закрытый список: ровно те числа, которые приложение

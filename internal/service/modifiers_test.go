@@ -282,3 +282,28 @@ func TestEffectiveACFromStatuses(t *testing.T) {
 		t.Errorf("базовый КД изменился на %d — он должен оставаться прежним", cmb.AC)
 	}
 }
+
+// Истощение: «−5 скорости за уровень» — множитель берётся из уровня метки,
+// снимок в метке остаётся неумноженным.
+func TestPerLevelModifierScalesWithStatusLevel(t *testing.T) {
+	r := testRoom()
+	r.conditions = &fakeConditions{list: []*domain.Condition{{
+		ID: "sys-exhaustion", Name: "Истощение", Slug: "exhaustion", Levels: 6,
+		Modifiers: []domain.Modifier{{Target: domain.ModifierTargetSpeed, Mode: domain.ModifierAdd, Value: "-5", PerLevel: true}},
+	}}}
+	cmb := &domain.Combatant{ID: "c1", Name: "Гоблин", TokenID: "tok-1", AC: 15}
+	r.combat.Combatants["c1"] = cmb
+
+	r.handleApplyStatus(domain.ClientMsg{CombatantID: "c1", StatusSlug: "exhaustion"})
+	if got := r.effectiveStat(cmb, 30, domain.ModifierTargetSpeed); got != 25 {
+		t.Fatalf("уровень 1: скорость = %d, ожидалось 25", got)
+	}
+	lvl := 3
+	r.handleSetStatusLevel(domain.ClientMsg{CombatantID: "c1", StatusSlug: "exhaustion", Level: &lvl})
+	if got := r.effectiveStat(cmb, 30, domain.ModifierTargetSpeed); got != 15 {
+		t.Fatalf("уровень 3: скорость = %d, ожидалось 15", got)
+	}
+	if st := r.statusesOf(cmb); len(st) != 1 || st[0].Modifiers[0].Value != "-5" {
+		t.Fatalf("снимок в метке умножен: %+v", st)
+	}
+}

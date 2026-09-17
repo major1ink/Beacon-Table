@@ -52,13 +52,19 @@ export function targetLabel(target) {
 }
 
 // parseCell — одна запись формулы. null — пусто; {bad, why} — не понял;
-// иначе {mode, value}. Кубы разрешены только при opts.dice.
+// иначе {mode, value, perLevel}. Кубы разрешены только при opts.dice;
+// суффикс «/ур» — за каждый уровень метки (см. domain.Modifier.PerLevel).
 export function parseCell(raw, opts = {}) {
   let s = String(raw ?? "")
     .trim()
     .replace(/−/g, "-")
     .replace(/\s+/g, "");
   if (!s) return null;
+  let perLevel = false;
+  if (/\/(ур|уровень|lvl)$/i.test(s)) {
+    perLevel = true;
+    s = s.replace(/\/(ур|уровень|lvl)$/i, "");
+  }
   let mode = null;
   if (s.startsWith("=")) {
     mode = MODE_SET;
@@ -77,8 +83,11 @@ export function parseCell(raw, opts = {}) {
     if (mode !== MODE_ADD) return { bad: true, why: "Кубы — со знаком: −1к6 урон, +1к6 лечение." };
     return { mode: MODE_ADD, value: s.replace(/k/i, "к").replace(/d/i, "к") };
   }
-  if (/^[+-]?\d+$/.test(s)) return { mode: mode || MODE_SET, value: String(parseInt(s, 10)) };
-  return { bad: true, why: "Не понял. Примеры: −2 прибавить, 10 поставить, >=10 не ниже." };
+  if (/^[+-]?\d+$/.test(s)) {
+    if (perLevel && mode !== MODE_ADD) return { bad: true, why: "«/ур» — только с прибавкой: −5/ур." };
+    return { mode: mode || MODE_SET, value: String(parseInt(s, 10)), perLevel };
+  }
+  return { bad: true, why: "Не понял. Примеры: −2 прибавить, 10 поставить, >=10 не ниже, −5/ур за уровень." };
 }
 
 // parseCells — ячейка целиком: несколько записей через «;».
@@ -103,7 +112,7 @@ export function cellText(m) {
   if (m.mode === MODE_SET) return "=" + v;
   if (m.mode === MODE_MIN) return "≥" + v;
   if (m.mode === MODE_MAX) return "≤" + v;
-  return v.startsWith("−") || v.startsWith("+") ? v : "+" + v;
+  return (v.startsWith("−") || v.startsWith("+") ? v : "+" + v) + (m.perLevel ? "/ур" : "");
 }
 const cellsText = (mods) => mods.map(cellText).join("; ");
 
@@ -153,7 +162,7 @@ export function renderStatEditor(list, onChange, { stand, periodic = true, readO
       // Заменяем постоянные модификаторы цели на разобранные; подписи
       // (note) сохраняем по позиции — импорт из Foundry их приносит.
       const old = permanent(target);
-      const next = parsed.map((p, i) => Object.assign(old[i] || { target, period: PERIOD_NONE, note: "" }, { target, mode: p.mode, value: p.value, period: PERIOD_NONE }));
+      const next = parsed.map((p, i) => Object.assign(old[i] || { target, period: PERIOD_NONE, note: "" }, { target, mode: p.mode, value: p.value, period: PERIOD_NONE, perLevel: !!p.perLevel }));
       for (let i = list.length - 1; i >= 0; i--) if (list[i].target === target && !list[i].period) list.splice(i, 1);
       list.push(...next);
       onChange();
@@ -298,7 +307,7 @@ export function renderStatEditor(list, onChange, { stand, periodic = true, readO
   const legend = el("p", {
     class: "card-note stat-legend",
     html:
-      "В ячейку: <code>10</code> поставить · <code>−2</code> / <code>+2</code> прибавить · <code>&gt;=10</code> не ниже · <code>&lt;=5</code> не выше — действует, пока метка висит; несколько — через «;»." +
+      "В ячейку: <code>10</code> поставить · <code>−2</code> / <code>+2</code> прибавить · <code>&gt;=10</code> не ниже · <code>&lt;=5</code> не выше · <code>−5/ур</code> за каждый уровень — действует, пока метка висит; несколько — через «;»." +
       (periodic ? " «Хиты в ход» — раз в ход: <code>−1к6</code> урон, <code>+5</code> лечение." : "") +
       " Пусто — не меняет.",
   });
