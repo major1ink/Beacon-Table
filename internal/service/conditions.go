@@ -77,6 +77,14 @@ func validateConditionName(name string) (string, error) {
 	return name, nil
 }
 
+// defaultConditionSlug — ключ карточки, у которой ДМ не выбрал код Foundry
+// (см. domain.Condition.Slug): из ID, потому что имя русское и в slug не
+// ложится, а пустой ключ оставил бы карточку без возможности повесить метку.
+// Префикс отличает такие ключи от кодов Foundry и не пересекается с ними.
+func defaultConditionSlug(id string) string {
+	return NormalizeConditionSlug("c-" + id)
+}
+
 // NormalizeConditionSlug — приведение машинного ключа к каноничному виду
 // (нижний регистр, пробелы/подчёркивания в дефис, всё остальное вырезано).
 // Экспортируется, потому что тем же ключом ходят команды наложения метки в
@@ -94,6 +102,9 @@ func NormalizeConditionSlug(slug string) string {
 // sanitizeReference клампит карточку справочника: молча, без ошибки.
 func sanitizeCondition(c domain.Condition) domain.Condition {
 	c.Slug = NormalizeConditionSlug(c.Slug)
+	if c.Slug == "" {
+		c.Slug = defaultConditionSlug(c.ID)
+	}
 	c.Source = clampRunes(c.Source, maxConditionShortText)
 	c.ImageURL = clampRunes(c.ImageURL, maxConditionShortText)
 	c.Color = clampRunes(c.Color, 32)
@@ -174,11 +185,7 @@ func (s *conditionService) Create(ctx context.Context, name string) (*domain.Con
 		return nil, err
 	}
 	c := domain.NewCondition(newID(), name)
-	// Slug из имени НЕ выводим: имя русское, а slug должен быть латинским
-	// кодом, совпадающим с кодом Foundry ("blinded" у «Ослепления») —
-	// угадать его из имени нельзя, это осознанный ввод ДМ в конструкторе
-	// (см. web/src/pages/conditions.js). Пустой slug — валидное состояние
-	// карточки: она просто не участвует в сопоставлении с импортом.
+	c.Slug = defaultConditionSlug(c.ID)
 	c.UpdatedAt = time.Now()
 	if err := s.conditions.Create(ctx, c.ID, c); err != nil {
 		return nil, err
@@ -192,8 +199,8 @@ func (s *conditionService) Update(ctx context.Context, id string, c domain.Condi
 		return nil, err
 	}
 	c.Name = name
-	c = sanitizeCondition(c)
 	c.ID = id
+	c = sanitizeCondition(c)
 	c.UpdatedAt = time.Now()
 	found, err := s.conditions.Update(ctx, id, &c)
 	if err != nil {
