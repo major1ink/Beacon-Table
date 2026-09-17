@@ -39,11 +39,12 @@
     #app { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: none; }
     #app.ready { display: block; }
 
-    /* пикер глифа — быстрый выбор из набора каталога (foundry-conditions.js) */
+    /* пикер значка — SVG-набор (condition-glyphs.js), в цвет карточки */
     .glyph-picker { display: flex; flex-wrap: wrap; gap: 4px; }
-    .glyph-picker button { width: 34px; height: 34px; font-size: 17px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; }
+    .glyph-picker button { width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--cc); }
     .glyph-picker button.active { box-shadow: inset 0 0 0 2px var(--accent); }
-    .glyph-input { width: 64px; text-align: center; font-size: 18px; }
+    .glyph-btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px 4px 8px; color: var(--cc); font-size: 20px; line-height: 1; }
+    .glyph-btn .cond-glyph svg { width: 22px; height: 22px; }
 
     /* описание: textarea markdown/HTML + живой рендер */
     .md-block { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

@@ -34,6 +34,7 @@ import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
+import { glyphNode } from "../condition-glyphs.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
@@ -350,9 +351,9 @@ const CONFIGS = {
     detailUrl: (id, o) => `/conditions.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     batchMap: mapFoundryConditionBatch,
     batchEmptyMsg: "Не удалось распознать ни одного эффекта (нужен документ ActiveEffect из Foundry VTT или предмет/существо с массивом effects).",
-    // avatarText — эмодзи-глиф состояния (domain.Condition.Icon).
+    // avatarNode — глиф состояния (domain.Condition.Icon): SVG из набора или эмодзи.
     avatar: true,
-    avatarText: (c) => c.icon || "❔",
+    avatarNode: (c) => glyphNode(c.icon, ""),
     searchHay: (c) => [c.name, c.slug, c.source, ...(c.tags || [])],
     badge: (c) => [c.levels > 1 ? `${c.levels} ур.` : "", (c.source || "").trim()],
     subText: (c) => (c.slug && CONDITION_RU[c.slug] ? conditionName(c.slug) + " (" + c.slug + ")" : ""),
@@ -491,7 +492,7 @@ function buildRow(x) {
     const avatar = document.createElement("div");
     avatar.className = "catalog-avatar";
     if (x.imageUrl) avatar.style.backgroundImage = `url("${x.imageUrl}")`;
-    else if (cfg.avatarText) avatar.textContent = cfg.avatarText(x);
+    else if (cfg.avatarNode) avatar.appendChild(cfg.avatarNode(x));
     else avatar.innerHTML = icon(cfg.avatarIcon || "image", { size: 14 });
     row.appendChild(avatar);
   }
