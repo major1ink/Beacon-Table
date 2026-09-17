@@ -477,7 +477,7 @@ func (r *Room) effectiveStat(cmb *domain.Combatant, base int, target string) int
 	}
 	mods := make([]domain.Modifier, 0, len(statuses))
 	for _, st := range statuses {
-		mods = append(mods, st.Modifiers...)
+		mods = append(mods, domain.ScaleModifiers(st.Modifiers, st.Level)...)
 	}
 	return domain.ApplyModifiers(base, target, mods)
 }
@@ -504,7 +504,7 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 	statuses := r.statusesOf(cmb)
 	delta := 0
 	for _, st := range statuses {
-		for _, m := range st.Modifiers {
+		for _, m := range domain.ScaleModifiers(st.Modifiers, st.Level) {
 			if m.Period != period || m.Target != domain.ModifierTargetHPCurrent {
 				continue
 			}
