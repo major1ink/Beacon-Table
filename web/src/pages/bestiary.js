@@ -8,6 +8,7 @@
 // величина — модификатор характеристики (та же формула, что и в
 // character-sheet.js: floor((score-10)/2)).
 import { fetchMe, fetchMonster, createMonster, updateMonster, deleteMonster, uploadFile, fetchSpells } from "../api.js";
+import { mergeInPlace } from "../merge-in-place.js";
 import { openSocket } from "../ws-reconnect.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
@@ -19,22 +20,10 @@ import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
-
-const ABILITIES = [
-  { key: "str", label: "Сил" },
-  { key: "dex", label: "Лов" },
-  { key: "con", label: "Тел" },
-  { key: "int", label: "Инт" },
-  { key: "wis", label: "Муд" },
-  { key: "cha", label: "Хар" },
-];
-
-function abilityMod(score) {
-  return Math.floor(((score || 0) - 10) / 2);
-}
-function fmtMod(n) {
-  return n >= 0 ? "+" + n : String(n);
-}
+import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
+import { renderKvTable } from "../kv-table.js";
+import { glyphNode } from "../condition-glyphs.js";
+import { ABILITIES, fmtMod, crColor, monsterGlyphName, renderAbilityTiles, renderMonsterPreview } from "../monster-block.js";
 
 // ==================== state ====================
 
@@ -71,28 +60,9 @@ function tmpInventoryId() {
   return "tmp-" + Math.random().toString(36).slice(2);
 }
 
-// ==================== DOM helpers (та же схема, что character-sheet.js) ====================
+// ==================== DOM helpers ====================
 
-function h(tag, attrs, children) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") e.className = v;
-    else if (k === "text") e.textContent = v;
-    else if (k === "html") e.innerHTML = v;
-    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of [].concat(children || [])) {
-    if (c === undefined || c === null || c === false) continue;
-    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-  }
-  return e;
-}
-
-function field(labelText, inputEl) {
-  return h("label", { class: "field" }, [h("span", { text: labelText }), inputEl]);
-}
+const h = hh;
 
 function textInput(get, set, opts) {
   const inp = h("input", Object.assign({ type: "text" }, opts || {}));
@@ -108,42 +78,88 @@ function numberInput(get, set, opts) {
   const inp = h("input", Object.assign({ type: "number" }, opts || {}));
   inp.value = get() ?? 0;
   inp.addEventListener("input", () => {
-    set(parseInt(inp.value, 10) || 0);
+    const v = parseInt(inp.value, 10);
+    set(Number.isNaN(v) ? 0 : v);
     scheduleSave();
-    refreshComputed();
   });
   return inp;
 }
 
-const computedRefs = [];
-function computed(labelText, compute) {
-  const span = h("span", { class: "computed" });
-  computedRefs.push(() => (span.textContent = compute()));
-  span.textContent = compute();
-  return h("span", {}, [labelText ? h("span", { class: "computed-lbl", text: labelText }) : null, span]);
-}
-function refreshComputed() {
-  for (const fn of computedRefs) fn();
+const monsterGlyph = () => glyphNode(monsterGlyphName(monster), "");
+
+function heroPills() {
+  return [monster.cr ? pill("ПО " + monster.cr, "rar") : null, monster.source ? pill(monster.source, "gold") : null, ...monster.tags.map((t) => pill(t))];
 }
 
-function rollBtn(getFormula, label) {
-  return h("button", { type: "button", class: "roll-btn", title: "Бросить " + label, html: icon("dice", { size: 12 }), onclick: () => sendRoll(getFormula(), label) });
-}
-
-// mdBlock — textarea markdown слева + живой рендер справа (тот же `marked`,
-// что и заметки ДМ, см. web/src/notes/markdown.js). Без вики-ссылок — у
-// статблока монстра нет смысла резолвить [[...]] на другие заметки.
-function mdBlock(labelText, get, set, opts) {
-  const render = h("div", { class: "md-render" });
-  render.innerHTML = renderNoteHtml(get());
-  const t = h("textarea", opts || {});
-  t.value = get() ?? "";
+// textBlock — свёрнутый блок текста статблока (особенности, действия…):
+// в редакторе textarea markdown/HTML, в чтении — рендер с кликабельными
+// формулами (см. inline-rolls.js). Пустой в чтении не показывается.
+function textBlock(title, key, { open, readOnly } = {}) {
+  const get = () => (key === "legendaryActions" ? [monster.legendaryActionsIntro, monster.legendaryActions].filter(Boolean).join("\n\n") : monster[key] || "");
+  if (readOnly) {
+    const text = get();
+    if (!text.trim()) return null;
+    const body = h("div", { class: "mb-prose" });
+    // Вступление и легендарные действия склеены пустой строкой, а не <p>:
+    // после HTML-блока marked не разбирает markdown в следующих строках.
+    body.innerHTML = renderNoteHtml(text);
+    enhanceRolls(body, sendRoll);
+    wireCatalogLinks(body);
+    return fold({ title, body: [body], open: open !== false });
+  }
+  const t = h("textarea", { "aria-label": title, style: key === "legendaryActionsIntro" ? "min-height:56px" : "min-height:110px" });
+  t.value = monster[key] ?? "";
   t.addEventListener("input", () => {
-    set(t.value);
-    render.innerHTML = renderNoteHtml(t.value);
+    monster[key] = t.value;
     scheduleSave();
+    f.setSummary(summary());
   });
-  return h("div", { class: "section" }, [h("h3", { text: labelText }), h("div", { class: "md-block" }, [t, render])]);
+  const summary = () => (monster[key] ? String(monster[key]).replace(/\*\*/g, "").replace(/<[^>]+>/g, "").slice(0, 80) : "пусто");
+  const f = fold({ title, summary: summary(), body: [t], open });
+  return f;
+}
+
+// kvRows — строки статблока «показатель · значение» (kv-table.js).
+function kvTopRows(onChange) {
+  const set = (k) => (v) => {
+    monster[k] = v;
+    onChange && onChange();
+  };
+  return [
+    {
+      label: "Класс доспеха",
+      get: () => (monster.acNote ? `${monster.ac || 0} (${monster.acNote})` : String(monster.ac || 0)),
+      custom: () => h("div", { class: "kvt-pair" }, [numberInput(() => monster.ac, (v) => { monster.ac = v; onChange && onChange(); }, { min: 0, class: "mono", "aria-label": "КД", style: "width:72px" }), textInput(() => monster.acNote, set("acNote"), { placeholder: "природный доспех", "aria-label": "КД — примечание" })]),
+    },
+    {
+      label: "Хиты",
+      get: () => (monster.hitDice ? `${monster.hp || 0} (${monster.hitDice})` : String(monster.hp || 0)),
+      mono: true,
+      custom: () => h("div", { class: "kvt-pair" }, [numberInput(() => monster.hp, (v) => { monster.hp = v; onChange && onChange(); }, { min: 0, class: "mono", "aria-label": "Хиты", style: "width:72px" }), textInput(() => monster.hitDice, set("hitDice"), { placeholder: "2к6", class: "mono", "aria-label": "Кость хитов" })]),
+    },
+    { label: "Скорость", get: () => monster.speed, set: set("speed"), placeholder: "30 фт., полёт 60 фт." },
+  ];
+}
+function kvBottomRows(onChange) {
+  const set = (k) => (v) => {
+    monster[k] = v;
+    onChange && onChange();
+  };
+  return [
+    { label: "Спасброски", get: () => monster.savingThrows, set: set("savingThrows"), placeholder: "Тел +7, Мдр +4", mono: true },
+    { label: "Навыки", get: () => monster.skills, set: set("skills"), placeholder: "Восприятие +5, Скрытность +6", mono: true },
+    { label: "Уязвимости к урону", get: () => monster.damageVulnerabilities, set: set("damageVulnerabilities") },
+    { label: "Сопротивления к урону", get: () => monster.damageResistances, set: set("damageResistances") },
+    { label: "Иммунитет к урону", get: () => monster.damageImmunities, set: set("damageImmunities") },
+    { label: "Иммунитет к состояниям", get: () => monster.conditionImmunities, set: set("conditionImmunities") },
+    { label: "Чувства", get: () => monster.senses, set: set("senses"), placeholder: "тёмное зрение 60 фт., пасс. Внимательность 12" },
+    { label: "Языки", get: () => monster.languages, set: set("languages") },
+    {
+      label: "Опасность",
+      get: () => [monster.cr ? monster.cr : "", monster.proficiencyBonus ? "бонус мастерства " + fmtMod(monster.proficiencyBonus) : ""].filter(Boolean).join(", "),
+      custom: () => h("div", { class: "kvt-pair" }, [textInput(() => monster.cr, (v) => { monster.cr = v; onChange && onChange(); }, { placeholder: "1/2", class: "mono", "aria-label": "Опасность", style: "width:72px" }), labeled("Бонус мастерства", numberInput(() => monster.proficiencyBonus, set("proficiencyBonus"), { min: 0, class: "mono", style: "width:72px" }))]),
+    },
+  ];
 }
 
 // ==================== рендер ====================
@@ -158,11 +174,7 @@ function renderApp() {
 }
 
 function renderEditView(root) {
-  // ---- шапка: портрет + имя/размер/тип/мировоззрение ----
-  const portrait = monster.imageUrl
-    ? h("img", { class: "portrait-img", src: monster.imageUrl })
-    : h("div", { class: "portrait-placeholder", text: "нет арта" });
-  const upload = h("input", { type: "file", accept: "image/*" });
+  const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
     if (!file) return;
@@ -170,227 +182,130 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       monster.imageUrl = url;
       scheduleSave();
-      renderApp();
+      hero.setGlyph(monsterGlyph(), monster.imageUrl);
+      artBtn.textContent = "Убрать арт";
+      preview.update();
     } catch (err) {
       showAlert("Не удалось загрузить арт: " + err.message);
     }
   });
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("div", { class: "portrait-wrap" }, [portrait, h("div", { class: "col", style: "flex:1 1 auto;gap:6px;" }, [
-        field("Имя", textInput(() => monster.name, (v) => { monster.name = v; document.getElementById("monsterTitle").textContent = v || "Без имени"; })),
-        field("Токен-арт", upload),
-      ])]),
-      h("div", { class: "row" }, [
-        field("Размер", textInput(() => monster.size, (v) => (monster.size = v), { placeholder: "Средний" })),
-        field("Тип", textInput(() => monster.type, (v) => (monster.type = v), { placeholder: "гуманоид" })),
-        field("Мировоззрение", textInput(() => monster.alignment, (v) => (monster.alignment = v), { placeholder: "нейтральное" })),
-        field("Опасность (CR)", textInput(() => monster.cr, (v) => (monster.cr = v), { placeholder: "1/2" })),
-        field("Бонус мастерства", numberInput(() => monster.proficiencyBonus, (v) => (monster.proficiencyBonus = v), { min: 0 })),
-      ]),
-      tagsField(),
-    ])
-  );
+  const artBtn = h("button", {
+    type: "button",
+    text: monster.imageUrl ? "Убрать арт" : "Загрузить токен-арт…",
+    onclick: () => {
+      if (monster.imageUrl) {
+        monster.imageUrl = "";
+        scheduleSave();
+        hero.setGlyph(monsterGlyph(), "");
+        artBtn.textContent = "Загрузить токен-арт…";
+        preview.update();
+      } else upload.click();
+    },
+  });
 
-  // ---- боевые показатели ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Боевые показатели" }),
-      h("div", { class: "row" }, [
-        field("КД (AC)", numberInput(() => monster.ac, (v) => (monster.ac = v), { min: 0 })),
-        field("КД — примечание", textInput(() => monster.acNote, (v) => (monster.acNote = v), { placeholder: "природный доспех" })),
-        field("Хиты (число)", numberInput(() => monster.hp, (v) => (monster.hp = v), { min: 0 })),
-        field("Кость хитов", textInput(() => monster.hitDice, (v) => (monster.hitDice = v), { placeholder: "8d8+16" })),
-      ]),
-      field("Скорость", textInput(() => monster.speed, (v) => (monster.speed = v), { placeholder: "30 фт., полёт 60 фт." })),
-    ])
-  );
+  // Книжный подзаголовок: размер, тип и мировоззрение правятся в нём.
+  const subInput = (key, ph, size) => {
+    const inp = textInput(() => monster[key], (v) => { monster[key] = v; inp.size = Math.max(size, v.length + 1); if (key === "type") { hero.setGlyph(monsterGlyph(), monster.imageUrl); preview.update(); } }, { placeholder: ph, "aria-label": ph });
+    inp.size = Math.max(size, (monster[key] || "").length + 1);
+    return inp;
+  };
+  const subtitle = h("div", { class: "card-sub" }, [subInput("size", "Средний", 8), h("span", { text: " " }), subInput("type", "гуманоид", 12), h("span", { text: ", " }), subInput("alignment", "нейтральное", 12)]);
 
-  // ---- характеристики ----
-  const grid = h("div", { class: "ability-grid" });
-  for (const a of ABILITIES) {
-    const scoreGet = () => monster.abilities[a.key];
-    const scoreSet = (v) => (monster.abilities[a.key] = Math.max(1, Math.min(30, v || 10)));
-    grid.appendChild(
-      h("div", { class: "ability-box" }, [
-        h("span", { class: "ability-name", text: a.label }),
-        numberInput(scoreGet, scoreSet, { min: 1, max: 30 }),
-        h("div", { class: "ability-actions" }, [
-          computed("", () => fmtMod(abilityMod(monster.abilities[a.key]))),
-          rollBtn(() => "1d20" + fmtMod(abilityMod(monster.abilities[a.key])), a.label),
+  const hero = renderHero({
+    glyph: monsterGlyph(),
+    imageUrl: monster.imageUrl,
+    color: crColor(monster.cr),
+    name: monster.name,
+    namePlaceholder: "Имя существа",
+    pills: heroPills(),
+    subtitle,
+    controls: [h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    onName: (v) => {
+      monster.name = v;
+      document.getElementById("monsterTitle").textContent = v || "Без имени";
+      scheduleSave();
+      preview.update();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+
+  const preview = renderMonsterPreview(monster, { glyphNode });
+  const refreshHead = () => {
+    hero.setPills(heroPills());
+    hero.setColor(crColor(monster.cr));
+    preview.update();
+  };
+  const kvTop = renderKvTable(kvTopRows(() => preview.update()), { onChange: scheduleSave });
+  const tiles = renderAbilityTiles(monster, { onChange: () => { scheduleSave(); preview.update(); }, sendRoll });
+  const kvBottom = renderKvTable(kvBottomRows(refreshHead), { onChange: scheduleSave, hint: "Пустые строки в чтении скрываются. +к попаданию и формулы урона в действиях кликабельны." });
+
+  const compatSummary = () => [monster.source, monster.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
+  const compatFold = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary(),
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => monster.source, (v) => { monster.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "MM'24" })),
+        labeled("Модуль Foundry", textInput(() => monster.foundryModuleId, (v) => { monster.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.monsters" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
+      ]),
+      tagsField(() => hero.setPills(heroPills())),
+    ],
+  });
+
+  root.appendChild(
+    renderBody(
+      [
+        kvTop,
+        tiles,
+        kvBottom,
+        h("div", { class: "card-folds" }, [
+          textBlock("Особенности", "traits", { open: true }),
+          textBlock("Действия", "actions", { open: true }),
+          textBlock("Бонусные действия", "bonusActions"),
+          textBlock("Реакции", "reactions"),
+          textBlock("Вступление к легендарным действиям", "legendaryActionsIntro"),
+          textBlock("Легендарные действия", "legendaryActions"),
+          textBlock("Действия и эффекты логова", "lairActions"),
+          spellsSection(false),
+          invSection(false),
+          textBlock("Описание", "description"),
+          compatFold,
+          importSection(),
         ]),
-      ])
-    );
-  }
-  root.appendChild(h("div", { class: "section" }, [h("h3", { text: "Характеристики" }), grid]));
-
-  // ---- спасброски / навыки / сопротивления / чувства ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Спасброски, навыки, сопротивления" }),
-      h("div", { class: "grid-cols" }, [
-        field("Спасброски", textInput(() => monster.savingThrows, (v) => (monster.savingThrows = v), { placeholder: "Тел +7, Мдр +4" })),
-        field("Навыки", textInput(() => monster.skills, (v) => (monster.skills = v), { placeholder: "Восприятие +5, Скрытность +6" })),
-        field("Уязвимости к урону", textInput(() => monster.damageVulnerabilities, (v) => (monster.damageVulnerabilities = v))),
-        field("Сопротивления к урону", textInput(() => monster.damageResistances, (v) => (monster.damageResistances = v))),
-        field("Иммунитет к урону", textInput(() => monster.damageImmunities, (v) => (monster.damageImmunities = v))),
-        field("Иммунитет к состояниям", textInput(() => monster.conditionImmunities, (v) => (monster.conditionImmunities = v))),
-        field("Чувства", textInput(() => monster.senses, (v) => (monster.senses = v), { placeholder: "тёмное зрение 60 фт., Пасс. Восприятие 12" })),
-        field("Языки", textInput(() => monster.languages, (v) => (monster.languages = v))),
-      ]),
-    ])
+      ],
+      [preview]
+    )
   );
-
-  // ---- заклинания (ссылки на общую библиотеку — см. panel-section
-  // "spells" в dm.html, добавление сюда происходит оттуда, здесь только
-  // просмотр/открытие/удаление) ----
-  root.appendChild(spellsSection());
-  root.appendChild(invSection());
-
-  // ---- текстовые блоки способностей ----
-  root.appendChild(mdBlock("Особенности", () => monster.traits, (v) => (monster.traits = v)));
-  root.appendChild(mdBlock("Действия", () => monster.actions, (v) => (monster.actions = v)));
-  root.appendChild(mdBlock("Бонусные действия", () => monster.bonusActions, (v) => (monster.bonusActions = v)));
-  root.appendChild(mdBlock("Реакции", () => monster.reactions, (v) => (monster.reactions = v)));
-  root.appendChild(mdBlock("Вступление к легендарным действиям", () => monster.legendaryActionsIntro, (v) => (monster.legendaryActionsIntro = v), { rows: 2 }));
-  root.appendChild(mdBlock("Легендарные действия", () => monster.legendaryActions, (v) => (monster.legendaryActions = v)));
-  root.appendChild(mdBlock("Действия и эффекты логова", () => monster.lairActions, (v) => (monster.lairActions = v)));
-  root.appendChild(mdBlock("Описание / лор", () => monster.description, (v) => (monster.description = v)));
-
-  // ---- импорт из TTG Club ----
-  root.appendChild(importSection());
 }
 
 // ==================== read-режим (по умолчанию) ====================
-// Аккуратный статблок вместо формы — тот же макет, что у классического
-// блока существа 5e (и у страницы ttg.club, которую разбирает
-// monster-import.js: шапка/КД-ХП-скорость/характеристики/спасброски-навыки-
-// чувства/способности по разделам). Никаких мутирующих контролов — только
-// чтение и клики по формулам (см. web/src/inline-rolls.js).
-
-// rollLink — кликабельное число, кидающее formula через тот же sendRoll, что
-// и кнопки 🎲 в режиме редактирования (см. rollBtn выше).
-function rollLink(formula, label, text) {
-  const a = h("a", { class: "inline-roll", href: "#", title: "Бросить " + label, text });
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    sendRoll(formula, label);
-  });
-  return a;
-}
-
-// lineIf — строка "Метка значение", либо null, если значение пустое (read-
-// режим не показывает пустые поля вообще, в отличие от формы редактирования).
-function lineIf(label, value) {
-  const v = (value ?? "").toString().trim();
-  if (!v) return null;
-  return h("div", { class: "sb-line" }, [h("strong", { text: label + " " }), v]);
-}
-
-// proseBlock — заголовок капсом + HTML-поле (то же renderNoteHtml, что и
-// живой предпросмотр в mdBlock), с постобработкой кликабельных формул.
-// null, если поле пустое — раздел просто не появляется.
-function proseBlock(title, htmlContent) {
-  if (!htmlContent || !String(htmlContent).trim()) return null;
-  const body = h("div", { class: "sb-prose" });
-  body.innerHTML = renderNoteHtml(htmlContent);
-  enhanceRolls(body, sendRoll);
-  wireCatalogLinks(body);
-  return h("div", { class: "sb-block" }, [h("h3", { class: "sb-section-title", text: title }), body]);
-}
-
-function readHeader() {
-  const portrait = monster.imageUrl
-    ? h("img", { class: "sb-portrait", src: monster.imageUrl })
-    : h("div", { class: "sb-portrait sb-portrait-placeholder" });
-  const subtitle = [[monster.size, monster.type].filter(Boolean).join(" "), monster.alignment].filter(Boolean).join(", ");
-  const tags = monster.tags.length
-    ? h("div", { class: "sb-tags" }, monster.tags.map((t) => h("span", { class: "sb-tag-pill", text: t })))
-    : null;
-  return h("div", { class: "sb-header" }, [
-    portrait,
-    h("div", { class: "sb-header-text" }, [
-      h("h2", { class: "sb-name", text: monster.name || "Без имени" }),
-      subtitle ? h("div", { class: "sb-subtitle", text: subtitle }) : null,
-      tags,
-    ]),
-  ]);
-}
-
-// readInfo — КД/ХП/скорость + спасброски/навыки/сопротивления/чувства/языки/
-// опасность одним блоком, чтобы прогнать через enhanceRolls один раз (числа
-// в этих строках — свободный текст ДМ/импорта, отдельный парсер под них не
-// нужен, тот же общий regex справляется).
-function readInfo() {
-  const wrap = h("div", { class: "sb-info" });
-  const acText = monster.acNote ? `${monster.ac || 0} (${monster.acNote})` : String(monster.ac || 0);
-  wrap.appendChild(h("div", { class: "sb-line" }, [h("strong", { text: "Класс доспеха " }), acText]));
-  const hpText = monster.hitDice ? `${monster.hp || 0} (${monster.hitDice})` : String(monster.hp || 0);
-  wrap.appendChild(h("div", { class: "sb-line" }, [h("strong", { text: "Хиты " }), hpText]));
-  const add = (label, value) => {
-    const line = lineIf(label, value);
-    if (line) wrap.appendChild(line);
-  };
-  add("Скорость", monster.speed);
-  add("Спасброски", monster.savingThrows);
-  add("Навыки", monster.skills);
-  add("Уязвимости к урону", monster.damageVulnerabilities);
-  add("Сопротивления к урону", monster.damageResistances);
-  add("Иммунитет к урону", monster.damageImmunities);
-  add("Иммунитет к состояниям", monster.conditionImmunities);
-  add("Чувства", monster.senses);
-  add("Языки", monster.languages);
-  const crBits = [];
-  if (monster.cr) crBits.push("Опасность " + monster.cr);
-  if (monster.proficiencyBonus) crBits.push("Бонус мастерства " + fmtMod(monster.proficiencyBonus));
-  if (crBits.length) wrap.appendChild(h("div", { class: "sb-line", text: crBits.join(" · ") }));
-  return wrap;
-}
-
-function readAbilityGrid() {
-  const grid = h("div", { class: "sb-ability-grid" });
-  for (const a of ABILITIES) {
-    const score = monster.abilities[a.key];
-    const mod = abilityMod(score);
-    grid.appendChild(
-      h("div", { class: "sb-ability-box" }, [
-        h("span", { class: "sb-ability-name", text: a.label }),
-        h("span", { class: "sb-ability-score", text: String(score) }),
-        rollLink("1d20" + fmtMod(mod), a.label, fmtMod(mod)),
-      ])
-    );
-  }
-  return grid;
-}
 
 function renderReadView(root) {
-  root.appendChild(readHeader());
-  root.appendChild(h("div", { class: "sb-hr" }));
-  const info = readInfo();
-  root.appendChild(info);
-  enhanceRolls(info, sendRoll); // те же числа-формулы в свободном тексте (спасброски/навыки/КД/ХП...), что и в прозе ниже
-  root.appendChild(h("div", { class: "sb-hr" }));
-  root.appendChild(readAbilityGrid());
+  const subtitle = h("div", { class: "card-sub", text: [[monster.size, monster.type].filter(Boolean).join(" "), monster.alignment].filter(Boolean).join(", ") });
+  const hero = renderHero({ glyph: monsterGlyph(), imageUrl: monster.imageUrl, color: crColor(monster.cr), name: monster.name, pills: heroPills(), subtitle, readOnly: true });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
 
-  const spells = spellsSection(true);
-  const inv = invSection(true);
+  const preview = renderMonsterPreview(monster, { glyphNode });
+  const kvTop = renderKvTable(kvTopRows(), { readOnly: true, sendRoll });
+  const tiles = renderAbilityTiles(monster, { readOnly: true, sendRoll });
+  const kvBottom = renderKvTable(kvBottomRows(), { readOnly: true, sendRoll });
   const blocks = [
-    proseBlock("Особенности", monster.traits),
-    proseBlock("Действия", monster.actions),
-    proseBlock("Бонусные действия", monster.bonusActions),
-    proseBlock("Реакции", monster.reactions),
-    // Вступление и сами действия склеиваются пустой строкой, а не через
-    // <p>…</p>: после HTML-блока marked считает следующие строки его
-    // продолжением и markdown в них не разбирает — названия действий так и
-    // оставались текстом "**Рывок.**" вместо жирного.
-    proseBlock("Легендарные действия", [monster.legendaryActionsIntro, monster.legendaryActions].filter(Boolean).join("\n\n")),
-    proseBlock("Действия и эффекты логова", monster.lairActions),
-    proseBlock("Описание", monster.description),
+    textBlock("Особенности", "traits", { readOnly: true }),
+    textBlock("Действия", "actions", { readOnly: true }),
+    textBlock("Бонусные действия", "bonusActions", { readOnly: true }),
+    textBlock("Реакции", "reactions", { readOnly: true }),
+    textBlock("Легендарные действия", "legendaryActions", { readOnly: true }),
+    textBlock("Действия и эффекты логова", "lairActions", { readOnly: true }),
+    spellsSection(true),
+    invSection(true),
+    textBlock("Описание", "description", { readOnly: true, open: false }),
   ].filter(Boolean);
-  if (spells || inv || blocks.length) root.appendChild(h("div", { class: "sb-hr" }));
-  if (spells) root.appendChild(spells);
-  if (inv) root.appendChild(inv);
-  blocks.forEach((b) => root.appendChild(b));
+  const compat = [monster.source, monster.foundryModuleId].filter(Boolean).join(" · ");
+  if (compat) blocks.push(fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }));
+
+  root.appendChild(renderBody([kvTop, tiles, kvBottom, blocks.length ? h("div", { class: "card-folds" }, blocks) : null], [preview]));
 }
 
 // applyImport — общая точка для файла и вставленного текста: парсит JSON,
@@ -441,14 +356,17 @@ function importSection() {
   });
   const textarea = h("textarea", { id: "importTextarea", placeholder: "...или вставь сюда содержимое JSON-файла" });
   const importBtn = h("button", { type: "button", id: "importBtn", text: "Импортировать вставленный JSON", onclick: () => applyImport(textarea.value, msg) });
-  return h("div", { class: "section", id: "importSection" }, [
-    h("h3", { text: "Импорт из TTG Club" }),
-    h("p", { class: "hint" }, "На странице существа на 5e14.ttg.club нажми «Экспорт для FVTT» и сохрани JSON-файл — выбери его ниже (или вставь содержимое текстом). Поля карточки заменятся тем, что удастся разобрать из файла; уже добавленные заклинания и теги не трогаются."),
-    field("Файл экспорта", fileInput),
-    textarea,
-    importBtn,
-    msg,
-  ]);
+  return fold({
+    title: "Импорт из TTG Club / Foundry VTT",
+    summary: "JSON-экспорт существа",
+    body: [
+      h("p", { class: "card-note" }, "На странице существа на 5e14.ttg.club нажми «Экспорт для FVTT» и сохрани JSON-файл — выбери его ниже (или вставь содержимое текстом). Поля карточки заменятся тем, что удастся разобрать из файла; уже добавленные заклинания и теги не трогаются."),
+      labeled("Файл экспорта", fileInput),
+      textarea,
+      importBtn,
+      msg,
+    ],
+  });
 }
 
 function spellLevelLabel(lvl) {
@@ -510,16 +428,16 @@ function mergeSpellRefs(existing, incoming) {
 // списка — readOnly скрывает ✕, читает то же самое, чем пользуется
 // read-режим (renderReadView).
 function spellsSection(readOnly) {
-  const list = h("div", { class: "spell-ref-list" });
+  const list = h("div", { class: "mb-refs" });
   function renderList() {
     list.innerHTML = "";
     if (monster.spells.length === 0) {
       if (readOnly) return; // read-режим не занимает место под пустой список — как остальные пустые блоки
-      list.appendChild(h("p", { class: "hint", text: "Заклинаний нет — добавь их из панели «Заклинания» ДМ." }));
+      list.appendChild(h("p", { class: "card-note", text: "Заклинаний нет — добавь их из панели «Заклинания» ДМ." }));
       return;
     }
     monster.spells.forEach((ref, i) => {
-      const name = h("span", { class: "spell-ref-name", text: ref.name });
+      const name = h("span", { class: "nm", text: ref.name });
       const spellId = spellRefId(ref);
       if (spellId) {
         name.classList.add("clickable");
@@ -530,16 +448,18 @@ function spellsSection(readOnly) {
         // (тот же приём, что popoutBtn в floating-window.js).
         name.onclick = () => window.open(`/spellbook.html?id=${spellId}`, "spell-" + spellId);
       }
-      const row = [name, h("span", { class: "spell-ref-level", text: spellLevelLabel(ref.level) })];
+      const row = [name, h("span", { class: "tag", text: spellLevelLabel(ref.level) })];
       if (!readOnly) {
-        row.push(h("button", { type: "button", html: icon("close", { size: 11 }), title: "Убрать из списка", onclick: () => { monster.spells.splice(i, 1); scheduleSave(); renderList(); } }));
+        row.push(h("button", { type: "button", html: icon("close", { size: 11 }), "aria-label": "Убрать из списка", onclick: () => { monster.spells.splice(i, 1); scheduleSave(); renderList(); f.setSummary(summary()); } }));
       }
-      list.appendChild(h("div", { class: "spell-ref-row" }, row));
+      list.appendChild(h("div", { class: "mb-ref" }, row));
     });
   }
   renderList();
   if (readOnly && monster.spells.length === 0) return null; // ничего показывать не нужно
-  return h("div", { class: readOnly ? "sb-block" : "section" }, [h("h3", { class: readOnly ? "sb-section-title" : undefined, text: "Заклинания" }), list]);
+  const summary = () => (monster.spells.length ? monster.spells.map((r) => r.name).join(", ") : "нет");
+  const f = fold({ title: "Заклинания", summary: readOnly ? "" : summary(), body: [list], open: readOnly });
+  return f;
 }
 
 // invSection — шаблон добычи монстра (domain.Monster.Inventory, см. план
@@ -547,24 +467,24 @@ function spellsSection(readOnly) {
 // item-picker.js) — не в отдельной панели ДМ, каталог предметов не тащит за
 // собой того же "кому назначить"/выбора цели, что у заклинаний.
 function invSection(readOnly) {
-  const list = h("div", { class: "inv-ref-list" });
+  const list = h("div", { class: "mb-refs" });
   function renderList() {
     list.innerHTML = "";
     if (monster.inventory.length === 0) {
       if (readOnly) return; // read-режим не занимает место под пустой список
-      list.appendChild(h("p", { class: "hint", text: "Инвентарь пуст — добавь предметы из каталога ниже." }));
+      list.appendChild(h("p", { class: "card-note", text: "Инвентарь пуст — добавь предметы из каталога ниже." }));
       return;
     }
     monster.inventory.forEach((e, i) => {
-      const avatar = h("div", { class: "inv-avatar" });
+      const avatar = h("div", { class: "av" });
       if (e.imageUrl) avatar.style.backgroundImage = `url("${e.imageUrl}")`;
-      const name = h("span", { class: "spell-ref-name", text: e.name });
-      const weight = h("span", { class: "spell-ref-level", text: (e.weightLb || 0) + " фнт" });
+      const name = h("span", { class: "nm", text: e.name });
+      const weight = h("span", { class: "tag", text: (e.weightLb || 0) + " фнт" });
       const row = [avatar, name, weight];
       if (readOnly) {
-        row.push(h("span", { class: "spell-ref-level", text: "×" + e.quantity }));
+        row.push(h("span", { class: "tag", text: "×" + e.quantity }));
       } else {
-        const qty = h("input", { type: "number", min: "0", value: String(e.quantity), style: "width:52px;" });
+        const qty = h("input", { type: "number", min: "0", value: String(e.quantity), "aria-label": "Количество" });
         qty.addEventListener("change", () => {
           e.quantity = parseInt(qty.value, 10) || 0;
           scheduleSave();
@@ -574,28 +494,27 @@ function invSection(readOnly) {
           h("button", {
             type: "button",
             html: icon("close", { size: 11 }),
-            title: "Убрать из списка",
+            "aria-label": "Убрать из списка",
             onclick: () => {
               monster.inventory.splice(i, 1);
               scheduleSave();
               renderList();
+              block.setSummary(summary());
             },
           })
         );
       }
-      list.appendChild(h("div", { class: "spell-ref-row" }, row));
+      list.appendChild(h("div", { class: "mb-ref" }, row));
     });
   }
   renderList();
   if (readOnly && monster.inventory.length === 0) return null;
 
-  const block = h("div", { class: readOnly ? "sb-block" : "section" }, [
-    h("h3", { class: readOnly ? "sb-section-title" : undefined, text: "Инвентарь (лут)" }),
-    list,
-  ]);
+  const summary = () => (monster.inventory.length ? monster.inventory.map((e) => e.name).join(", ") : "нет");
+  const block = fold({ title: "Инвентарь (лут)", summary: readOnly ? "" : summary(), body: [list], open: readOnly });
   if (!readOnly) {
     const pickerWrap = h("div", { style: "margin-top:8px;" });
-    block.appendChild(pickerWrap);
+    block.querySelector(".card-fold-body").appendChild(pickerWrap);
     initItemPicker(pickerWrap, {
       onPick: (item, qty) => {
         const existing = monster.inventory.find((x) => x.itemId === item.id);
@@ -611,25 +530,23 @@ function invSection(readOnly) {
           });
         scheduleSave();
         renderList();
+        block.setSummary(summary());
       },
     });
   }
   return block;
 }
 
-function tagsField() {
-  const wrap = h("div", {});
-  const list = h("div", { class: "tag-list" });
+function tagsField(onChange) {
+  const list = h("div", { class: "card-chips" });
   function renderTags() {
     list.innerHTML = "";
     monster.tags.forEach((tag, i) => {
-      list.appendChild(
-        h("span", { class: "tag-pill" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), onclick: () => { monster.tags.splice(i, 1); scheduleSave(); renderTags(); } })])
-      );
+      list.appendChild(h("span", { class: "card-chip" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), "aria-label": "Убрать тег", onclick: () => { monster.tags.splice(i, 1); scheduleSave(); renderTags(); onChange(); } })]));
     });
   }
   renderTags();
-  const input = h("input", { type: "text", placeholder: "тег + Enter (биом/источник/кампания)" });
+  const input = h("input", { type: "text", placeholder: "тег + Enter" });
   input.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
@@ -639,9 +556,9 @@ function tagsField() {
     input.value = "";
     scheduleSave();
     renderTags();
+    onChange();
   });
-  wrap.append(field("Теги", input), list);
-  return wrap;
+  return h("div", {}, [labeled("Теги", input), list]);
 }
 
 // ==================== autosave ====================
@@ -676,7 +593,7 @@ async function doSave() {
   dirty = false;
   setSaveStatus("saving");
   try {
-    monster = normalizeMonster(await updateMonster(monsterId, monster));
+    mergeInPlace(monster, normalizeMonster(await updateMonster(monsterId, monster)));
     setSaveStatus("saved");
     // Панель "Бестиарий" в dm.html кэширует список (обновляется только при
     // открытии панели) — без этого пинга её карточка/токен-арт оставались бы
