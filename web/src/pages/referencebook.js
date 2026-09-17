@@ -17,6 +17,9 @@ import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
+import { glyphNode } from "../condition-glyphs.js";
+import { REFERENCE_KINDS, kindInfo, kindLabel } from "../reference-kind.js";
 
 // ==================== state ====================
 
@@ -32,28 +35,9 @@ function normalizeReference(raw) {
   return ref;
 }
 
-// ==================== DOM helpers (та же схема, что itembook.js) ====================
+// ==================== DOM helpers ====================
 
-function h(tag, attrs, children) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") e.className = v;
-    else if (k === "text") e.textContent = v;
-    else if (k === "html") e.innerHTML = v;
-    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of [].concat(children || [])) {
-    if (c === undefined || c === null || c === false) continue;
-    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-  }
-  return e;
-}
-
-function field(labelText, inputEl) {
-  return h("label", { class: "field" }, [h("span", { text: labelText }), inputEl]);
-}
+const h = hh;
 
 function textInput(get, set, opts) {
   const inp = h("input", Object.assign({ type: "text" }, opts || {}));
@@ -65,19 +49,45 @@ function textInput(get, set, opts) {
   return inp;
 }
 
-// mdBlock — textarea markdown/HTML слева + живой рендер справа (тот же
-// `marked`, что и заметки ДМ/бестиарий/заклинания/предметы).
-function mdBlock(labelText, get, set, opts) {
+// mdBlock — textarea markdown/HTML + живой рендер (тот же `marked`, что и
+// заметки ДМ, см. web/src/notes/markdown.js).
+function mdBlock(labelText, get, set) {
   const render = h("div", { class: "md-render" });
   render.innerHTML = renderNoteHtml(get());
-  const t = h("textarea", opts || {});
+  const t = h("textarea", { "aria-label": labelText });
   t.value = get() ?? "";
   t.addEventListener("input", () => {
     set(t.value);
     render.innerHTML = renderNoteHtml(t.value);
     scheduleSave();
   });
-  return h("div", { class: "section" }, [h("h3", { text: labelText }), h("div", { class: "md-block" }, [t, render])]);
+  return h("div", { class: "md-block" }, [t, render]);
+}
+
+const refGlyph = () => glyphNode((kindInfo(reference.kind) || { glyph: "scroll" }).glyph, "");
+const refColor = () => (kindInfo(reference.kind) || {}).color || "";
+
+function heroPills() {
+  return [reference.kind ? pill(kindLabel(reference.kind), "rar") : null, reference.source ? pill(reference.source, "gold") : null, ...reference.tags.map((t) => pill(t))];
+}
+
+// sheetPreview — «На листе персонажа»: поле листа, в котором запись
+// появится подсказкой (см. character-sheet.js: referenceNames). Только у
+// видов записей, у которых такое поле есть.
+function sheetPreview() {
+  const k = kindInfo(reference.kind);
+  if (!k || !k.sheetField) return null;
+  const box = h("div", { class: "rp" });
+  box.update = () => {
+    box.innerHTML = "";
+    box.append(
+      h("span", { class: "card-lbl", text: "На листе персонажа" }),
+      h("div", { class: "rp-field" }, [h("span", { class: "rp-fl", text: k.sheetField }), h("div", { class: "rp-fv" }, [h("span", { text: reference.name || "Без имени" }), h("span", { html: icon("chevron-down", { size: 12 }) })])]),
+      h("span", { class: "card-aside-note", text: "Игрок выберет эту запись в поле листа, а описание появится подсказкой рядом." })
+    );
+  };
+  box.update();
+  return box;
 }
 
 // ==================== рендер ====================
@@ -90,10 +100,7 @@ function renderApp() {
 }
 
 function renderEditView(root) {
-  const portrait = reference.imageUrl
-    ? h("img", { class: "portrait-img", src: reference.imageUrl })
-    : h("div", { class: "portrait-placeholder", text: "нет иконки" });
-  const upload = h("input", { type: "file", accept: "image/*" });
+  const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
     if (!file) return;
@@ -101,69 +108,117 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       reference.imageUrl = url;
       scheduleSave();
-      renderApp();
+      hero.setGlyph(refGlyph(), reference.imageUrl);
+      artBtn.textContent = "Убрать арт";
     } catch (err) {
       showAlert("Не удалось загрузить иконку: " + err.message);
     }
   });
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("div", { class: "portrait-wrap" }, [portrait, h("div", { class: "col", style: "flex:1 1 auto;gap:6px;" }, [
-        field("Имя", textInput(() => reference.name, (v) => { reference.name = v; document.getElementById("refTitle").textContent = v || "Без имени"; })),
-        field("Иконка", upload),
-      ])]),
-      h("div", { class: "row" }, [
-        field("Вид записи", textInput(() => reference.kind, (v) => (reference.kind = v), { placeholder: "класс / архетип / происхождение / вид / черта класса" })),
-        field("Родитель", textInput(() => reference.parentName, (v) => (reference.parentName = v), { placeholder: "например «Варвар» — для архетипа" })),
-        field("Источник", textInput(() => reference.source, (v) => (reference.source = v), { placeholder: "PHB 2024" })),
+  const artBtn = h("button", {
+    type: "button",
+    text: reference.imageUrl ? "Убрать арт" : "Загрузить свой…",
+    onclick: () => {
+      if (reference.imageUrl) {
+        reference.imageUrl = "";
+        scheduleSave();
+        hero.setGlyph(refGlyph(), "");
+        artBtn.textContent = "Загрузить свой…";
+      } else upload.click();
+    },
+  });
+
+  // Вид записи — известные списком, чужое значение остаётся как есть.
+  const kindSel = h("select", { "aria-label": "Вид записи" });
+  kindSel.appendChild(h("option", { value: "", text: "— вид записи —" }));
+  for (const k of REFERENCE_KINDS) kindSel.appendChild(h("option", { value: k.key, text: kindLabel(k.key) }));
+  if (reference.kind && !kindInfo(reference.kind)) kindSel.appendChild(h("option", { value: reference.kind, text: reference.kind }));
+  kindSel.value = reference.kind || "";
+  kindSel.addEventListener("change", () => {
+    reference.kind = kindSel.value;
+    scheduleSave();
+    renderApp(); // меняется набор: глиф, цвет, поле родителя, панель «На листе»
+  });
+  const parentInp = textInput(() => reference.parentName, (v) => { reference.parentName = v; parentInp.size = Math.max(12, v.length + 1); }, { placeholder: "родитель, например «Плут»", "aria-label": "Родитель" });
+  parentInp.size = Math.max(12, (reference.parentName || "").length + 1);
+  const hasParent = !!(kindInfo(reference.kind) || {}).hasParent || !!reference.parentName;
+  const subtitle = h("div", { class: "card-sub" }, [kindSel, hasParent ? h("span", { text: " · " }) : null, hasParent ? parentInp : null]);
+
+  const hero = renderHero({
+    glyph: refGlyph(),
+    imageUrl: reference.imageUrl,
+    color: refColor(),
+    name: reference.name,
+    namePlaceholder: "Название записи",
+    pills: heroPills(),
+    square: true,
+    subtitle,
+    controls: [h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    onName: (v) => {
+      reference.name = v;
+      document.getElementById("refTitle").textContent = v || "Без имени";
+      scheduleSave();
+      if (preview) preview.update();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+
+  const preview = sheetPreview();
+  const compatSummary = () => [reference.source, reference.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
+  const compatFold = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary(),
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => reference.source, (v) => { reference.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "PHB'24" })),
+        labeled("Модуль Foundry", textInput(() => reference.foundryModuleId, (v) => { reference.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.classes" }), "Откуда импортирована — чтобы повторный импорт нашёл запись."),
       ]),
-      tagsField(),
-    ])
+      tagsField(() => hero.setPills(heroPills())),
+    ],
+  });
+
+  root.appendChild(
+    renderBody(
+      [h("div", { class: "card-desc" }, [mdBlock("Описание", () => reference.description, (v) => (reference.description = v))]), h("div", { class: "card-folds" }, [compatFold, importSection()])],
+      preview ? [preview] : null
+    )
   );
-
-  root.appendChild(mdBlock("Описание", () => reference.description, (v) => (reference.description = v)));
-
-  root.appendChild(importSection());
 }
 
 // ==================== read-режим (по умолчанию) ====================
 
-function readHeader() {
-  const portrait = reference.imageUrl
-    ? h("img", { class: "ib-portrait", src: reference.imageUrl })
-    : null;
-  const subtitleBits = [reference.kind, reference.parentName ? "родитель: " + reference.parentName : ""].filter(Boolean).join(", ");
-  const pills = [...(reference.source ? [reference.source] : []), ...reference.tags].map((t) => h("span", { class: "ib-tag-pill", text: t }));
-  const text = h("div", { class: "ib-header-text" }, [
-    h("h2", { class: "ib-name", text: reference.name || "Без имени" }),
-    h("div", { class: "ib-subtitle", text: subtitleBits }),
-    pills.length ? h("div", { class: "ib-tags" }, pills) : null,
-  ]);
-  return portrait ? h("div", { class: "ib-header" }, [portrait, text]) : text;
-}
-
 function renderReadView(root) {
-  root.appendChild(readHeader());
+  const subtitle = h("div", { class: "card-sub", text: [kindLabel(reference.kind), reference.parentName ? "· " + reference.parentName : ""].filter(Boolean).join(" ") });
+  const hero = renderHero({
+    glyph: refGlyph(),
+    imageUrl: reference.imageUrl,
+    color: refColor(),
+    name: reference.name,
+    pills: heroPills(),
+    square: true,
+    subtitle,
+    readOnly: true,
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
 
+  const preview = sheetPreview();
   const desc = reference.description && reference.description.trim();
+  const body = h("div", { class: "card-prose card-desc" });
   if (desc) {
-    root.appendChild(h("div", { class: "ib-hr" }));
-    const body = h("div", { class: "ib-prose" });
     body.innerHTML = renderNoteHtml(reference.description);
     wireCatalogLinks(body);
-    root.appendChild(h("div", { class: "ib-block" }, [h("h3", { class: "ib-section-title", text: "Описание" }), body]));
-  }
+  } else body.appendChild(h("p", { class: "card-note", text: "Описания пока нет." }));
+  const compat = [reference.source, reference.foundryModuleId].filter(Boolean).join(" · ");
+  root.appendChild(renderBody([body, compat ? h("div", { class: "card-folds" }, [fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] })]) : null], preview ? [preview] : null));
 }
 
-function tagsField() {
-  const wrap = h("div", {});
-  const list = h("div", { class: "tag-list" });
+function tagsField(onChange) {
+  const list = h("div", { class: "card-chips" });
   function renderTags() {
     list.innerHTML = "";
     reference.tags.forEach((tag, i) => {
-      list.appendChild(
-        h("span", { class: "tag-pill" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), onclick: () => { reference.tags.splice(i, 1); scheduleSave(); renderTags(); } })])
-      );
+      list.appendChild(h("span", { class: "card-chip" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), "aria-label": "Убрать тег", onclick: () => { reference.tags.splice(i, 1); scheduleSave(); renderTags(); onChange(); } })]));
     });
   }
   renderTags();
@@ -177,9 +232,9 @@ function tagsField() {
     input.value = "";
     scheduleSave();
     renderTags();
+    onChange();
   });
-  wrap.append(field("Теги", input), list);
-  return wrap;
+  return h("div", {}, [labeled("Теги", input), list]);
 }
 
 // applyImport — общая точка для файла и вставленного текста: парсит JSON
@@ -220,12 +275,15 @@ function importSection() {
     applyImport(await file.text(), msg);
     fileInput.value = "";
   });
-  return h("div", { class: "section", id: "importSection" }, [
-    h("h3", { text: "Импорт из Foundry VTT" }),
-    h("p", { class: "hint" }, "Экспортируй класс/архетип/черту из Foundry VTT (или распакованный пак целиком) в JSON и выбери файл ниже. Поля карточки заменятся тем, что удастся разобрать."),
-    field("Файл экспорта", fileInput),
-    msg,
-  ]);
+  return fold({
+    title: "Импорт из Foundry VTT",
+    summary: "JSON-экспорт записи",
+    body: [
+      h("p", { class: "card-note" }, "Экспортируй класс/архетип/черту из Foundry VTT (или распакованный пак целиком) в JSON и выбери файл ниже. Поля карточки заменятся тем, что удастся разобрать."),
+      labeled("Файл экспорта", fileInput),
+      msg,
+    ],
+  });
 }
 
 // ==================== autosave ====================
