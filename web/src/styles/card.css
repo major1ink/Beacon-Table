@@ -219,3 +219,19 @@
 .sp-chip-g { font-size: 14px; line-height: 1; display: inline-flex; }
 .sp-chip-g img { width: 16px; height: 16px; object-fit: contain; border-radius: 50%; }
 .sp-chip-r { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: nowrap; }
+
+/* ---- таблица «показатель · значение» (kv-table.js) ---- */
+.kvt { margin: 6px 18px 0; border-top: 2px solid rgba(181, 137, 31, 0.55); border-bottom: 2px solid rgba(181, 137, 31, 0.55); padding: 4px 0; }
+.kvt table { width: 100%; border-collapse: collapse; }
+.kvt th { font: 600 17px/1.15 var(--font-display); color: #fff; text-align: left; padding: 6px; width: 32%; border-top: 1px solid var(--border); vertical-align: middle; }
+.kvt td { padding: 4px 6px; border-top: 1px solid var(--border); }
+.kvt tr:first-child th, .kvt tr:first-child td { border-top: none; }
+.kvt td input { min-height: 34px; padding: 4px 8px; background: transparent; border-color: transparent; font-size: 14px; }
+.kvt td input:hover, .kvt td input:focus { border-color: rgba(255, 255, 255, 0.2); background: var(--bg); }
+.kvt td input.mono, .kvt-val.mono { font-family: ui-monospace, Menlo, monospace; font-variant-ligatures: none; }
+.kvt-val { display: block; padding: 4px 8px; font-size: 14px; line-height: 1.5; }
+.kvt-hint { font-size: 11px; color: var(--text-dim); padding: 4px 8px 2px; margin: 0; }
+@container card (max-width: 560px) {
+  .kvt { margin-inline: 14px; }
+  .kvt th { width: 40%; font-size: 15px; }
+}
