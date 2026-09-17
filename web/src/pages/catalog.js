@@ -33,6 +33,7 @@ import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
+import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
@@ -354,7 +355,7 @@ const CONFIGS = {
     avatarText: (c) => c.icon || "❔",
     searchHay: (c) => [c.name, c.slug, c.source, ...(c.tags || [])],
     badge: (c) => [c.levels > 1 ? `${c.levels} ур.` : "", (c.source || "").trim()],
-    subText: (c) => c.slug || "",
+    subText: (c) => (c.slug && CONDITION_RU[c.slug] ? conditionName(c.slug) + " (" + c.slug + ")" : ""),
     sidebar: [
       { id: "source", title: "Источник", kind: "list", of: bySource },
       { id: "tags", title: "Метки", kind: "list", of: byTags },

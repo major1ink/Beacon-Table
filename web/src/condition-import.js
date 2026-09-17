@@ -171,10 +171,9 @@ function effectSlug(effect) {
   }
   const flagged = effect.flags && effect.flags.core && effect.flags.core.statusId;
   if (flagged) return foundryStatusToSlug(flagged);
-  // Имя русское/произвольное — латинского slug'а из него не получится (см.
-  // service.NormalizeConditionSlug вырезает кириллицу). Тогда возвращаем
-  // пустую строку: карточка создастся, а slug ДМ впишет руками — конструктор
-  // об этом прямо предупреждает.
+  // Имя русское/произвольное — латинского кода из него не получится (см.
+  // service.NormalizeConditionSlug вырезает кириллицу). Тогда пустая
+  // строка: сервер выдаст карточке свой ключ (service.defaultConditionSlug).
   return normalizeSlug(effect.name || effect.label || "");
 }
 
