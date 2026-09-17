@@ -9,6 +9,7 @@
 // web/src/item-import.js (чистая функция, без побочных эффектов), этот файл
 // только вызывает её и мержит результат в текущую карточку.
 import { fetchMe, fetchItem, createItem, updateItem, deleteItem, uploadFile } from "../api.js";
+import { mergeInPlace } from "../merge-in-place.js";
 import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
@@ -376,7 +377,7 @@ async function doSave() {
   dirty = false;
   setSaveStatus("saving");
   try {
-    item = normalizeItem(await updateItem(itemId, item));
+    mergeInPlace(item, normalizeItem(await updateItem(itemId, item)));
     setSaveStatus("saved");
     // Панель "Предметы" в dm.html/player.html кэширует список (обновляется
     // только при открытии) — без этого пинга её строка оставалась бы видимо

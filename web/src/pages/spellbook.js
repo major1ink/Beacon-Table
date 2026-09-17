@@ -9,6 +9,7 @@
 // web/src/spell-import.js (чистая функция, без побочных эффектов), этот файл
 // только вызывает её и мержит результат в текущую карточку.
 import { fetchMe, fetchSpell, createSpell, updateSpell, deleteSpell, fetchConditions } from "../api.js";
+import { mergeInPlace } from "../merge-in-place.js";
 import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
@@ -442,7 +443,7 @@ async function doSave() {
   dirty = false;
   setSaveStatus("saving");
   try {
-    spell = normalizeSpell(await updateSpell(spellId, spell));
+    mergeInPlace(spell, normalizeSpell(await updateSpell(spellId, spell)));
     setSaveStatus("saved");
     // Панель "Заклинания" в dm.html/player.html кэширует список (обновляется
     // только при открытии) — без этого пинга её строка/уровень оставались бы
