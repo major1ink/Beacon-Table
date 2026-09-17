@@ -2,7 +2,7 @@
 // статблока: «Показатель · База · Изменение · Итог» для КД, скорости, хитов,
 // инициативы и шести характеристик. Изменение пишется формулой в ячейку:
 // «10» — поставить, «−2»/«+2» — прибавить, «>=10» — не ниже, «<=5» — не
-// выше; несколько через «;». Кубы («−1к6») — только в строке «Хиты в ход»,
+// выше, «/2» — вдвое (округление вниз); несколько через «;». Кубы («−1к6») — только в строке «Хиты в ход»,
 // это периодический модификатор по текущим хитам. База берётся со стенда
 // (stand.js), итог считает applyModifiers — то же, что видит трекер.
 //
@@ -10,7 +10,7 @@
 // держит его по ссылке и сливает ответ автосейва туда же (см.
 // pages/conditions.js: mergeArrayInPlace).
 import { el, labeled } from "./card-shell.js";
-import { applyModifiers, parseValue, MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, PERIOD_NONE, PERIOD_TURN_START, PERIOD_TURN_END, TARGET_HP_CURRENT } from "./modifiers.js";
+import { applyModifiers, parseValue, MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, MODE_DIV, PERIOD_NONE, PERIOD_TURN_START, PERIOD_TURN_END, TARGET_HP_CURRENT } from "./modifiers.js";
 import { fetchModifierTargets } from "./api.js";
 
 const ROWS = [
@@ -66,6 +66,9 @@ export function parseCell(raw, opts = {}) {
     s = s.replace(/\/(ур|уровень|lvl)$/i, "");
   }
   let mode = null;
+  // «/2», «×½», «½» — разделить; «×¼» — на четыре.
+  const m = /^(?:\/|÷|[x×]1\/)(\d+)$/.exec(s) || (/^[x×]?½$/.test(s) ? [s, "2"] : null) || (/^[x×]?¼$/.test(s) ? [s, "4"] : null);
+  if (m) return parseInt(m[1], 10) > 1 ? { mode: MODE_DIV, value: m[1], perLevel: false } : { bad: true, why: "Делитель — целое от 2: /2 вдвое, /4 вчетверо." };
   if (s.startsWith("=")) {
     mode = MODE_SET;
     s = s.slice(1);
@@ -112,6 +115,7 @@ export function cellText(m) {
   if (m.mode === MODE_SET) return "=" + v;
   if (m.mode === MODE_MIN) return "≥" + v;
   if (m.mode === MODE_MAX) return "≤" + v;
+  if (m.mode === MODE_DIV) return v === "2" ? "×½" : v === "4" ? "×¼" : "/" + v;
   return (v.startsWith("−") || v.startsWith("+") ? v : "+" + v) + (m.perLevel ? "/ур" : "");
 }
 const cellsText = (mods) => mods.map(cellText).join("; ");
@@ -307,7 +311,7 @@ export function renderStatEditor(list, onChange, { stand, periodic = true, readO
   const legend = el("p", {
     class: "card-note stat-legend",
     html:
-      "В ячейку: <code>10</code> поставить · <code>−2</code> / <code>+2</code> прибавить · <code>&gt;=10</code> не ниже · <code>&lt;=5</code> не выше · <code>−5/ур</code> за каждый уровень — действует, пока метка висит; несколько — через «;»." +
+      "В ячейку: <code>10</code> поставить · <code>−2</code> / <code>+2</code> прибавить · <code>/2</code> вдвое · <code>&gt;=10</code> не ниже · <code>&lt;=5</code> не выше · <code>−5/ур</code> за каждый уровень — действует, пока метка висит; несколько — через «;»." +
       (periodic ? " «Хиты в ход» — раз в ход: <code>−1к6</code> урон, <code>+5</code> лечение." : "") +
       " Пусто — не меняет.",
   });
@@ -329,7 +333,7 @@ export function renderStatEditor(list, onChange, { stand, periodic = true, readO
 export function describeModifier(m) {
   const label = targetLabel(m.target);
   const per = m.period === PERIOD_TURN_START ? " в начале хода" : m.period === PERIOD_TURN_END ? " в конце хода" : "";
-  const body = m.mode === MODE_SET ? "→ " + m.value : m.mode === MODE_MIN ? "не ниже " + m.value : m.mode === MODE_MAX ? "не выше " + m.value : cellText(m);
+  const body = m.mode === MODE_SET ? "→ " + m.value : m.mode === MODE_MIN ? "не ниже " + m.value : m.mode === MODE_MAX ? "не выше " + m.value : m.mode === MODE_DIV ? (m.value === "2" ? "вдвое" : "÷" + m.value) : cellText(m);
   return `${label} ${body}${per}${m.note ? ` (${m.note})` : ""}`;
 }
 

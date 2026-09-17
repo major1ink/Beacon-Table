@@ -307,3 +307,23 @@ func TestPerLevelModifierScalesWithStatusLevel(t *testing.T) {
 		t.Fatalf("снимок в метке умножен: %+v", st)
 	}
 }
+
+// «Вдвое» применяется после прибавок и до границ, с округлением вниз:
+// лежащий с +10 к скорости на базе 25 ползёт (25+10)/2 = 17.
+func TestApplyModifiersDiv(t *testing.T) {
+	mods := []domain.Modifier{
+		mod(domain.ModifierTargetSpeed, domain.ModifierDiv, "2"),
+		mod(domain.ModifierTargetSpeed, domain.ModifierAdd, "10"),
+		mod(domain.ModifierTargetSpeed, domain.ModifierMin, "20"),
+	}
+	if got := domain.ApplyModifiers(25, domain.ModifierTargetSpeed, mods); got != 20 {
+		t.Errorf("скорость = %d, ожидалось 20 (floor(35/2)=17, не ниже 20)", got)
+	}
+	if got := domain.ApplyModifiers(25, domain.ModifierTargetSpeed, mods[:2]); got != 17 {
+		t.Errorf("без границы: %d, ожидалось 17", got)
+	}
+	// Делитель 0/1 — ничего не делает.
+	if got := domain.ApplyModifiers(30, domain.ModifierTargetSpeed, []domain.Modifier{mod(domain.ModifierTargetSpeed, domain.ModifierDiv, "1")}); got != 30 {
+		t.Errorf("делитель 1: %d", got)
+	}
+}
