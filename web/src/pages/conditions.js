@@ -15,9 +15,10 @@ import { fetchMe, fetchCondition, createCondition, updateCondition, deleteCondit
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
-import { normalizeSlug, DEFAULT_ICONS } from "../foundry-conditions.js";
+import { DEFAULT_ICONS, CONDITION_RU, conditionName } from "../foundry-conditions.js";
 import { renderStatEditor, loadTargets, describeModifier } from "../stat-editor.js";
 import { loadStand, renderStandSelect } from "../stand.js";
+import { renderStatusPreview } from "../status-preview.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { el as h, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
@@ -181,6 +182,7 @@ function renderEditView(root) {
       condition.imageUrl = url;
       scheduleSave();
       hero.setGlyph(condition.icon, condition.imageUrl);
+      preview.update();
       artBtn.textContent = "Убрать арт";
     } catch (err) {
       showAlert("Не удалось загрузить значок: " + err.message);
@@ -194,6 +196,7 @@ function renderEditView(root) {
         condition.imageUrl = "";
         scheduleSave();
         hero.setGlyph(condition.icon, "");
+        preview.update();
         artBtn.textContent = "Загрузить свой…";
       } else upload.click();
     },
@@ -204,6 +207,7 @@ function renderEditView(root) {
     condition.color = colorInput.value;
     scheduleSave();
     hero.setColor(condition.color);
+    preview.update();
   });
 
   const glyphInput = h("input", { type: "text", class: "glyph-input", value: condition.icon || "", placeholder: "❔", maxlength: "8" });
@@ -211,6 +215,7 @@ function renderEditView(root) {
     condition.icon = glyphInput.value;
     scheduleSave();
     hero.setGlyph(condition.icon, condition.imageUrl);
+    preview.update();
   });
 
   const hero = renderHero({
@@ -226,6 +231,7 @@ function renderEditView(root) {
       condition.name = v;
       document.getElementById("condTitle").textContent = v || "Без имени";
       scheduleSave();
+      preview.update();
     },
   });
   root.appendChild(hero.el);
@@ -252,10 +258,12 @@ function renderEditView(root) {
     body: [labeled("Что не ложится в цифры — текст для глаз ДМ, виден в палитре при ПКМ по значку", mechanics)],
   });
 
+  const preview = renderStatusPreview(condition, { durLabel, ridersNames: () => condition.riders.map((slug) => (allConditions.find((c) => c.slug === slug) || {}).name || slug) });
   const refreshApply = () => {
     applyFold.setSummary(applySummary());
     hero.setPills(heroPills());
     hero.setLevels(condition.levels);
+    preview.update();
   };
   const applyFold = fold({
     title: "Наложение",
@@ -287,24 +295,19 @@ function renderEditView(root) {
     if (w) slugWarnBox.appendChild(w);
   }
   refreshSlugWarning();
-  const compatSummary = () => [condition.slug, condition.source].filter(Boolean).join(" · ") || "Foundry-код, источник, теги";
+  const compatSummary = () => [foundryLabel(condition.slug), condition.source].filter(Boolean).join(" · ") || "Foundry-код, источник, теги";
   const compatFold = fold({
     title: "Совместимость и источник",
     summary: compatSummary(),
     body: [
       h("div", { class: "card-grid2" }, [
         labeled(
-          "Slug",
-          textInput(
-            () => condition.slug,
-            (v) => {
-              condition.slug = normalizeSlug(v);
-              refreshSlugWarning();
-              compatFold.setSummary(compatSummary());
-            },
-            { placeholder: "blinded" }
-          ),
-          "Код Foundry (blinded/prone/exhaustion) — по нему импорт находит карточку. Пусто — сервер поставит свой ключ."
+          "Соответствие Foundry",
+          foundrySelect(() => {
+            refreshSlugWarning();
+            compatFold.setSummary(compatSummary());
+          }),
+          "Импортированный из Foundry эффект с этим кодом найдёт эту карточку. Без соответствия у карточки свой ключ."
         ),
         labeled("Источник", textInput(() => condition.source, (v) => { condition.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "PHB'24" })),
       ]),
@@ -313,26 +316,47 @@ function renderEditView(root) {
     ],
   });
 
-  const glyphFold = fold({ title: "Набор значков", summary: "быстрый выбор глифа", body: [glyphPicker((g) => { glyphInput.value = g; hero.setGlyph(g, condition.imageUrl); })] });
+  const glyphFold = fold({ title: "Набор значков", summary: "быстрый выбор глифа", body: [glyphPicker((g) => { glyphInput.value = g; hero.setGlyph(g, condition.imageUrl); preview.update(); })] });
 
-  root.appendChild(renderBody([effects, h("div", { class: "card-folds" }, [rulesFold, applyFold, descFold, compatFold, glyphFold, importSection()])], null));
+  root.appendChild(renderBody([effects, h("div", { class: "card-folds" }, [rulesFold, applyFold, descFold, compatFold, glyphFold, importSection()])], [preview]));
 }
 
-// slugConflictWarning — предупреждение «этот slug уже занят другой
-// карточкой». Дубль не ошибка для сервера (он просто берёт первую по
-// алфавиту, см. domain.Condition.Slug), но за столом это выглядит как
-// «состояние не работает»: метка вешается с чужими изменениями и чужим
-// именем. Проверяем по списку мира, загруженному при открытии карточки.
+// foundryLabel — русское имя кода Foundry для выжимки/выпадашки; ключ вида
+// c-<id> (см. service.defaultConditionSlug) — не код, для него пусто.
+function foundryLabel(slug) {
+  return slug && CONDITION_RU[slug] ? `${conditionName(slug)} (${slug})` : "";
+}
+
+// foundrySelect — выбор кода Foundry вместо ввода slug руками: код нужен
+// только мосту с импортом (см. domain.Condition.Slug), а ключ для меток
+// сервер выдаёт сам. «Не сопоставлять» шлёт пустой slug — сервер вернёт
+// c-<id>, и mergeConditionInPlace подхватит его.
+function foundrySelect(onChange) {
+  const select = h("select", {});
+  select.appendChild(h("option", { value: "", text: "— не сопоставлять —" }));
+  for (const slug of Object.keys(CONDITION_RU)) select.appendChild(h("option", { value: slug, text: `${conditionName(slug)} (${slug})` }));
+  select.value = CONDITION_RU[condition.slug] ? condition.slug : "";
+  select.addEventListener("change", () => {
+    condition.slug = select.value;
+    scheduleSave();
+    onChange();
+  });
+  return select;
+}
+
+// slugConflictWarning — «этот код уже у другой карточки». Дубль не ошибка
+// для сервера (он берёт первую по алфавиту, см. domain.Condition.Slug), но
+// за столом это выглядит как «состояние не работает»: метка вешается с
+// чужими изменениями и чужим именем.
 function slugConflictWarning() {
   const slug = (condition.slug || "").trim();
-  if (!slug) return null;
+  if (!slug || !CONDITION_RU[slug]) return null;
   const others = allConditions.filter((c) => c.slug === slug && c.id !== condition.id);
   if (others.length === 0) return null;
   return h("p", {
     class: "card-note",
     style: "color: var(--amber);",
-    text:
-      "Такой slug уже есть у карточки «" + others[0].name + "». Метка найдёт только одну из них — поменяй slug, иначе состояние будет вешаться с чужими изменениями.",
+    text: "Этот код уже у карточки «" + others[0].name + "». Импорт и метки найдут только одну из них.",
   });
 }
 

@@ -351,7 +351,7 @@ function renderPalette(state) {
       cell.className = "status-cell" + (st ? " active" : "");
       if (cond.color) cell.style.setProperty("--cell-color", cond.color);
       cell.appendChild(statusVisual(cond, cond.name));
-      cell.title = `${cond.name}${slug ? ` (${slug})` : ""}\nЛКМ — повесить/снять, ПКМ — подробности`;
+      cell.title = `${cond.name}\nЛКМ — повесить/снять, ПКМ — подробности`;
       if (st && st.level) {
         const lvl = document.createElement("span");
         lvl.className = "status-cell-level";
@@ -364,13 +364,12 @@ function renderPalette(state) {
         r.textContent = st.rounds;
         cell.appendChild(r);
       }
-      // Карточка без slug'а вешать нечего — метка ссылается именно на него
-      // (см. domain.AppliedStatus). Не прячем такую карточку, а показываем
-      // погашенной с подсказкой: иначе ДМ не поймёт, почему заведённое им
-      // состояние «пропало» из палитры.
+      // Без ключа метке не на что ссылаться (см. domain.AppliedStatus);
+      // сервер выдаёт его каждой сохранённой карточке, так что сюда попадает
+      // только ещё не сохранённая.
       if (!slug) {
         cell.style.cursor = "not-allowed";
-        cell.title = `${cond.name}\nУ карточки не заполнен slug — заполни его в конструкторе, иначе состояние не на что повесить.`;
+        cell.title = `${cond.name}\nКарточка ещё не сохранена.`;
       } else {
         cell.onclick = () => {
           if (st) dispatch(send, target, "remove_status", { statusSlug: slug });
