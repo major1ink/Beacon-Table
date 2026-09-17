@@ -48,9 +48,11 @@ export function ornament() {
 }
 
 // renderHero — шапка. glyph: DOM-узел или строка (эмодзи); imageUrl
-// перекрывает глиф. readOnly — имя текстом, без контролов.
-export function renderHero({ glyph, imageUrl, color, name, namePlaceholder, levels, pills, controls, onName, readOnly }) {
-  const medal = el("div", { class: "card-medal", role: "img", "aria-label": "Значок" });
+// перекрывает глиф. readOnly — имя текстом, без контролов. square —
+// квадратный медальон (предметы с артом); subtitle — узел под именем
+// (книжная строка «Доспех (кольчуга), редкий»).
+export function renderHero({ glyph, imageUrl, color, name, namePlaceholder, levels, pills, controls, onName, readOnly, square, subtitle }) {
+  const medal = el("div", { class: "card-medal" + (square ? " square" : ""), role: "img", "aria-label": "Значок" });
   const pillsBox = el("div", { class: "card-pills" });
   const nameBox = el("h2", { class: "card-name" });
   let nameInput = null;
@@ -63,7 +65,7 @@ export function renderHero({ glyph, imageUrl, color, name, namePlaceholder, leve
   }
   const root = el("div", { class: "card-hero" }, [
     medal,
-    el("div", { class: "card-hero-text" }, [nameBox, pillsBox, !readOnly && controls && controls.length ? el("div", { class: "card-hero-controls" }, controls) : null]),
+    el("div", { class: "card-hero-text" }, [nameBox, subtitle || null, pillsBox, !readOnly && controls && controls.length ? el("div", { class: "card-hero-controls" }, controls) : null]),
   ]);
 
   const api = {

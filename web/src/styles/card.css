@@ -61,7 +61,8 @@
 .card-body.no-aside { grid-template-columns: minmax(0, 1fr); }
 .card-main { min-width: 0; }
 .card-aside { background: var(--rail-bg); border-left: 1px solid var(--border); }
-.card-aside-in { position: sticky; top: 0; padding: 16px; display: grid; gap: 12px; justify-items: center; }
+.card-aside-in { position: sticky; top: 0; padding: 16px; display: grid; gap: 12px; justify-items: center; min-width: 0; }
+.card-aside-in > * { max-width: 100%; min-width: 0; }
 .card-aside-in .card-lbl { justify-self: start; }
 .card-aside-note { font-size: 12.5px; color: var(--text-dim); text-align: center; line-height: 1.4; }
 
@@ -193,7 +194,7 @@
 }
 
 /* ---- предпросмотр метки (status-preview.js) ---- */
-.sp { display: grid; gap: 12px; justify-items: center; width: 100%; }
+.sp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; justify-items: center; width: 100%; }
 .sp .card-lbl { justify-self: start; }
 .sp-token {
   width: 100px; height: 100px; border-radius: 50%; position: relative;
@@ -235,3 +236,40 @@
   .kvt { margin-inline: 14px; }
   .kvt th { width: 40%; font-size: 15px; }
 }
+
+/* ---- предпросмотр инвентаря (inventory-preview.js) ---- */
+.ip { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: 100%; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.ip > * { min-width: 0; max-width: 100%; }
+.ip-inv { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.ip-row { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.ip-ic { width: 28px; height: 28px; border-radius: 8px; background: #0f0f16; border: 1px solid var(--cc); display: grid; place-items: center; color: var(--cc); flex: 0 0 auto; overflow: hidden; }
+.ip-ic img { width: 100%; height: 100%; object-fit: cover; }
+.ip-ic svg { width: 16px; height: 16px; }
+.ip-nm { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ip-w { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+.ip-eq { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
+.ip-eq input { width: 34px; height: 20px; appearance: none; -webkit-appearance: none; background: var(--surface); border-radius: 999px; position: relative; cursor: pointer; margin: 0; min-height: 0; }
+.ip-eq input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-dim); transition: transform 0.15s; }
+.ip-eq input:checked { background: var(--accent); }
+.ip-eq input:checked::after { transform: translateX(14px); background: #fff; }
+.ip-kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.ip-kv b { color: var(--text-dim); font-weight: 500; }
+.ip-delta { font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.ip-arr { color: var(--text-dim); margin-inline: 4px; }
+.ip-to { font-weight: 600; }
+.ip-delta.up .ip-to { color: var(--green-bright); }
+.ip-delta.down .ip-to { color: #e06666; }
+.ip-delta.same .ip-to { color: var(--text-dim); }
+@media (prefers-reduced-motion: reduce) { .ip-eq input::after { transition: none; } }
+
+/* ---- шапка предмета: квадратный медальон, книжный подзаголовок ---- */
+.card-worn-h { padding: 12px 18px 0; }
+@container card (max-width: 560px) { .card-worn-h { padding-inline: 14px; } }
+.card-medal.square { border-radius: 18px; }
+.card-medal.square img { width: 100%; height: 100%; border-radius: 0; object-fit: cover; }
+.card-sub { font: italic 500 16px/1.3 var(--font-display); color: var(--text-dim); display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
+.card-sub input { font: inherit; color: var(--text); background: transparent; border: none; border-bottom: 1px dashed rgba(255, 255, 255, 0.18); border-radius: 0; padding: 0 2px; min-height: 0; width: auto; }
+.card-sub input:focus { box-shadow: none; border-bottom-color: var(--accent); }
+.card-pill.rar { color: var(--cc); background: color-mix(in srgb, var(--cc) 16%, transparent); font-weight: 500; }
+.card-pill.att { color: var(--amber); background: rgba(210, 154, 43, 0.14); white-space: normal; }
+@container card (max-width: 560px) { .card-medal.square { border-radius: 14px; } }
