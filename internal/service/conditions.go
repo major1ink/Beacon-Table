@@ -77,12 +77,10 @@ func validateConditionName(name string) (string, error) {
 	return name, nil
 }
 
-// defaultConditionSlug — ключ карточки, у которой ДМ не выбрал код Foundry
-// (см. domain.Condition.Slug): из ID, потому что имя русское и в slug не
-// ложится, а пустой ключ оставил бы карточку без возможности повесить метку.
-// Префикс отличает такие ключи от кодов Foundry и не пересекается с ними.
+// defaultConditionSlug — см. domain.DefaultConditionSlug; нормализация на
+// случай ID с символами вне [a-z0-9-].
 func defaultConditionSlug(id string) string {
-	return NormalizeConditionSlug("c-" + id)
+	return NormalizeConditionSlug(domain.DefaultConditionSlug(id))
 }
 
 // NormalizeConditionSlug — приведение машинного ключа к каноничному виду
