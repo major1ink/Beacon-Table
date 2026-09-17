@@ -28,7 +28,7 @@
 // Так ничего не пропадает молча и при этом в домен не заезжает модель
 // правил dnd5e: ключей у Foundry сотни, наших целей — дюжина.
 import { foundryStatusToSlug, conditionName, defaultIcon, normalizeSlug } from "./foundry-conditions.js";
-import { MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, PERIOD_NONE } from "./modifiers.js";
+import { MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, MODE_DIV, PERIOD_NONE } from "./modifiers.js";
 import { cleanFoundryText } from "./foundry-text.js";
 
 // CHANGE_MODE_RU — режимы ActiveEffect.changes[].mode из Foundry
@@ -90,10 +90,9 @@ const CHANGE_KEY_TARGET = {
 };
 
 // CHANGE_MODE_TARGET — режимы Foundry (CONST.ACTIVE_EFFECT_MODES) в наши.
-// MULTIPLY (1) и CUSTOM (0) сознательно не поддерживаем: умножение — это
-// уже вычисление от базы, которое зависит от порядка и от того, что считать
-// базой, а CUSTOM у Foundry вообще означает «спроси систему правил». Такие
-// изменения остаются текстом в Mechanics.
+// MULTIPLY (1) ложится только как деление на целое (×0.5 → «/2», см.
+// changeToModifier), CUSTOM (0) у Foundry означает «спроси систему правил» —
+// такие изменения остаются текстом в Mechanics.
 const CHANGE_MODE_TARGET = { 2: MODE_ADD, 5: MODE_SET, 4: MODE_MIN, 3: MODE_MAX };
 
 // changeToModifier — одно изменение Foundry в наш Modifier, либо null, если
@@ -101,8 +100,15 @@ const CHANGE_MODE_TARGET = { 2: MODE_ADD, 5: MODE_SET, 4: MODE_MIN, 3: MODE_MAX 
 // значение-формула вроде "@abilities.dex.mod" — у нас нет её контекста).
 function changeToModifier(ch) {
   const target = CHANGE_KEY_TARGET[String(ch.key || "").trim()];
+  if (!target) return null;
+  if (ch.mode === 1) {
+    // MULTIPLY: 0.5 → делить на 2, 0.25 → на 4; остальное не наше.
+    const k = parseFloat(String(ch.value ?? "").trim());
+    if (k > 0 && k < 1 && Number.isInteger(1 / k)) return { target, mode: MODE_DIV, value: String(1 / k), period: PERIOD_NONE, note: "" };
+    return null;
+  }
   const mode = CHANGE_MODE_TARGET[ch.mode];
-  if (!target || !mode) return null;
+  if (!mode) return null;
   const value = String(ch.value ?? "").trim();
   if (!/^[+-]?\d+$/.test(value)) return null;
   return { target, mode, value, period: PERIOD_NONE, note: "" };

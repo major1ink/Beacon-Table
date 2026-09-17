@@ -17,6 +17,7 @@ export const MODE_ADD = "add";
 export const MODE_SET = "set";
 export const MODE_MIN = "min";
 export const MODE_MAX = "max";
+export const MODE_DIV = "div"; // разделить с округлением вниз («скорость вдвое» — value "2")
 
 export const PERIOD_NONE = "";
 export const PERIOD_TURN_START = "turn-start";
@@ -48,14 +49,15 @@ export function parseValue(value) {
 }
 
 // applyModifiers — база плюс все ПОСТОЯННЫЕ модификаторы указанной цели.
-// Зеркало domain.ApplyModifiers, включая порядок и правило «несколько set —
-// побеждает наименьший».
+// Зеркало domain.ApplyModifiers, включая порядок set → add → div → min → max
+// и правило «несколько set — побеждает наименьший».
 export function applyModifiers(base, target, mods) {
   let result = base;
   let setDone = false;
   let add = 0;
   let minVal = null;
   let maxVal = null;
+  let div = 1;
 
   for (const m of mods || []) {
     if (!m || m.target !== target || (m.period || PERIOD_NONE) !== PERIOD_NONE) continue;
@@ -77,12 +79,16 @@ export function applyModifiers(base, target, mods) {
       case MODE_MAX:
         maxVal = maxVal === null ? v : Math.min(maxVal, v);
         break;
+      case MODE_DIV:
+        if (v > 1) div *= v;
+        break;
       default:
         break;
     }
   }
 
   result += add;
+  if (div > 1) result = Math.floor(result / div);
   if (minVal !== null && result < minVal) result = minVal;
   if (maxVal !== null && result > maxVal) result = maxVal;
   return result;
@@ -124,7 +130,7 @@ export function collectModifiers(sources) {
 // [{text: "+2 — Щит"}, ...]. Порядок — как в списке; режимы кроме add
 // подписываются словом, потому что «14 — Кольчуга» без пояснения читается
 // как прибавка.
-const MODE_WORDS = { [MODE_SET]: "ставит", [MODE_MIN]: "не ниже", [MODE_MAX]: "не выше" };
+const MODE_WORDS = { [MODE_SET]: "ставит", [MODE_MIN]: "не ниже", [MODE_MAX]: "не выше", [MODE_DIV]: "делит на" };
 
 export function explainModifiers(target, mods) {
   const out = [];
@@ -156,6 +162,8 @@ export function formatModifier(m, targetLabel) {
     body = /^[+-]/.test(value) ? value : "+" + value;
   } else if (m.mode === MODE_SET) {
     body = "→ " + value;
+  } else if (m.mode === MODE_DIV) {
+    body = value === "2" ? "вдвое" : "÷" + value;
   } else {
     body = `${MODE_WORDS[m.mode] || m.mode} ${value}`;
   }

@@ -108,3 +108,17 @@ test("импорт эффекта заполняет и модификаторы
   assert.equal(card.mechanics, "спасброски: прибавить -2");
   assert.equal(card.defaultRounds, 2);
 });
+
+test("«вдвое» после прибавок, с округлением вниз, до границ (паритет с domain)", () => {
+  const mods = [m("speed", "div", "2"), m("speed", "add", "10"), m("speed", "min", "20")];
+  assert.equal(applyModifiers(25, "speed", mods), 20);
+  assert.equal(applyModifiers(25, "speed", mods.slice(0, 2)), 17);
+  assert.equal(applyModifiers(30, "speed", [m("speed", "div", "1")]), 30);
+  assert.equal(formatModifier(m("speed", "div", "2"), "Скорость"), "Скорость вдвое");
+});
+
+test("уровень метки умножает perLevel-модификаторы", () => {
+  const mods = collectModifiers([{ name: "Истощение", level: 3, modifiers: [m("speed", "add", "-5", { perLevel: true }), m("initiative", "add", "-2")] }]);
+  assert.equal(applyModifiers(30, "speed", mods), 15);
+  assert.equal(applyModifiers(0, "initiative", mods), -2);
+});
