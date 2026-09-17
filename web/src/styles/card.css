@@ -232,6 +232,12 @@
 .kvt td input.mono, .kvt-val.mono { font-family: ui-monospace, Menlo, monospace; font-variant-ligatures: none; }
 .kvt-val { display: block; padding: 4px 8px; font-size: 14px; line-height: 1.5; }
 .kvt-hint { font-size: 11px; color: var(--text-dim); padding: 4px 8px 2px; margin: 0; }
+/* составная ячейка: число + подпись (КД с примечанием, хиты с костью) */
+.kvt-pair { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.kvt-pair input { min-height: 34px; width: auto; flex: 1 1 140px; }
+.kvt-pair input.mono { flex: 0 0 72px; }
+.kvt-pair .field { flex-direction: row; align-items: center; gap: 6px; }
+.kvt-pair .field input { flex: 0 0 72px; }
 @container card (max-width: 560px) {
   .kvt { margin-inline: 14px; }
   .kvt th { width: 40%; font-size: 15px; }
@@ -308,3 +314,48 @@
 .sc-chip input.note { width: 170px; }
 .sc-chip button { background: none; padding: 0; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
 .sc-chip button:hover { color: #fff; background: var(--danger); }
+
+/* ---- статблок существа (monster-block.js) ---- */
+.mb-ab { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 10px 18px 0; }
+.mb-tile { text-align: center; background: var(--bg); border-radius: 10px; padding: 6px 4px; display: grid; gap: 2px; justify-items: center; }
+.mb-tile .card-lbl { font-size: 10.5px; }
+.mb-tile input { min-height: 34px; padding: 2px; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 16px; font-weight: 600; background: transparent; border-color: transparent; }
+.mb-tile input:hover, .mb-tile input:focus { border-color: rgba(255, 255, 255, 0.2); background: var(--panel-bg); }
+.mb-score { font: 600 18px/34px ui-monospace, Menlo, monospace; }
+.mb-mod { background: none; padding: 2px 8px; font: 600 12px/1.4 ui-monospace, Menlo, monospace; color: var(--gold); border-bottom: 1px dashed var(--gold); border-radius: 0; }
+.mb-mod:hover { background: var(--accent-bg); color: #fff; border-bottom-color: transparent; border-radius: 4px; }
+.mb-block { padding: 12px 18px 0; }
+.mb-prose { font-size: 13.5px; line-height: 1.6; }
+.mb-prose p { margin: 0.5em 0; }
+.mb-prose p:first-child { margin-top: 0; }
+.mb-prose p:last-child { margin-bottom: 0; }
+.mb-prose strong { color: #fff; }
+.mb-refs { display: flex; flex-direction: column; gap: 4px; }
+.mb-ref { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 8px; padding: 5px 8px; font-size: 13px; }
+.mb-ref .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-ref .nm.clickable { cursor: pointer; color: var(--accent); }
+.mb-ref .nm.clickable:hover { text-decoration: underline; }
+.mb-ref .tag { flex: 0 0 auto; font-size: 10.5px; color: var(--text-dim); background: var(--bg); border-radius: 8px; padding: 1px 6px; }
+.mb-ref .av { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px; background: var(--bg) center/cover no-repeat; }
+.mb-ref input { width: 56px; min-height: 30px; padding: 3px 6px; text-align: center; }
+.mb-ref button { background: none; padding: 0; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
+.mb-ref button:hover { color: #fff; background: var(--danger); }
+/* предпросмотр «на карте и в трекере» */
+.mp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: 100%; justify-items: center; }
+.mp > * { min-width: 0; max-width: 100%; }
+.mp .card-lbl { justify-self: start; }
+.mp-token { width: 100px; height: 100px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4b4a5e, #1d1c28 70%); border: 3px solid var(--cc, #5a5a6e); display: grid; place-items: center; overflow: hidden; color: var(--cc); }
+.mp-token img { width: 100%; height: 100%; object-fit: cover; }
+.mp-token svg { width: 48px; height: 48px; }
+.mp-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 12px 6px 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; }
+.mp-av { width: 28px; height: 28px; border-radius: 50%; background: #1d1c28; border: 1px solid var(--cc, var(--border)); display: grid; place-items: center; overflow: hidden; color: var(--cc); flex: 0 0 auto; }
+.mp-av img { width: 100%; height: 100%; object-fit: cover; }
+.mp-av svg { width: 15px; height: 15px; }
+.mp-nums { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: nowrap; }
+.mp-nums b { color: var(--text); font-weight: 600; }
+.mp .card-aside-note svg { vertical-align: -2px; }
+@container card (max-width: 560px) {
+  .mb-ab { grid-template-columns: repeat(3, 1fr); padding-inline: 14px; }
+  .mb-tile input { min-height: 40px; }
+  .mb-block { padding-inline: 14px; }
+}
