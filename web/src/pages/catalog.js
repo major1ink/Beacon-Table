@@ -36,6 +36,7 @@ import { mapFoundryConditionBatch } from "../condition-import.js";
 import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { rarityKey, rarityRank, rarityColor } from "../item-rarity.js";
+import { kindRank } from "../reference-kind.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
@@ -98,12 +99,6 @@ function monsterBaseType(m) {
 }
 
 
-const KIND_ORDER = ["класс", "архетип", "вид", "черта вида", "происхождение", "черта", "черта класса"];
-
-function kindRank(k) {
-  const i = KIND_ORDER.indexOf(k);
-  return i === -1 ? KIND_ORDER.length : i;
-}
 
 function bySource(x) {
   const src = String(x.source || "").trim();
