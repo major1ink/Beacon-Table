@@ -109,8 +109,9 @@ const cellsText = (mods) => mods.map(cellText).join("; ");
 
 // renderStatEditor — list: массив модификаторов; onChange — автосейв;
 // opts.stand — select из stand.js (current() → запись с stats);
-// opts.periodic — показывать строку «Хиты в ход» (у предметов её нет).
-export function renderStatEditor(list, onChange, { stand, periodic = true } = {}) {
+// opts.periodic — показывать строку «Хиты в ход» (у предметов её нет);
+// opts.readOnly — режим чтения: формула текстом, только тронутые строки.
+export function renderStatEditor(list, onChange, { stand, periodic = true, readOnly = false } = {}) {
   const permanent = (target) => list.filter((m) => m.target === target && !m.period);
   const base = (target) => (stand && stand.current() ? stand.current().stats[target] ?? 0 : 0);
   const bad = new Set();
@@ -134,6 +135,7 @@ export function renderStatEditor(list, onChange, { stand, periodic = true } = {}
   }
 
   function cellInput(target, plain) {
+    if (readOnly) return el("span", { class: "stat-formula", text: cellsText(permanent(target)) });
     const inp = el("input", { type: "text", value: cellsText(permanent(target)), placeholder: plain ? "—" : "−2 · 10", "aria-label": "Изменение: " + targetLabel(target), autocomplete: "off" });
     const err = el("small", { class: "stat-err", hidden: true, "aria-live": "polite" });
     const commit = () => {
@@ -201,6 +203,16 @@ export function renderStatEditor(list, onChange, { stand, periodic = true } = {}
   function hpRow() {
     const cur = () => list.find((m) => m.target === TARGET_HP_CURRENT && m.period);
     const m0 = cur();
+    if (readOnly) {
+      if (!m0) return null;
+      const per = PERIODS.find((p) => p[0] === m0.period);
+      return el("tr", { class: "stat-hp" }, [
+        el("th", { scope: "row", class: "stat-n", text: "Хиты в ход" }),
+        el("td", { class: "stat-base", text: "—" }),
+        el("td", { class: "stat-ch" }, [el("span", { class: "stat-formula", text: cellText(m0) + " " + (per ? per[1] : "") + (m0.note ? " · " + m0.note : "") })]),
+        el("td", { class: "stat-res " + (String(m0.value).trim().startsWith("-") ? "down" : "up") }, [el("b", { text: cellText(m0) + "/ход" })]),
+      ]);
+    }
     const inp = el("input", { type: "text", value: m0 ? String(m0.value).replace(/-/g, "−") : "", placeholder: "−1к6 · +5", "aria-label": "Хиты в ход: число или кубы со знаком", autocomplete: "off" });
     const note = el("input", { type: "text", value: m0 ? m0.note || "" : "", placeholder: "подпись: огонь, яд…", "aria-label": "Подпись в логе", autocomplete: "off" });
     const err = el("small", { class: "stat-err", hidden: true, "aria-live": "polite" });
@@ -264,16 +276,24 @@ export function renderStatEditor(list, onChange, { stand, periodic = true } = {}
     ]);
   }
 
-  const rows = ROWS.map(([target, label]) =>
+  // В чтении показываем только то, что состояние трогает.
+  const shown = (target) => !readOnly || permanent(target).length > 0;
+  const rows = ROWS.filter(([t]) => shown(t)).map(([target, label]) =>
     el("tr", {}, [el("th", { scope: "row", class: "stat-n", text: label }), el("td", { class: "stat-base num", text: base(target) }), el("td", { class: "stat-ch" }, [cellInput(target)]), resCell(target, "td")])
   );
-  if (periodic) rows.push(hpRow());
+  if (periodic) {
+    const hp = hpRow();
+    if (hp) rows.push(hp);
+  }
+  if (readOnly && rows.length === 0 && !ABILITIES.some(([t]) => shown(t))) {
+    return el("div", { class: "stat-editor readonly" }, [el("p", { class: "card-note stat-none", text: "Ничего не меняет в числах — только значок на токене и правила." })]);
+  }
   const table = el("table", { class: "stat-table" }, [
     el("caption", { class: "sr-only", text: "Что меняет: показатель, база на стенде, изменение, итог" }),
     el("thead", {}, [el("tr", {}, ["Показатель", "База", "Изменение", "Итог"].map((t) => el("th", { scope: "col", text: t })))]),
     el("tbody", {}, rows),
   ]);
-  const abilities = el("div", { class: "stat-ab" }, ABILITIES.map(([target, label]) => el("div", {}, [el("span", { class: "card-lbl", text: label }), cellInput(target, true), resCell(target, "div")])));
+  const abilities = el("div", { class: "stat-ab" }, ABILITIES.filter(([t]) => shown(t)).map(([target, label]) => el("div", {}, [el("span", { class: "card-lbl", text: label }), cellInput(target, true), resCell(target, "div")])));
 
   const legend = el("p", {
     class: "card-note stat-legend",
@@ -284,11 +304,12 @@ export function renderStatEditor(list, onChange, { stand, periodic = true } = {}
   });
 
   const head = stand ? el("div", { class: "stat-stand" }, [labeled("Примерить на", stand)]) : null;
-  const root = el("div", { class: "stat-editor" }, [head, el("div", { class: "stat-sb" }, [table]), abilities, legend]);
+  const root = el("div", { class: "stat-editor" + (readOnly ? " readonly" : "") }, [head, rows.length ? el("div", { class: "stat-sb" }, [table]) : null, abilities.children.length ? abilities : null, readOnly ? null : legend]);
 
   // refresh — база сменилась (другое существо на стенде): перекрасить итоги.
   root.refresh = () => {
-    table.querySelectorAll("td.stat-base.num").forEach((td, i) => (td.textContent = base(ROWS[i][0])));
+    const visible = ROWS.filter(([t]) => shown(t));
+    table.querySelectorAll("td.stat-base.num").forEach((td, i) => (td.textContent = base(visible[i][0])));
     for (const target of results.keys()) paintResult(target);
   };
   if (stand) stand.addEventListener("change", root.refresh);
