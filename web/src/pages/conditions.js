@@ -16,7 +16,7 @@ import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { DEFAULT_ICONS, CONDITION_RU, conditionName } from "../foundry-conditions.js";
-import { renderStatEditor, loadTargets, describeModifier } from "../stat-editor.js";
+import { renderStatEditor, loadTargets } from "../stat-editor.js";
 import { loadStand, renderStandSelect } from "../stand.js";
 import { renderStatusPreview } from "../status-preview.js";
 import { showAlert, showConfirm } from "../modal.js";
@@ -479,58 +479,34 @@ function tagsField(onChange) {
 // ==================== read-режим (по умолчанию) ====================
 
 function renderReadView(root) {
-  const pills = [...(condition.source ? [pill(condition.source, "gold")] : []), ...condition.tags.map((t) => pill(t))];
-  const subtitleBits = [condition.levels > 1 ? `уровней: ${condition.levels}` : "", durLabel(), condition.overlay ? "во весь токен" : ""].filter(Boolean).join(" · ");
-
   const hero = renderHero({
     glyph: condition.icon,
     imageUrl: condition.imageUrl,
     color: condition.color,
     name: condition.name,
     levels: condition.levels,
-    pills: [...pills, pill(subtitleBits)],
+    pills: heroPills(),
     readOnly: true,
   });
   root.appendChild(hero.el);
   root.appendChild(ornament());
 
-  if (condition.modifiers.length) {
-        root.appendChild(
-      h("div", { class: "ib-block" }, [
-        h("h3", { class: "ib-section-title", text: "Изменения" }),
-        ...condition.modifiers.map((m) => h("div", { class: "ib-line", text: describeModifier(m) })),
-      ])
-    );
-  }
+  const stats = renderStatEditor(condition.modifiers, () => {}, { stand: renderStandSelect(standEntries), periodic: true, readOnly: true });
+  const preview = renderStatusPreview(condition, { durLabel, ridersNames: () => condition.riders.map((slug) => (allConditions.find((c) => c.slug === slug) || {}).name || slug) });
 
-  if (condition.mechanics) {
-        root.appendChild(
-      h("div", { class: "ib-block" }, [
-        h("h3", { class: "ib-section-title", text: "Механика" }),
-        h("div", { class: "ib-line", text: condition.mechanics }),
-      ])
-    );
-  }
-
-  if (condition.riders.length) {
-    const names = condition.riders.map((slug) => {
-      const known = allConditions.find((c) => c.slug === slug);
-      return known ? known.name : slug;
-    });
-    root.appendChild(
-      h("div", { class: "ib-block" }, [
-        h("h3", { class: "ib-section-title", text: "Вешается вместе с" }),
-        h("div", { class: "ib-line", text: names.join(", ") }),
-      ])
-    );
-  }
-
+  const folds = [];
+  if (condition.mechanics) folds.push(fold({ title: "Правила", body: [h("p", { class: "card-text", text: condition.mechanics })], open: true }));
+  folds.push(fold({ title: "Наложение", summary: applySummary(), body: [h("p", { class: "card-text", text: applySummary() })] }));
   const desc = condition.description && condition.description.trim();
   if (desc) {
-        const body = h("div", { class: "ib-prose" });
+    const body = h("div", { class: "card-prose" });
     body.innerHTML = renderNoteHtml(condition.description);
-    root.appendChild(h("div", { class: "ib-block" }, [h("h3", { class: "ib-section-title", text: "Описание" }), body]));
+    folds.push(fold({ title: "Описание", body: [body], open: true }));
   }
+  const compat = [foundryLabel(condition.slug), condition.source].filter(Boolean).join(" · ");
+  if (compat) folds.push(fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }));
+
+  root.appendChild(renderBody([stats, h("div", { class: "card-folds" }, folds)], [preview]));
 }
 
 // ==================== импорт ====================
