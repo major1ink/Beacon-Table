@@ -35,6 +35,7 @@ import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
 import { glyphNode } from "../condition-glyphs.js";
+import { rarityKey, rarityRank, rarityColor } from "../item-rarity.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
@@ -96,16 +97,6 @@ function monsterBaseType(m) {
   return t ? [t] : [];
 }
 
-const RARITY_ORDER = ["обычный", "необычный", "редкий", "очень редкий", "легендарный", "артефакт", ""];
-
-function rarityKey(it) {
-  return String(it.rarity || "").trim().toLowerCase();
-}
-
-function rarityRank(r) {
-  const i = RARITY_ORDER.indexOf(r);
-  return i === -1 ? RARITY_ORDER.length - 1 : i;
-}
 
 const KIND_ORDER = ["класс", "архетип", "вид", "черта вида", "происхождение", "черта", "черта класса"];
 
@@ -299,13 +290,14 @@ const CONFIGS = {
     avatarIcon: "backpack",
     searchHay: (it) => [it.name, it.type, it.rarity, ...(it.tags || [])],
     badge: (it) => [it.rarity || "", (it.source || "").trim()],
+    badgeColor: (it, text) => (text === it.rarity ? rarityColor(it.rarity) : ""),
     flags: (it) => (it.requiresAttunement ? [["Н", "Требует настройки"]] : []),
     sidebar: [
-      { id: "rarity", title: "Редкость", kind: "list", of: (it) => (rarityKey(it) ? [capitalize(rarityKey(it))] : []) },
+      { id: "rarity", title: "Редкость", kind: "list", of: (it) => (rarityKey(it.rarity) ? [capitalize(rarityKey(it.rarity))] : []) },
       { id: "props", title: "Свойства", kind: "toggles", items: [{ key: "requiresAttunement", label: "Настройка", icon: "zap" }] },
       { id: "source", title: "Источник", kind: "list", of: bySource },
     ],
-    groupKey: rarityKey,
+    groupKey: (it) => rarityKey(it.rarity),
     groupLabel: (r) => capitalize(r) || "Без редкости",
     groupSort: (a, b) => rarityRank(a) - rarityRank(b),
     createPlaceholder: "Имя нового предмета",
@@ -526,6 +518,12 @@ function buildRow(x) {
     badge.className = "catalog-badge";
     badge.textContent = text;
     if (cfg.badgeTitle) badge.title = cfg.badgeTitle(x);
+    // Редкость предмета — своим цветом, тем же, что медальон карточки.
+    const color = cfg.badgeColor ? cfg.badgeColor(x, text) : "";
+    if (color) {
+      badge.style.color = color;
+      badge.style.borderColor = color;
+    }
     row.appendChild(badge);
   }
 
