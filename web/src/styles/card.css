@@ -283,3 +283,28 @@
 .rp-fv { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; background: var(--surface); border-radius: 8px; padding: 7px 10px; }
 .rp-fv span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-fv svg { color: var(--text-dim); flex: 0 0 auto; }
+
+/* ---- предпросмотр заклинания (spell-preview.js) ---- */
+.spp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.spp > * { min-width: 0; max-width: 100%; }
+.spp-kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.spp-kv b { color: var(--text-dim); font-weight: 500; }
+.spp-chip { --cc: var(--accent); display: inline-flex; align-items: center; gap: 6px; justify-self: start; max-width: 100%; padding: 4px 10px 4px 6px; border-radius: var(--radius-pill); background: var(--surface); border: 1px solid var(--cc); font-size: 12.5px; }
+.spp-chip.clickable { cursor: pointer; }
+.spp-chip.clickable:hover, .spp-chip.clickable:focus-visible { background: var(--surface-hover); outline: none; box-shadow: var(--ring-accent); }
+.spp-chip-g { width: 18px; height: 18px; display: grid; place-items: center; color: var(--cc); flex: 0 0 auto; }
+.spp-chip-g svg { width: 16px; height: 16px; }
+.spp-chip-r { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: nowrap; }
+/* компоненты В · С · М в kv-таблице заклинания */
+.comp { display: inline-flex; gap: 4px; }
+.comp button { width: 34px; height: 34px; padding: 0; font-family: ui-monospace, Menlo, monospace; font-weight: 600; background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); }
+.comp button[aria-pressed="true"] { color: #fff; background: var(--surface-hover); border-color: var(--accent); }
+.comp-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.comp-row input { flex: 1 1 140px; min-height: 34px; }
+/* чипы состояний заклинания в редакторе: раунды и подпись прямо в чипе */
+.sc-chip { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; border-radius: 12px; padding: 5px 8px 5px 10px; background: var(--surface); font-size: 13px; }
+.sc-chip input { min-height: 30px; padding: 3px 6px; font-size: 12.5px; }
+.sc-chip input.num { width: 60px; font-family: ui-monospace, Menlo, monospace; text-align: center; }
+.sc-chip input.note { width: 170px; }
+.sc-chip button { background: none; padding: 0; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
+.sc-chip button:hover { color: #fff; background: var(--danger); }
