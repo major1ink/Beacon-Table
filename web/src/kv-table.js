@@ -3,8 +3,10 @@
 // строки скрыты, формулы кубов кликабельны (inline-rolls.js). Общая для
 // предметов; стили — styles/card.css (.kvt).
 //
-// rows: [{ label, get, set, placeholder, mono, type, min, step }] —
-// get/set замыкаются на объект карточки, как textInput в pages/*.js.
+// rows: [{ label, get, set, placeholder, mono, type, min, step, custom }] —
+// get/set замыкаются на объект карточки, как textInput в pages/*.js;
+// custom() — свой контрол вместо поля (компоненты заклинания, КД с
+// подписью), в чтении всё равно показывается get().
 import { el } from "./card-shell.js";
 import { enhanceRolls } from "./inline-rolls.js";
 
@@ -18,6 +20,8 @@ export function renderKvTable(rows, { readOnly = false, onChange, sendRoll, hint
     if (readOnly) {
       cell = el("span", { class: "kvt-val" + (r.mono ? " mono" : ""), text: String(value) + (r.unit || "") });
       if (sendRoll) enhanceRolls(cell, sendRoll);
+    } else if (r.custom) {
+      cell = r.custom();
     } else {
       const inp = el("input", { type: r.type || "text", class: r.mono ? "mono" : "", value: value ?? "", placeholder: r.placeholder || "—", "aria-label": r.label, min: r.min, step: r.step, autocomplete: "off" });
       inp.addEventListener("input", () => {

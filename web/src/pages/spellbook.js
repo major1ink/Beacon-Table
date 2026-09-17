@@ -19,6 +19,11 @@ import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
+import { renderKvTable } from "../kv-table.js";
+import { renderSpellPreview } from "../spell-preview.js";
+import { glyphNode } from "../condition-glyphs.js";
+import { SCHOOLS, schoolInfo } from "../spell-school.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -53,28 +58,9 @@ function normalizeSpell(raw) {
   return s;
 }
 
-// ==================== DOM helpers (та же схема, что bestiary.js) ====================
+// ==================== DOM helpers ====================
 
-function h(tag, attrs, children) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") e.className = v;
-    else if (k === "text") e.textContent = v;
-    else if (k === "html") e.innerHTML = v;
-    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of [].concat(children || [])) {
-    if (c === undefined || c === null || c === false) continue;
-    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-  }
-  return e;
-}
-
-function field(labelText, inputEl, title) {
-  return h("label", { class: "field", title }, [h("span", { text: labelText }), inputEl]);
-}
+const h = hh;
 
 function textInput(get, set, opts) {
   const inp = h("input", Object.assign({ type: "text" }, opts || {}));
@@ -84,20 +70,6 @@ function textInput(get, set, opts) {
     scheduleSave();
   });
   return inp;
-}
-
-function selectInput(get, set, options) {
-  const sel = h(
-    "select",
-    {},
-    options.map((o) => h("option", { value: o.value, text: o.label }))
-  );
-  sel.value = String(get());
-  sel.addEventListener("change", () => {
-    set(parseInt(sel.value, 10));
-    scheduleSave();
-  });
-  return sel;
 }
 
 // ATTACK_OPTIONS — вид броска атаки (см. domain.Spell.Attack): код и подпись.
@@ -112,47 +84,89 @@ function attackLabel(value) {
   return value && opt ? opt.label : "";
 }
 
-// stringSelectInput — как selectInput, но без parseInt (тот держит уровень).
-function stringSelectInput(get, set, options) {
-  const sel = h(
-    "select",
-    {},
-    options.map((o) => h("option", { value: o.value, text: o.label }))
-  );
-  sel.value = String(get() || "");
-  sel.addEventListener("change", () => {
-    set(sel.value);
-    scheduleSave();
-  });
-  return sel;
-}
-
-function checkboxField(labelText, get, set) {
-  const cb = h("input", { type: "checkbox" });
-  cb.checked = !!get();
-  cb.addEventListener("change", () => {
-    set(cb.checked);
-    scheduleSave();
-  });
-  return h("label", { class: "check-row" }, [cb, labelText]);
-}
-
-// mdBlock — textarea markdown/HTML слева + живой рендер справа (тот же
-// `marked`, что и заметки ДМ/бестиарий, см. web/src/notes/markdown.js).
-// Импортированное описание приходит уже HTML-ом — marked пропускает
-// инлайновый HTML как есть, рендер работает одинаково что для markdown, что
-// для готового HTML.
-function mdBlock(labelText, get, set, opts) {
+// mdBlock — textarea markdown/HTML + живой рендер (тот же `marked`, что и
+// заметки ДМ, см. web/src/notes/markdown.js). Импортированное описание
+// приходит HTML-ом — marked пропускает его как есть.
+function mdBlock(labelText, get, set) {
   const render = h("div", { class: "md-render" });
   render.innerHTML = renderNoteHtml(get());
-  const t = h("textarea", opts || {});
+  const t = h("textarea", { "aria-label": labelText });
   t.value = get() ?? "";
   t.addEventListener("input", () => {
     set(t.value);
     render.innerHTML = renderNoteHtml(t.value);
     scheduleSave();
   });
-  return h("div", { class: "section" }, [h("h3", { text: labelText }), h("div", { class: "md-block" }, [t, render])]);
+  return h("div", { class: "md-block" }, [t, render]);
+}
+
+// levelPhrase — книжная форма для подзаголовка: «заговор» / «2-го круга».
+function levelPhrase(lvl) {
+  return lvl === 0 ? "заговор" : lvl + "-го круга";
+}
+
+// componentsText — "В, С, М (материалы)" из трёх флагов и текста материалов.
+function componentsText(s) {
+  const parts = [];
+  if (s.verbal) parts.push("В");
+  if (s.somatic) parts.push("С");
+  if (s.material) parts.push("М" + (s.materialNote ? ` (${s.materialNote})` : ""));
+  return parts.join(", ");
+}
+
+const spellGlyph = () => glyphNode((schoolInfo(spell.school) || { glyph: "sparkle" }).glyph, "");
+const spellColor = () => (schoolInfo(spell.school) || {}).color || "";
+
+function heroPills() {
+  return [spell.concentration ? pill("концентрация", "att") : null, spell.ritual ? pill("ритуал") : null, spell.source ? pill(spell.source, "gold") : null, ...spell.tags.map((t) => pill(t))];
+}
+
+// kvRows — строки таблицы «показатель · значение» (kv-table.js).
+function kvRows(onChange) {
+  const set = (k) => (v) => {
+    spell[k] = v;
+    onChange && onChange();
+  };
+  return [
+    { label: "Время накладывания", get: () => spell.castTime, set: set("castTime"), placeholder: "1 действие" },
+    { label: "Дистанция", get: () => spell.range, set: set("range"), placeholder: "120 фт." },
+    { label: "Компоненты", get: () => componentsText(spell), custom: () => componentsEditor(onChange) },
+    { label: "Длительность", get: () => spell.duration, set: set("duration"), placeholder: "мгновенная" },
+    { label: "Атака заклинанием", get: () => attackLabel(spell.attack), custom: () => attackSelect(onChange) },
+    { label: "Спасбросок", get: () => spell.savingThrow, set: set("savingThrow"), placeholder: "Телосложение" },
+    { label: "Урон", get: () => spell.damage, set: set("damage"), placeholder: "8к6 огнём", mono: true },
+    { label: "За круг ячейки выше", get: () => spell.upcast, set: set("upcast"), placeholder: "1к6", mono: true },
+    { label: "Классы", get: () => spell.classes, set: set("classes"), placeholder: "волшебник, чародей" },
+  ];
+}
+
+// componentsEditor — В · С · М кнопками плюс материал; в чтении вместо него
+// строка componentsText.
+function componentsEditor(onChange) {
+  const btns = h("div", { class: "comp", role: "group", "aria-label": "Компоненты" });
+  for (const [key, label, title] of [["verbal", "В", "вербальный"], ["somatic", "С", "соматический"], ["material", "М", "материальный"]]) {
+    const b = h("button", { type: "button", text: label, title, "aria-pressed": String(!!spell[key]) });
+    b.addEventListener("click", () => {
+      spell[key] = !spell[key];
+      b.setAttribute("aria-pressed", String(spell[key]));
+      scheduleSave();
+      onChange && onChange();
+    });
+    btns.appendChild(b);
+  }
+  const note = textInput(() => spell.materialNote, (v) => { spell.materialNote = v; onChange && onChange(); }, { placeholder: "материал: жемчужина не дешевле 100 зм", "aria-label": "Материальные компоненты" });
+  return h("div", { class: "comp-row" }, [btns, note]);
+}
+
+function attackSelect(onChange) {
+  const sel = h("select", { "aria-label": "Атака заклинанием" }, ATTACK_OPTIONS.map((o) => h("option", { value: o.value, text: o.label })));
+  sel.value = String(spell.attack || "");
+  sel.addEventListener("change", () => {
+    spell.attack = sel.value;
+    scheduleSave();
+    onChange && onChange();
+  });
+  return sel;
 }
 
 // ==================== рендер ====================
@@ -167,275 +181,163 @@ function renderApp() {
 }
 
 function renderEditView(root) {
-  // ---- шапка: имя/уровень/школа/источник/теги ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("div", { class: "row" }, [
-        field("Имя", textInput(() => spell.name, (v) => { spell.name = v; document.getElementById("spellTitle").textContent = v || "Без имени"; })),
-        field("Уровень", selectInput(() => spell.level, (v) => (spell.level = v), LEVEL_OPTIONS)),
-        field("Школа", textInput(() => spell.school, (v) => (spell.school = v), { placeholder: "Прорицание" })),
-        field("Источник", textInput(() => spell.source, (v) => (spell.source = v), { placeholder: "PHB'24" })),
-      ]),
-      tagsField(),
-    ])
-  );
+  const lvlSel = h("select", { class: "mono", "aria-label": "Круг" }, LEVEL_OPTIONS.map((o) => h("option", { value: o.value, text: o.value === 0 ? "заговор" : o.value + "-й круг" })));
+  lvlSel.value = String(spell.level);
+  lvlSel.addEventListener("change", () => {
+    spell.level = parseInt(lvlSel.value, 10);
+    scheduleSave();
+  });
+  const schSel = h("select", { "aria-label": "Школа" });
+  schSel.appendChild(h("option", { value: "", text: "— школа —" }));
+  for (const sc of SCHOOLS) schSel.appendChild(h("option", { value: sc.ru, text: sc.ru }));
+  if (spell.school && !schoolInfo(spell.school)) schSel.appendChild(h("option", { value: spell.school, text: spell.school }));
+  schSel.value = spell.school || "";
+  schSel.addEventListener("change", () => {
+    spell.school = schSel.value;
+    scheduleSave();
+    hero.setGlyph(spellGlyph(), "");
+    hero.setColor(spellColor());
+  });
+  const subtitle = h("div", { class: "card-sub" }, [schSel, h("span", { text: " " }), lvlSel]);
 
-  // ---- сотворение ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Сотворение" }),
-      h("div", { class: "row" }, [
-        field("Время накладывания", textInput(() => spell.castTime, (v) => (spell.castTime = v), { placeholder: "1 действие" })),
-        field("Дистанция", textInput(() => spell.range, (v) => (spell.range = v), { placeholder: "120 фт." })),
-        field("Длительность", textInput(() => spell.duration, (v) => (spell.duration = v), { placeholder: "Мгновенная" })),
-      ]),
-      h("div", { class: "checkbox-row" }, [
-        checkboxField("Ритуал", () => spell.ritual, (v) => (spell.ritual = v)),
-        checkboxField("Концентрация", () => spell.concentration, (v) => (spell.concentration = v)),
-        checkboxField("В (вербальный)", () => spell.verbal, (v) => (spell.verbal = v)),
-        checkboxField("С (соматический)", () => spell.somatic, (v) => (spell.somatic = v)),
-        checkboxField("М (материальный)", () => spell.material, (v) => (spell.material = v)),
-      ]),
-      field("Материальные компоненты", textInput(() => spell.materialNote, (v) => (spell.materialNote = v), { placeholder: "жемчужина стоимостью не менее 100 зм..." })),
-    ])
-  );
+  const flag = (key, label) => {
+    const cb = h("input", { type: "checkbox" });
+    cb.checked = !!spell[key];
+    cb.addEventListener("change", () => {
+      spell[key] = cb.checked;
+      scheduleSave();
+      hero.setPills(heroPills());
+      preview.update();
+    });
+    return h("label", { class: "card-toggle" }, [cb, label]);
+  };
 
-  // ---- эффект ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Эффект" }),
-      h("div", { class: "row" }, [
-        field(
-          "Атака заклинанием",
-          stringSelectInput(() => spell.attack, (v) => (spell.attack = v), ATTACK_OPTIONS),
-          "Бьёт броском атаки, а не спасброском цели. По этому полю лист персонажа рисует кнопку броска."
-        ),
-        field("Спасбросок", textInput(() => spell.savingThrow, (v) => (spell.savingThrow = v), { placeholder: "Тел" })),
-        field("Урон", textInput(() => spell.damage, (v) => (spell.damage = v), { placeholder: "8к6 (огонь)" })),
-        field(
-          "За круг ячейки выше",
-          textInput(() => spell.upcast, (v) => (spell.upcast = v), { placeholder: "1к6" }),
-          "Прибавка за каждый круг ячейки выше своего. По ней лист считает урон с ячейки повыше."
-        ),
-        field("Классы", textInput(() => spell.classes, (v) => (spell.classes = v), { placeholder: "Волшебник, Чародей" })),
+  const hero = renderHero({
+    glyph: spellGlyph(),
+    color: spellColor(),
+    name: spell.name,
+    namePlaceholder: "Название заклинания",
+    pills: heroPills(),
+    subtitle,
+    controls: [h("div", { class: "field" }, [h("span", { text: "Свойства" }), h("div", { style: "display:flex;gap:14px;min-height:36px;align-items:center;flex-wrap:wrap" }, [flag("concentration", "концентрация"), flag("ritual", "ритуал")])])],
+    onName: (v) => {
+      spell.name = v;
+      document.getElementById("spellTitle").textContent = v || "Без имени";
+      scheduleSave();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+
+  const preview = renderSpellPreview(spell, { sendRoll, attackLabel, conditions: allConditions, canApply: false });
+  const kv = renderKvTable(kvRows(() => preview.update()), { onChange: scheduleSave, hint: "Формулы урона кликабельны в чтении. Пустые строки в чтении скрываются." });
+  const statuses = h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: "Накладывает состояния" }), statusesField(() => preview.update())]);
+
+  const descFold = fold({ title: "Описание", summary: spell.description || "текст заклинания", body: [mdBlock("Описание", () => spell.description, (v) => { spell.description = v; descFold.setSummary(v || "текст заклинания"); })], open: true });
+  const compatSummary = () => [spell.source, spell.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
+  const compatFold = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary(),
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => spell.source, (v) => { spell.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "PHB'24" })),
+        labeled("Модуль Foundry", textInput(() => spell.foundryModuleId, (v) => { spell.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.spells" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
       ]),
-      statusesField(),
-    ])
-  );
+      tagsField(() => hero.setPills(heroPills())),
+    ],
+  });
 
-  // ---- описание ----
-  root.appendChild(mdBlock("Описание", () => spell.description, (v) => (spell.description = v)));
-
-  // ---- импорт из TTG Club ----
-  root.appendChild(importSection());
+  root.appendChild(renderBody([kv, statuses, h("div", { class: "card-folds" }, [descFold, compatFold, importSection()])], [preview]));
 }
 
 // ==================== read-режим (по умолчанию) ====================
-// Карточка заклинания в духе Foundry: имя + "уровень, школа" подстрокой,
-// сетка сотворения, эффект, описание — без единого сырого инпута. Урон и
-// прочие формулы в описании кликабельны (см. web/src/inline-rolls.js).
-
-function lineIf(label, value) {
-  const v = (value ?? "").toString().trim();
-  if (!v) return null;
-  return h("div", { class: "sb-line" }, [h("strong", { text: label + " " }), v]);
-}
-
-function levelLabel(lvl) {
-  const opt = LEVEL_OPTIONS.find((o) => o.value === lvl);
-  return opt ? opt.label : String(lvl);
-}
-
-// componentsText — "В, С, М (материалы)" собранная строка из трёх чекбоксов
-// + свободного текста материалов (то же самое, что показал бы Foundry в
-// шапке карточки заклинания).
-function componentsText(s) {
-  const parts = [];
-  if (s.verbal) parts.push("В");
-  if (s.somatic) parts.push("С");
-  if (s.material) parts.push("М" + (s.materialNote ? ` (${s.materialNote})` : ""));
-  return parts.join(", ");
-}
-
-function readHeader() {
-  const subtitleBits = [levelLabel(spell.level), spell.school].filter(Boolean).join(", ");
-  const badges = [];
-  if (spell.ritual) badges.push("Ритуал");
-  if (spell.concentration) badges.push("Концентрация");
-  const pills = [...(spell.source ? [spell.source] : []), ...spell.tags].map((t) => h("span", { class: "sb-tag-pill", text: t }));
-  return h("div", { class: "sb-header-text" }, [
-    h("h2", { class: "sb-name", text: spell.name || "Без имени" }),
-    h("div", { class: "sb-subtitle", text: subtitleBits + (badges.length ? " · " + badges.join(", ") : "") }),
-    pills.length ? h("div", { class: "sb-tags" }, pills) : null,
-  ]);
-}
-
-function readCastingGrid() {
-  const wrap = h("div", { class: "sb-info" });
-  const add = (label, value) => {
-    const line = lineIf(label, value);
-    if (line) wrap.appendChild(line);
-  };
-  add("Время накладывания", spell.castTime);
-  add("Дистанция", spell.range);
-  add("Компоненты", componentsText(spell));
-  add("Длительность", spell.duration);
-  add("Атака заклинанием", attackLabel(spell.attack));
-  add("Спасбросок", spell.savingThrow);
-  add("Урон", spell.damage);
-  add("За круг ячейки выше", spell.upcast ? "+" + spell.upcast : "");
-  add("Классы", spell.classes);
-  return wrap;
-}
 
 function renderReadView(root) {
-  root.appendChild(readHeader());
-  root.appendChild(h("div", { class: "sb-hr" }));
-  const info = readCastingGrid();
-  root.appendChild(info);
-  enhanceRolls(info, sendRoll); // формула урона и т.п. в этих строках — кликабельная
+  const subtitle = h("div", { class: "card-sub", text: [spell.school, levelPhrase(spell.level)].filter(Boolean).join(" ") + (spell.ritual ? " (ритуал)" : "") });
+  const hero = renderHero({ glyph: spellGlyph(), color: spellColor(), name: spell.name, pills: heroPills(), subtitle, readOnly: true });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
 
-  const statusesBlock = readStatuses();
-  if (statusesBlock) root.appendChild(statusesBlock);
+  // Чип состояния кликабелен только у ДМ внутри окна стола: карточка живёт
+  // в iframe и WS-команды слать не может — просит топ-документ (см.
+  // spell-preview.js). Игроку сервер наложить метку всё равно не даст.
+  const preview = renderSpellPreview(spell, { sendRoll, attackLabel, conditions: allConditions, canApply: isAdminView && window.parent !== window });
+  const kv = renderKvTable(kvRows(), { readOnly: true, sendRoll });
 
+  const folds = [];
   const desc = spell.description && spell.description.trim();
   if (desc) {
-    root.appendChild(h("div", { class: "sb-hr" }));
-    const body = h("div", { class: "sb-prose" });
+    const body = h("div", { class: "card-prose" });
     body.innerHTML = renderNoteHtml(spell.description);
     enhanceRolls(body, sendRoll);
     wireCatalogLinks(body);
-    root.appendChild(h("div", { class: "sb-block" }, [h("h3", { class: "sb-section-title", text: "Описание" }), body]));
+    folds.push(fold({ title: "Описание", body: [body], open: true }));
   }
+  const compat = [spell.source, spell.foundryModuleId].filter(Boolean).join(" · ");
+  if (compat) folds.push(fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }));
+
+  root.appendChild(renderBody([kv, folds.length ? h("div", { class: "card-folds" }, folds) : null], [preview]));
 }
 
-// statusesField — правка списка «что накладывает» руками (режим ✎). Список
-// состояний мира тянется один раз при загрузке карточки (см. boot) — тем же
-// приёмом, что и остальные подсказки в конструкторах; если он не загрузился,
-// поле всё равно работает, просто без выпадашки.
-function statusesField() {
-  const wrap = h("div", { style: "margin-top:8px;" });
-  const list = h("div", { class: "tag-list" });
+function statusesField(onChange) {
+  const list = h("div", { class: "card-chips", style: "margin-top:8px" });
+  const select = h("select", { "aria-label": "Добавить состояние" });
 
   function renderList() {
     list.innerHTML = "";
     spell.statuses.forEach((ref, i) => {
-      const roundsInp = h("input", {
-        type: "number",
-        min: "0",
-        value: ref.rounds || 0,
-        style: "width:56px;",
-        title: "Раундов, 0 — по описанию заклинания",
-      });
+      const roundsInp = h("input", { type: "number", min: "0", class: "num", value: ref.rounds || 0, title: "Раундов, 0 — по описанию заклинания", "aria-label": "Раундов" });
       roundsInp.addEventListener("input", () => {
         const v = parseInt(roundsInp.value, 10);
         ref.rounds = Number.isNaN(v) ? 0 : v;
         scheduleSave();
+        onChange();
       });
-      const noteInp = h("input", {
-        type: "text",
-        value: ref.note || "",
-        placeholder: "при провале спасброска",
-        style: "width:170px;",
-      });
+      const noteInp = h("input", { type: "text", class: "note", value: ref.note || "", placeholder: "при провале спасброска", "aria-label": "Подпись" });
       noteInp.addEventListener("input", () => {
         ref.note = noteInp.value;
         scheduleSave();
+        onChange();
       });
+      const cond = allConditions.find((c) => c.slug === ref.slug);
       list.appendChild(
-        h("span", { class: "tag-pill", style: "gap:6px;padding:2px 6px 2px 10px;" }, [
+        h("span", { class: "sc-chip" }, [
+          h("span", { class: "spp-chip-g", style: cond && cond.color ? "color:" + cond.color : "" }, [glyphNode(cond ? cond.icon : "question", "")]),
           ref.name || ref.slug,
           roundsInp,
           noteInp,
-          h("button", {
-            type: "button",
-            html: icon("close", { size: 11 }),
-            onclick: () => {
-              spell.statuses.splice(i, 1);
-              scheduleSave();
-              renderList();
-            },
-          }),
+          h("button", { type: "button", html: icon("close", { size: 11 }), "aria-label": "Убрать состояние", onclick: () => { spell.statuses.splice(i, 1); scheduleSave(); renderList(); onChange(); } }),
         ])
       );
     });
-  }
-  renderList();
-
-  const select = h("select", {});
-  select.appendChild(h("option", { value: "", text: "+ добавить состояние…" }));
-  for (const c of allConditions) {
-    if (!c.slug) continue;
-    select.appendChild(h("option", { value: c.slug, text: `${c.name} (${c.slug})` }));
+    select.innerHTML = "";
+    select.appendChild(h("option", { value: "", text: "+ добавить состояние…" }));
+    for (const c of allConditions) {
+      if (!c.slug || spell.statuses.some((s) => s.slug === c.slug)) continue;
+      select.appendChild(h("option", { value: c.slug, text: c.name }));
+    }
+    select.style.width = "auto";
+    list.appendChild(select);
   }
   select.addEventListener("change", () => {
     const slug = select.value;
-    select.value = "";
     if (!slug || spell.statuses.some((s) => s.slug === slug)) return;
     const cond = allConditions.find((c) => c.slug === slug);
     spell.statuses.push({ slug, name: cond ? cond.name : slug, rounds: (cond && cond.defaultRounds) || 0, note: "" });
     scheduleSave();
     renderList();
+    onChange();
   });
-
-  wrap.append(
-    field("Накладывает состояния", select, "Заполняется и импортом из Foundry (effects[] заклинания). Метку всё равно вешает ДМ вручную — сервер спасброски не кидает."),
-    list
-  );
-  return wrap;
+  renderList();
+  return h("div", {}, [list, h("p", { class: "card-note", text: "Заполняется и импортом из Foundry (effects[] заклинания). Метку всё равно вешает ДМ — сервер спасброски не кидает." })]);
 }
 
-// readStatuses — блок «Накладывает состояния» (см. domain.SpellStatusRef).
-// Заполняется импортом из Foundry (effects[] заклинания, см.
-// spell-import.js: mapFoundrySpellStatuses) или руками в режиме правки.
-//
-// Чип кликабелен только у ДМ и только когда карточка открыта внутри
-// dm.html: сама она живёт в iframe плавающего окна и WS-команды слать не
-// может — вместо этого просит топ-документ показать выбор цели и наложить
-// (postMessage "beacon:applySpellStatus", см. web/src/pages/dm.js). У игрока
-// и в отдельном окне браузера это просто справочная строка: сервер всё
-// равно не даст игроку наложить метку (см. Room.authorize).
-function readStatuses() {
-  if (!spell.statuses.length) return null;
-  const canApply = isAdminView && window.parent !== window;
-  const chips = spell.statuses.map((ref) => {
-    const bits = [ref.name || ref.slug];
-    if (ref.rounds) bits.push(`${ref.rounds} р.`);
-    if (ref.note) bits.push(ref.note);
-    const chip = h("span", { class: "tag-pill" + (canApply ? " clickable" : ""), text: bits.join(" · ") });
-    if (canApply) {
-      chip.title = "Наложить это состояние на токен на карте";
-      chip.style.cursor = "pointer";
-      chip.onclick = () =>
-        window.parent.postMessage(
-          {
-            type: "beacon:applySpellStatus",
-            slug: ref.slug,
-            name: ref.name || ref.slug,
-            rounds: ref.rounds || 0,
-            spellName: spell.name || "",
-          },
-          location.origin
-        );
-    }
-    return chip;
-  });
-  return h("div", { class: "sb-block" }, [
-    h("h3", { class: "sb-section-title", text: "Накладывает состояния" }),
-    h("div", { class: "tag-list" }, chips),
-    canApply ? null : h("div", { class: "hint", text: "Наложить метку может только ДМ — из окна ДМ-стола." }),
-  ]);
-}
-
-function tagsField() {
-  const wrap = h("div", {});
-  const list = h("div", { class: "tag-list" });
+function tagsField(onChange) {
+  const list = h("div", { class: "card-chips" });
   function renderTags() {
     list.innerHTML = "";
     spell.tags.forEach((tag, i) => {
-      list.appendChild(
-        h("span", { class: "tag-pill" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), onclick: () => { spell.tags.splice(i, 1); scheduleSave(); renderTags(); } })])
-      );
+      list.appendChild(h("span", { class: "card-chip" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), "aria-label": "Убрать тег", onclick: () => { spell.tags.splice(i, 1); scheduleSave(); renderTags(); onChange(); } })]));
     });
   }
   renderTags();
@@ -449,9 +351,9 @@ function tagsField() {
     input.value = "";
     scheduleSave();
     renderTags();
+    onChange();
   });
-  wrap.append(field("Теги", input), list);
-  return wrap;
+  return h("div", {}, [labeled("Теги", input), list]);
 }
 
 // applyImport — общая точка для файла и вставленного текста: парсит JSON,
@@ -495,14 +397,17 @@ function importSection() {
   });
   const textarea = h("textarea", { id: "importTextarea", placeholder: "...или вставь сюда содержимое JSON-файла" });
   const importBtn = h("button", { type: "button", id: "importBtn", text: "Импортировать вставленный JSON", onclick: () => applyImport(textarea.value, msg) });
-  return h("div", { class: "section", id: "importSection" }, [
-    h("h3", { text: "Импорт из TTG Club" }),
-    h("p", { class: "hint" }, "На странице заклинания на 5e14.ttg.club нажми «Экспортировать в FvTT» и сохрани JSON-файл — выбери его ниже (или вставь содержимое текстом). Поля карточки заменятся тем, что удастся разобрать из файла."),
-    field("Файл экспорта", fileInput),
-    textarea,
-    importBtn,
-    msg,
-  ]);
+  return fold({
+    title: "Импорт из TTG Club / Foundry VTT",
+    summary: "JSON-экспорт заклинания",
+    body: [
+      h("p", { class: "card-note" }, "На странице заклинания на 5e14.ttg.club нажми «Экспортировать в FvTT» и сохрани JSON-файл — выбери его ниже (или вставь содержимое текстом). Поля карточки заменятся тем, что удастся разобрать из файла."),
+      labeled("Файл экспорта", fileInput),
+      textarea,
+      importBtn,
+      msg,
+    ],
+  });
 }
 
 // ==================== autosave ====================
