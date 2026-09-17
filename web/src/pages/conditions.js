@@ -5,9 +5,9 @@
 // h()/textInput/mdBlock-конструктор, тот же debounce-автосейв, тот же
 // read/edit-тумблер и «Клонировать» для карточек каталога «из коробки».
 //
-// Два разных блока, которые легко перепутать: «Изменения» — то, что
-// приложение реально применяет числами (см. internal/domain/modifier.go и
-// modifier-editor.js), «Механика» — то, что в числа не ложится
+// Два разных блока, которые легко перепутать: статблок «что меняет» — то,
+// что приложение реально применяет числами (см. internal/domain/modifier.go
+// и stat-editor.js), «Правила» — то, что в числа не ложится
 // (преимущество/помеха, автопровалы) и остаётся текстом для глаз ДМ.
 // Правил приложение по-прежнему не знает: список изменений составляет
 // человек или импорт (web/src/condition-import.js), а не вывод из описания.
@@ -16,7 +16,8 @@ import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { normalizeSlug, DEFAULT_ICONS } from "../foundry-conditions.js";
-import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
+import { renderStatEditor, loadTargets, describeModifier } from "../stat-editor.js";
+import { loadStand, renderStandSelect } from "../stand.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { el as h, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
@@ -30,6 +31,8 @@ let editMode = false;
 // состояний (Riders): их указывают slug'ами, а тыкать мышью удобнее по
 // именам. Тянется один раз при открытии карточки.
 let allConditions = [];
+// standEntries — существа и персонажи для «примерить на» (см. stand.js).
+let standEntries = [];
 
 function normalizeCondition(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
@@ -43,7 +46,7 @@ function normalizeCondition(raw) {
 // ЖЕ объект `condition`, а не подменяем переменную целиком (было раньше:
 // `condition = normalizeCondition(await updateCondition(...))`).
 //
-// Почему это важно: renderModifierEditor/riders-редактор получают массив
+// Почему это важно: renderStatEditor/riders-редактор получают массив
 // (condition.modifiers, condition.riders) ОДИН РАЗ при монтировании секции
 // и потом мутируют его на месте (push/splice) — сами по ссылке, а не через
 // геттер вроде textInput'а. Если подменить саму переменную `condition`
@@ -70,8 +73,8 @@ function mergeConditionInPlace(target, saved) {
 // mergeArrayInPlace — как mergeConditionInPlace, но для одного массива:
 // держит по ссылке не только сам массив, но и (для массива объектов, как
 // modifiers) каждый элемент по индексу. У «Значения»/«Заметки» в редакторе
-// изменений нет перерисовки строки на каждый символ (см. modifier-editor.js:
-// valueInp/noteInp) — поле держит объект-модификатор по ссылке напрямую;
+// изменений нет перерисовки строки на каждый символ (см. stat-editor.js:
+// cellInput) — поле держит объект-модификатор по ссылке напрямую;
 // подмена этого объекта на новый с тем же содержимым оторвала бы поле от
 // массива точно так же, как раньше отрывала подмена самого массива.
 function mergeArrayInPlace(cur, value) {
@@ -229,11 +232,11 @@ function renderEditView(root) {
   root.appendChild(ornament());
 
   // ---- изменения, которые приложение реально применяет ----
-  const effects = h("div", { class: "card-folds" }, [
-    h("span", { class: "card-lbl", text: "Что меняет" }),
-    renderModifierEditor(condition.modifiers, scheduleSave, {
-      hint: "Применяется, пока метка висит: постоянные — к КД/скорости/характеристикам в трекере и на листе персонажа, «в начале/конце хода» — разовым броском по текущим хитам.",
-    }),
+  const effects = h("div", {}, [
+    condition.modifiers.length
+      ? null
+      : h("p", { class: "cond-empty-hint", html: "Впиши, что меняет состояние: <b>−2</b> в КД, <b>0</b> в скорость, <b>−1к6</b> в хиты в ход. Итог считается на выбранном существе." }),
+    renderStatEditor(condition.modifiers, scheduleSave, { stand: renderStandSelect(standEntries), periodic: true }),
   ]);
 
   const mechanics = h("textarea", { placeholder: "Помеха на броски атаки; атаки по существу — с преимуществом", style: "min-height:60px;" });
@@ -704,8 +707,8 @@ function currentId() {
     document.getElementById("loadingHint").textContent = "Не удалось загрузить состояние: " + err.message;
     return;
   }
-  ensureModifierEditorCSS();
-  await loadModifierTargets(); // справочник целей для таблицы «Изменения»
+  await loadTargets(); // подписи целей для статблока
+  standEntries = await loadStand();
   // Список нужен только для выпадашки зависимых состояний — если он не
   // загрузился, карточка всё равно должна открыться.
   try {
