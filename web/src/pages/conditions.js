@@ -19,6 +19,7 @@ import { normalizeSlug, DEFAULT_ICONS } from "../foundry-conditions.js";
 import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { el as h, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 
 // ==================== state ====================
 
@@ -85,28 +86,7 @@ function mergeArrayInPlace(cur, value) {
   cur.length = value.length;
 }
 
-// ==================== DOM helpers (та же схема, что referencebook.js) ====================
-
-function h(tag, attrs, children) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") e.className = v;
-    else if (k === "text") e.textContent = v;
-    else if (k === "html") e.innerHTML = v;
-    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of [].concat(children || [])) {
-    if (c === undefined || c === null || c === false) continue;
-    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-  }
-  return e;
-}
-
-function field(labelText, inputEl, title) {
-  return h("label", { class: "field", title }, [h("span", { text: labelText }), inputEl]);
-}
+// ==================== DOM helpers ====================
 
 function textInput(get, set, opts) {
   const inp = h("input", Object.assign({ type: "text" }, opts || {}));
@@ -135,7 +115,6 @@ function checkboxInput(get, set) {
   inp.addEventListener("change", () => {
     set(inp.checked);
     scheduleSave();
-    renderApp();
   });
   return inp;
 }
@@ -150,19 +129,34 @@ function mdBlock(labelText, get, set, opts) {
     render.innerHTML = renderNoteHtml(t.value);
     scheduleSave();
   });
-  return h("div", { class: "section" }, [h("h3", { text: labelText }), h("div", { class: "md-block" }, [t, render])]);
+  t.setAttribute("aria-label", labelText);
+  return h("div", { class: "md-block" }, [t, render]);
 }
 
-// preview — предпросмотр значка ровно в том виде, в каком его увидят на
-// токене и в палитре: свой арт, если он задан, иначе глиф; кайма — цветом
-// карточки (см. web/src/vtt/layers/tokens.js: drawStatuses и
-// status-palette.js: statusVisual — три места, один контракт).
-function preview() {
-  const box = h("div", { class: "cond-preview" });
-  if (condition.color) box.style.setProperty("--cond-color", condition.color);
-  if (condition.imageUrl) box.appendChild(h("img", { src: condition.imageUrl, alt: condition.name || "" }));
-  else box.appendChild(h("span", { text: condition.icon || "❔" }));
-  return box;
+// durLabel — длительность метки словами; одно место для плашки в шапке,
+// выжимки «Наложения» и предпросмотра, чтобы они не расходились.
+function durLabel() {
+  const n = condition.defaultRounds || 0;
+  if (!n) return "бессрочно";
+  const m10 = n % 10, m100 = n % 100;
+  const word = m10 === 1 && m100 !== 11 ? "раунд" : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? "раунда" : "раундов";
+  return n + " " + word;
+}
+
+function heroPills() {
+  return [
+    condition.source ? pill(condition.source, "gold") : null,
+    ...condition.tags.map((t) => pill(t)),
+    pill(durLabel(), "", icon("clock", { size: 12 })),
+    condition.overlay ? pill("во весь токен") : null,
+  ];
+}
+
+function applySummary() {
+  const names = condition.riders.map((slug) => (allConditions.find((c) => c.slug === slug) || {}).name || slug);
+  return [condition.levels > 1 ? condition.levels + " уровней" : "без уровней", durLabel(), condition.overlay ? "во весь токен" : null, names.length ? "вместе с: " + names.join(", ") : null]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 // ==================== рендер ====================
@@ -175,7 +169,7 @@ function renderApp() {
 }
 
 function renderEditView(root) {
-  const upload = h("input", { type: "file", accept: "image/*" });
+  const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
     if (!file) return;
@@ -183,23 +177,106 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       condition.imageUrl = url;
       scheduleSave();
-      renderApp();
+      hero.setGlyph(condition.icon, condition.imageUrl);
+      artBtn.textContent = "Убрать арт";
     } catch (err) {
       showAlert("Не удалось загрузить значок: " + err.message);
     }
+  });
+  const artBtn = h("button", {
+    type: "button",
+    text: condition.imageUrl ? "Убрать арт" : "Загрузить свой…",
+    onclick: () => {
+      if (condition.imageUrl) {
+        condition.imageUrl = "";
+        scheduleSave();
+        hero.setGlyph(condition.icon, "");
+        artBtn.textContent = "Загрузить свой…";
+      } else upload.click();
+    },
   });
 
   const colorInput = h("input", { type: "color", value: condition.color || "#7c6cf0" });
   colorInput.addEventListener("input", () => {
     condition.color = colorInput.value;
     scheduleSave();
-    renderApp();
+    hero.setColor(condition.color);
   });
 
-  // slugWarnBox — обёртка для slugConflictWarning(), которую обновляем точечно
-  // при каждом вводе в поле Slug, не перестраивая всю форму (см. поле Slug
-  // ниже: полная renderApp() здесь недопустима — она пересоздаёт сам <input>
-  // и роняет фокус на каждой букве).
+  const glyphInput = h("input", { type: "text", class: "glyph-input", value: condition.icon || "", placeholder: "❔", maxlength: "8" });
+  glyphInput.addEventListener("input", () => {
+    condition.icon = glyphInput.value;
+    scheduleSave();
+    hero.setGlyph(condition.icon, condition.imageUrl);
+  });
+
+  const hero = renderHero({
+    glyph: condition.icon,
+    imageUrl: condition.imageUrl,
+    color: condition.color,
+    name: condition.name,
+    namePlaceholder: "Название состояния",
+    levels: condition.levels,
+    pills: heroPills(),
+    controls: [labeled("Значок", glyphInput), labeled("Цвет", colorInput), h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    onName: (v) => {
+      condition.name = v;
+      document.getElementById("condTitle").textContent = v || "Без имени";
+      scheduleSave();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+
+  // ---- изменения, которые приложение реально применяет ----
+  const effects = h("div", { class: "card-folds" }, [
+    h("span", { class: "card-lbl", text: "Что меняет" }),
+    renderModifierEditor(condition.modifiers, scheduleSave, {
+      hint: "Применяется, пока метка висит: постоянные — к КД/скорости/характеристикам в трекере и на листе персонажа, «в начале/конце хода» — разовым броском по текущим хитам.",
+    }),
+  ]);
+
+  const mechanics = h("textarea", { placeholder: "Помеха на броски атаки; атаки по существу — с преимуществом", style: "min-height:60px;" });
+  mechanics.value = condition.mechanics ?? "";
+  mechanics.addEventListener("input", () => {
+    condition.mechanics = mechanics.value;
+    scheduleSave();
+    rulesFold.setSummary(condition.mechanics || "помеха, преимущество, автопровалы — текстом");
+  });
+  const rulesFold = fold({
+    title: "Правила",
+    summary: condition.mechanics || "помеха, преимущество, автопровалы — текстом",
+    body: [labeled("Что не ложится в цифры — текст для глаз ДМ, виден в палитре при ПКМ по значку", mechanics)],
+  });
+
+  const refreshApply = () => {
+    applyFold.setSummary(applySummary());
+    hero.setPills(heroPills());
+    hero.setLevels(condition.levels);
+  };
+  const applyFold = fold({
+    title: "Наложение",
+    summary: applySummary(),
+    body: [
+      h("div", { class: "card-grid3" }, [
+        labeled("Уровней", numberInput(() => condition.levels, (v) => { condition.levels = v; refreshApply(); }, { max: "20" }), "0 или 1 — обычный тумблер. Больше — многоуровневое, как истощение (6)."),
+        labeled("Раундов по умолчанию", numberInput(() => condition.defaultRounds, (v) => { condition.defaultRounds = v; refreshApply(); }, { placeholder: "0 — бессрочно" }), "Счётчик уменьшается в начале хода того, на ком метка; ДМ меняет при наложении."),
+        h("div", { class: "field" }, [
+          h("span", { text: "Значок" }),
+          h("label", { class: "card-toggle" }, [checkboxInput(() => condition.overlay, (v) => { condition.overlay = v; refreshApply(); }), "во весь токен"]),
+          h("p", { class: "card-note", text: "Для состояний важнее арта: окаменение, беспамятство." }),
+        ]),
+      ]),
+      ridersField(() => refreshApply()),
+    ],
+  });
+
+  const descFold = fold({
+    title: "Описание",
+    summary: condition.description || "что это и как выглядит",
+    body: [mdBlock("Описание", () => condition.description, (v) => { condition.description = v; descFold.setSummary(v || "что это и как выглядит"); })],
+  });
+
   const slugWarnBox = h("div", {});
   function refreshSlugWarning() {
     slugWarnBox.innerHTML = "";
@@ -207,120 +284,35 @@ function renderEditView(root) {
     if (w) slugWarnBox.appendChild(w);
   }
   refreshSlugWarning();
-
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("div", { class: "portrait-wrap" }, [
-        preview(),
-        h("div", { class: "col", style: "flex:1 1 auto;gap:6px;min-width:0;" }, [
-          field(
-            "Имя",
-            textInput(
-              () => condition.name,
-              (v) => {
-                condition.name = v;
-                document.getElementById("condTitle").textContent = v || "Без имени";
-              }
-            )
-          ),
-          h("div", { class: "row" }, [
-            field(
-              "Глиф",
-              textInput(() => condition.icon, (v) => (condition.icon = v), { placeholder: "🙈", maxlength: "8" }),
-              "Один символ-эмодзи. Именно он рисуется значком на токене и в палитре — SVG-иконки тут не используются, потому что тот же значок нужен и в WebGL-сцене."
-            ),
-            field("Свой арт", upload, "Необязательно: PNG/SVG вместо глифа — рисуется и на токене, и в палитре."),
-            field("Цвет", colorInput, "Кайма значка на токене и рамка чипа в трекере."),
-          ]),
-          condition.imageUrl
-            ? h("button", {
-                type: "button",
-                text: "Убрать свой арт",
-                style: "align-self:flex-start;padding:3px 10px;font-size:11px;",
-                onclick: () => {
-                  condition.imageUrl = "";
-                  scheduleSave();
-                  renderApp();
-                },
-              })
-            : null,
-        ]),
-      ]),
-      glyphPicker(),
-      slugWarnBox,
-      h("div", { class: "row" }, [
-        field(
+  const compatSummary = () => [condition.slug, condition.source].filter(Boolean).join(" · ") || "Foundry-код, источник, теги";
+  const compatFold = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary(),
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled(
           "Slug",
           textInput(
             () => condition.slug,
             (v) => {
               condition.slug = normalizeSlug(v);
-              // Полная перерисовка (renderApp) тут не годится: она пересоздаёт
-              // сам <input>, и фокус слетает после каждой буквы. Обновляем
-              // только предупреждение о дубле slug'а, само поле не трогаем.
               refreshSlugWarning();
+              compatFold.setSummary(compatSummary());
             },
             { placeholder: "blinded" }
           ),
-          "Машинный ключ состояния: по нему метка ссылается на карточку, по нему же сопоставляется импорт из Foundry (там это код вида blinded/prone/exhaustion). Латиница, цифры и дефис. Должен быть уникальным в пределах библиотеки — иначе метка будет вешаться то с одной карточкой, то с другой."
+          "Код Foundry (blinded/prone/exhaustion) — по нему импорт находит карточку. Пусто — сервер поставит свой ключ."
         ),
-        field("Источник", textInput(() => condition.source, (v) => (condition.source = v), { placeholder: "PHB'24" })),
-        field(
-          "Уровней",
-          numberInput(() => condition.levels, (v) => (condition.levels = v), { max: "20" }),
-          "0 или 1 — обычный тумблер. Больше — многоуровневое состояние вроде истощения (6): у метки появляется номер уровня."
-        ),
-        field(
-          "Раундов по умолчанию",
-          numberInput(() => condition.defaultRounds, (v) => (condition.defaultRounds = v)),
-          "Сколько раундов метка висит, если ДМ не указал иное. 0 — бессрочно, пока не снимут. Счётчик уменьшается в начале хода того, на ком метка."
-        ),
+        labeled("Источник", textInput(() => condition.source, (v) => { condition.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "PHB'24" })),
       ]),
-      h("div", { class: "cond-flags" }, [
-        h("label", {}, [
-          checkboxInput(() => condition.overlay, (v) => (condition.overlay = v)),
-          h("span", { text: "значок во весь токен (overlay)" }),
-        ]),
-      ]),
-      h("p", { class: "cond-note", text: "Overlay — для состояний, которые важнее самого арта: окаменение, беспамятство. Аналог flags.core.overlay в Foundry." }),
-      ridersField(),
-      tagsField(),
-    ])
-  );
+      slugWarnBox,
+      tagsField(() => hero.setPills(heroPills())),
+    ],
+  });
 
-  // ---- изменения, которые приложение реально применяет ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Изменения" }),
-      renderModifierEditor(condition.modifiers, scheduleSave, {
-        hint:
-          "Применяется, пока метка висит: постоянные — к КД/скорости/характеристикам в трекере и на листе персонажа, «в начале/конце хода» — разовым броском по текущим хитам (виден в общем логе). Преимущество, помеха и автопровалы сюда не ложатся — им место в «Механике» ниже.",
-      }),
-    ])
-  );
+  const glyphFold = fold({ title: "Набор значков", summary: "быстрый выбор глифа", body: [glyphPicker((g) => { glyphInput.value = g; hero.setGlyph(g, condition.imageUrl); })] });
 
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Механика" }),
-      (() => {
-        const t = h("textarea", { placeholder: "Помеха на броски атаки; атаки по существу — с преимуществом", style: "min-height:60px;" });
-        t.value = condition.mechanics ?? "";
-        t.addEventListener("input", () => {
-          condition.mechanics = t.value;
-          scheduleSave();
-        });
-        return t;
-      })(),
-      h("p", {
-        class: "cond-note",
-        text:
-          "Короткая выжимка «что меняется по цифрам» — её видно в палитре при ПКМ по значку. Beacon Table эти цифры НЕ применяет: броски и модификаторы за столом считает человек, как и с атаками монстра.",
-      }),
-    ])
-  );
-
-  root.appendChild(mdBlock("Описание", () => condition.description, (v) => (condition.description = v)));
-  root.appendChild(importSection());
+  root.appendChild(renderBody([effects, h("div", { class: "card-folds" }, [rulesFold, applyFold, descFold, compatFold, glyphFold, importSection()])], null));
 }
 
 // slugConflictWarning — предупреждение «этот slug уже занят другой
@@ -334,7 +326,7 @@ function slugConflictWarning() {
   const others = allConditions.filter((c) => c.slug === slug && c.id !== condition.id);
   if (others.length === 0) return null;
   return h("p", {
-    class: "cond-note",
+    class: "card-note",
     style: "color: var(--amber);",
     text:
       "Такой slug уже есть у карточки «" + others[0].name + "». Метка найдёт только одну из них — поменяй slug, иначе состояние будет вешаться с чужими изменениями.",
@@ -345,24 +337,24 @@ function slugConflictWarning() {
 // каталог «из коробки» и импорт (см. foundry-conditions.js: DEFAULT_ICONS).
 // Не ограничивает ввод: поле «Глиф» рядом принимает любой эмодзи, пикер —
 // просто чтобы не искать символ по всей раскладке.
-function glyphPicker() {
+function glyphPicker(onPick) {
   const wrap = h("div", { class: "glyph-picker" });
   const seen = new Set();
   for (const glyph of Object.values(DEFAULT_ICONS)) {
     if (seen.has(glyph)) continue;
     seen.add(glyph);
-    wrap.appendChild(
-      h("button", {
-        type: "button",
-        text: glyph,
-        class: condition.icon === glyph ? "active" : "",
-        onclick: () => {
-          condition.icon = glyph;
-          scheduleSave();
-          renderApp();
-        },
-      })
-    );
+    const btn = h("button", {
+      type: "button",
+      text: glyph,
+      class: condition.icon === glyph ? "active" : "",
+      onclick: () => {
+        condition.icon = glyph;
+        scheduleSave();
+        wrap.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+        onPick(glyph);
+      },
+    });
+    wrap.appendChild(btn);
   }
   return wrap;
 }
@@ -371,70 +363,70 @@ function glyphPicker() {
 // тянет за собой «недееспособность» и «положение лёжа». Разворачивает их
 // сервер в момент наложения, на один уровень вглубь (см.
 // internal/service/room_statuses.go: handleApplyStatus).
-function ridersField() {
-  const wrap = h("div", { style: "margin-top:8px;" });
-  const list = h("div", { class: "rider-list" });
+function ridersField(onChange) {
+  const list = h("div", { class: "card-chips" });
+  const select = h("select", { "aria-label": "Добавить зависимое состояние" });
 
   function renderRiders() {
     list.innerHTML = "";
     condition.riders.forEach((slug, i) => {
       const known = allConditions.find((c) => c.slug === slug);
       list.appendChild(
-        h("span", { class: "tag-pill" }, [
+        h("span", { class: "card-chip" }, [
           (known ? known.name : slug) + (known ? "" : " (нет такой карточки)"),
           h("button", {
             type: "button",
             html: icon("close", { size: 11 }),
+            "aria-label": "Убрать",
             onclick: () => {
               condition.riders.splice(i, 1);
               scheduleSave();
               renderRiders();
+              onChange();
             },
           }),
         ])
       );
     });
-  }
-  renderRiders();
-
-  const select = h("select", {});
-  select.appendChild(h("option", { value: "", text: "+ добавить зависимое…" }));
-  for (const c of allConditions) {
-    if (!c.slug || c.slug === condition.slug) continue;
-    select.appendChild(h("option", { value: c.slug, text: `${c.name} (${c.slug})` }));
+    select.innerHTML = "";
+    select.appendChild(h("option", { value: "", text: "+ добавить…" }));
+    for (const c of allConditions) {
+      if (!c.slug || c.slug === condition.slug || condition.riders.includes(c.slug)) continue;
+      select.appendChild(h("option", { value: c.slug, text: c.name }));
+    }
+    select.style.width = "auto";
+    list.appendChild(select);
   }
   select.addEventListener("change", () => {
     const slug = select.value;
-    select.value = "";
     if (!slug || condition.riders.includes(slug)) return;
     condition.riders.push(slug);
     scheduleSave();
     renderRiders();
+    onChange();
   });
+  renderRiders();
 
-  wrap.append(
-    field("Зависимые состояния", select, "Вешаются автоматически вместе с этим. Снятие этого их НЕ снимает — как и в Foundry."),
-    list
-  );
-  return wrap;
+  return h("div", { class: "field" }, [h("span", { text: "Вешается вместе с" }), list, h("p", { class: "card-note", text: "Вешаются автоматически вместе с этим. Снятие этого их не снимает." })]);
 }
 
-function tagsField() {
-  const wrap = h("div", { style: "margin-top:8px;" });
-  const list = h("div", { class: "tag-list" });
+function tagsField(onChange) {
+  const list = h("div", { class: "card-chips" });
   function renderTags() {
     list.innerHTML = "";
     condition.tags.forEach((tag, i) => {
       list.appendChild(
-        h("span", { class: "tag-pill" }, [
+        h("span", { class: "card-chip" }, [
           tag,
           h("button", {
             type: "button",
             html: icon("close", { size: 11 }),
+            "aria-label": "Убрать тег",
             onclick: () => {
               condition.tags.splice(i, 1);
               scheduleSave();
               renderTags();
+              onChange();
             },
           }),
         ])
@@ -452,40 +444,31 @@ function tagsField() {
     input.value = "";
     scheduleSave();
     renderTags();
+    onChange();
   });
-  wrap.append(field("Теги", input), list);
-  return wrap;
+  return h("div", {}, [labeled("Теги", input), list]);
 }
 
 // ==================== read-режим (по умолчанию) ====================
 
 function renderReadView(root) {
-  const pills = [...(condition.source ? [condition.source] : []), ...condition.tags].map((t) =>
-    h("span", { class: "ib-tag-pill", text: t })
-  );
-  const subtitleBits = [
-    condition.slug ? `slug: ${condition.slug}` : "slug не задан — состояние не на что вешать",
-    condition.levels > 1 ? `уровней: ${condition.levels}` : "",
-    condition.defaultRounds ? `по умолчанию ${condition.defaultRounds} р.` : "бессрочно",
-    condition.overlay ? "во весь токен" : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const pills = [...(condition.source ? [pill(condition.source, "gold")] : []), ...condition.tags.map((t) => pill(t))];
+  const subtitleBits = [condition.levels > 1 ? `уровней: ${condition.levels}` : "", durLabel(), condition.overlay ? "во весь токен" : ""].filter(Boolean).join(" · ");
 
-  root.appendChild(
-    h("div", { class: "ib-header" }, [
-      preview(),
-      h("div", { class: "ib-header-text" }, [
-        h("h2", { class: "ib-name", text: condition.name || "Без имени" }),
-        h("div", { class: "ib-subtitle", text: subtitleBits }),
-        pills.length ? h("div", { class: "ib-tags" }, pills) : null,
-      ]),
-    ])
-  );
+  const hero = renderHero({
+    glyph: condition.icon,
+    imageUrl: condition.imageUrl,
+    color: condition.color,
+    name: condition.name,
+    levels: condition.levels,
+    pills: [...pills, pill(subtitleBits)],
+    readOnly: true,
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
 
   if (condition.modifiers.length) {
-    root.appendChild(h("div", { class: "ib-hr" }));
-    root.appendChild(
+        root.appendChild(
       h("div", { class: "ib-block" }, [
         h("h3", { class: "ib-section-title", text: "Изменения" }),
         ...condition.modifiers.map((m) => h("div", { class: "ib-line", text: describeModifier(m) })),
@@ -494,8 +477,7 @@ function renderReadView(root) {
   }
 
   if (condition.mechanics) {
-    root.appendChild(h("div", { class: "ib-hr" }));
-    root.appendChild(
+        root.appendChild(
       h("div", { class: "ib-block" }, [
         h("h3", { class: "ib-section-title", text: "Механика" }),
         h("div", { class: "ib-line", text: condition.mechanics }),
@@ -518,8 +500,7 @@ function renderReadView(root) {
 
   const desc = condition.description && condition.description.trim();
   if (desc) {
-    root.appendChild(h("div", { class: "ib-hr" }));
-    const body = h("div", { class: "ib-prose" });
+        const body = h("div", { class: "ib-prose" });
     body.innerHTML = renderNoteHtml(condition.description);
     root.appendChild(h("div", { class: "ib-block" }, [h("h3", { class: "ib-section-title", text: "Описание" }), body]));
   }
@@ -553,7 +534,7 @@ function applyImport(rawText, msgEl) {
   document.getElementById("condTitle").textContent = condition.name || "Без имени";
   msgEl.textContent =
     `Импортировано: «${mapped[0].name}».` +
-    (mapped[0].slug ? "" : " Slug распознать не удалось — впиши его вручную, иначе состояние не на что вешать.") +
+    (mapped[0].slug ? "" : " Код Foundry распознать не удалось — карточка получит свой ключ.") +
     (mapped.length > 1 ? ` (В файле было ${mapped.length} эффектов — применён первый.)` : "");
   msgEl.classList.add("ok");
   scheduleSave();
@@ -569,21 +550,19 @@ function importSection() {
     applyImport(await file.text(), msg);
     fileInput.value = "";
   });
-  return h("div", { class: "section", id: "importSection" }, [
-    h("h3", { text: "Импорт из Foundry VTT" }),
+  return fold({
+    title: "Импорт из Foundry VTT",
+    summary: "JSON-экспорт эффекта",
+    body: [
     h(
       "p",
-      { class: "hint" },
+      { class: "card-note" },
       "Нажми в Foundry на эффекте (ActiveEffect) «Export Data» и выбери полученный JSON. Подойдёт и файл предмета/заклинания/существа — из него возьмутся вложенные эффекты. Паки компендиума (.db/LevelDB) браузер прочитать не может, только JSON-экспорт."
     ),
-    h(
-      "p",
-      { class: "hint" },
-      "Строка changes[] из Foundry не применяется как механика — она расшифровывается словами в поле «Механика» (Beacon Table не считает КД и модификаторы за ДМ)."
-    ),
-    field("Файл экспорта", fileInput),
+    labeled("Файл экспорта", fileInput),
     msg,
-  ]);
+    ],
+  });
 }
 
 // ==================== autosave ====================
