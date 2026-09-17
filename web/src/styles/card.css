@@ -175,3 +175,27 @@
   .stat-ab { grid-template-columns: repeat(3, 1fr); }
   .stat-ab input { min-height: 40px; }
 }
+
+/* ---- предпросмотр метки (status-preview.js) ---- */
+.sp { display: grid; gap: 12px; justify-items: center; width: 100%; }
+.sp .card-lbl { justify-self: start; }
+.sp-token {
+  width: 100px; height: 100px; border-radius: 50%; position: relative;
+  background: radial-gradient(circle at 40% 35%, #4b4a5e, #1d1c28 70%); border: 3px solid #5a5a6e;
+  display: grid; place-items: center; font-size: 44px; line-height: 1;
+}
+.sp-badge {
+  position: absolute; top: -6px; left: 50%; transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%;
+  background: #0f0f16; border: 2px solid var(--cc); display: grid; place-items: center; font-size: 15px; line-height: 1;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--cc) 60%, transparent);
+}
+.sp-badge img, .sp-ov img { width: 80%; height: 80%; object-fit: contain; border-radius: 50%; }
+.sp-ov { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; font-size: 56px; background: rgba(10, 10, 16, 0.55); }
+.sp-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px 4px 6px; border-radius: var(--radius-pill);
+  background: var(--surface); border: 1px solid var(--cc); font-size: 12.5px;
+}
+.sp-chip > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-chip-g { font-size: 14px; line-height: 1; display: inline-flex; }
+.sp-chip-g img { width: 16px; height: 16px; object-fit: contain; border-radius: 50%; }
+.sp-chip-r { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: nowrap; }
