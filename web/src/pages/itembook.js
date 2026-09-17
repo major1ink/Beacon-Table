@@ -15,7 +15,8 @@ import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
-import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
+import { renderStatEditor, loadTargets, describeModifier } from "../stat-editor.js";
+import { loadStand, renderStandSelect } from "../stand.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
@@ -25,6 +26,8 @@ import { initFullscreenButton } from "../fullscreen.js";
 
 let itemId = null;
 let item = null; // объект domain.Item целиком (сервер отдаёт camelCase — см. json-теги)
+// standEntries — существа и персонажи для «примерить на» (см. stand.js).
+let standEntries = [];
 let rollWS = null;
 let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js)
 let isAdminView = false; // роль текущего аккаунта (см. boot()) — определяет /ws/dm или /ws/player
@@ -176,11 +179,12 @@ function renderEditView(root) {
 
   // ---- изменения, которые даёт НАДЕТЫЙ предмет (см. domain.Modifier) ----
   root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Изменения, пока предмет надет" }),
-      renderModifierEditor(item.modifiers, scheduleSave, {
-        hint:
-          "Лист персонажа применяет это, когда предмет отмечен «надет» в инвентаре: КД, скорость, характеристики. Поле «Класс доспеха» выше — текстовая формулировка целиком («14 + Лов (макс 2)»), а тут — та её часть, которую приложение умеет посчитать; заполнять оба не обязательно.",
+    h("div", { class: "section card-root" }, [
+      h("h3", { text: "Пока предмет надет" }),
+      renderStatEditor(item.modifiers, scheduleSave, { stand: renderStandSelect(standEntries), periodic: false }),
+      h("p", {
+        class: "hint",
+        text: "Лист персонажа применяет это, когда предмет отмечен «надет» в инвентаре. Поле «Класс доспеха» выше — формулировка целиком («14 + Лов (макс 2)»), а тут — та её часть, которую приложение умеет посчитать.",
       }),
     ])
   );
@@ -494,8 +498,8 @@ function currentId() {
     document.getElementById("loadingHint").textContent = "Не указан id предмета (?id=...).";
     return;
   }
-  ensureModifierEditorCSS();
-  await loadModifierTargets(); // справочник целей для таблицы «Изменения»
+  await loadTargets(); // подписи целей для статблока
+  standEntries = await loadStand();
   try {
     item = normalizeItem(await fetchItem(itemId));
   } catch (err) {

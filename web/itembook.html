@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beacon Table — Предмет</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
+  <link rel="stylesheet" href="/src/styles/card.css" />
   <style>
     /* Та же палитра/база, что spellbook.html/bestiary.html — единая "бумага" для карточек. */
     :root { --radius: 8px; }
@@ -49,6 +50,8 @@
       padding: 10px 12px; margin-bottom: 10px;
     }
     .section > h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+    /* статблок «пока надет» внутри секции — без своих боковых отступов */
+    .section .stat-editor { padding: 0; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1 1 120px; }
     .col { display: flex; flex-direction: column; }
