@@ -18,7 +18,7 @@
 // себя по свежим данным (см. refreshOpenPalette).
 import { fetchConditions } from "./api.js";
 import { icon } from "./icons.js";
-import { describeModifier, loadModifierTargets } from "./modifier-editor.js";
+import { describeModifier, loadTargets } from "./stat-editor.js";
 
 // ---- CSS ----
 // Стили инжектятся из JS, а не лежат в dm.html, потому что палитра нужна
@@ -275,7 +275,7 @@ export async function openStatusPalette({ x, y, target, send, statusesFor, title
   openPalette = { el, x, y, target, send, statusesFor, title, detailSlug: "", filter: "" };
   positionPalette(el, x, y);
   el.textContent = "Загрузка…";
-  await Promise.all([loadConditions(), loadModifierTargets()]);
+  await Promise.all([loadConditions(), loadTargets()]);
   if (!openPalette || openPalette.el !== el) return; // успели закрыть, пока грузились
   renderPalette(openPalette);
 }

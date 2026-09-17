@@ -24,7 +24,7 @@ export const PERIOD_TURN_END = "turn-end";
 
 // Цели, которые нужны лично этому модулю для форматирования (полный список
 // с подписями приходит с сервера, см. GET /api/modifier-targets и
-// modifier-editor.js — дублировать его тут незачем).
+// stat-editor.js — дублировать его тут незачем).
 export const TARGET_AC = "ac";
 export const TARGET_SPEED = "speed";
 export const TARGET_HP_MAX = "hp.max";
