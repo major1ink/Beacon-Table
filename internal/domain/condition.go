@@ -129,6 +129,14 @@ type Condition struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// DefaultConditionSlug — ключ карточки без кода Foundry: из ID, потому что
+// имя русское и в slug не ложится. Хранилище подставляет его старым
+// карточкам при чтении (заведены до того, как ключ стал обязательным), а
+// сервис — при сохранении. Префикс отличает такие ключи от кодов Foundry.
+func DefaultConditionSlug(id string) string {
+	return "c-" + id
+}
+
 // NewCondition создаёт пустую карточку состояния с разумными дефолтами —
 // как NewReference/NewItem/NewMonster/NewSpell, готова сразу отдаваться на
 // редактирование (или на импорт поверх себя, см.
