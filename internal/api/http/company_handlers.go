@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -155,7 +155,7 @@ func (a *API) handleCompanyExport(w http.ResponseWriter, r *http.Request) {
 		// Заголовки уже ушли — HTTP-статус не поменять; клиент получит
 		// оборванный zip. Логируем, чтобы причина не потерялась.
 		//nolint:gosec // G706: c.ID — 32-hex id из companies.ByID, не пользовательский ввод
-		log.Printf("экспорт мира %s: %v", c.ID, err)
+		slog.Error("Экспорт мира оборвался", "company_id", c.ID, "err", err)
 	}
 }
 

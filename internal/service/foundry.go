@@ -214,6 +214,10 @@ const foundryHTTPTimeout = time.Hour
 // сцены (см. RoomService.ImportScenes).
 const roomImportTimeout = 30 * time.Second
 
+// maxFoundryRedirects — предел на цепочку перенаправлений при скачивании
+// манифеста и архива модуля.
+const maxFoundryRedirects = 8
+
 // NewFoundryService — cacheDir: папка под скачанные архивы (чистится по TTL
 // самим кэшем, см. foundry.Cache). modules — где запоминаются установленные
 // пакеты этого мира (см. Installed/CheckUpdates). bestiary/spells/items/
@@ -236,7 +240,7 @@ func NewFoundryService(
 		// (см. GuardedTransport); тут только предел на их число, чтобы цепочка
 		// перенаправлений не съедала часовой таймаут.
 		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
-			if len(via) >= 8 {
+			if len(via) >= maxFoundryRedirects {
 				return fmt.Errorf("слишком много перенаправлений")
 			}
 			return nil

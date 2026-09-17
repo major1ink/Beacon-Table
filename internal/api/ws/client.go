@@ -6,7 +6,6 @@ package ws
 
 import (
 	"encoding/json"
-	"log"
 	"log/slog"
 	"net/http"
 	"time"
@@ -69,7 +68,7 @@ func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *ht
 		// Сюда же попадает отказ по Origin (см. checkOrigin): gorilla сам
 		// отвечает 403, мы дописываем адрес и Origin в журнал.
 		//
-		slog.Warn("отклонён WS-хендшейк", "origin", r.Header.Get("Origin"), "err", err)
+		slog.Warn("Отклонён WS-хендшейк", "origin", r.Header.Get("Origin"), "err", err)
 		return
 	}
 	// Соединение под присмотром Gateway до самого конца — иначе остановка
@@ -140,7 +139,7 @@ func (c *Client) readLoop() {
 		_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		msg, err := service.DecodeClientMsg(raw)
 		if err != nil {
-			log.Println("bad message:", err)
+			slog.Debug("Не удалось разобрать сообщение клиента", "err", err)
 			continue
 		}
 		c.room.Dispatch(c, msg)

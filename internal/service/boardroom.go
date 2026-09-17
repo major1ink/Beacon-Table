@@ -320,7 +320,7 @@ func (r *boardRoom) flushIfDirty() {
 	doc := *r.doc
 	doc.Scene = r.scene()
 	if _, err := r.boards.SetScene(context.Background(), r.id, &doc); err != nil {
-		slog.Error("не удалось сохранить доску, попробую ещё раз позже", "board", r.id, "err", err)
+		slog.Error("Не удалось сохранить доску, попробую ещё раз позже", "board", r.id, "err", err)
 		return
 	}
 	r.dirty = false

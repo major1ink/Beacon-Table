@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"math"
 	"regexp"
@@ -807,25 +806,25 @@ func (r *Room) flushIfDirty() {
 			continue
 		}
 		if err := r.store.SaveScene(ctx, id, s); err != nil {
-			log.Println("не удалось сохранить сцену, попробую ещё раз позже:", id, err)
+			slog.Warn("Не удалось сохранить сцену, попробую ещё раз позже", "scene_id", id, "err", err)
 			continue // не сбрасываем — повторим именно эту сцену на следующем тике
 		}
 		delete(r.dirtyScenes, id)
 	}
 	if err := r.store.SaveMeta(ctx, r.currentSceneID, r.sceneOrder); err != nil {
-		slog.Error("не удалось сохранить активную сцену", "err", err)
+		slog.Error("Не удалось сохранить активную сцену", "err", err)
 		return
 	}
 	if r.combatDirty {
 		if err := r.store.SaveCombat(ctx, r.combat); err != nil {
-			log.Println("не удалось сохранить трекер инициативы, попробую ещё раз позже:", err)
+			slog.Warn("Не удалось сохранить трекер инициативы, попробую ещё раз позже", "err", err)
 		} else {
 			r.combatDirty = false
 		}
 	}
 	if r.hubDirty {
 		if err := r.store.SaveHub(ctx, r.hub); err != nil {
-			log.Println("не удалось сохранить хаб лута, попробую ещё раз позже:", err)
+			slog.Warn("Не удалось сохранить хаб лута, попробую ещё раз позже", "err", err)
 		} else {
 			r.hubDirty = false
 		}
@@ -2655,7 +2654,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		r.sceneOrder = removeString(r.sceneOrder, msg.SceneID)
 		delete(r.dirtyScenes, msg.SceneID)
 		if err := r.store.DeleteScene(context.Background(), msg.SceneID); err != nil {
-			log.Println("не удалось удалить файл сцены:", msg.SceneID, err)
+			slog.Error("Не удалось удалить файл сцены", "scene_id", msg.SceneID, "err", err)
 		}
 		if r.currentSceneID == msg.SceneID {
 			nextID := ""
