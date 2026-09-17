@@ -3,7 +3,7 @@ package service
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"fmt"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -13,7 +13,7 @@ import (
 func randomHex(nBytes int) string {
 	b := make([]byte, nBytes)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatal("crypto/rand недоступен:", err)
+		panic(fmt.Sprintf("crypto/rand недоступен: %v", err))
 	}
 	return hex.EncodeToString(b)
 }
@@ -29,7 +29,7 @@ const passwordAlphabet = "abcdefghjkmnpqrstuvwxyzACDEFGHJKMNPQRSTUVWXYZ23456789"
 func generatePassword() string {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatal("crypto/rand недоступен:", err)
+		panic(fmt.Sprintf("crypto/rand недоступен: %v", err))
 	}
 	out := make([]byte, len(b))
 	for i, v := range b {

@@ -3,7 +3,7 @@ package foundry
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"fmt"
 )
 
 // newID — тот же принцип, что у service.newID и app.newID (crypto/rand, 16
@@ -15,7 +15,7 @@ import (
 func newID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatal("crypto/rand недоступен:", err)
+		panic(fmt.Sprintf("crypto/rand недоступен: %v", err))
 	}
 	return hex.EncodeToString(b)
 }

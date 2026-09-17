@@ -31,7 +31,7 @@ func (a *API) handleHealth(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), healthTimeout)
 		defer cancel()
 		if err := a.Health.PingContext(ctx); err != nil {
-			slog.Error("проверка живости: база не отвечает", "err", err)
+			slog.Error("Проверка живости: база не отвечает", "err", err)
 			resp["status"] = "база не отвечает"
 			writeJSON(w, http.StatusServiceUnavailable, resp)
 			return

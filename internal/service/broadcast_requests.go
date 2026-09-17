@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
-	"log"
+	"fmt"
 	"sort"
 	"time"
 
@@ -28,7 +28,7 @@ type broadcastRequest struct {
 func newRequestCode() string {
 	b := make([]byte, requestCodeLength)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatal("crypto/rand недоступен:", err)
+		panic(fmt.Sprintf("crypto/rand недоступен: %v", err))
 	}
 	out := make([]byte, len(b))
 	for i, v := range b {

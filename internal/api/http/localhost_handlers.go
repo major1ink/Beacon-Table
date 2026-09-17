@@ -105,11 +105,11 @@ func (a *API) handleDMPasswordReset(w http.ResponseWriter, r *http.Request) {
 	}
 	username, password, err := a.ResetDMPassword()
 	if err != nil {
-		slog.Error("не удалось сбросить пароль ДМ", "err", err)
+		slog.Error("Не удалось сбросить пароль ДМ", "err", err)
 		writeErr(w, http.StatusInternalServerError, "не удалось сбросить пароль")
 		return
 	}
-	slog.Info("пароль ДМ сброшен со страницы входа", "адрес", r.RemoteAddr)
+	slog.Info("Пароль ДМ сброшен со страницы входа", "addr", r.RemoteAddr)
 	writeJSON(w, http.StatusOK, map[string]string{"username": username, "password": password})
 }
 
@@ -131,7 +131,7 @@ func (a *API) handleShutdown(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "выключение сервера отсюда недоступно")
 		return
 	}
-	slog.Info("выключение сервера по кнопке в интерфейсе", "кто", acc.Username)
+	slog.Info("Выключение сервера по кнопке в интерфейсе", "username", acc.Username)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	// Останавливаемся после того, как ответ ушёл: иначе браузер получил бы
 	// оборванное соединение и показал ошибку вместо «сервер остановлен».

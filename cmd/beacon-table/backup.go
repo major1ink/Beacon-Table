@@ -5,8 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"flag"
-	"log"
+	"fmt"
 	"log/slog"
+	"os"
 
 	"beacon-table/internal/backup"
 	"beacon-table/internal/repository/sqlite"
@@ -31,19 +32,21 @@ func runBackupCommand(args []string) {
 		if errors.Is(err, flag.ErrHelp) || errors.Is(err, errShowVersion) {
 			return
 		}
-		log.Fatal(err) // журнал ещё не настроен — печатаем как есть
+		// Журнал ещё не настроен — печатаем как есть.
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	setupLogging(cfg)
 
 	db, err := sqlite.Open(cfg.DBPath())
 	if err != nil {
-		fatal("не удалось открыть базу", "путь", cfg.DBPath(), "err", err)
+		fatal("Не удалось открыть базу", "path", cfg.DBPath(), "err", err)
 	}
 	defer db.Close()
 
 	path, err := backup.Once(context.Background(), backupOptions(cfg, db))
 	if err != nil {
-		fatal("бэкап не удался", "err", err)
+		fatal("Бэкап не удался", "err", err)
 	}
-	slog.Info("бэкап готов", "path", path)
+	slog.Info("Бэкап готов", "path", path)
 }

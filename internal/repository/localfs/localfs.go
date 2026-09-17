@@ -128,7 +128,6 @@ func (s *Store) Save(ctx context.Context, kind, folder, filename string, r io.Re
 	if err != nil {
 		return "", err
 	}
-	defer dst.Close()
 
 	// Пишем под присмотром квоты: она обрывает копирование, как только
 	// место кончилось, а не после того, как файл целиком лёг на диск.
@@ -138,6 +137,12 @@ func (s *Store) Save(ctx context.Context, kind, folder, filename string, r io.Re
 		_ = dst.Close()
 		_ = os.Remove(full)
 		return "", err
+	}
+	// Ошибка записи может всплыть только на закрытии — недописанный файл
+	// тоже не оставляем.
+	if err := dst.Close(); err != nil {
+		_ = os.Remove(full)
+		return "", fmt.Errorf("не удалось записать файл: %w", err)
 	}
 	s.quota.Add(written)
 	return urlPrefix + urlFolder + safeName, nil

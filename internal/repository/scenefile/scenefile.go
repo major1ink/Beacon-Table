@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"log"
 	"log/slog"
 	"os"
 	"path"
@@ -116,7 +115,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 
 	entries, err := os.ReadDir(s.scenesDir)
 	if err != nil && !os.IsNotExist(err) {
-		log.Println("не удалось прочитать папку сцен, начинаю с пустой библиотеки:", err)
+		slog.Warn("Не удалось прочитать папку сцен, начинаю с пустой библиотеки", "path", s.scenesDir, "err", err)
 	}
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
@@ -126,12 +125,12 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 		//nolint:gosec // G304: e.Name() — имя файла из os.ReadDir(s.scenesDir)
 		data, err := os.ReadFile(p)
 		if err != nil {
-			log.Println("не удалось прочитать сцену, пропускаю:", p, err)
+			slog.Warn("Не удалось прочитать сцену, пропускаю", "path", p, "err", err)
 			continue
 		}
 		sc := &domain.SceneState{}
 		if err := json.Unmarshal(data, sc); err != nil {
-			slog.Warn("сцена повреждена, пропускаю", "path", p, "err", err)
+			slog.Warn("Сцена повреждена, пропускаю", "path", p, "err", err)
 			continue
 		}
 		stem := strings.TrimSuffix(e.Name(), ".json")
@@ -139,7 +138,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 		finalizeLoadedScene(sc, stem)
 		if needsResave {
 			if err := s.SaveScene(ctx, sc.ID, sc); err != nil {
-				log.Println("не удалось пересохранить мигрированную сцену:", sc.ID, err)
+				slog.Warn("Не удалось пересохранить мигрированную сцену", "scene_id", sc.ID, "err", err)
 			}
 		}
 		scenes[sc.ID] = sc
@@ -149,7 +148,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 	var meta roomMeta
 	if data, err := os.ReadFile(s.roomMetaFile); err == nil {
 		if err := json.Unmarshal(data, &meta); err != nil {
-			log.Println("не удалось разобрать room.json:", err)
+			slog.Warn("Не удалось разобрать файл состояния комнаты", "path", s.roomMetaFile, "err", err)
 		}
 	}
 
@@ -186,7 +185,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 		}
 	}
 
-	log.Printf("состояние загружено: сцен — %d, активна %q", len(scenes), currentID)
+	slog.Info("Состояние загружено", "scenes", len(scenes), "current_scene_id", currentID)
 	return &domain.RoomSnapshot{CurrentSceneID: currentID, SceneOrder: order, Scenes: scenes, Combat: s.loadCombat(), Hub: s.loadHub()}, nil
 }
 
@@ -201,7 +200,7 @@ func (s *Store) loadCombat() *domain.CombatState {
 		return combat
 	}
 	if err := json.Unmarshal(data, combat); err != nil {
-		slog.Warn("трекер инициативы повреждён, начинаю с пустого", "err", err)
+		slog.Warn("Трекер инициативы повреждён, начинаю с пустого", "err", err)
 		return domain.NewCombatState()
 	}
 	if combat.Combatants == nil {
@@ -237,7 +236,7 @@ func (s *Store) loadHub() *domain.LootHub {
 		return hub
 	}
 	if err := json.Unmarshal(data, hub); err != nil {
-		slog.Warn("хаб лута повреждён, начинаю с пустого", "err", err)
+		slog.Warn("Хаб лута повреждён, начинаю с пустого", "err", err)
 		return domain.NewLootHub()
 	}
 	if hub.Entries == nil {
@@ -317,7 +316,7 @@ func (s *Store) migrateLegacyIfNeeded() *domain.RoomSnapshot {
 		byURL[single.MapURL] = single
 		currentMapURL = single.MapURL
 	} else {
-		log.Println("старый файл состояния повреждён, миграция пропущена:", s.legacyFile)
+		slog.Warn("Старый файл состояния повреждён, миграция пропущена", "path", s.legacyFile)
 		return nil
 	}
 
@@ -336,7 +335,7 @@ func (s *Store) migrateLegacyIfNeeded() *domain.RoomSnapshot {
 			currentID = sc.ID
 		}
 		if err := s.SaveScene(context.Background(), sc.ID, sc); err != nil {
-			log.Println("миграция: не удалось сохранить сцену", url, err)
+			slog.Warn("Миграция: не удалось сохранить сцену", "url", url, "err", err)
 		}
 	}
 	sort.Strings(order) // детерминированный порядок вместо случайного порядка map-итерации
@@ -345,15 +344,15 @@ func (s *Store) migrateLegacyIfNeeded() *domain.RoomSnapshot {
 	}
 
 	if err := s.SaveMeta(context.Background(), currentID, order); err != nil {
-		log.Println("миграция: не удалось сохранить активную сцену:", err)
+		slog.Warn("Миграция: не удалось сохранить активную сцену", "err", err)
 	}
 
 	// убираем старый файл с дороги, а не удаляем — если миграция где-то
 	// ошиблась, есть что руками сверить/докатить назад.
 	if err := s.backupToMigrations(s.legacyFile); err != nil {
-		log.Println("миграция: не удалось убрать старый файл в бэкап:", err)
+		slog.Warn("Миграция: не удалось убрать старый файл в бэкап", "path", s.legacyFile, "err", err)
 	}
-	log.Printf("состояние мигрировано в %s (сцен: %d)", s.scenesDir, len(scenes))
+	slog.Info("Состояние мигрировано", "path", s.scenesDir, "scenes", len(scenes))
 
 	return &domain.RoomSnapshot{CurrentSceneID: currentID, SceneOrder: order, Scenes: scenes, Combat: s.loadCombat(), Hub: s.loadHub()}
 }

@@ -8,8 +8,8 @@ import (
 	"embed"
 	"errors"
 	"flag"
+	"fmt"
 	"io/fs"
-	"log"
 	"log/slog"
 	"mime"
 	"net"
@@ -75,20 +75,22 @@ func main() {
 		if errors.Is(err, errShowVersion) {
 			return // версию напечатал bindFlags (см. version.go)
 		}
-		log.Fatal(err) // журнал ещё не настроен — печатаем как есть
+		// Журнал ещё не настроен — печатаем как есть.
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	// Каталог данных создаём до настройки журнала: файл журнала по умолчанию
 	// лежит именно в нём, а без журнала не видно и остальных ошибок старта.
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
-		fatal("не удалось создать каталог данных", "путь", cfg.DataDir, "err", err)
+		fatal("Не удалось создать каталог данных", "path", cfg.DataDir, "err", err)
 	}
 
 	logLevel, logPath := setupLogging(cfg)
 	settingsFile = configFile
 
 	version := serverVersion()
-	log.Println("Beacon Table версия:", version)
+	slog.Info("Beacon Table запускается", "version", version)
 	if logPath != "" {
 		// Печатаем первым делом: если сервер дальше не поднимется, человеку,
 		// запустившему программу двойным кликом, нужно знать, куда смотреть.
@@ -96,22 +98,22 @@ func main() {
 		//nolint:gosec // G706: путь пришёл из настроек запуска, не по сети —
 		// подставить в него перевод строки может только тот, кто и так
 		// запускает процесс (ср. строку про файл настроек выше).
-		log.Println("журнал пишется в файл:", logPath)
+		slog.Info("Журнал пишется в файл", "file", logPath)
 	}
 	if configFile != "" {
 		//nolint:gosec // G706: путь пришёл из аргументов запуска/окружения,
 		// не по сети — подставить в него перевод строки может только тот,
 		// кто и так запускает процесс.
-		log.Println("настройки из файла:", configFile)
+		slog.Info("Настройки прочитаны из файла", "file", configFile)
 
 		// Файл создаётся один раз, а настройки в новых версиях прибавляются:
 		// дописываем недостающие, чтобы обновивший бинарник о них узнал.
 		// Ошибку не считаем фатальной — файл может лежать только для чтения.
 		if added, err := syncConfigFile(configFile); err != nil {
-			slog.Warn("не удалось дописать новые настройки в файл", "file", configFile, "err", err)
+			slog.Warn("Не удалось дописать новые настройки в файл", "file", configFile, "err", err)
 		} else if len(added) > 0 {
-			slog.Info("в файл настроек добавлены новые параметры",
-				"file", configFile, "параметры", strings.Join(added, ", "))
+			slog.Info("В файл настроек добавлены новые параметры",
+				"file", configFile, "params", strings.Join(added, ", "))
 		}
 	}
 
@@ -121,14 +123,14 @@ func main() {
 	// пароль ДМ и обесценить тот, с которым уже работает живая копия.
 	ln, err := net.Listen("tcp", cfg.Addr)
 	if err != nil {
-		fatal("не удалось занять адрес",
-			"адрес", cfg.Addr, "err", err,
-			"что делать", "скорее всего Beacon Table уже запущен — откройте "+browserURL(cfg.Addr)+" или закройте прошлую копию; либо смените BEACON_ADDR в beacon.conf")
+		fatal("Не удалось занять адрес",
+			"addr", cfg.Addr, "err", err,
+			"hint", "скорее всего Beacon Table уже запущен — откройте "+browserURL(cfg.Addr)+" или закройте прошлую копию; либо смените BEACON_ADDR в beacon.conf")
 	}
 
 	db, err := sqlite.Open(cfg.DBPath())
 	if err != nil {
-		fatal("не удалось открыть базу", "путь", cfg.DBPath(), "err", err)
+		fatal("Не удалось открыть базу", "path", cfg.DBPath(), "err", err)
 	}
 	accountRepo := sqlite.NewAccountStore(db)
 	sessionRepo := sqlite.NewSessionStore(db, accountRepo)
@@ -152,9 +154,9 @@ func main() {
 	uploadQuota := quota.New(cfg.UploadsDir, cfg.UploadsQuota, cfg.UploadsWorldQuota)
 	if cfg.UploadsQuota > 0 || cfg.UploadsWorldQuota > 0 {
 		if err := uploadQuota.Scan(); err != nil {
-			fatal("не удалось посчитать занятое место в каталоге загрузок", "путь", cfg.UploadsDir, "err", err)
+			fatal("Не удалось посчитать занятое место в каталоге загрузок", "path", cfg.UploadsDir, "err", err)
 		}
-		slog.Info("квота загрузок",
+		slog.Info("Квота загрузок",
 			"занято", quota.FormatSize(uploadQuota.TotalUsed()),
 			"предел", quota.FormatSize(cfg.UploadsQuota),
 			"на мир", quota.FormatSize(cfg.UploadsWorldQuota))
@@ -166,7 +168,7 @@ func main() {
 	broadcastSvc := service.NewBroadcastService(stateRepo)
 	tempPassword, err := authSvc.SeedAdmin(ctx)
 	if err != nil {
-		fatal("не удалось создать или проверить аккаунт ДМ", "err", err)
+		fatal("Не удалось создать или проверить аккаунт ДМ", "err", err)
 	}
 	// --reset-dm-password: пароль забыт, войти нечем. Выдаём новый временный
 	// и дальше идём обычным путём — он ляжет и в файл, и в подсказку на
@@ -174,19 +176,19 @@ func main() {
 	if cfg.ResetDMPassword {
 		pw, rerr := authSvc.ResetAdminPassword(ctx)
 		if rerr != nil {
-			fatal("не удалось сбросить пароль ДМ", "err", rerr)
+			fatal("Не удалось сбросить пароль ДМ", "err", rerr)
 		}
 		tempPassword = pw
 	}
 	if err := companies.Bootstrap(ctx); err != nil {
-		fatal("не удалось поднять миры", "err", err)
+		fatal("Не удалось поднять миры", "err", err)
 	}
 
 	mux := http.NewServeMux()
 
 	sub, err := fs.Sub(staticFiles, "static")
 	if err != nil {
-		fatal("не удалось открыть встроенный фронтенд", "err", err)
+		fatal("Не удалось открыть встроенный фронтенд", "err", err)
 	}
 	// Go не знает .webmanifest: без типа FileServer отдаёт его как text/plain,
 	// и браузер такой манифест игнорирует.
@@ -233,7 +235,7 @@ func main() {
 
 	systemAssets, err := fs.Sub(systemFiles, "systemdata/assets")
 	if err != nil {
-		fatal("не удалось открыть встроенный каталог", "err", err)
+		fatal("Не удалось открыть встроенный каталог", "err", err)
 	}
 	mux.Handle(systemAssetsURL, http.StripPrefix(systemAssetsURL, http.FileServer(http.FS(systemAssets))))
 
@@ -259,52 +261,52 @@ func main() {
 
 	if cfg.DemoMode {
 		if cfg.DemoWorld == "" {
-			fatal("демо-режим включён, но не задан BEACON_DEMO_WORLD",
-				"что делать", "выгрузите мир кнопкой ⬇ на экране миров и укажите путь к .zip в BEACON_DEMO_WORLD")
+			fatal("Демо-режим включён, но не задан BEACON_DEMO_WORLD",
+				"hint", "выгрузите мир кнопкой ⬇ на экране миров и укажите путь к .zip в BEACON_DEMO_WORLD")
 		}
 		if _, err := os.Stat(cfg.DemoWorld); err != nil {
 			// Самая частая ошибка настройки демо: файла нет или он лежит не
 			// там, где его ищут (путь считается от рабочего каталога).
 			// Говорим прямо, где искали и что туда положить.
 			abs, _ := filepath.Abs(cfg.DemoWorld)
-			fatal("не найден эталонный мир для демо",
+			fatal("Не найден эталонный мир для демо",
 				"BEACON_DEMO_WORLD", cfg.DemoWorld,
 				"искали по пути", abs,
-				"что делать", "выгрузите мир кнопкой ⬇ на экране миров и положите .zip по этому пути")
+				"hint", "выгрузите мир кнопкой ⬇ на экране миров и положите .zip по этому пути")
 		}
 		demo := newDemoResetter(companies, accountRepo, cfg.DemoWorld, cfg.DemoReset)
 		// Сбрасываем сразу на старте: сервер мог упасть посреди чужой партии,
 		// и витрина должна открыться в известном состоянии, а не в том, где
 		// её оставил последний гость.
 		if err := demo.Reset(ctx); err != nil {
-			fatal("не удалось поднять демо-стол из эталона", "эталон", cfg.DemoWorld, "err", err)
+			fatal("Не удалось поднять демо-стол из эталона", "template_world", cfg.DemoWorld, "err", err)
 		}
 		go demo.Run(bgCtx)
 		// Уборка ушедших гостей — отдельно от сброса стола и много чаще:
 		// сброс возвращает мир к эталону раз в несколько часов, а место в
 		// очереди должно освобождаться сразу за человеком (см. app.GuestKeeper).
 		go guests.Run(bgCtx)
-		slog.Info("демо-режим включён",
-			"эталон", cfg.DemoWorld, "сброс каждые", cfg.DemoReset.String())
+		slog.Info("Демо-режим включён",
+			"template_world", cfg.DemoWorld, "reset_every", cfg.DemoReset.String())
 	}
 
 	if cfg.BackupEnabled {
 		go backup.Run(bgCtx, cfg.BackupInterval, backupOptions(cfg, db))
 	} else {
-		log.Println("резервное копирование выключено (BEACON_BACKUP_ENABLED=false)")
+		slog.Info("Резервное копирование выключено", "setting", "BEACON_BACKUP_ENABLED=false")
 	}
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           apihttp.LogRequests(api.LimitAPIBodies(mux)),
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fatal("сервер остановился с ошибкой", "адрес", cfg.Addr, "err", err)
+			fatal("Сервер остановился с ошибкой", "addr", cfg.Addr, "err", err)
 		}
 	}()
-	log.Println("Beacon Table сервер запущен на", cfg.Addr)
+	slog.Info("Сервер запущен", "addr", cfg.Addr)
 	printAccessURLs(cfg.Addr)
 
 	if shouldOpenBrowser(cfg) {
@@ -324,6 +326,10 @@ func main() {
 // загруженной карты, а systemd по умолчанию даёт на остановку девяносто.
 const shutdownTimeout = 15 * time.Second
 
+// readHeaderTimeout — сколько ждём заголовки запроса: защита от соединений,
+// которые открылись и молчат.
+const readHeaderTimeout = 10 * time.Second
+
 // shutdown останавливает сервер по порядку, в котором каждый следующий шаг
 // не может помешать предыдущему:
 //
@@ -336,19 +342,19 @@ const shutdownTimeout = 15 * time.Second
 //  4. закрываем базу: на закрытии последнего соединения SQLite сливает WAL
 //     в основной файл, и рядом с beacon.db не остаётся -wal с данными.
 func shutdown(srv *http.Server, gateway *apiws.Gateway, companies *app.CompanyManager, db *sql.DB) {
-	log.Println("завершение работы, сохраняю мир...")
+	slog.Info("Завершение работы, сохраняю мир")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		// Не дождались — дальше всё равно закрываемся: мир сохранить важнее,
 		// чем дотерпеть зависший запрос.
-		slog.Warn("не все запросы успели завершиться", "err", err)
+		slog.Warn("Не все запросы успели завершиться", "err", err)
 	}
 	gateway.CloseAll()
 	companies.Shutdown()
 	if err := db.Close(); err != nil {
-		slog.Error("ошибка закрытия базы", "err", err)
+		slog.Error("Ошибка закрытия базы", "err", err)
 	}
-	log.Println("сервер остановлен")
+	slog.Info("Сервер остановлен")
 }

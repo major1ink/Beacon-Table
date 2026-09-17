@@ -69,7 +69,7 @@ func (d *demoResetter) Run(ctx context.Context) {
 			if ctx.Err() != nil {
 				return // остановка сервера
 			}
-			slog.Error("не удалось сбросить демо-стол", "err", err)
+			slog.Error("Не удалось сбросить демо-стол", "err", err)
 		}
 	}
 }
@@ -130,9 +130,9 @@ func (d *demoResetter) Reset(ctx context.Context) error {
 		// force: вместе с миром уходят и гостевые аккаунты, заведённые в
 		// нём, — отдельно подчищать их не нужно.
 		if err := d.companies.Delete(ctx, previous, true); err != nil && !errors.Is(err, domain.ErrNotFound) {
-			slog.Warn("прежний демо-стол удалить не удалось", "err", err)
+			slog.Warn("Прежний демо-стол удалить не удалось", "err", err)
 		}
 	}
-	slog.Info("демо-стол сброшен к эталону", "мир", res.Company.Name)
+	slog.Info("Демо-стол сброшен к эталону", "world", res.Company.Name)
 	return nil
 }

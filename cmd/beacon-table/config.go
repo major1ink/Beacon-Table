@@ -123,6 +123,13 @@ type Config struct {
 	DemoReset time.Duration
 }
 
+// Значения по умолчанию для настроек, у которых есть срок или счётчик.
+const (
+	defaultBackupInterval = 24 * time.Hour // раз в сутки: игра идёт вечерами, чаще смысла нет
+	defaultBackupKeep     = 7              // неделя архивов
+	defaultDemoReset      = 3 * time.Hour  // демо-стол живёт одну игровую сессию
+)
+
 func defaultConfig() Config {
 	return Config{
 		Addr:           ":8080",
@@ -130,12 +137,12 @@ func defaultConfig() Config {
 		UploadsDir:     "uploads",
 		BehindProxy:    false,
 		BackupEnabled:  true,
-		BackupInterval: 24 * time.Hour,
-		BackupKeep:     7,
+		BackupInterval: defaultBackupInterval,
+		BackupKeep:     defaultBackupKeep,
 		LogLevel:       "info",
 		LogFormat:      "text",
 		OpenBrowser:    "auto",
-		DemoReset:      3 * time.Hour,
+		DemoReset:      defaultDemoReset,
 	}
 }
 

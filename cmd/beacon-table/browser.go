@@ -85,7 +85,7 @@ func openBrowser(url string) {
 		cmd = exec.Command("xdg-open", url) //nolint:gosec // G204: см. выше
 	}
 	if err := cmd.Start(); err != nil {
-		slog.Debug("не удалось открыть браузер", "url", url, "err", err)
+		slog.Debug("Не удалось открыть браузер", "url", url, "err", err)
 		return
 	}
 	// Дожидаемся в фоне: без этого дочерний процесс останется зомби на всё

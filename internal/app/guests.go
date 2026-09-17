@@ -192,14 +192,14 @@ func (g *GuestKeeper) Release(ctx context.Context, acc *domain.Account) error {
 	if g.worlds != nil {
 		if world := g.worlds.Current(); world != nil {
 			if _, err := world.Room.RemoveOwnerTokens(ctx, acc.ID); err != nil {
-				slog.Warn("фишку ушедшего гостя убрать не удалось", "гость", acc.Username, "err", err)
+				slog.Warn("Фишку ушедшего гостя убрать не удалось", "guest", acc.Username, "err", err)
 			}
 			// Заготовка «готового персонажа», которую гость взял на входе,
 			// должна вернуться в пул — FK у pregen_characters нет, каскадом
 			// она не освободится (тот же отдельный вызов, что в
 			// api/http.handleAdminAccountDelete).
 			if err := world.Pregens.FreeByAccount(ctx, acc.ID); err != nil {
-				slog.Warn("заготовку персонажа вернуть в пул не удалось", "гость", acc.Username, "err", err)
+				slog.Warn("Заготовку персонажа вернуть в пул не удалось", "guest", acc.Username, "err", err)
 			}
 		}
 	}
@@ -223,7 +223,7 @@ func (g *GuestKeeper) Sweep(ctx context.Context) int {
 	}
 	all, err := g.accounts.List(ctx)
 	if err != nil {
-		slog.Warn("не удалось перебрать аккаунты для уборки гостей", "err", err)
+		slog.Warn("Не удалось перебрать аккаунты для уборки гостей", "err", err)
 		return 0
 	}
 	now := time.Now()
@@ -238,11 +238,11 @@ func (g *GuestKeeper) Sweep(ctx context.Context) int {
 			continue
 		}
 		if err := g.Release(ctx, acc); err != nil {
-			slog.Warn("не удалось убрать гостя по бездействию", "гость", acc.Username, "err", err)
+			slog.Warn("Не удалось убрать гостя по бездействию", "guest", acc.Username, "err", err)
 			continue
 		}
 		removed++
-		slog.Info("гость убран по бездействию", "гость", acc.Username)
+		slog.Info("Гость убран по бездействию", "guest", acc.Username)
 	}
 	g.dropStrangers(alive)
 	return removed

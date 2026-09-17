@@ -101,7 +101,7 @@ func (a *API) seatDemoPlayer(r *http.Request, world *app.ActiveWorld, acc *domai
 		return
 	}
 	if _, err := world.Room.SpawnPlayerToken(ctx, acc.ID, char.ID, char.Name, char.AvatarURL); err != nil {
-		slog.Warn("гостю-игроку не удалось поставить токен", "гость", acc.Username, "err", err)
+		slog.Warn("Гостю-игроку не удалось поставить токен", "guest", acc.Username, "err", err)
 	}
 }
 
@@ -117,7 +117,7 @@ func (a *API) claimDemoCharacter(r *http.Request, world *app.ActiveWorld, acc *d
 	ctx := r.Context()
 	free, err := world.Pregens.Available(ctx)
 	if err != nil {
-		slog.Warn("не удалось получить заготовки персонажей для гостя-игрока", "err", err)
+		slog.Warn("Не удалось получить заготовки персонажей для гостя-игрока", "err", err)
 	}
 	// По порядку: занятые заготовки из Available уже исключены, так что
 	// следующему гостю достанется следующая по списку, а не та же самая.
@@ -129,14 +129,14 @@ func (a *API) claimDemoCharacter(r *http.Request, world *app.ActiveWorld, acc *d
 			return char
 		}
 		if !errors.Is(err, domain.ErrForbidden) {
-			slog.Warn("не удалось выдать гостю-игроку заготовку персонажа", "заготовка", p.Name, "err", err)
+			slog.Warn("Не удалось выдать гостю-игроку заготовку персонажа", "pregen", p.Name, "err", err)
 			break
 		}
 	}
 
 	char, err := world.Characters.Create(ctx, acc.ID, acc.Username, "")
 	if err != nil {
-		slog.Warn("не удалось завести персонажа гостю-игроку", "гость", acc.Username, "err", err)
+		slog.Warn("Не удалось завести персонажа гостю-игроку", "guest", acc.Username, "err", err)
 		return nil
 	}
 	return char

@@ -14,8 +14,9 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,7 +125,7 @@ func (m *CompanyManager) UploadQuota(company *domain.Company) *quota.World {
 func newID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatal("crypto/rand недоступен:", err)
+		panic(fmt.Sprintf("crypto/rand недоступен: %v", err))
 	}
 	return hex.EncodeToString(b)
 }
@@ -403,7 +404,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	m.mu.Lock()
 	m.current = world
 	m.mu.Unlock()
-	log.Println("мир запущен:", company.Name, "("+company.System+")")
+	slog.Info("Мир запущен", "world", company.Name, "system", company.System)
 	return nil
 }
 
@@ -469,7 +470,7 @@ func (m *CompanyManager) Bootstrap(ctx context.Context) error {
 			return err
 		}
 		if !isUpgrade {
-			log.Println("миров ещё нет — войди под ДМ и создай первый мир на /worlds.html")
+			slog.Info("Миров ещё нет — войди под ДМ и создай первый мир", "url", "/worlds.html")
 			return nil
 		}
 		company := &domain.Company{ID: newID(), Name: "Мир по умолчанию", System: domain.SystemDnD5e2024}
@@ -483,7 +484,7 @@ func (m *CompanyManager) Bootstrap(ctx context.Context) error {
 		if err := sqlite.MigrateLegacyCompany(ctx, m.db, company.ID, company.System); err != nil {
 			return err
 		}
-		log.Println("существующая инсталляция мигрирована в мир по умолчанию:", company.Name)
+		slog.Info("Существующая инсталляция мигрирована в мир по умолчанию", "world", company.Name)
 		return m.Launch(ctx, company.ID)
 	}
 
@@ -492,12 +493,12 @@ func (m *CompanyManager) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	if activeID == "" {
-		log.Println("ни один мир не запущен — войди под ДМ и выбери мир на /worlds.html")
+		slog.Info("Ни один мир не запущен — войди под ДМ и выбери мир", "url", "/worlds.html")
 		return nil
 	}
 	if _, err := m.companies.ByID(ctx, activeID); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			log.Println("ранее активный мир больше не существует — войди под ДМ и выбери мир на /worlds.html")
+			slog.Warn("Ранее активный мир больше не существует — войди под ДМ и выбери мир", "url", "/worlds.html")
 			return nil
 		}
 		return err
