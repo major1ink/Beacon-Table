@@ -12,6 +12,7 @@
 // Правил приложение по-прежнему не знает: список изменений составляет
 // человек или импорт (web/src/condition-import.js), а не вывод из описания.
 import { fetchMe, fetchCondition, createCondition, updateCondition, deleteCondition, fetchConditions, uploadFile } from "../api.js";
+import { mergeInPlace } from "../merge-in-place.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
@@ -42,53 +43,6 @@ function normalizeCondition(raw) {
   c.riders = Array.isArray(c.riders) ? c.riders : [];
   c.modifiers = Array.isArray(c.modifiers) ? c.modifiers : [];
   return c;
-}
-
-// mergeConditionInPlace — после автосохранения переносим ответ сервера В ТОТ
-// ЖЕ объект `condition`, а не подменяем переменную целиком (было раньше:
-// `condition = normalizeCondition(await updateCondition(...))`).
-//
-// Почему это важно: renderStatEditor/riders-редактор получают массив
-// (condition.modifiers, condition.riders) ОДИН РАЗ при монтировании секции
-// и потом мутируют его на месте (push/splice) — сами по ссылке, а не через
-// геттер вроде textInput'а. Если подменить саму переменную `condition`
-// (и тем самым — ссылки на её массивы) ответом сервера, уже смонтированная
-// форма продолжает держать СТАРЫЙ массив: следующие правки в открытых полях
-// «Изменения»/«Зависимые состояния»/«Теги» уходят в осиротевший массив,
-// который ни один будущий scheduleSave() уже не увидит. Внешне это
-// выглядело как «правка изменения тихо не сохраняется, при перезаходе в
-// карточку — пусто»: только жизни хватало ровно до первого успешного
-// автосохранения, а любая дальнейшая правка того же списка терялась молча.
-function mergeConditionInPlace(target, saved) {
-  for (const key of Object.keys(target)) {
-    if (!(key in saved)) delete target[key];
-  }
-  for (const [key, value] of Object.entries(saved)) {
-    if (Array.isArray(target[key]) && Array.isArray(value)) {
-      mergeArrayInPlace(target[key], value);
-    } else {
-      target[key] = value;
-    }
-  }
-}
-
-// mergeArrayInPlace — как mergeConditionInPlace, но для одного массива:
-// держит по ссылке не только сам массив, но и (для массива объектов, как
-// modifiers) каждый элемент по индексу. У «Значения»/«Заметки» в редакторе
-// изменений нет перерисовки строки на каждый символ (см. stat-editor.js:
-// cellInput) — поле держит объект-модификатор по ссылке напрямую;
-// подмена этого объекта на новый с тем же содержимым оторвала бы поле от
-// массива точно так же, как раньше отрывала подмена самого массива.
-function mergeArrayInPlace(cur, value) {
-  for (let i = 0; i < value.length; i++) {
-    const v = value[i];
-    if (cur[i] && typeof cur[i] === "object" && v && typeof v === "object") {
-      Object.assign(cur[i], v);
-    } else {
-      cur[i] = v;
-    }
-  }
-  cur.length = value.length;
 }
 
 // ==================== DOM helpers ====================
@@ -337,7 +291,7 @@ function foundryLabel(slug) {
 // foundrySelect — выбор кода Foundry вместо ввода slug руками: код нужен
 // только мосту с импортом (см. domain.Condition.Slug), а ключ для меток
 // сервер выдаёт сам. «Не сопоставлять» шлёт пустой slug — сервер вернёт
-// c-<id>, и mergeConditionInPlace подхватит его.
+// c-<id>, и mergeInPlace подхватит его.
 function foundrySelect(onChange) {
   const select = h("select", {});
   select.appendChild(h("option", { value: "", text: "— не сопоставлять —" }));
@@ -606,7 +560,7 @@ async function doSave() {
   setSaveStatus("saving");
   try {
     const saved = normalizeCondition(await updateCondition(conditionId, condition));
-    mergeConditionInPlace(condition, saved);
+    mergeInPlace(condition, saved);
     setSaveStatus("saved");
     // Палитра состояний (status-palette.js) кэширует список на страницу —
     // без этого пинга ДМ увидел бы в ней старое имя/иконку до перезагрузки.

@@ -11,6 +11,7 @@
 // целиком в web/src/reference-import.js (чистая функция, батчевая — см. её
 // комментарий), этот файл только вызывает её и мержит результат.
 import { fetchMe, fetchReference, createReference, updateReference, deleteReference, uploadFile } from "../api.js";
+import { mergeInPlace } from "../merge-in-place.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
@@ -318,7 +319,7 @@ async function doSave() {
   dirty = false;
   setSaveStatus("saving");
   try {
-    reference = normalizeReference(await updateReference(referenceId, reference));
+    mergeInPlace(reference, normalizeReference(await updateReference(referenceId, reference)));
     setSaveStatus("saved");
     // Панель "Справочник" в dm.html/player.html кэширует список (обновляется
     // только при открытии) — без этого пинга её строка оставалась бы видимо
