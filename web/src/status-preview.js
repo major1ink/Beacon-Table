@@ -4,10 +4,11 @@
 // drawStatuses — картинка, если есть арт, иначе глиф, кайма цветом карточки.
 // Только показ: ничего не шлёт и не сохраняет.
 import { el } from "./card-shell.js";
+import { glyphNode } from "./condition-glyphs.js";
 
 function visual(cond) {
   if (cond.imageUrl) return el("img", { src: cond.imageUrl, alt: "" });
-  return el("span", { text: cond.icon || "❔" });
+  return glyphNode(cond.icon, "");
 }
 
 // renderStatusPreview — возвращает узел с методом update(): перерисовать по

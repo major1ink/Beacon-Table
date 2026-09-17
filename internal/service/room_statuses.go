@@ -196,7 +196,7 @@ func (r *Room) lookupCondition(slug string) *domain.Condition {
 // недоверия, что у "hub_add_item" (имя/вес предмета) и "add_combatant"
 // (HP/КД): клиент говорит только КОГО и ЧЕМ пометить.
 func snapshotStatus(slug string, cond *domain.Condition) domain.AppliedStatus {
-	st := domain.AppliedStatus{Slug: slug, Name: slug, Icon: "❔"}
+	st := domain.AppliedStatus{Slug: slug, Name: slug, Icon: "question"}
 	if cond != nil {
 		st.Name = cond.Name
 		st.Color = cond.Color

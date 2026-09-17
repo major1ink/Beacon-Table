@@ -30,7 +30,11 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--cc) 22%, transparent), 0 0 28px color-mix(in srgb, var(--cc) 45%, transparent);
 }
 .card-medal img { width: 76%; height: 76%; object-fit: contain; border-radius: 50%; }
+.card-medal .cond-glyph { display: contents; }
 .card-medal svg { width: 56%; height: 56%; }
+/* .cond-glyph — обёртка глифа (condition-glyphs.js: glyphNode): SVG в размер шрифта */
+.cond-glyph { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+.cond-glyph svg { width: 1em; height: 1em; }
 .card-medal .card-medal-lvl {
   position: absolute; right: -6px; bottom: -4px; background: var(--cc); color: #fff;
   font: 600 11px/1 ui-monospace, Menlo, monospace; padding: 3px 6px; border-radius: var(--radius-pill);
@@ -202,6 +206,10 @@
   box-shadow: 0 0 10px color-mix(in srgb, var(--cc) 60%, transparent);
 }
 .sp-badge img, .sp-ov img { width: 80%; height: 80%; object-fit: contain; border-radius: 50%; }
+.sp-badge .cond-glyph, .sp-ov .cond-glyph { color: var(--cc); }
+.sp-badge .cond-glyph svg { width: 18px; height: 18px; }
+.sp-ov .cond-glyph svg { width: 56px; height: 56px; }
+.sp-chip-g .cond-glyph { color: var(--cc); }
 .sp-ov { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; font-size: 56px; background: rgba(10, 10, 16, 0.55); }
 .sp-chip {
   display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px 4px 6px; border-radius: var(--radius-pill);

@@ -2,7 +2,7 @@
   "name": "Окаменение",
   "slug": "petrified",
   "source": "PHB'24",
-  "icon": "🗿",
+  "icon": "stone",
   "color": "#7c7c7c",
   "overlay": true,
   "mechanics": "Недееспособность; вес ×10; сопротивление всему урону; иммунитет к яду и болезням.",

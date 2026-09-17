@@ -15,7 +15,8 @@ import { fetchMe, fetchCondition, createCondition, updateCondition, deleteCondit
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
-import { DEFAULT_ICONS, CONDITION_RU, conditionName } from "../foundry-conditions.js";
+import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
+import { GLYPHS, glyphNode, glyphSVG, isGlyph } from "../condition-glyphs.js";
 import { renderStatEditor, loadTargets } from "../stat-editor.js";
 import { loadStand, renderStandSelect } from "../stand.js";
 import { renderStatusPreview } from "../status-preview.js";
@@ -181,7 +182,7 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       condition.imageUrl = url;
       scheduleSave();
-      hero.setGlyph(condition.icon, condition.imageUrl);
+      hero.setGlyph(glyphNode(condition.icon, ""), condition.imageUrl);
       preview.update();
       artBtn.textContent = "Убрать арт";
     } catch (err) {
@@ -195,7 +196,7 @@ function renderEditView(root) {
       if (condition.imageUrl) {
         condition.imageUrl = "";
         scheduleSave();
-        hero.setGlyph(condition.icon, "");
+        hero.setGlyph(glyphNode(condition.icon, ""), "");
         preview.update();
         artBtn.textContent = "Загрузить свой…";
       } else upload.click();
@@ -210,23 +211,29 @@ function renderEditView(root) {
     preview.update();
   });
 
-  const glyphInput = h("input", { type: "text", class: "glyph-input", value: condition.icon || "", placeholder: "❔", maxlength: "8" });
-  glyphInput.addEventListener("input", () => {
-    condition.icon = glyphInput.value;
-    scheduleSave();
-    hero.setGlyph(condition.icon, condition.imageUrl);
-    preview.update();
+  // Кнопка «Значок» показывает текущий глиф и раскрывает набор ниже.
+  const glyphBtn = h("button", { type: "button", class: "glyph-btn", "aria-label": "Выбрать значок" }, [glyphNode(condition.icon, ""), h("span", { html: icon("chevron-down", { size: 12 }), style: "display:inline-flex;color:var(--text-dim)" })]);
+  glyphBtn.addEventListener("click", () => {
+    glyphFold.open = true;
+    glyphFold.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
+  const setIcon = (name) => {
+    condition.icon = name;
+    scheduleSave();
+    hero.setGlyph(glyphNode(name, ""), condition.imageUrl);
+    glyphBtn.replaceChild(glyphNode(name, ""), glyphBtn.firstChild);
+    preview.update();
+  };
 
   const hero = renderHero({
-    glyph: condition.icon,
+    glyph: glyphNode(condition.icon, ""),
     imageUrl: condition.imageUrl,
     color: condition.color,
     name: condition.name,
     namePlaceholder: "Название состояния",
     levels: condition.levels,
     pills: heroPills(),
-    controls: [labeled("Значок", glyphInput), labeled("Цвет", colorInput), h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    controls: [h("div", { class: "field" }, [h("span", { text: "Значок" }), glyphBtn]), labeled("Цвет", colorInput), h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
     onName: (v) => {
       condition.name = v;
       document.getElementById("condTitle").textContent = v || "Без имени";
@@ -316,7 +323,7 @@ function renderEditView(root) {
     ],
   });
 
-  const glyphFold = fold({ title: "Набор значков", summary: "быстрый выбор глифа", body: [glyphPicker((g) => { glyphInput.value = g; hero.setGlyph(g, condition.imageUrl); preview.update(); })] });
+  const glyphFold = fold({ title: "Значок", summary: isGlyph(condition.icon) ? "из набора" : "эмодзи " + (condition.icon || "❔"), body: [glyphPicker(setIcon)] });
 
   root.appendChild(renderBody([effects, h("div", { class: "card-folds" }, [rulesFold, applyFold, descFold, compatFold, glyphFold, importSection()])], [preview]));
 }
@@ -360,25 +367,23 @@ function slugConflictWarning() {
   });
 }
 
-// glyphPicker — быстрый выбор глифа из того же набора, которым пользуется
-// каталог «из коробки» и импорт (см. foundry-conditions.js: DEFAULT_ICONS).
-// Не ограничивает ввод: поле «Глиф» рядом принимает любой эмодзи, пикер —
-// просто чтобы не искать символ по всей раскладке.
+// glyphPicker — набор SVG-глифов (см. condition-glyphs.js). Эмодзи старых
+// карточек остаются как есть, пока ДМ не выберет глиф.
 function glyphPicker(onPick) {
-  const wrap = h("div", { class: "glyph-picker" });
-  const seen = new Set();
-  for (const glyph of Object.values(DEFAULT_ICONS)) {
-    if (seen.has(glyph)) continue;
-    seen.add(glyph);
+  const wrap = h("div", { class: "glyph-picker", role: "listbox", "aria-label": "Значок состояния" });
+  for (const name of Object.keys(GLYPHS)) {
     const btn = h("button", {
       type: "button",
-      text: glyph,
-      class: condition.icon === glyph ? "active" : "",
+      html: glyphSVG(name, { size: 20 }),
+      class: condition.icon === name ? "active" : "",
+      "aria-label": name,
+      "aria-selected": String(condition.icon === name),
       onclick: () => {
-        condition.icon = glyph;
-        scheduleSave();
-        wrap.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
-        onPick(glyph);
+        wrap.querySelectorAll("button").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+          b.setAttribute("aria-selected", String(b === btn));
+        });
+        onPick(name);
       },
     });
     wrap.appendChild(btn);
@@ -480,7 +485,7 @@ function tagsField(onChange) {
 
 function renderReadView(root) {
   const hero = renderHero({
-    glyph: condition.icon,
+    glyph: glyphNode(condition.icon, ""),
     imageUrl: condition.imageUrl,
     color: condition.color,
     name: condition.name,

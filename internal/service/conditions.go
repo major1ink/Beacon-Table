@@ -108,11 +108,11 @@ func sanitizeCondition(c domain.Condition) domain.Condition {
 	c.Source = clampRunes(c.Source, maxConditionShortText)
 	c.ImageURL = clampRunes(c.ImageURL, maxConditionShortText)
 	c.Color = clampRunes(c.Color, 32)
-	// Icon — один глиф-эмодзи (см. domain.Condition.Icon). Режем по рунам, а
-	// не по байтам: эмодзи многобайтовый, и составные (с модификаторами кожи/
-	// ZWJ-склейки вроде 🧝‍♀️) занимают несколько рун — 8 хватает любому
-	// разумному варианту и всё равно отсекает вставленный целиком абзац.
-	c.Icon = clampRunes(strings.TrimSpace(c.Icon), 8)
+	// Icon — имя SVG-глифа или эмодзи (см. domain.Condition.Icon). Режем по
+	// рунам, а не по байтам: эмодзи многобайтовый, составные (ZWJ-склейки
+	// вроде 🧝‍♀️) занимают несколько рун; 32 хватает и им, и самому длинному
+	// имени глифа, но отсекает вставленный целиком абзац.
+	c.Icon = clampRunes(strings.TrimSpace(c.Icon), 32)
 	c.Description = clampRunes(c.Description, maxConditionLongText)
 	c.Mechanics = clampRunes(c.Mechanics, maxConditionText)
 	c.Modifiers = sanitizeModifiers(c.Modifiers)
