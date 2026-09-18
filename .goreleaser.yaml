@@ -33,9 +33,8 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-# Заметки к версии пишутся руками: docs/releases/<тег>.md, workflow подставляет их в релиз.
 changelog:
-  disable: true
+  sort: asc
 
 release:
   name_template: "Beacon Table {{ .Version }}"
