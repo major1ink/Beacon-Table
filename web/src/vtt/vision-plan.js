@@ -162,7 +162,43 @@ function planInputKey(scene, isDM) {
     parts.push("B", id);
     for (const p of scene.buildings[id].points) parts.push(p.x, p.y);
   }
+  parts.push(fogZonesSignature(scene));
   return parts.join("|");
+}
+
+// fogZonesSignature — подпись ПОКАЗАННЫХ зон тумана со СВЕТОМ
+// (domain.FogArea.Light): только они — вход расчёта. Скрытая зона —
+// сплошная тьма поверх всего (layers/manual-fog.js), на расчёт света не
+// влияет и в подпись не попадает — её правка не сбрасывает кэш ни слоя
+// света, ни плана.
+function fogZonesSignature(scene) {
+  const parts = [];
+  for (const id in scene.fogAreas || {}) {
+    const zone = scene.fogAreas[id];
+    if (!zone.light || !zone.revealed) continue;
+    parts.push("Z", id, zone.light);
+    for (const p of zone.points) parts.push(p.x, p.y);
+  }
+  return parts.join(",");
+}
+
+// fogLightZones — зоны тумана со светом как готовые MultiPolygon'ы по
+// режиму (см. domain.FogArea.Light). Контуры прижаты к тому же кванту, что
+// и лучи (см. коммент у buildings в computeLightLayer — иначе
+// polygon-clipping спотыкается на почти совпадающих точках).
+function fogLightZones(scene, quantum) {
+  const byLight = { bright: [], dim: [], dark: [] };
+  for (const id in scene.fogAreas || {}) {
+    const zone = scene.fogAreas[id];
+    if (!zone.revealed || !byLight[zone.light] || zone.points.length < 3) continue;
+    const pts = quantizePoints(zone.points, quantum);
+    if (pts.length >= 3) byLight[zone.light].push(pts);
+  }
+  return {
+    bright: byLight.bright.length ? unionAll(byLight.bright) : [],
+    dim: byLight.dim.length ? unionAll(byLight.dim) : [],
+    dark: byLight.dark.length ? unionAll(byLight.dark) : [],
+  };
 }
 
 // hasColoredLight — есть ли на сцене хоть один горящий цветной источник.
@@ -276,7 +312,12 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
   // domain.TokenVision, радиусом в его Range. Свет тут не при чём — это
   // единственный способ увидеть что-то на неосвещённой карте.
   const darkPolys = cachedDarkPolys(sightTokens, scene.grid, quantum, ray, memo, wallsSignature(scene)).filter((p) => p.length >= 3);
-  const darkMulti = darkPolys.length ? unionAll(darkPolys) : [];
+  let darkMulti = darkPolys.length ? unionAll(darkPolys) : [];
+  // Магическая тьма (domain.FogArea.Light = "dark") не пробивается и тёмным
+  // зрением — как по правилам 5e. Свет она гасит уже в слое света (см.
+  // applyZones в computeLightLayer), тут остаётся только зрение.
+  const darkZones = darkMulti.length ? fogLightZones(scene, quantum).dark : [];
+  if (darkZones.length) darkMulti = differenceMulti(darkMulti, darkZones);
 
   // Слой света считаем через memo (см. computeVisionPlanWithFallback): он не
   // зависит от того, где стоят наблюдатели, и при таскании токена по карте
@@ -386,6 +427,7 @@ function lightLayerKey(scene, quantum, tokens) {
     parts.push("B", id);
     for (const p of scene.buildings[id].points) parts.push(p.x, p.y);
   }
+  parts.push(fogZonesSignature(scene));
   return parts.join("|");
 }
 
@@ -568,9 +610,24 @@ export function computeLightLayer(scene, quantum, tokens, w, h) {
   // применяется к каждому по отдельности, а объединяются уже готовые
   // многоугольники.
   const hasTints = lightTokens.some((t) => t.light.color);
+  // zones — зоны тумана со своим светом (domain.FogArea.Light). Ложатся
+  // ПОВЕРХ обычного расчёта в каждую полосу: "bright" — во все полосы
+  // (ярко освещённое ядро без затухания), "dim" — только в самую дальнюю
+  // (тускло, без ядра), "dark" — вычитается из всех (тьма гасит даже
+  // глобальный свет и свет факелов). Вложенность полос (см. ringMultis:
+  // subtractNested) это не ломает: во все полосы добавляется/вычитается
+  // одно и то же, в одну лишнюю — только самая широкая.
+  const zones = fogLightZones(scene, quantum);
+  const applyZones = (band, k) => {
+    let multi = band.multi;
+    if (zones.bright.length) multi = unionMulti(multi, zones.bright);
+    if (k === 0 && zones.dim.length) multi = unionMulti(multi, zones.dim);
+    if (zones.dark.length && multi.length) multi = differenceMulti(multi, zones.dark);
+    return { multi, parts: band.parts };
+  };
   const bandAt = (k) => {
-    if (globalLight === "bright") return { multi: worldRect(w, h), parts: [] };
-    if (globalLight === "dim") return { multi: k === 0 ? worldRect(w, h) : [], parts: [] };
+    if (globalLight === "bright") return applyZones({ multi: worldRect(w, h), parts: [] }, k);
+    if (globalLight === "dim") return applyZones({ multi: k === 0 ? worldRect(w, h) : [], parts: [] }, k);
     const entries = lightTokens
       .map((t) => {
         const dim = gridUnitsToWorld(grid, Math.max(t.light.dim || 0, t.light.bright || 0));
@@ -581,7 +638,7 @@ export function computeLightLayer(scene, quantum, tokens, w, h) {
       .filter((e) => e.multi.length);
     // Части нужны только у самой дальней полосы: цвет заливает весь тусклый
     // радиус источника целиком.
-    return clipLightByBuildings(entries, hasTints && k === 0);
+    return applyZones(clipLightByBuildings(entries, hasTints && k === 0), k);
   };
 
   const bands = [];

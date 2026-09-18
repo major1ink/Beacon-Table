@@ -16,8 +16,9 @@ import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDrawOptions } from "../draw-options.js";
 import { createBoardList } from "../board-list.js";
 import { sceneLinksOf } from "../board/links.js";
-import { attachTooltip, hideTooltip } from "../tooltip.js";
+import { attachTooltip, hideTooltip, renderWithKeys } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP, RAIL_HELP } from "../tool-help.js";
+import { zoneStyle } from "../vtt/layers/manual-fog.js";
 import {
   fetchMe,
   apiLogout,
@@ -857,6 +858,8 @@ function lightFields() {
 }
 function setLightFieldsVisible(on) {
   for (const el of lightFields()) el.classList.toggle("visible", on);
+  // Поля раскрылись — меню подросло и могло уехать за нижний край экрана.
+  clampMenu(tokenMenu);
 }
 function syncLightFieldsVisibility(checkbox) {
   setLightFieldsVisible(checkbox.checked);
@@ -893,11 +896,18 @@ wallPointMenuDelete.onclick = () => {
   closeWallPointMenu();
 };
 
-// ================= меню фигуры ручного тумана (ПКМ внутри контура) =================
-// Раньше ПКМ сразу удалял фигуру без подтверждения — теперь фигуру можно ещё
-// и двигать/переформовывать (см. interaction.js), поэтому снос вынесен в
-// меню, как у токена/значка заметки, а не остаётся единственным ПКМ-действием.
+// ================= меню зоны тумана (ПКМ внутри контура) =================
+// То же, что строка зоны в панели «Туман» (см. renderFogZoneList), но под
+// курсором: показать/скрыть игрокам, переименовать, свет внутри, замок,
+// удалить. Снос — только отсюда и из панели, не голым ПКМ: зону можно
+// двигать/переформовывать (interaction.js), случайный клик не должен её
+// сносить.
 const fogAreaMenu = document.getElementById("fogAreaMenu");
+const fogAreaMenuTitle = document.getElementById("fogAreaMenuTitle");
+const fogAreaMenuRevealBtn = document.getElementById("fogAreaMenuRevealBtn");
+const fogAreaMenuRevealLabel = document.getElementById("fogAreaMenuRevealLabel");
+const fogAreaMenuRenameBtn = document.getElementById("fogAreaMenuRenameBtn");
+const fogAreaMenuLights = document.getElementById("fogAreaMenuLights");
 const fogAreaMenuDelete = document.getElementById("fogAreaMenuDelete");
 const fogAreaMenuLockBtn = document.getElementById("fogAreaMenuLockBtn");
 const fogAreaMenuLockLabel = document.getElementById("fogAreaMenuLockLabel");
@@ -908,6 +918,30 @@ function closeFogAreaMenu() {
   menuFogAreaId = null;
 }
 
+// FOG_LIGHT_LABELS — подписи режимов света зоны (domain.FogArea.Light) —
+// общие для меню, списка и подсказок.
+const FOG_LIGHT_LABELS = { "": "без света", bright: "ярко", dim: "тускло", dark: "тьма" };
+
+// updateFogArea — правка полей зоны: interaction.js накладывает patch на
+// живую зону и шлёт её целиком (см. vtt:updateFogArea).
+function updateFogArea(id, patch) {
+  document.dispatchEvent(new CustomEvent("vtt:updateFogArea", { detail: { id, patch } }));
+}
+
+// fogZoneTitle — имя зоны для меню/окон; безымянная — по фигуре.
+function fogZoneTitle(zone) {
+  if (zone.name) return zone.name;
+  return zone.shape === "rect" ? "Прямоугольник" : zone.shape === "circle" ? "Круг" : "Зона тумана";
+}
+
+async function renameFogArea(id) {
+  const zone = (vtt.getScene().fogAreas || {})[id];
+  if (!zone) return;
+  const name = await showPrompt("Название зоны — видно только ДМ:", { title: "Переименовать зону", okLabel: "Сохранить", value: zone.name || "" });
+  if (name == null) return;
+  updateFogArea(id, { name: name.trim().slice(0, 60) });
+}
+
 document.addEventListener("vtt:fogAreaContextMenu", (e) => {
   closeCanvasMenu();
   closeTokenMenu();
@@ -916,9 +950,43 @@ document.addEventListener("vtt:fogAreaContextMenu", (e) => {
   closeWallMenu();
   closeBuildingMenu();
   menuFogAreaId = e.detail.id;
-  wireMapObjectLock("fogArea", menuFogAreaId, fogAreaMenuLockBtn, fogAreaMenuLockLabel, [fogAreaMenuDelete], closeFogAreaMenu);
+  const zone = (vtt.getScene().fogAreas || {})[menuFogAreaId] || e.detail.area || {};
+  fogAreaMenuTitle.textContent = fogZoneTitle(zone);
+  fogAreaMenuRevealLabel.textContent = zone.revealed ? "Скрыть от игроков" : "Показать игрокам";
+  for (const b of fogAreaMenuLights.querySelectorAll("[data-light]")) {
+    b.classList.toggle("on", (zone.light || "") === b.dataset.light);
+    b.setAttribute("aria-checked", String((zone.light || "") === b.dataset.light));
+  }
+  wireMapObjectLock(
+    "fogArea",
+    menuFogAreaId,
+    fogAreaMenuLockBtn,
+    fogAreaMenuLockLabel,
+    [fogAreaMenuDelete, fogAreaMenuRenameBtn, fogAreaMenuLights],
+    closeFogAreaMenu
+  );
   placeMenu(fogAreaMenu, e.detail.pageX, e.detail.pageY);
 });
+
+// Показать/скрыть — доступно и у запертой зоны: замок бережёт контур от
+// случайного драга, а снятие тумана — то, ради чего зоны и рисуют.
+fogAreaMenuRevealBtn.onclick = () => {
+  if (!menuFogAreaId) return;
+  const zone = (vtt.getScene().fogAreas || {})[menuFogAreaId];
+  if (zone) updateFogArea(menuFogAreaId, { revealed: !zone.revealed });
+  closeFogAreaMenu();
+};
+fogAreaMenuRenameBtn.onclick = () => {
+  const id = menuFogAreaId;
+  closeFogAreaMenu();
+  if (id) renameFogArea(id);
+};
+fogAreaMenuLights.onclick = (e) => {
+  const b = e.target.closest("[data-light]");
+  if (!b || !menuFogAreaId) return;
+  updateFogArea(menuFogAreaId, { light: b.dataset.light });
+  closeFogAreaMenu();
+};
 
 fogAreaMenuDelete.onclick = () => {
   if (!menuFogAreaId) return;
@@ -1557,6 +1625,22 @@ function placeMenu(menu, pageX, pageY, display = "block") {
   menu.style.left = left + "px";
   menu.style.top = top + "px";
   menu.style.visibility = "";
+}
+
+// clampMenu — уже открытое меню подросло (в нём раскрылись поля) и должно
+// остаться целиком в окне: тот же зажим, что у placeMenu, но от текущей
+// позиции. Меряем после раскладки — иначе высота ещё старая.
+function clampMenu(menu) {
+  if (menu.style.display === "none") return;
+  requestAnimationFrame(() => {
+    if (menu.style.display === "none") return;
+    const margin = 8;
+    const { width, height } = menu.getBoundingClientRect();
+    const left = Math.max(margin, Math.min(parseFloat(menu.style.left) || 0, window.innerWidth - width - margin));
+    const top = Math.max(margin, Math.min(parseFloat(menu.style.top) || 0, window.innerHeight - height - margin));
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+  });
 }
 
 // applyTokenMenuLockState — гасит в открытом меню всё, что правит запертый
@@ -4447,6 +4531,9 @@ function setSidePanelSection(name, { focus = false } = {}) {
   // раздела, а не только на открытие/закрытие света: уход в любой другой
   // раздел так же выключает режим, как и закрытие панели.
   document.dispatchEvent(new CustomEvent("vtt:lightEditMode", { detail: { active: openPanelSection === "light" } }));
+  // Раздел «Туман» — то же, что инструмент «Туман» (см. панель зон ниже):
+  // ей нужно знать и о закрытии, и об уходе в другой раздел.
+  document.dispatchEvent(new CustomEvent("vtt:panelSection", { detail: { section: openPanelSection } }));
 }
 
 // placeSidePanel — центр по высоте через margin-top, а не align-self:
@@ -4910,6 +4997,197 @@ function renderLightList() {
 onPanelOpen("light", renderLightList);
 document.addEventListener("vtt:sceneUpdated", () => {
   if (openPanelSection === "light") renderLightList();
+});
+
+// ================= панель «Туман»: фигура и список зон =================
+// Открытая панель И ЕСТЬ включённый инструмент «Туман» (как у пометок):
+// выбор инструмента из колонки открывает раздел, закрытие раздела снимает
+// инструмент. Здесь же — какой фигурой рисовать следующую зону
+// (interaction.js слушает "vtt:fogSettings") и список зон сцены: у зоны на
+// карте нет своего UI кроме контура и ручек, а показать/скрыть игрокам —
+// самое частое действие за сессию, и искать для него зону мышью в тумане
+// каждый раз слишком долго.
+const fogShapes = document.getElementById("fogShapes");
+const fogShapeHint = document.getElementById("fogShapeHint");
+const fogZoneList = document.getElementById("fogZoneList");
+let fogToolActive = false;
+let fogShape = "poly";
+
+const FOG_SHAPES = [
+  { id: "poly", label: "Контур", glyph: "⬠", hint: "[Ctrl] + [ЛКМ] — первая точка, дальше клик за кликом; замкнуть — клик по стартовой точке или двойной [ЛКМ]." },
+  { id: "rect", label: "Прямоугольник", glyph: "▭", hint: "[Ctrl] + перетягивание по диагонали." },
+  { id: "circle", label: "Круг", glyph: "◯", hint: "[Ctrl] + перетягивание от центра." },
+];
+const fogShapeBtns = new Map();
+for (const shape of FOG_SHAPES) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "draw-shape";
+  btn.setAttribute("role", "radio");
+  btn.innerHTML = `<span class="draw-shape-glyph">${shape.glyph}</span>${shape.label}`;
+  btn.onclick = () => setFogShape(shape.id);
+  fogShapeBtns.set(shape.id, btn);
+  fogShapes.appendChild(btn);
+}
+function setFogShape(id) {
+  fogShape = id;
+  for (const [sid, b] of fogShapeBtns) {
+    b.classList.toggle("active", sid === id);
+    b.setAttribute("aria-checked", String(sid === id));
+  }
+  fogShapeHint.textContent = "";
+  renderWithKeys(fogShapeHint, FOG_SHAPES.find((sh) => sh.id === id).hint);
+  document.dispatchEvent(new CustomEvent("vtt:fogSettings", { detail: { shape: fogShape } }));
+}
+setFogShape("poly");
+
+// fogZonesSorted — зоны текущей сцены в стабильном порядке (см.
+// lightTokensSorted — те же соображения про порядок ключей с сервера).
+function fogZonesSorted() {
+  return Object.entries(vtt.getScene().fogAreas || {}).sort(
+    (a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ru") || a[0].localeCompare(b[0])
+  );
+}
+
+function renderFogZoneList() {
+  // Те же две предосторожности, что у renderLightList: не сбивать печать
+  // имени и вернуть фокус кнопке, пересозданной вместе со строкой.
+  const editing = document.activeElement;
+  if (editing && fogZoneList.contains(editing) && editing.classList.contains("light-row-name")) return;
+  const refocus = editing && fogZoneList.contains(editing) && editing.dataset && editing.dataset.zoneBtn
+    ? { id: editing.dataset.zoneId, btn: editing.dataset.zoneBtn }
+    : null;
+  fogZoneList.innerHTML = "";
+  const rows = fogZonesSorted();
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "На сцене пока нет зон тумана. Выбери фигуру выше и нарисуй первую с зажатым Ctrl.";
+    fogZoneList.appendChild(empty);
+    return;
+  }
+  for (const [id, zone] of rows) {
+    const revealed = !!zone.revealed;
+    const locked = !!zone.locked;
+    const row = document.createElement("div");
+    row.className = "light-row" + (revealed ? " revealed" : "") + (locked ? " locked" : "");
+
+    const swatch = document.createElement("span");
+    swatch.className = "light-row-swatch";
+    swatch.style.background = "#" + zoneStyle(zone).color.toString(16).padStart(6, "0");
+    swatch.title = revealed ? "Показана игрокам" : "Скрыта от игроков";
+
+    const name = document.createElement("input");
+    name.className = "light-row-name";
+    name.value = zone.name || "";
+    name.placeholder = fogZoneTitle(zone);
+    name.title = "Название зоны — видно только ДМ";
+    name.disabled = locked;
+    name.onblur = () => {
+      const next = name.value.trim().slice(0, 60);
+      if (next !== (zone.name || "")) updateFogArea(id, { name: next });
+      else renderFogZoneList();
+    };
+    name.onkeydown = (e) => {
+      if (e.key === "Enter") name.blur();
+      if (e.key === "Escape") {
+        name.value = zone.name || "";
+        name.blur();
+      }
+    };
+
+    const lightTag = document.createElement("span");
+    lightTag.className = "light-row-radii";
+    lightTag.textContent = zone.light ? zoneStyle(zone).glyph + " " + FOG_LIGHT_LABELS[zone.light] : "";
+    lightTag.title = "Свет внутри зоны";
+
+    // Показать/скрыть — и у запертой: замок бережёт контур, не туман.
+    const eye = document.createElement("button");
+    eye.type = "button";
+    eye.className = revealed ? "" : "on";
+    eye.innerHTML = icon(revealed ? "eye-off" : "eye", { size: 14 });
+    eye.title = revealed ? "Скрыть от игроков — накрыть зону туманом снова" : "Показать игрокам — снять туман с зоны";
+    eye.dataset.zoneId = id;
+    eye.dataset.zoneBtn = "eye";
+    eye.onclick = () => updateFogArea(id, { revealed: !revealed });
+
+    // Лампочка — по кругу: нет → ярко → тускло → тьма → нет.
+    const bulb = document.createElement("button");
+    bulb.type = "button";
+    bulb.className = zone.light ? "on" : "";
+    bulb.innerHTML = icon("bulb", { size: 14 });
+    bulb.title = "Свет внутри зоны: сейчас " + FOG_LIGHT_LABELS[zone.light || ""] + " — клик переключает по кругу";
+    bulb.disabled = locked;
+    bulb.dataset.zoneId = id;
+    bulb.dataset.zoneBtn = "bulb";
+    bulb.onclick = () => {
+      const order = ["", "bright", "dim", "dark"];
+      updateFogArea(id, { light: order[(order.indexOf(zone.light || "") + 1) % order.length] });
+    };
+
+    const focusBtn = document.createElement("button");
+    focusBtn.type = "button";
+    focusBtn.innerHTML = icon("target", { size: 14 });
+    focusBtn.title = "Показать на карте — камера наведётся и подсветит зону";
+    focusBtn.dataset.zoneId = id;
+    focusBtn.dataset.zoneBtn = "focus";
+    focusBtn.onclick = () => document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: "fogArea", id } }));
+
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.className = locked ? "on" : "";
+    lockBtn.innerHTML = icon("lock", { size: 14 });
+    lockBtn.title = locked ? "Снять замок — зона снова двигается и правится" : "Запереть — зона не двигается и не правится, пока замок не снят";
+    lockBtn.dataset.zoneId = id;
+    lockBtn.dataset.zoneBtn = "lock";
+    lockBtn.onclick = () =>
+      document.dispatchEvent(new CustomEvent("vtt:setMapObjectLocked", { detail: { kind: "fogArea", id, locked: !locked } }));
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.innerHTML = icon("trash", { size: 14 });
+    del.title = "Удалить зону";
+    del.disabled = locked;
+    del.dataset.zoneId = id;
+    del.dataset.zoneBtn = "del";
+    del.onclick = () => document.dispatchEvent(new CustomEvent("vtt:removeFogArea", { detail: { id } }));
+
+    row.append(swatch, name, lightTag, eye, bulb, focusBtn, lockBtn, del);
+    fogZoneList.appendChild(row);
+  }
+
+  if (refocus) {
+    const again = fogZoneList.querySelector(`[data-zone-id="${CSS.escape(refocus.id)}"][data-zone-btn="${refocus.btn}"]`);
+    if (again && !again.disabled) again.focus();
+  }
+}
+
+onPanelOpen("fog", () => {
+  renderFogZoneList();
+  if (!fogToolActive) document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "fog" }));
+});
+document.addEventListener("vtt:sceneUpdated", () => {
+  if (openPanelSection === "fog") renderFogZoneList();
+});
+document.addEventListener("vtt:toolChanged", (e) => {
+  fogToolActive = e.detail === "fog";
+  if (fogToolActive && openPanelSection !== "fog") setSidePanelSection("fog");
+  else if (!fogToolActive && openPanelSection === "fog") closeSidePanel();
+});
+// Раздел закрыли или ушли в другой — инструмент снимается, чтобы открытая
+// панель не врала про то, что сейчас в руке (см. пометки выше).
+document.addEventListener("vtt:panelSection", (e) => {
+  if (fogToolActive && e.detail.section !== "fog") document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
+});
+// Только что нарисованная зона — сразу в поле имени: назвать её, пока
+// помнишь, что накрыл.
+document.addEventListener("vtt:fogAreaCreated", (e) => {
+  if (openPanelSection !== "fog") return;
+  renderFogZoneList();
+  const rows = [...fogZoneList.querySelectorAll(".light-row")];
+  const row = rows.find((r) => r.querySelector(`[data-zone-id="${CSS.escape(e.detail.id)}"]`));
+  const name = row && row.querySelector(".light-row-name");
+  if (name) name.focus();
 });
 
 // ===================================================================

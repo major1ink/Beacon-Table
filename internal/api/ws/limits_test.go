@@ -132,7 +132,7 @@ func TestOversizedFrameIsRefused(t *testing.T) {
 
 // TestFrameWithinLimitPasses — граница проведена там, где надо: обводка
 // тумана вокруг крупной карты — это сотни килобайт законного JSON (см.
-// web/src/vtt/interaction.js: fogPath), и она обязана доходить.
+// web/src/vtt/interaction.js: fogChain), и она обязана доходить.
 func TestFrameWithinLimitPasses(t *testing.T) {
 	url, cookie := testTable(t)
 	conn := dialTable(t, url, cookie)
