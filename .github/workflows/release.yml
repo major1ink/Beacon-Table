@@ -20,12 +20,17 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Заметки к версии
+        run: |
+          f="docs/releases/${{ github.ref_name }}.md"
+          [ -s "$f" ] || { echo "::error::Нет файла $f — напишите заметки к версии и пересоздайте тег"; exit 1; }
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes docs/releases/${{ github.ref_name }}.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -45,23 +50,21 @@ jobs:
     needs: goreleaser
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Анонс версии в канале
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           [ -n "$TG_TOKEN" ] || { echo "TELEGRAM_BOT_TOKEN не задан, пропускаю"; exit 0; }
-          notes=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body \
-            | grep -v '^## \|Full Changelog' | sed -E 's/^\* [0-9a-f]+: /• /')
+          notes=$(sed -E 's/^#+ *//; s/^[-*] /• /; s/\*\*//g' "docs/releases/$TAG.md")
           text="Вышла версия ${TAG#v}
 
-          ${notes:0:3000}
+          ${notes:0:3500}
 
           Скачать: https://beacontable.ru/download.html
           Релиз на GitHub: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
-          resp=$(curl -sS -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-            --data-urlencode "chat_id=@beacontable" \
-            --data-urlencode "text=$text" \
-            --data-urlencode "disable_web_page_preview=true")
+          resp=$(curl -sS -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage"             --data-urlencode "chat_id=@beacontable"             --data-urlencode "text=$text"             --data-urlencode "disable_web_page_preview=true")
           echo "$resp" | jq -e .ok > /dev/null || { echo "Telegram: $(echo "$resp" | jq -r .description)"; exit 1; }
