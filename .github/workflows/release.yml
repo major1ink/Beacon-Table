@@ -40,3 +40,27 @@ jobs:
           gh api repos/major1ink/beacon-table-site/dispatches \
             -f event_type=release-published \
             -f 'client_payload[tag]=${{ github.ref_name }}'
+
+  telegram:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Анонс версии в канале
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          [ -n "$TG_TOKEN" ] || { echo "TELEGRAM_BOT_TOKEN не задан, пропускаю"; exit 0; }
+          notes=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body \
+            | grep -v '^## \|Full Changelog' | sed -E 's/^\* [0-9a-f]+: /• /' | head -c 3000)
+          text="Вышла версия ${TAG#v}
+
+          $notes
+
+          Скачать: https://beacontable.ru/download.html
+          Релиз на GitHub: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          curl -sS -f -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+            --data-urlencode "chat_id=@beacontable" \
+            --data-urlencode "text=$text" \
+            --data-urlencode "disable_web_page_preview=true" > /dev/null

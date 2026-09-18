@@ -17,6 +17,7 @@
   <a href="https://github.com/major1ink/Beacon-Table/releases/latest">Скачать</a> ·
   <a href="https://github.com/major1ink/Beacon-Table/wiki">Документация</a> ·
   <a href="https://beacontable.ru/roadmap.html">Роадмап</a> ·
+  <a href="https://t.me/beacontable">Telegram</a> ·
   <a href="#english-summary">English summary</a>
 </p>
 
@@ -261,6 +262,8 @@ docker compose up -d
 Нашли баг или что-то работает не так — создайте [Issue](https://github.com/major1ink/Beacon-Table/issues).
 
 Есть идея, чего не хватает для игры, — тоже пишите.
+
+Вопросы и новости — в [Telegram-канале](https://t.me/beacontable), почта — info@beacontable.ru.
 
 Что уже запланировано и над чем идёт работа — на [странице роадмапа](https://beacontable.ru/roadmap.html).
 
