@@ -10,6 +10,11 @@ import {
   doorAt,
   fogAreaAt,
   fogVertexNear,
+  fogEdgeNear,
+  moveFogHandle,
+  snapToFogVertex,
+  fogRectPoints,
+  fogCirclePoints,
   buildingAt,
   buildingVertexNear,
   noteMarkerAt,
@@ -809,7 +814,22 @@ export function createInteraction(ctx) {
     // никакого следа незамкнутой попытки (см. domain.Building: контур
     // обязан быть замкнут).
     let buildingChain = null;
-    let fogPath = null;
+    // Инструмент «Туман» (см. tool "fog" ниже) рисует зоны ТОЧКАМИ, как
+    // стены, а не росчерком: fogChain — вершины ещё не отправленного
+    // многоугольника (коммит одним "add_fog_area" по замыканию на стартовую
+    // точку или двойному клику, как у здания); fogDragFrom — mousedown
+    // Ctrl-драга прямоугольника/круга (см. fogShape). fogShape — какая
+    // фигура выбрана в панели «Туман» (pages/dm.js шлёт "vtt:fogSettings",
+    // как панель пометок — "vtt:drawSettings").
+    let fogChain = null;
+    let fogDragFrom = null;
+    let fogShape = "poly";
+    document.addEventListener("vtt:fogSettings", (e) => {
+      fogShape = (e.detail && e.detail.shape) || "poly";
+      fogChain = null;
+      fogDragFrom = null;
+      preview.clear();
+    });
     let gridDragStart = null; // {x,y,offsetX,offsetY} в мировых координатах
     // rulerFrom — стартовая точка текущего замера инструментом "Линейка"
     // (см. tool "ruler" ниже); dragStart/dragLastPos/dragTraveled —
@@ -902,7 +922,8 @@ export function createInteraction(ctx) {
       draggingFogArea = null;
       draggingBuildingPoint = null;
       buildingChain = null;
-      fogPath = null;
+      fogChain = null;
+      fogDragFrom = null;
       cancelDraw();
       setSelectedDrawing(null);
       gridDragStart = null;
@@ -949,7 +970,8 @@ export function createInteraction(ctx) {
       draggingFogArea = null;
       draggingBuildingPoint = null;
       buildingChain = null;
-      fogPath = null;
+      fogChain = null;
+      fogDragFrom = null;
       gridDragStart = null;
       marquee = null;
       rulerFrom = null;
@@ -1030,6 +1052,80 @@ export function createInteraction(ctx) {
       const scale = ctx.world.scale.x || 1;
       const start = buildingChain[0];
       return Math.hypot(x - start.x, y - start.y) < 14 / scale ? start : null;
+    }
+
+    // ---- зоны тумана: рисование точками, как стены (см. tool "fog") ----
+
+    // fogSnappedPoint — точка под курсором, примагниченная к ближайшей
+    // вершине ДРУГОЙ зоны (snapToFogVertex), а если таких нет — к вершине
+    // стены (snappedPoint): зоны обычно накрывают комнаты, и их углы
+    // должны ложиться ровно на углы стен и друг на друга, иначе между
+    // соседними облаками остаётся щель в пару пикселей. exclude — ручка,
+    // которую сейчас тащат (не прилипает сама к себе).
+    function fogSnappedPoint(x, y, exclude) {
+      const scale = ctx.world.scale.x || 1;
+      return snapToFogVertex(x, y, ctx.scene.fogAreas, scale, exclude) || snappedPoint(x, y);
+    }
+
+    // fogCloseTarget — как buildingCloseTarget: стартовая точка цепочки,
+    // если курсор рядом с ней и точек уже хватает на контур, иначе null.
+    function fogCloseTarget(x, y) {
+      if (!fogChain || fogChain.length < 3) return null;
+      const scale = ctx.world.scale.x || 1;
+      const start = fogChain[0];
+      return Math.hypot(x - start.x, y - start.y) < 14 / scale ? start : null;
+    }
+
+    // sendFogArea — сохранить зону целиком: "add_fog_area" с тем же id —
+    // апсерт на сервере (см. room.go:applyMutation), одним сообщением и
+    // создание, и любая правка. Всегда весь объект, а не {id, points}:
+    // иначе правка контура стирала бы имя/свет/замок зоны.
+    function sendFogArea(area) {
+      ctx.send({ type: "add_fog_area", fogArea: area });
+    }
+
+    // commitFogShape — новая зона выбранной фигуры: многоугольник по
+    // цепочке точек либо прямоугольник/круг по двум точкам драга. Локальная
+    // мутация сразу (как у splitWallAt) — зона появляется под курсором в
+    // тот же кадр, не дожидаясь ответа сервера.
+    function commitFogShape(points, shape) {
+      if (!points || points.length < 3) return;
+      const area = { id: "fog-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), shape, points };
+      if (!ctx.scene.fogAreas) ctx.scene.fogAreas = {};
+      ctx.scene.fogAreas[area.id] = area;
+      ctx.dirty.manualFog = true;
+      ctx.render();
+      sendFogArea(area);
+      document.dispatchEvent(new CustomEvent("vtt:fogAreaCreated", { detail: { id: area.id } }));
+    }
+
+    // fogDragPoints — контур прямоугольника/круга по началу драга и
+    // текущей точке; null, если жест ещё слишком короткий, чтобы быть
+    // фигурой (порог тот же, что у клика/драга стены).
+    function fogDragPoints(from, to) {
+      if (fogShape === "circle") {
+        const r = Math.hypot(to.x - from.x, to.y - from.y);
+        return r > 6 ? fogCirclePoints(from.x, from.y, r) : null;
+      }
+      if (Math.abs(to.x - from.x) <= 6 || Math.abs(to.y - from.y) <= 6) return null;
+      return fogRectPoints(from.x, from.y, to.x, to.y);
+    }
+
+    // paintFogPreview — пунктирный предпросмотр того, что получится, если
+    // отпустить/кликнуть сейчас: цепочка многоугольника (заливка — когда
+    // контур уже можно замкнуть, как у здания) или прямоугольник/круг.
+    function paintFogPreview(points, closable, startPoint) {
+      const scale = ctx.world.scale.x || 1;
+      preview.clear();
+      if (!points || points.length < 2) return;
+      if (closable || !startPoint) preview.poly(points).fill({ color: 0x8bc3ff, alpha: 0.14 });
+      preview.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) preview.lineTo(points[i].x, points[i].y);
+      if (closable || !startPoint) preview.lineTo(points[0].x, points[0].y);
+      preview.stroke({ width: 2 / scale, color: 0x8bc3ff, alpha: 0.9 });
+      if (startPoint) {
+        preview.circle(startPoint.x, startPoint.y, (closable ? 7 : 4) / scale).fill({ color: 0x8bc3ff, alpha: closable ? 0.9 : 0.5 });
+      }
     }
 
     // Полная замена метаданных текущей сцены (сервер не поддерживает PATCH
@@ -1136,14 +1232,34 @@ export function createInteraction(ctx) {
         return;
       }
       if (tool === "fog") {
+        if (fogChain) {
+          // Цепочка многоугольника уже идёт — точки добавляются по mouseup
+          // (см. там же), mousedown только проглатывает событие.
+          return;
+        }
         if (createHeld) {
-          fogPath = [{ x, y }];
+          // Многоугольник — клик за кликом (коммит по mouseup);
+          // прямоугольник/круг — одним драгом от этой точки.
+          if (fogShape !== "poly") fogDragFrom = fogSnappedPoint(x, y);
           return;
         }
         const scale = ctx.world.scale.x || 1;
         const fogVertex = fogVertexNear(x, y, ctx.scene.fogAreas, scale);
         if (fogVertex && !isLocked(ctx.scene.fogAreas[fogVertex.areaId])) {
           draggingFogVertex = fogVertex;
+          return;
+        }
+        // Клик по стороне многоугольной зоны (не по вершине) — врезать
+        // новую вершину прямо тут и сразу утащить её этим же жестом, как
+        // splitWallAt у стен.
+        const edge = fogEdgeNear(x, y, ctx.scene.fogAreas, scale);
+        if (edge && !isLocked(ctx.scene.fogAreas[edge.areaId])) {
+          const area = ctx.scene.fogAreas[edge.areaId];
+          area.points = area.points.slice(0, edge.index).concat([{ x: edge.x, y: edge.y }], area.points.slice(edge.index));
+          ctx.dirty.manualFog = true;
+          ctx.render();
+          sendFogArea(area);
+          draggingFogVertex = { areaId: edge.areaId, index: edge.index, x: edge.x, y: edge.y };
           return;
         }
         const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
@@ -1328,15 +1444,14 @@ export function createInteraction(ctx) {
         return;
       }
 
-      if (tool === "fog" && fogPath) {
-        const last = fogPath[fogPath.length - 1];
-        if (Math.hypot(x - last.x, y - last.y) > 6) fogPath.push({ x, y });
-        preview.clear();
-        if (fogPath.length > 1) {
-          preview.moveTo(fogPath[0].x, fogPath[0].y);
-          for (let i = 1; i < fogPath.length; i++) preview.lineTo(fogPath[i].x, fogPath[i].y);
-          preview.stroke({ width: 2 / scale, color: 0x8bc3ff, alpha: 0.85 });
-        }
+      if (tool === "fog" && fogChain) {
+        const to = fogSnappedPoint(x, y);
+        const closeTarget = fogCloseTarget(to.x, to.y);
+        paintFogPreview(fogChain.concat([closeTarget || to]), !!closeTarget, fogChain[0]);
+        return;
+      }
+      if (tool === "fog" && fogDragFrom) {
+        paintFogPreview(fogDragPoints(fogDragFrom, fogSnappedPoint(x, y)), true, null);
         return;
       }
 
@@ -1445,12 +1560,17 @@ export function createInteraction(ctx) {
         // с тем же id — апсерт на сервере (см. room.go:applyMutation), так
         // им же и обновляем существующую фигуру, отдельного типа сообщения
         // не нужно.
+        // Фигуру сохраняет moveFogHandle (угол прямоугольника тянет
+        // соседей, ручка круга — радиус); прилипание — только у
+        // многоугольника: у прямоугольника/круга прилипший угол ломал бы
+        // осевую/круглую форму.
         const area = ctx.scene.fogAreas[draggingFogVertex.areaId];
         if (area) {
-          area.points[draggingFogVertex.index] = { x, y };
+          const to = area.shape === "rect" || area.shape === "circle" ? { x, y } : fogSnappedPoint(x, y, draggingFogVertex);
+          area.points = moveFogHandle(area, draggingFogVertex.index, to.x, to.y);
           ctx.dirty.manualFog = true;
           ctx.render();
-          ctx.send({ type: "add_fog_area", fogArea: { id: area.id, points: area.points } });
+          sendFogArea(area);
         }
         return;
       }
@@ -1465,7 +1585,7 @@ export function createInteraction(ctx) {
           area.points = draggingFogArea.original.map((p) => ({ x: p.x + dx, y: p.y + dy }));
           ctx.dirty.manualFog = true;
           ctx.render();
-          ctx.send({ type: "add_fog_area", fogArea: { id: area.id, points: area.points } });
+          sendFogArea(area);
         }
         return;
       }
@@ -1657,12 +1777,31 @@ export function createInteraction(ctx) {
         return;
       }
 
-      if (tool === "fog" && fogPath) {
-        if (fogPath.length >= 3) {
-          ctx.send({ type: "add_fog_area", fogArea: { id: "fog-" + Date.now(), points: fogPath } });
-        }
-        fogPath = null;
+      if (tool === "fog" && fogDragFrom) {
+        const up = mousePos(e);
+        commitFogShape(fogDragPoints(fogDragFrom, fogSnappedPoint(up.x, up.y)), fogShape);
+        fogDragFrom = null;
         preview.clear();
+        return;
+      }
+      // Многоугольник — как здание: клик за кликом, коммит одним сообщением
+      // по замыканию на стартовую точку (см. fogCloseTarget) или по
+      // двойному клику (dblclick ниже). Первый клик — только при зажатом
+      // Ctrl (см. rationale у mousedown), дальше Ctrl не нужен.
+      if (tool === "fog" && fogShape === "poly" && (fogChain || e.ctrlKey || e.metaKey)) {
+        const { x, y } = mousePos(e);
+        const pt = fogSnappedPoint(x, y);
+        if (!fogChain) {
+          fogChain = [pt];
+          return;
+        }
+        if (fogCloseTarget(pt.x, pt.y)) {
+          commitFogShape(fogChain, "poly");
+          fogChain = null;
+          preview.clear();
+          return;
+        }
+        fogChain.push(pt);
         return;
       }
 
@@ -1731,6 +1870,10 @@ export function createInteraction(ctx) {
     // свернуть колонку) решает страница — см. pages/dm.js.
     window.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      // Escape в поле ввода (имя зоны в панели «Туман», чат) — отмена
+      // правки самого поля, не команда карте: иначе он снимал бы
+      // инструмент и захлопывал панель, из которой печатают.
+      if (isTypingTarget()) return;
       let aborted = false;
       if (tool === "wall" && (wallChainLast || wallDragFrom)) {
         wallChainLast = null;
@@ -1740,6 +1883,12 @@ export function createInteraction(ctx) {
       }
       if (tool === "building" && buildingChain) {
         buildingChain = null;
+        preview.clear();
+        aborted = true;
+      }
+      if (tool === "fog" && (fogChain || fogDragFrom)) {
+        fogChain = null;
+        fogDragFrom = null;
         preview.clear();
         aborted = true;
       }
@@ -1834,6 +1983,15 @@ export function createInteraction(ctx) {
         preview.clear();
         return;
       }
+      // Зона тумана, в отличие от здания, замыкается и двойным кликом: два
+      // клика в одну точку — это последняя вершина + «готово», как у стен
+      // двойной клик заканчивает цепочку. Меньше трёх точек — отмена.
+      if (tool === "fog" && fogChain) {
+        if (fogChain.length >= 3) commitFogShape(fogChain, "poly");
+        fogChain = null;
+        preview.clear();
+        return;
+      }
       const { x, y } = mousePos(e);
       const hitId = dmTokenAt(x, y, { skipLocked: true });
       if (hitId) {
@@ -1898,6 +2056,12 @@ export function createInteraction(ctx) {
         preview.clear();
         return;
       }
+      if (tool === "fog" && (fogChain || fogDragFrom)) {
+        fogChain = null;
+        fogDragFrom = null;
+        preview.clear();
+        return;
+      }
       if (tool === "draw") {
         // ПКМ в инструменте рисования — стереть пометку под курсором (та же
         // идиома, что ПКМ по фигуре тумана/зданию); незаконченный жест ПКМ
@@ -1958,7 +2122,7 @@ export function createInteraction(ctx) {
         const fogId = fogAreaAt(x, y, ctx.scene.fogAreas);
         if (fogId) {
           document.dispatchEvent(
-            new CustomEvent("vtt:fogAreaContextMenu", { detail: { id: fogId, pageX: e.clientX, pageY: e.clientY } })
+            new CustomEvent("vtt:fogAreaContextMenu", { detail: { id: fogId, area: ctx.scene.fogAreas[fogId], pageX: e.clientX, pageY: e.clientY } })
           );
           return;
         }
@@ -2021,9 +2185,25 @@ export function createInteraction(ctx) {
       if (wallIds.length) ctx.send({ type: "remove_wall_point", wallIds });
     });
 
-    // команда из меню фигуры тумана (см. web/dm.html #fogAreaMenu)
+    // команды из меню зоны тумана и панели «Туман» (см. web/dm.html
+    // #fogAreaMenu, pages/dm.js): удалить; правка полей (имя, показ
+    // игрокам, свет) — patch поверх живой зоны, тем же апсертом.
     document.addEventListener("vtt:removeFogArea", (e) => {
       ctx.send({ type: "remove_fog_area", id: e.detail.id });
+    });
+    document.addEventListener("vtt:updateFogArea", (e) => {
+      const { id, patch } = e.detail || {};
+      const area = ctx.scene.fogAreas && ctx.scene.fogAreas[id];
+      if (!area || !patch) return;
+      // Свет бывает только у показанной зоны (см. domain.FogArea): включить
+      // свет — значит показать её, скрыть — значит погасить.
+      if (patch.light) patch.revealed = true;
+      if (patch.revealed === false) patch.light = "";
+      Object.assign(area, patch);
+      ctx.dirty.manualFog = true;
+      ctx.dirty.vision = true;
+      ctx.render();
+      sendFogArea(area);
     });
 
     // команда из меню здания (см. web/dm.html #buildingMenu)

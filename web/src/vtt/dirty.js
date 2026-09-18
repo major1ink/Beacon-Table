@@ -47,6 +47,7 @@ export function diffAndMarkDirty(dirty, prevScene, nextScene) {
   }
   if (!prevScene || prevScene.fogAreas !== nextScene.fogAreas) {
     dirty.manualFog = true;
+    dirty.vision = true; // свет зоны (domain.FogArea.Light) — вход расчёта освещения; без света план сам увидит, что вход не менялся (planInputKey)
   }
   if (!prevScene || prevScene.drawings !== nextScene.drawings) {
     dirty.drawings = true;

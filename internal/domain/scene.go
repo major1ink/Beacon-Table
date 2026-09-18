@@ -261,13 +261,62 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 
-// FogArea — область ручного тумана произвольной формы. Постоянный оверрайд
-// DM: скрывает область у игроков ДАЖЕ если туда дотягивается обзор токена.
+// FogArea — зона ручного тумана: замкнутый контур, который ДМ скрывает у
+// игроков ДАЖЕ там, куда дотягивается обзор токена, и снимает по своей
+// команде (Revealed), не стирая саму фигуру — её можно накрыть снова.
+//
+// Shape — как контур рисовался и как правится ("poly" — вершины по
+// одной, "rect" — 4 угла, "circle" — 36-угольник по центру и радиусу).
+// Points во всех трёх случаях уже готовый многоугольник: сервер, слой у
+// игрока и расчёт света работают с одним представлением, а фигуру
+// сохраняет только правка на клиенте (см. web/src/geometry.js:
+// fogAreaHandles/moveFogHandle).
+//
+// Скрытая зона (Revealed=false) у игрока — сплошная тьма: ни свет, ни
+// тёмное зрение в неё не заглядывают, это и есть туман. Light —
+// освещение внутри ПОКАЗАННОЙ зоны поверх обычного расчёта (см.
+// web/src/vtt/vision-plan.js): "" — без изменений, "bright"/"dim" —
+// зона освещена независимо от источников, "dark" — магическая тьма:
+// гасит и свет, и тёмное зрение. У скрытой зоны света не бывает
+// (Normalize сбрасывает): включить свет — значит показать зону.
 type FogArea struct {
-	ID     string  `json:"id"`
-	Points []Point `json:"points"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name,omitempty"`
+	Shape    string  `json:"shape,omitempty"`
+	Points   []Point `json:"points"`
+	Revealed bool    `json:"revealed,omitempty"`
+	Light    string  `json:"light,omitempty"`
 	// Locked — см. Token.Locked (общий для всех объектов карты флаг).
 	Locked bool `json:"locked,omitempty"`
+}
+
+// FogAreaShapes / FogAreaLights — допустимые значения FogArea.Shape/Light;
+// всё прочее сервер приводит к "" (см. service.Room.applyMutation).
+var (
+	FogAreaShapes = map[string]bool{"poly": true, "rect": true, "circle": true}
+	FogAreaLights = map[string]bool{"bright": true, "dim": true, "dark": true}
+)
+
+// maxFogAreaNameLen — предел имени зоны в рунах: имя видно только ДМ на
+// его карте и в списке зон, длиннее одной строки ему незачем.
+const maxFogAreaNameLen = 60
+
+// Normalize — санитария зоны от клиента: контур из < 3 точек не образует
+// фигуры (false), недопустимые Shape/Light — сброс, имя — обрезка.
+func (f *FogArea) Normalize() bool {
+	if f == nil || len(f.Points) < 3 {
+		return false
+	}
+	if !FogAreaShapes[f.Shape] {
+		f.Shape = ""
+	}
+	if !FogAreaLights[f.Light] || !f.Revealed {
+		f.Light = ""
+	}
+	if r := []rune(f.Name); len(r) > maxFogAreaNameLen {
+		f.Name = string(r[:maxFogAreaNameLen])
+	}
+	return true
 }
 
 // Building — здание: ЗАМКНУТЫЙ многоугольник (Points, как у FogArea — контур

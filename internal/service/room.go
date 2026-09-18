@@ -2592,7 +2592,9 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		r.markDirty(r.currentSceneID)
 
 	case "add_fog_area":
-		if msg.FogArea != nil {
+		// Апсерт по id — тем же сообщением зона и создаётся, и правится
+		// (контур, имя, показ игрокам, свет, замок).
+		if msg.FogArea != nil && msg.FogArea.Normalize() {
 			r.scene.FogAreas[msg.FogArea.ID] = msg.FogArea
 			r.markDirty(r.currentSceneID)
 		}

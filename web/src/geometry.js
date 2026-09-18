@@ -374,38 +374,162 @@ export function pointInPolygon(x, y, points) {
   return inside;
 }
 
-// fogAreaAt — id фигуры ручного тумана, содержащей точку (x,y), либо null.
-// fogAreas: { [id]: {points: [{x,y}, ...]} }.
+// fogAreaAt — id зоны тумана, содержащей точку (x,y), либо null.
+// fogAreas: { [id]: {points: [{x,y}, ...]} }. Перебор с конца — если зоны
+// вложены, кликом берётся та, что нарисована позже (лежит сверху).
 export function fogAreaAt(x, y, fogAreas) {
-  for (const id in fogAreas) {
-    const area = fogAreas[id];
-    if (area.points.length >= 3 && pointInPolygon(x, y, area.points)) return id;
+  const ids = Object.keys(fogAreas || {});
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const area = fogAreas[ids[i]];
+    if (area.points.length >= 3 && pointInPolygon(x, y, area.points)) return ids[i];
   }
   return null;
 }
 
-// fogVertexNear — ближайшая вершина фигуры ручного тумана к (x,y) в пределах
-// screenPx экранных пикселей, либо null — {areaId, index, x, y}. Та же идиома,
-// что wallVertexNear, но точки фигуры тумана не группируются между разными
-// фигурами (в отличие от стен, углы разных облаков тумана не обязаны
-// склеиваться) — index прямо указывает на area.points[index], которую
-// перетаскивание в interaction.js подменяет на новую позицию (переформовка
-// контура).
+// ---- фигуры зон тумана (см. domain.FogArea.Shape) ----
+// Все три фигуры хранятся одним и тем же многоугольником points — сервер,
+// слой у игрока и расчёт света про фигуру не знают. Фигура важна только
+// правке: у прямоугольника и круга ручки двигают контур так, чтобы он
+// остался прямоугольником/кругом, а не превратился в произвольный
+// многоугольник от первого же драга.
+
+// FOG_CIRCLE_SEGMENTS — сколько вершин у "круга". Кратно 4, чтобы четыре
+// ручки круга (см. fogAreaHandles) легли ровно на оси через центр.
+export const FOG_CIRCLE_SEGMENTS = 36;
+
+// fogCirclePoints — многоугольник круга: первая вершина справа (угол 0),
+// дальше по часовой стрелке.
+export function fogCirclePoints(cx, cy, r, n = FOG_CIRCLE_SEGMENTS) {
+  const points = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    points.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+  }
+  return points;
+}
+
+// fogRectPoints — 4 угла осевого прямоугольника по двум противоположным
+// углам, в порядке обхода: левый-верхний, правый-верхний, правый-нижний,
+// левый-нижний. Именно этот порядок ждёт moveFogHandle.
+export function fogRectPoints(x1, y1, x2, y2) {
+  const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+  return [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+}
+
+// fogAreaCenter — центр охватывающего прямоугольника контура; у круга это
+// его центр (вершины симметричны), у остальных — просто где повесить подпись.
+export function fogAreaCenter(points) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, w: maxX - minX, h: maxY - minY };
+}
+
+// fogAreaHandles — точки-ручки зоны, за которые её правят: у многоугольника
+// и прямоугольника — каждая вершина, у круга — четыре на осях (тянуть за
+// любую из 36 вершин было бы честно, но 36 кружков на одном круге — каша).
+// index — индекс в area.points, его же принимает moveFogHandle.
+export function fogAreaHandles(area) {
+  const points = area.points || [];
+  if (area.shape === "circle" && points.length === FOG_CIRCLE_SEGMENTS) {
+    const step = FOG_CIRCLE_SEGMENTS / 4;
+    return [0, step, step * 2, step * 3].map((index) => ({ x: points[index].x, y: points[index].y, index }));
+  }
+  return points.map((p, index) => ({ x: p.x, y: p.y, index }));
+}
+
+// moveFogHandle — новый контур после перетаскивания ручки index в (x,y),
+// с сохранением фигуры: у многоугольника двигается одна вершина, у
+// прямоугольника — угол вместе с двумя соседними (противоположный стоит на
+// месте), у круга — меняется радиус (центр остаётся). Исходный массив не
+// трогается.
+export function moveFogHandle(area, index, x, y) {
+  const points = area.points;
+  if (area.shape === "rect" && points.length === 4) {
+    const opposite = points[(index + 2) % 4];
+    return fogRectPoints(opposite.x, opposite.y, x, y);
+  }
+  if (area.shape === "circle" && points.length === FOG_CIRCLE_SEGMENTS) {
+    const c = fogAreaCenter(points);
+    return fogCirclePoints(c.x, c.y, Math.max(1, Math.hypot(x - c.x, y - c.y)));
+  }
+  return points.map((p, i) => (i === index ? { x, y } : p));
+}
+
+// fogVertexNear — ближайшая ручка зоны к (x,y) в пределах screenPx экранных
+// пикселей, либо null — {areaId, index, x, y}. Та же идиома, что
+// wallVertexNear, но точки разных зон не группируются: у соседних зон углы
+// не обязаны склеиваться, index указывает в area.points ровно одной зоны.
 export function fogVertexNear(x, y, fogAreas, scale, screenPx = 10) {
   const threshold = screenPx / scale;
   let best = null, bestDist = threshold;
   for (const id in fogAreas) {
-    const area = fogAreas[id];
-    for (let i = 0; i < area.points.length; i++) {
-      const p = area.points[i];
-      const d = Math.hypot(p.x - x, p.y - y);
+    for (const h of fogAreaHandles(fogAreas[id])) {
+      const d = Math.hypot(h.x - x, h.y - y);
       if (d < bestDist) {
-        best = { areaId: id, index: i, x: p.x, y: p.y };
+        best = { areaId: id, index: h.index, x: h.x, y: h.y };
         bestDist = d;
       }
     }
   }
   return best;
+}
+
+// fogEdgeNear — ближайшая сторона МНОГОУГОЛЬНОЙ зоны к (x,y) в пределах
+// screenPx, либо null — {areaId, index, x, y}: index — позиция, куда
+// вставить новую вершину (после вершины index-1), x/y — проекция курсора на
+// сторону. Аналог врезки точки в стену (interaction.js: splitWallAt); у
+// прямоугольника и круга лишних вершин не бывает — они не участвуют.
+export function fogEdgeNear(x, y, fogAreas, scale, screenPx = 8) {
+  const threshold = screenPx / scale;
+  let best = null, bestDist = threshold;
+  for (const id in fogAreas) {
+    const area = fogAreas[id];
+    if (area.shape === "rect" || area.shape === "circle") continue;
+    const pts = area.points;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const d = distToSegment(x, y, a.x, a.y, b.x, b.y);
+      if (d < bestDist) {
+        const proj = closestPointOnSegment(x, y, a.x, a.y, b.x, b.y);
+        best = { areaId: id, index: i + 1, x: proj.cx, y: proj.cy };
+        bestDist = d;
+      }
+    }
+  }
+  return best;
+}
+
+// snapToFogVertex — примагничивание к вершинам зон при рисовании/правке
+// (как snapToWallVertex): ближайшая вершина любой зоны в пределах screenPx,
+// кроме ручки exclude ({areaId, index} — та, которую сейчас тащат).
+// Возвращает {x,y} или null. Смежные комнаты, накрытые по отдельности,
+// без этого оставляли бы между собой щель в пару пикселей.
+export function snapToFogVertex(x, y, fogAreas, scale, exclude, screenPx = 14) {
+  const threshold = screenPx / scale;
+  let best = null, bestDist = threshold;
+  for (const id in fogAreas) {
+    const pts = fogAreas[id].points;
+    for (let i = 0; i < pts.length; i++) {
+      if (exclude && exclude.areaId === id && exclude.index === i) continue;
+      const d = Math.hypot(pts[i].x - x, pts[i].y - y);
+      if (d < bestDist) {
+        best = pts[i];
+        bestDist = d;
+      }
+    }
+  }
+  return best ? { x: best.x, y: best.y } : null;
 }
 
 // buildingAt — id здания, содержащего точку (x,y), либо null. Та же идиома,
