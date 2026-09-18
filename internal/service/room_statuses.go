@@ -196,7 +196,7 @@ func (r *Room) lookupCondition(slug string) *domain.Condition {
 // недоверия, что у "hub_add_item" (имя/вес предмета) и "add_combatant"
 // (HP/КД): клиент говорит только КОГО и ЧЕМ пометить.
 func snapshotStatus(slug string, cond *domain.Condition) domain.AppliedStatus {
-	st := domain.AppliedStatus{Slug: slug, Name: slug, Icon: "❔"}
+	st := domain.AppliedStatus{Slug: slug, Name: slug, Icon: "question"}
 	if cond != nil {
 		st.Name = cond.Name
 		st.Color = cond.Color
@@ -477,7 +477,7 @@ func (r *Room) effectiveStat(cmb *domain.Combatant, base int, target string) int
 	}
 	mods := make([]domain.Modifier, 0, len(statuses))
 	for _, st := range statuses {
-		mods = append(mods, st.Modifiers...)
+		mods = append(mods, domain.ScaleModifiers(st.Modifiers, st.Level)...)
 	}
 	return domain.ApplyModifiers(base, target, mods)
 }
@@ -504,7 +504,7 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 	statuses := r.statusesOf(cmb)
 	delta := 0
 	for _, st := range statuses {
-		for _, m := range st.Modifiers {
+		for _, m := range domain.ScaleModifiers(st.Modifiers, st.Level) {
 			if m.Period != period || m.Target != domain.ModifierTargetHPCurrent {
 				continue
 			}

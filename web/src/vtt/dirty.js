@@ -47,6 +47,7 @@ export function diffAndMarkDirty(dirty, prevScene, nextScene) {
   }
   if (!prevScene || prevScene.fogAreas !== nextScene.fogAreas) {
     dirty.manualFog = true;
+    dirty.vision = true; // свет зоны (domain.FogArea.Light) — вход расчёта освещения; без света план сам увидит, что вход не менялся (planInputKey)
   }
   if (!prevScene || prevScene.drawings !== nextScene.drawings) {
     dirty.drawings = true;
@@ -59,6 +60,9 @@ export function diffAndMarkDirty(dirty, prevScene, nextScene) {
   }
   if (!prevScene || prevScene.noteMarkers !== nextScene.noteMarkers) {
     dirty.tokens = true; // значки заметок (layers/note-markers.js) обновляются тем же битом, что и токены — отдельный не нужен, обновление дешёвое
+  }
+  if (!prevScene || prevScene.teleports !== nextScene.teleports) {
+    dirty.tokens = true; // порталы (layers/teleports.js) — тем же битом
   }
   if (!prevScene || prevScene.fogOfWar !== nextScene.fogOfWar) {
     dirty.vision = true;

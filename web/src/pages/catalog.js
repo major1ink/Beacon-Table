@@ -33,9 +33,14 @@ import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
+import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
+import { glyphNode } from "../condition-glyphs.js";
+import { rarityKey, rarityRank, rarityColor } from "../item-rarity.js";
+import { kindRank } from "../reference-kind.js";
 import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -47,6 +52,61 @@ const title = qs.get("title") || "Компендиум";
 
 function spellLevelLabel(lvl) {
   return lvl ? lvl + "-й круг" : "Заговор";
+}
+
+function spellGroupLabel(lvl) {
+  return lvl ? lvl + "-й круг" : "Заговоры";
+}
+
+// «Адское возмездие [Hellish Rebuke]» → { ru, en }.
+function splitName(name) {
+  const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name || "");
+  return m ? { ru: m[1], en: m[2] } : { ru: name || "", en: "" };
+}
+
+function spellClasses(s) {
+  return String(s.classes || "").split(/[,;/]/).map((c) => c.trim()).filter(Boolean);
+}
+
+const CR_ORDER = ["", "0", "1/8", "1/4", "1/2", ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
+
+function crKey(cr) {
+  return String(cr || "").trim();
+}
+
+function crLabel(cr) {
+  return cr ? "ПО " + cr : "ПО —";
+}
+
+function crGroupLabel(cr) {
+  return cr ? "ПО " + cr : "ПО — (без уровня опасности)";
+}
+
+function crRank(cr) {
+  const i = CR_ORDER.indexOf(cr);
+  return i === -1 ? CR_ORDER.length : i;
+}
+
+function capitalize(t) {
+  t = String(t || "").trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : "";
+}
+
+// «зверь (динозавр)» → «Зверь».
+function monsterBaseType(m) {
+  const t = capitalize(String(m.type || "").replace(/\s*\(.*$/, ""));
+  return t ? [t] : [];
+}
+
+
+
+function bySource(x) {
+  const src = String(x.source || "").trim();
+  return src ? [src] : [];
+}
+
+function byTags(x) {
+  return Array.isArray(x.tags) ? x.tags.filter(Boolean) : [];
 }
 
 // ==================== per-type конфигурация ====================
@@ -82,12 +142,15 @@ async function addSpellToMyCharacter(spell, characterId) {
   await updateCharacterSheet(characterId, sheet);
 }
 
-function renderSpellAddWidget(row, s) {
+// Один виджет «кому добавить» на весь список, по «+» переезжает в строку.
+let spellAddWidget = null;
+
+function buildSpellAddWidget() {
   const addWrap = document.createElement("div");
   addWrap.className = "catalog-target";
   const select = document.createElement("select");
   if (role === "dm") {
-    select.appendChild(new Option("Добавить…", ""));
+    select.appendChild(new Option("Кому…", ""));
     if (spellTargets.characters.length) {
       const g = document.createElement("optgroup");
       g.label = "Персонажи";
@@ -101,25 +164,27 @@ function renderSpellAddWidget(row, s) {
       select.appendChild(g);
     }
   } else {
-    select.appendChild(new Option("Добавить моему персонажу…", ""));
+    select.appendChild(new Option("Моему персонажу…", ""));
     for (const c of spellTargets.characters) select.appendChild(new Option(c.name, c.id));
   }
   const addBtn = document.createElement("button");
   addBtn.type = "button";
-  addBtn.innerHTML = icon("plus", { size: 13 });
-  addBtn.title = role === "dm" ? "Добавить это заклинание выбранной цели" : "Добавить заклинание в лист выбранного персонажа";
+  addBtn.innerHTML = icon("check", { size: 13 });
+  addBtn.title = "Добавить";
   addBtn.onclick = async () => {
-    if (!select.value) return;
+    const spell = addWrap.spell;
+    if (!select.value || !spell) return;
     addBtn.disabled = true;
     try {
       if (role === "dm") {
         const [k, id] = select.value.split(":");
         if (!k || !id) return;
-        await addSpellToTarget(s, k, id);
+        await addSpellToTarget(spell, k, id);
       } else {
-        await addSpellToMyCharacter(s, select.value);
+        await addSpellToMyCharacter(spell, select.value);
       }
       select.value = "";
+      addWrap.remove();
     } catch (err) {
       showAlert("Не удалось добавить: " + err.message);
     } finally {
@@ -127,7 +192,28 @@ function renderSpellAddWidget(row, s) {
     }
   };
   addWrap.append(select, addBtn);
-  row.appendChild(addWrap);
+  addWrap.select = select;
+  return addWrap;
+}
+
+function renderSpellAddWidget(row, s) {
+  const openBtn = document.createElement("button");
+  openBtn.type = "button";
+  openBtn.className = "icon-btn";
+  openBtn.innerHTML = icon("plus", { size: 13 });
+  openBtn.title = role === "dm" ? "Добавить это заклинание персонажу или существу" : "Добавить заклинание в лист персонажа";
+  openBtn.onclick = () => {
+    if (!spellAddWidget) spellAddWidget = buildSpellAddWidget();
+    if (spellAddWidget.parentNode === row) {
+      spellAddWidget.remove();
+      return;
+    }
+    spellAddWidget.spell = s;
+    spellAddWidget.select.value = "";
+    row.appendChild(spellAddWidget);
+    spellAddWidget.select.focus();
+  };
+  row.appendChild(openBtn);
 }
 
 const CONFIGS = {
@@ -140,12 +226,20 @@ const CONFIGS = {
     detailUrl: (id, o) => `/bestiary.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     mapOne: mapFoundryMonsterJson,
     avatar: true,
+    avatarIcon: "creature",
     searchHay: (m) => [m.name, m.type, ...(m.tags || [])],
-    badge: (m) => (m.cr ? "CR " + m.cr : "—"),
+    badge: (m) => [crLabel(crKey(m.cr)), (m.source || "").trim()],
+    sidebar: [
+      { id: "cr", title: "ПО", kind: "chips", values: CR_ORDER, label: (v) => v || "—", of: (m) => [crKey(m.cr)] },
+      { id: "type", title: "Тип", kind: "list", of: monsterBaseType },
+    ],
+    groupKey: (m) => crKey(m.cr),
+    groupLabel: crGroupLabel,
+    groupSort: (a, b) => crRank(a) - crRank(b),
     draggable: true,
     dragMime: "application/x-beacon-monster",
     createPlaceholder: "Имя нового монстра",
-    emptyUser: "Своих монстров пока нет — создай первого ниже.",
+    emptyUser: "Своих монстров пока нет — создай первого выше.",
     deleteConfirm: (m) => `Удалить «${m.name}» из бестиария? Это необратимо (уже расставленные токены останутся на карте, но перестанут открывать статблок).`,
     savedMessageType: "beacon:monsterSaved",
   },
@@ -159,9 +253,22 @@ const CONFIGS = {
     mapOne: mapFoundrySpellJson,
     avatar: false,
     searchHay: (s) => [s.name, s.school, s.classes, ...(s.tags || [])],
-    badge: (s) => spellLevelLabel(s.level),
+    badge: (s) => (s.source || "").trim(),
+    badgeTitle: (s) => spellLevelLabel(s.level),
+    flags: (s) => [s.concentration && ["К", "Концентрация"], s.ritual && ["Р", "Ритуал"]].filter(Boolean),
+    sidebar: [
+      { id: "level", title: "Круг", kind: "chips", values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], label: String, of: (s) => [s.level || 0] },
+      { id: "props", title: "Свойства", kind: "toggles", items: [
+        { key: "concentration", label: "Концентрация", icon: "eye" },
+        { key: "ritual", label: "Ритуал", icon: "scroll" },
+      ] },
+      { id: "cls", title: "Класс", kind: "list", of: spellClasses },
+    ],
+    groupKey: (s) => s.level || 0,
+    groupLabel: spellGroupLabel,
+    groupSort: (a, b) => a - b,
     createPlaceholder: "Имя нового заклинания",
-    emptyUser: "Своих заклинаний пока нет — создай или импортируй первое ниже.",
+    emptyUser: "Своих заклинаний пока нет — создай или импортируй первое выше.",
     deleteConfirm: (s) => `Удалить «${s.name}» из библиотеки?`,
     savedMessageType: "beacon:spellSaved",
     extraWidget: renderSpellAddWidget,
@@ -175,10 +282,21 @@ const CONFIGS = {
     detailUrl: (id, o) => `/itembook.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     mapOne: mapFoundryItemJson,
     avatar: true,
+    avatarIcon: "backpack",
     searchHay: (it) => [it.name, it.type, it.rarity, ...(it.tags || [])],
-    badge: (it) => it.rarity || "",
+    badge: (it) => [it.rarity || "", (it.source || "").trim()],
+    badgeColor: (it, text) => (text === it.rarity ? rarityColor(it.rarity) : ""),
+    flags: (it) => (it.requiresAttunement ? [["Н", "Требует настройки"]] : []),
+    sidebar: [
+      { id: "rarity", title: "Редкость", kind: "list", of: (it) => (rarityKey(it.rarity) ? [capitalize(rarityKey(it.rarity))] : []) },
+      { id: "props", title: "Свойства", kind: "toggles", items: [{ key: "requiresAttunement", label: "Настройка", icon: "zap" }] },
+      { id: "source", title: "Источник", kind: "list", of: bySource },
+    ],
+    groupKey: (it) => rarityKey(it.rarity),
+    groupLabel: (r) => capitalize(r) || "Без редкости",
+    groupSort: (a, b) => rarityRank(a) - rarityRank(b),
     createPlaceholder: "Имя нового предмета",
-    emptyUser: "Своих предметов пока нет — создай или импортируй первый ниже.",
+    emptyUser: "Своих предметов пока нет — создай или импортируй первый выше.",
     deleteConfirm: (it) => `Удалить «${it.name}» из библиотеки?`,
     savedMessageType: "beacon:itemSaved",
     extraFilter: category ? (it) => classifyItemType(it.type) === category : null,
@@ -193,11 +311,20 @@ const CONFIGS = {
     batchMap: mapFoundryReferenceBatch,
     batchEmptyMsg: "Не удалось распознать ни одной записи справочника (нужен класс/архетип/черта Foundry VTT).",
     avatar: true,
+    avatarIcon: "scroll",
     searchHay: (ref) => [ref.name, ref.kind, ref.parentName, ref.source, ...(ref.tags || [])],
-    badge: (ref) => ref.kind || "",
-    nameText: (ref) => (ref.parentName ? `${ref.name} (${ref.parentName})` : ref.name),
+    badge: (ref) => (ref.source || "").trim(),
+    subText: (ref) => [splitName(ref.name).en, ref.parentName].filter(Boolean).join(" · "),
+    sidebar: [
+      { id: "kind", title: "Тип записи", kind: "list", of: (ref) => (ref.kind ? [capitalize(ref.kind)] : []) },
+      { id: "parent", title: "Класс", kind: "list", of: (ref) => (ref.parentName ? [ref.parentName] : []) },
+      { id: "tags", title: "Метки", kind: "list", of: byTags },
+    ],
+    groupKey: (ref) => String(ref.kind || "").trim().toLowerCase(),
+    groupLabel: (k) => capitalize(k) || "Без типа",
+    groupSort: (a, b) => kindRank(a) - kindRank(b) || a.localeCompare(b, "ru"),
     createPlaceholder: "Имя новой записи",
-    emptyUser: "Своих записей пока нет — создай или импортируй первую ниже.",
+    emptyUser: "Своих записей пока нет — создай или импортируй первую выше.",
     deleteConfirm: (ref) => `Удалить «${ref.name}» из библиотеки?`,
     savedMessageType: "beacon:referenceSaved",
     extraFilter: kind ? (ref) => classifyReferenceKind(ref.kind) === kind : null,
@@ -211,15 +338,18 @@ const CONFIGS = {
     detailUrl: (id, o) => `/conditions.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     batchMap: mapFoundryConditionBatch,
     batchEmptyMsg: "Не удалось распознать ни одного эффекта (нужен документ ActiveEffect из Foundry VTT или предмет/существо с массивом effects).",
-    // avatar+avatarText: у состояния картинка чаще всего не загружена, а
-    // задан эмодзи-глиф (domain.Condition.Icon) — показываем в кружке его,
-    // а не прочерк, чтобы список читался так же, как палитра.
+    // avatarNode — глиф состояния (domain.Condition.Icon): SVG из набора или эмодзи.
     avatar: true,
-    avatarText: (c) => c.icon || "❔",
+    avatarNode: (c) => glyphNode(c.icon, ""),
     searchHay: (c) => [c.name, c.slug, c.source, ...(c.tags || [])],
-    badge: (c) => (c.levels > 1 ? `${c.levels} ур.` : c.slug || ""),
+    badge: (c) => [c.levels > 1 ? `${c.levels} ур.` : "", (c.source || "").trim()],
+    subText: (c) => (c.slug && CONDITION_RU[c.slug] ? conditionName(c.slug) + " (" + c.slug + ")" : ""),
+    sidebar: [
+      { id: "source", title: "Источник", kind: "list", of: bySource },
+      { id: "tags", title: "Метки", kind: "list", of: byTags },
+    ],
     createPlaceholder: "Имя нового состояния",
-    emptyUser: "Своих состояний пока нет — создай или импортируй первое ниже.",
+    emptyUser: "Своих состояний пока нет — создай или импортируй первое выше.",
     deleteConfirm: (c) => `Удалить «${c.name}» из библиотеки? Уже наложенные метки останутся висеть на токенах, но потеряют описание.`,
     savedMessageType: "beacon:conditionSaved",
   },
@@ -229,6 +359,7 @@ const cfg = CONFIGS[type];
 // ==================== DOM ====================
 
 const rowsEl = document.getElementById("catalogRows");
+const sideEl = document.getElementById("catalogSide");
 const searchEl = document.getElementById("catalogSearch");
 const createForm = document.getElementById("catalogCreateForm");
 const createNameInput = document.getElementById("catalogCreateName");
@@ -239,6 +370,80 @@ const systemHintEl = document.getElementById("catalogSystemHint");
 
 document.getElementById("catalogTitle").textContent = title;
 document.title = "Beacon Table — " + title;
+
+// ==================== боковые фильтры (cfg.sidebar) ====================
+// Секции: chips (фиксированные значения), toggles (булевы поля), list
+// (значения из данных, секция скрыта без них). Выбор — Set на секцию, пусто = все.
+const sideFilter = new Map();
+const sideLists = new Map();
+
+function sideButton(label, on, onClick, className) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = className + (on ? " on" : "");
+  b.textContent = label;
+  b.onclick = onClick;
+  return b;
+}
+
+function toggleSide(sec, value, btn) {
+  const set = sideFilter.get(sec.id);
+  if (set.has(value)) set.delete(value);
+  else set.add(value);
+  btn.classList.toggle("on", set.has(value));
+  renderRows();
+}
+
+function initSidebar() {
+  if (!cfg) return;
+  for (const sec of cfg.sidebar || []) {
+    sideFilter.set(sec.id, new Set());
+    const wrap = document.createElement("div");
+    const title = document.createElement("p");
+    title.className = "side-title";
+    title.textContent = sec.title;
+    const body = document.createElement("div");
+    body.className = sec.kind === "chips" ? "side-chips" : "side-list";
+    wrap.append(title, body);
+    sideEl.appendChild(wrap);
+    if (sec.kind === "chips") {
+      for (const v of sec.values) body.appendChild(sideButton(sec.label(v), false, (e) => toggleSide(sec, v, e.currentTarget), "side-chip"));
+    } else if (sec.kind === "toggles") {
+      for (const it of sec.items) {
+        const b = sideButton("", false, (e) => toggleSide(sec, it.key, e.currentTarget), "side-item");
+        b.innerHTML = icon(it.icon, { size: 13 });
+        b.append(it.label);
+        body.appendChild(b);
+      }
+    } else {
+      sideLists.set(sec.id, { sec, wrap, body });
+    }
+  }
+}
+
+function renderSideLists(onScope) {
+  for (const { sec, wrap, body } of sideLists.values()) {
+    const names = new Set();
+    for (const x of onScope) for (const v of sec.of(x)) names.add(v);
+    const set = sideFilter.get(sec.id);
+    for (const v of set) if (!names.has(v)) set.delete(v);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b, "ru"));
+    wrap.style.display = sorted.length ? "" : "none";
+    body.innerHTML = "";
+    for (const v of sorted) body.appendChild(sideButton(v, set.has(v), (e) => toggleSide(sec, v, e.currentTarget), "side-item"));
+  }
+}
+
+function passesSidebar(x) {
+  for (const sec of cfg.sidebar || []) {
+    const set = sideFilter.get(sec.id);
+    if (!set.size) continue;
+    if (sec.kind === "toggles") {
+      for (const key of set) if (!x[key]) return false;
+    } else if (!sec.of(x).some((v) => set.has(v))) return false;
+  }
+  return true;
+}
 
 function openDetail(record, opts) {
   window.parent.postMessage(
@@ -274,21 +479,46 @@ function buildRow(x) {
     const avatar = document.createElement("div");
     avatar.className = "catalog-avatar";
     if (x.imageUrl) avatar.style.backgroundImage = `url("${x.imageUrl}")`;
-    else avatar.textContent = cfg.avatarText ? cfg.avatarText(x) : "—";
+    else if (cfg.avatarNode) avatar.appendChild(cfg.avatarNode(x));
+    else avatar.innerHTML = icon(cfg.avatarIcon || "image", { size: 14 });
     row.appendChild(avatar);
   }
+  const parts = splitName(x.name);
   const name = document.createElement("div");
   name.className = "catalog-name";
-  name.textContent = cfg.nameText ? cfg.nameText(x) : x.name;
+  name.textContent = cfg.nameText ? cfg.nameText(x) : parts.ru;
   name.title = x.name;
   name.onclick = () => openDetail(x);
+  const subText = cfg.subText ? cfg.subText(x) : parts.en;
+  if (subText) {
+    const sub = document.createElement("div");
+    sub.className = "catalog-sub";
+    sub.textContent = subText;
+    name.appendChild(sub);
+  }
   row.appendChild(name);
 
-  const badgeText = cfg.badge ? cfg.badge(x) : "";
-  if (badgeText) {
+  for (const [text, hint] of cfg.flags ? cfg.flags(x) : []) {
+    const flag = document.createElement("span");
+    flag.className = "catalog-flag";
+    flag.textContent = text;
+    flag.title = hint;
+    row.appendChild(flag);
+  }
+
+  const badges = cfg.badge ? [].concat(cfg.badge(x)) : [];
+  for (const text of badges) {
+    if (!text) continue;
     const badge = document.createElement("span");
     badge.className = "catalog-badge";
-    badge.textContent = badgeText;
+    badge.textContent = text;
+    if (cfg.badgeTitle) badge.title = cfg.badgeTitle(x);
+    // Редкость предмета — своим цветом, тем же, что медальон карточки.
+    const color = cfg.badgeColor ? cfg.badgeColor(x, text) : "";
+    if (color) {
+      badge.style.color = color;
+      badge.style.borderColor = color;
+    }
     row.appendChild(badge);
   }
 
@@ -327,7 +557,9 @@ function renderRows() {
   rowsEl.innerHTML = "";
   let onScope = list.filter((x) => !!x.system === systemScope);
   if (cfg.extraFilter) onScope = onScope.filter(cfg.extraFilter);
+  renderSideLists(onScope);
   const filtered = onScope.filter((x) => {
+    if (!passesSidebar(x)) return false;
     if (!filter) return true;
     return cfg.searchHay(x).join(" ").toLowerCase().includes(filter);
   });
@@ -338,9 +570,30 @@ function renderRows() {
     rowsEl.appendChild(empty);
     return;
   }
-  for (const x of filtered) rowsEl.appendChild(buildRow(x));
+  if (!cfg.groupKey) {
+    for (const x of filtered) rowsEl.appendChild(buildRow(x));
+    return;
+  }
+  const groups = new Map();
+  for (const x of filtered) {
+    const k = cfg.groupKey(x);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(x);
+  }
+  const groupSort = cfg.groupSort || ((a, b) => String(a).localeCompare(String(b), "ru"));
+  for (const k of [...groups.keys()].sort(groupSort)) {
+    const group = document.createElement("div");
+    group.className = "catalog-group";
+    const head = document.createElement("div");
+    head.className = "catalog-group-title";
+    head.textContent = cfg.groupLabel(k);
+    group.appendChild(head);
+    for (const x of groups.get(k).sort((a, b) => a.name.localeCompare(b.name, "ru"))) group.appendChild(buildRow(x));
+    rowsEl.appendChild(group);
+  }
 }
 searchEl.oninput = renderRows;
+initSidebar();
 
 // ==================== создание ====================
 
@@ -429,6 +682,8 @@ importFile.addEventListener("change", async (e) => {
 });
 
 // ==================== закрыть / автообновление ====================
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {

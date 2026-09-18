@@ -8,6 +8,17 @@ import (
 	"time"
 )
 
+// Таймауты транспорта — те же, что у http.DefaultTransport: он подходит,
+// но подменить DialContext на нём нельзя, а собирать свой без явных
+// пределов — значит ждать молчащий хост бесконечно.
+const (
+	dialTimeout         = 10 * time.Second
+	dialKeepAlive       = 30 * time.Second
+	idleConnTimeout     = 90 * time.Second
+	tlsHandshakeTimeout = 10 * time.Second
+	maxIdleConns        = 10
+)
+
 // GuardedTransport — транспорт для http-клиента импорта модулей. Ссылку на
 // манифест и на архив даёт пользователь (ДМ), а обычный клиент сходил бы по
 // ней куда угодно.
@@ -26,14 +37,14 @@ import (
 // заблокированы всегда, независимо от флага: законной ссылки на модуль там
 // не бывает.
 func GuardedTransport(allowPrivateNetwork bool) *http.Transport {
-	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
 	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           guardedDialContext(dialer, allowPrivateNetwork),
 		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          10,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
+		MaxIdleConns:          maxIdleConns,
+		IdleConnTimeout:       idleConnTimeout,
+		TLSHandshakeTimeout:   tlsHandshakeTimeout,
 		ExpectContinueTimeout: time.Second,
 	}
 }

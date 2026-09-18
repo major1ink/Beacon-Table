@@ -60,6 +60,8 @@ function appendValue(host, text) {
 function render(spec) {
   const el = ensureEl();
   el.textContent = "";
+  // Без строк-жестов — уже: иначе фраза тянется в одну строку поверх панели.
+  el.classList.toggle("bt-tip--short", !(spec.rows && spec.rows.length));
   if (spec.title) {
     const title = document.createElement("div");
     title.className = "bt-tip-title";
@@ -94,10 +96,15 @@ function place(el, anchor) {
   const gap = 10;
   const margin = 8;
   const rect = anchor.getBoundingClientRect();
+  const preferLeft = rect.left > window.innerWidth / 2;
+  // Мерить с левого края: у правой кромки fixed-плашка ужимается, и
+  // широкая после переноса влево разворачивалась поверх колонки.
+  el.style.left = "0px";
+  // У правой колонки справа места нет — лучше ужаться, чем лечь на неё.
+  el.style.maxWidth = preferLeft ? Math.max(200, rect.left - gap - margin) + "px" : "";
   const { width, height } = el.getBoundingClientRect();
 
   const fitsLeft = rect.left - gap - width >= margin;
-  const preferLeft = rect.left > window.innerWidth / 2;
   const left = preferLeft && fitsLeft ? rect.left - gap - width : rect.right + gap;
 
   let top = rect.top + rect.height / 2 - height / 2;
@@ -136,6 +143,10 @@ function show(anchor, spec) {
 window.addEventListener("scroll", hide, true);
 window.addEventListener("resize", hide);
 document.addEventListener("mousedown", hide, true);
+// Esc гасит подсказку, не убирая фокус с кнопки (WCAG 1.4.13).
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") hide();
+});
 
 // attachTooltip — повесить подсказку на элемент. spec: {title, summary, rows}
 // либо функция, возвращающая такой объект (когда содержимое зависит от
@@ -144,8 +155,13 @@ document.addEventListener("mousedown", hide, true);
 export function attachTooltip(el, spec) {
   if (!el) return () => {};
   // Нативный title убираем: иначе поверх нашей панели вылезет ещё и
-  // браузерный, с тем же текстом и другой задержкой.
+  // браузерный, с тем же текстом и другой задержкой. Имя для скринридера
+  // title давал тоже — переносим заголовок в aria-label, если имени нет.
   el.removeAttribute("title");
+  if (!el.hasAttribute("aria-label") && !el.textContent.trim()) {
+    const initial = typeof spec === "function" ? spec() : spec;
+    if (initial && initial.title) el.setAttribute("aria-label", initial.title);
+  }
 
   const onEnter = (e) => {
     // На тач-устройствах подсказки по наведению не бывает — там палец сразу

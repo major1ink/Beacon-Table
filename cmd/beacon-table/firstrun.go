@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -48,9 +47,9 @@ func setupFirstRun(api *apihttp.API, cfg Config, configFile, password string) {
 	if err := writeFirstRunFile(path, cfg, password); err != nil {
 		// Не фатально: пароль есть и в журнале, и в подсказке на странице
 		// входа. Каталог может быть только для чтения — не повод не играть.
-		slog.Warn("не удалось записать файл с паролем ДМ", "файл", path, "err", err)
+		slog.Warn("Не удалось записать файл с паролем ДМ", "file", path, "err", err)
 	} else {
-		log.Println("логин и пароль ДМ записаны в файл:", path)
+		slog.Info("Логин и пароль ДМ записаны в файл", "file", path)
 	}
 
 	api.SetFirstRun(&apihttp.FirstRun{
@@ -60,7 +59,7 @@ func setupFirstRun(api *apihttp.API, cfg Config, configFile, password string) {
 			// Пароль сменили — файл с временным больше не нужен и только
 			// сбивал бы с толку («а какой из них настоящий?»).
 			if err := os.Remove(path); err == nil {
-				slog.Info("временный пароль ДМ сменён, файл удалён", "файл", path)
+				slog.Info("Временный пароль ДМ сменён, файл удалён", "file", path)
 			}
 		},
 	})
@@ -72,7 +71,7 @@ func setupFirstRun(api *apihttp.API, cfg Config, configFile, password string) {
 func removeFirstRunFile(cfg Config, configFile string) {
 	path := firstRunFilePath(cfg, configFile)
 	if err := os.Remove(path); err == nil {
-		slog.Info("убран файл с временным паролем ДМ — пароль уже сменён", "файл", path)
+		slog.Info("Убран файл с временным паролем ДМ — пароль уже сменён", "file", path)
 	}
 }
 

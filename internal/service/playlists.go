@@ -12,7 +12,8 @@ import (
 // именованные плейлисты, в каждом — упорядоченный список треков.
 type PlaylistService interface {
 	List(ctx context.Context) ([]*domain.Playlist, error)
-	Create(ctx context.Context, name string) (*domain.Playlist, error)
+	// Create — kind: "" (обычный плейлист) | domain.PlaylistKindSFX.
+	Create(ctx context.Context, name, kind string) (*domain.Playlist, error)
 	Rename(ctx context.Context, id, name string) error
 	Delete(ctx context.Context, id string) error
 	AddTrack(ctx context.Context, playlistID, url, name string, volume float64, loop bool) (*domain.PlaylistTrack, error)
@@ -35,16 +36,19 @@ func (s *playlistService) List(ctx context.Context) ([]*domain.Playlist, error) 
 	return s.playlists.List(ctx)
 }
 
-func (s *playlistService) Create(ctx context.Context, name string) (*domain.Playlist, error) {
+func (s *playlistService) Create(ctx context.Context, name, kind string) (*domain.Playlist, error) {
 	name, err := validatePlaylistName(name)
 	if err != nil {
 		return nil, err
 	}
+	if kind != "" && kind != domain.PlaylistKindSFX {
+		return nil, &domain.ValidationError{Msg: "неизвестный тип плейлиста"}
+	}
 	id := newID()
-	if err := s.playlists.Create(ctx, id, name); err != nil {
+	if err := s.playlists.Create(ctx, id, name, kind); err != nil {
 		return nil, err
 	}
-	return &domain.Playlist{ID: id, Name: name}, nil
+	return &domain.Playlist{ID: id, Name: name, Kind: kind}, nil
 }
 
 func (s *playlistService) Rename(ctx context.Context, id, name string) error {

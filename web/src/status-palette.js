@@ -18,7 +18,8 @@
 // себя по свежим данным (см. refreshOpenPalette).
 import { fetchConditions } from "./api.js";
 import { icon } from "./icons.js";
-import { describeModifier, loadModifierTargets } from "./modifier-editor.js";
+import { describeModifier, loadTargets } from "./stat-editor.js";
+import { glyphNode } from "./condition-glyphs.js";
 
 // ---- CSS ----
 // Стили инжектятся из JS, а не лежат в dm.html, потому что палитра нужна
@@ -52,6 +53,8 @@ const CSS = `
 .status-cell:hover { opacity: 0.85; background: var(--surface-hover); }
 .status-cell.active { opacity: 1; box-shadow: inset 0 0 0 2px var(--cell-color, var(--accent)); }
 .status-cell img { width: 76%; height: 76%; object-fit: contain; }
+.status-cell .cond-glyph { color: var(--cell-color, var(--text)); display: inline-flex; line-height: 1; }
+.status-cell .cond-glyph svg { width: 60%; height: 60%; min-width: 18px; min-height: 18px; }
 .status-cell-level {
   position: absolute; right: 1px; bottom: 0; font-size: 10px; font-weight: 700;
   padding: 0 3px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text);
@@ -89,6 +92,8 @@ const CSS = `
 .status-chip.clickable { cursor: pointer; }
 .status-chip.clickable:hover { background: var(--surface-hover); }
 .status-chip img { width: 12px; height: 12px; object-fit: contain; }
+.status-chip .cond-glyph { color: var(--chip-color, var(--text)); display: inline-flex; line-height: 1; }
+.status-chip .cond-glyph svg { width: 13px; height: 13px; }
 .status-chip-add {
   display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
   border-radius: var(--radius-pill); border: 1px dashed var(--border); background: none;
@@ -163,9 +168,7 @@ function statusVisual(st, alt) {
     img.alt = alt || "";
     return img;
   }
-  const span = document.createElement("span");
-  span.textContent = (st && st.icon) || "❔";
-  return span;
+  return glyphNode(st && st.icon, "");
 }
 
 // statusTargetMsg — цель команды: ровно одно из двух полей (см.
@@ -275,7 +278,7 @@ export async function openStatusPalette({ x, y, target, send, statusesFor, title
   openPalette = { el, x, y, target, send, statusesFor, title, detailSlug: "", filter: "" };
   positionPalette(el, x, y);
   el.textContent = "Загрузка…";
-  await Promise.all([loadConditions(), loadModifierTargets()]);
+  await Promise.all([loadConditions(), loadTargets()]);
   if (!openPalette || openPalette.el !== el) return; // успели закрыть, пока грузились
   renderPalette(openPalette);
 }
@@ -351,7 +354,7 @@ function renderPalette(state) {
       cell.className = "status-cell" + (st ? " active" : "");
       if (cond.color) cell.style.setProperty("--cell-color", cond.color);
       cell.appendChild(statusVisual(cond, cond.name));
-      cell.title = `${cond.name}${slug ? ` (${slug})` : ""}\nЛКМ — повесить/снять, ПКМ — подробности`;
+      cell.title = `${cond.name}\nЛКМ — повесить/снять, ПКМ — подробности`;
       if (st && st.level) {
         const lvl = document.createElement("span");
         lvl.className = "status-cell-level";
@@ -364,13 +367,12 @@ function renderPalette(state) {
         r.textContent = st.rounds;
         cell.appendChild(r);
       }
-      // Карточка без slug'а вешать нечего — метка ссылается именно на него
-      // (см. domain.AppliedStatus). Не прячем такую карточку, а показываем
-      // погашенной с подсказкой: иначе ДМ не поймёт, почему заведённое им
-      // состояние «пропало» из палитры.
+      // Без ключа метке не на что ссылаться (см. domain.AppliedStatus);
+      // сервер выдаёт его каждой сохранённой карточке, так что сюда попадает
+      // только ещё не сохранённая.
       if (!slug) {
         cell.style.cursor = "not-allowed";
-        cell.title = `${cond.name}\nУ карточки не заполнен slug — заполни его в конструкторе, иначе состояние не на что повесить.`;
+        cell.title = `${cond.name}\nКарточка ещё не сохранена.`;
       } else {
         cell.onclick = () => {
           if (st) dispatch(send, target, "remove_status", { statusSlug: slug });
@@ -499,6 +501,7 @@ function detailBlock(cond, applied, state) {
   hiddenRow.className = "status-palette-row";
   const hidden = document.createElement("input");
   hidden.type = "checkbox";
+  hidden.className = "switch";
   hidden.checked = !!applied.hidden;
   // Перевесить метку с теми же параметрами, но с другим флагом — отдельной
   // команды «сменить скрытность» нет: apply_status по существующему slug'у

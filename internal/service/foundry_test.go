@@ -82,6 +82,7 @@ func (f *fakeRoom) SpawnPlayerToken(context.Context, string, string, string, str
 }
 func (f *fakeRoom) RemoveOwnerTokens(context.Context, string) (int, error) { return 0, nil }
 func (f *fakeRoom) Announce(string)                                        {}
+func (f *fakeRoom) ListScenes(context.Context) ([]domain.SceneCard, error) { return nil, nil }
 func (f *fakeRoom) ImportScenes(_ context.Context, scenes []*domain.SceneState) (int, error) {
 	f.scenes = append(f.scenes, scenes...)
 	return len(scenes), nil
@@ -110,8 +111,8 @@ func (f *fakeRoom) LinkTokensToMonsters(_ context.Context, monsterByActor map[st
 type fakePlaylists struct{ lists []*domain.Playlist }
 
 func (f *fakePlaylists) List(context.Context) ([]*domain.Playlist, error) { return f.lists, nil }
-func (f *fakePlaylists) Create(_ context.Context, name string) (*domain.Playlist, error) {
-	p := &domain.Playlist{ID: name, Name: name}
+func (f *fakePlaylists) Create(_ context.Context, name, kind string) (*domain.Playlist, error) {
+	p := &domain.Playlist{ID: name, Name: name, Kind: kind}
 	f.lists = append(f.lists, p)
 	return p, nil
 }

@@ -64,6 +64,7 @@ func (s *Store) List(ctx context.Context) ([]*domain.Condition, error) {
 		if err := json.Unmarshal(data, &c); err != nil {
 			continue
 		}
+		fillSlug(&c)
 		conds = append(conds, &c)
 	}
 	sortByName(conds)
@@ -82,7 +83,16 @@ func (s *Store) Get(ctx context.Context, id string) (*domain.Condition, error) {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, err
 	}
+	fillSlug(&c)
 	return &c, nil
+}
+
+// fillSlug — карточки, сохранённые до того, как ключ стал обязательным,
+// лежат на диске без slug; без него метку не на что повесить.
+func fillSlug(c *domain.Condition) {
+	if c.Slug == "" && c.ID != "" {
+		c.Slug = domain.DefaultConditionSlug(c.ID)
+	}
 }
 
 // writeAtomic — общая запись Create/Update: во временный файл и

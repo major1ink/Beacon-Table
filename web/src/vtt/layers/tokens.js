@@ -3,6 +3,7 @@ import { isVideoUrl } from "../../geometry.js";
 import { dashedCircle } from "../dash.js";
 import { createVideoTexture } from "../video-texture.js";
 import { gridUnitsToWorld } from "../light-geometry.js";
+import { isGlyph, glyphDataURL } from "../../condition-glyphs.js";
 
 // Токены. В отличие от старого draw(), который каждый кадр
 // заново рисовал ВСЕ токены с нуля, здесь — retained-mode: по одному
@@ -356,13 +357,15 @@ export function createTokensLayer(ctx) {
 
   // statusVisualNode — «картинка или глиф» одной метки, тот же контракт, что
   // и в HTML-палитре (web/src/status-palette.js: statusVisual): есть свой
-  // арт — рисуем его, нет — эмодзи из карточки.
+  // арт — рисуем его; SVG-глиф из набора — тем же спрайтом через data-URI
+  // (см. condition-glyphs.js), эмодзи старых карточек — текстом.
   function statusVisualNode(st, box) {
-    if (st.imageUrl) {
+    const url = st.imageUrl || (isGlyph(st.icon) ? glyphDataURL(st.icon, st.color) : "");
+    if (url) {
       const sprite = new Sprite(Texture.EMPTY);
       sprite.anchor.set(0.5, 0.5);
       sprite.statusBox = box;
-      bindStatusSprite(sprite, st.imageUrl);
+      bindStatusSprite(sprite, url);
       fitStatusSprite(sprite);
       return sprite;
     }

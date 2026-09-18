@@ -2,7 +2,7 @@
   "name": "Застигнут врасплох",
   "slug": "surprised",
   "source": "PHB'24",
-  "icon": "❗",
+  "icon": "alert",
   "color": "#fa5252",
   "defaultRounds": 1,
   "mechanics": "Помеха на бросок инициативы.",

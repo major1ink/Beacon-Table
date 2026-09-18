@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"beacon-table/internal/domain"
@@ -105,7 +105,7 @@ func (s *authService) SeedAdmin(ctx context.Context) (string, error) {
 		if err := s.accounts.SetPassword(ctx, acc.ID, hash, true); err != nil {
 			return "", err
 		}
-		log.Printf("ДМ ещё не сменил временный пароль. Логин: %s  Пароль: %s", seedAdminUsername, plain)
+		slog.Info("ДМ ещё не сменил временный пароль", "username", seedAdminUsername, "password", plain)
 		return plain, nil
 	}
 	plain := generatePassword()
@@ -119,7 +119,7 @@ func (s *authService) SeedAdmin(ctx context.Context) (string, error) {
 	}); err != nil {
 		return "", err
 	}
-	log.Printf("Создан аккаунт ДМ. Логин: %s  Пароль: %s", seedAdminUsername, plain)
+	slog.Info("Создан аккаунт ДМ", "username", seedAdminUsername, "password", plain)
 	return plain, nil
 }
 
@@ -141,7 +141,7 @@ func (s *authService) ResetAdminPassword(ctx context.Context) (string, error) {
 	if err := s.sessions.DeleteForAccount(ctx, acc.ID); err != nil {
 		return "", err
 	}
-	log.Printf("Пароль ДМ сброшен. Логин: %s  Пароль: %s", seedAdminUsername, plain)
+	slog.Info("Пароль ДМ сброшен", "username", seedAdminUsername, "password", plain)
 	return plain, nil
 }
 

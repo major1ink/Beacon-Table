@@ -20,21 +20,12 @@
 // Foundry, весь разбор — здесь, на клиенте (см. domain/item.go: комментарий
 // про "умный бланк").
 import { cleanFoundryText } from "./foundry-text.js";
+import { rarityFromFoundry } from "./item-rarity.js";
 
 function ru(dict, code) {
   if (!code) return "";
   return Object.prototype.hasOwnProperty.call(dict, code) ? dict[code] : code;
 }
-
-const RARITY_RU = {
-  common: "обычный",
-  uncommon: "необычный",
-  rare: "редкий",
-  veryRare: "очень редкий",
-  legendary: "легендарный",
-  artifact: "артефакт",
-  varies: "разное",
-};
 
 const DENOMINATION_RU = { pp: "пм.", gp: "зм.", ep: "эм.", sp: "см.", cp: "мм." };
 const WEIGHT_UNIT_RU = { lb: "фунт.", kg: "кг" };
@@ -386,7 +377,7 @@ export function mapFoundryItemJson(raw) {
     name,
     source: buildSource(sys.source),
     type: buildType(raw, sys),
-    rarity: ru(RARITY_RU, sys.rarity) || sys.rarity || "",
+    rarity: rarityFromFoundry(sys.rarity),
     requiresAttunement: isAttunementRequired(sys.attunement),
     cost: buildCost(sys.price),
     weight: buildWeight(sys.weight),

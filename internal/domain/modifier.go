@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"math"
 	"strconv"
 	"strings"
 )
@@ -34,9 +35,10 @@ type Modifier struct {
 	// игнорируется при применении (карточка при этом остаётся валидной:
 	// каталог мог быть собран новой версией приложения).
 	Target string `json:"target"`
-	// Mode — как меняем: ModifierAdd/Set/Min/Max. Порядок применения внутри
-	// одной цели фиксированный и не зависит от порядка записей: сначала
-	// set (перебивает базу), потом сумма всех add, потом min, потом max.
+	// Mode — как меняем: ModifierAdd/Set/Div/Min/Max. Порядок применения
+	// внутри одной цели фиксированный и не зависит от порядка записей:
+	// сначала set (перебивает базу), потом сумма всех add, потом div
+	// (делители перемножаются), потом min, потом max.
 	// Так «скорость 0» от опутанности и «+10 скорости» от зелья дают 0, а
 	// не гонку за то, кто записан последним.
 	Mode string `json:"mode"`
@@ -55,6 +57,31 @@ type Modifier struct {
 	// Note — подпись для лога и подсказки («огонь», «от кольчуги»). На
 	// расчёт не влияет.
 	Note string `json:"note,omitempty"`
+	// PerLevel — значение умножается на уровень метки (AppliedStatus.Level):
+	// истощение даёт «−5 скорости за уровень». Только для числовых значений;
+	// у формулы кубов и у меток без уровней множитель 1 (см. ScaleModifiers).
+	PerLevel bool `json:"perLevel,omitempty"`
+}
+
+// ScaleModifiers — модификаторы метки с учётом её уровня: у PerLevel число
+// умножается на level (не меньше 1), остальные копируются как есть. Так и
+// сервер (Room.effectiveStat), и лист персонажа (web/src/modifiers.js:
+// collectModifiers) считают одно и то же. Снимок в метке остаётся
+// неумноженным — уровень ДМ меняет после наложения.
+func ScaleModifiers(mods []Modifier, level int) []Modifier {
+	if level < 1 {
+		level = 1
+	}
+	out := make([]Modifier, 0, len(mods))
+	for _, m := range mods {
+		if m.PerLevel && level > 1 {
+			if v, ok := ParseModifierValue(m.Value); ok {
+				m.Value = strconv.Itoa(v * level)
+			}
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // Цели модификаторов — закрытый список: ровно те числа, которые приложение
@@ -91,6 +118,9 @@ const (
 	ModifierSet = "set" // заменить базу («скорость 0», «КД 13» от доспеха)
 	ModifierMin = "min" // не ниже значения
 	ModifierMax = "max" // не выше значения
+	// ModifierDiv — разделить на значение с округлением вниз: «скорость
+	// вдвое» у лежащего (value "2"). Делитель меньше 1 игнорируется.
+	ModifierDiv = "div"
 )
 
 // Периоды (см. Modifier.Period).
@@ -147,7 +177,7 @@ func TargetSupportsPeriod(target string) bool {
 // ValidModifierMode — известен ли режим.
 func ValidModifierMode(mode string) bool {
 	switch mode {
-	case ModifierAdd, ModifierSet, ModifierMin, ModifierMax:
+	case ModifierAdd, ModifierSet, ModifierMin, ModifierMax, ModifierDiv:
 		return true
 	}
 	return false
@@ -183,7 +213,7 @@ func ParseModifierValue(value string) (int, bool) {
 // web/src/modifiers.js, там же объяснение, почему копия, а не один код).
 //
 // Порядок фиксирован и не зависит от порядка записей в списке: set → add →
-// min → max (см. Modifier.Mode). Несколько set подряд — побеждает
+// div → min → max (см. Modifier.Mode). Несколько set подряд — побеждает
 // НАИМЕНЬШИЙ: два доспеха одновременно не надевают, а если такое вышло,
 // пусть лучше персонаж окажется слабее, чем сильнее, чем задумано.
 func ApplyModifiers(base int, target string, mods []Modifier) int {
@@ -192,6 +222,7 @@ func ApplyModifiers(base int, target string, mods []Modifier) int {
 	add := 0
 	minVal, hasMin := 0, false
 	maxVal, hasMax := 0, false
+	div := 1
 
 	for _, m := range mods {
 		if m.Target != target || m.Period != ModifierPeriodNone {
@@ -217,10 +248,18 @@ func ApplyModifiers(base int, target string, mods []Modifier) int {
 			if !hasMax || v < maxVal {
 				maxVal, hasMax = v, true
 			}
+		case ModifierDiv:
+			if v > 1 {
+				div *= v
+			}
 		}
 	}
 
 	result += add
+	if div > 1 {
+		// Округление вниз и для отрицательных — floor, а не усечение к нулю.
+		result = int(math.Floor(float64(result) / float64(div)))
+	}
 	if hasMin && result < minVal {
 		result = minVal
 	}

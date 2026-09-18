@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseWikilink, wikilink, findEntryByTitle } from "../src/board/links.js";
+import { parseWikilink, wikilink, findEntryByTitle, parseCardLink, sceneLink, sceneLinksOf } from "../src/board/links.js";
 
 const entries = [
   { id: "e1", title: "Таверна", folder: "Глава 1" },
@@ -51,4 +51,36 @@ test("findEntryByTitle на одноимённых берёт первую, на
   assert.equal(findEntryByTitle(entries, "Таверна").folder, "Глава 1");
   assert.equal(findEntryByTitle(entries, "Крепость"), null);
   assert.equal(findEntryByTitle([], "Таверна"), null);
+});
+
+test("sceneLink хранит имя сцены и разбирается обратно", () => {
+  const card = parseCardLink(sceneLink("s1", "Таверна «У Марго»"));
+  assert.deepEqual(card, { kind: "scene", id: "s1", name: "Таверна «У Марго»" });
+  assert.equal(parseCardLink("beacon://scene/s2").name, "Сцена");
+  assert.equal(parseCardLink("beacon://scene/"), null);
+});
+
+test("sceneLinksOf связывает сцены стрелкой в обе стороны", () => {
+  const card = (id, scene) => ({ id, type: "embeddable", link: sceneLink(scene, scene) });
+  const arrow = (id, from, to, extra = {}) => ({
+    id,
+    type: "arrow",
+    startBinding: { elementId: from },
+    endBinding: { elementId: to },
+    ...extra,
+  });
+  const links = sceneLinksOf([
+    card("a", "s1"),
+    card("b", "s2"),
+    card("c", "s3"),
+    { id: "r", type: "rectangle" },
+    arrow("ab", "a", "b"),
+    arrow("bc", "b", "c", { isDeleted: true }), // стёртая стрелка не связывает
+    arrow("cr", "c", "r"), // прямоугольник — не сцена
+    arrow("aa", "a", "a"), // петля
+    { id: "loose", type: "arrow", startBinding: null, endBinding: null },
+  ]);
+  assert.deepEqual([...links.get("s1")], ["s2"]);
+  assert.deepEqual([...links.get("s2")], ["s1"]);
+  assert.equal(links.has("s3"), false);
 });

@@ -16,6 +16,7 @@
 // работающей страницы в рамку вместо отдельной вкладки браузера.
 
 import { showConfirm } from "./modal.js";
+import { attachDrag } from "./drag.js";
 
 let styleInjected = false;
 function injectStyle() {
@@ -31,7 +32,7 @@ function injectStyle() {
     }
     .fw-titlebar {
       flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 10px;
-      background: #26262f; cursor: move; user-select: none; border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: #26262f; cursor: move; user-select: none; touch-action: none; border-bottom: 1px solid rgba(255,255,255,0.08);
     }
     .fw-title {
       flex: 1 1 auto; font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -151,6 +152,7 @@ export function openFloatingWindow({
   body.className = "fw-body";
   const iframe = document.createElement("iframe");
   iframe.className = "fw-iframe";
+  iframe.allowFullscreen = true; // кнопка «во весь экран» внутри страницы, см. fullscreen.js
   iframe.src = url;
   body.appendChild(iframe);
 
@@ -228,23 +230,18 @@ export function openFloatingWindow({
   window.addEventListener("message", onMessage);
 
   // Поднять окно наверх кликом по шапке...
-  titlebar.addEventListener("mousedown", (e) => {
-    if (e.target === popoutBtn || e.target === closeBtn) return;
-    bringToFront(el);
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startLeft = el.offsetLeft;
-    const startTop = el.offsetTop;
-    function onMove(ev) {
-      el.style.left = Math.max(0, startLeft + (ev.clientX - startX)) + "px";
-      el.style.top = Math.max(0, startTop + (ev.clientY - startY)) + "px";
-    }
-    function onUp() {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    }
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+  titlebar.addEventListener("pointerdown", () => bringToFront(el));
+  let startLeft = 0;
+  let startTop = 0;
+  attachDrag(titlebar, {
+    onStart: () => {
+      startLeft = el.offsetLeft;
+      startTop = el.offsetTop;
+    },
+    onMove: (dx, dy) => {
+      el.style.left = Math.max(0, startLeft + dx) + "px";
+      el.style.top = Math.max(0, startTop + dy) + "px";
+    },
   });
   // ...и кликом ГДЕ УГОДНО внутри самого листа — iframe того же origin, так
   // что его contentWindow можно слушать напрямую (клики внутри iframe не

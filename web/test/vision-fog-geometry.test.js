@@ -682,3 +682,67 @@ test("широкие радиусы света считаются на рабо�
     assert.equal(quantum, WORKING_QUANTUM, "рабочего кванта не хватило — расчёт свалился на аварийную лестницу");
   }
 });
+
+// ---- свет зон тумана (domain.FogArea.Light, см. applyZones в vision-plan.js) ----
+
+// zoneRect — зона-прямоугольник вокруг точки (cx, cy) со своим светом.
+function zoneRect(id, cx, cy, half, light, extra = {}) {
+  return {
+    id,
+    light,
+    points: [
+      { x: cx - half, y: cy - half },
+      { x: cx + half, y: cy - half },
+      { x: cx + half, y: cy + half },
+      { x: cx - half, y: cy + half },
+    ],
+    ...extra,
+  };
+}
+
+test("зона «ярко» освещена без единого источника света", () => {
+  const scene = makeScene([{ x: 800, y: 800 }], "");
+  scene.fogAreas = { z1: zoneRect("z1", 800, 800, 60, "bright", { revealed: true }) };
+  const plan = computeVisionPlan(scene, false, WORKING_QUANTUM);
+  assert.ok(plan.dimIslands.some(({ poly }) => multiContains([poly], 800, 800)), "зона не освещена");
+  // Яркое ядро — без колец затухания внутри зоны.
+  assert.ok(!plan.rings.some(({ multi }) => multiContains(multi, 800, 800)), "у яркой зоны появилась поволока");
+});
+
+test("зона «тускло» видна, но с поволокой тусклого света", () => {
+  const scene = makeScene([{ x: 800, y: 800 }], "");
+  scene.fogAreas = { z1: zoneRect("z1", 800, 800, 60, "dim", { revealed: true }) };
+  const plan = computeVisionPlan(scene, false, WORKING_QUANTUM);
+  assert.ok(plan.dimIslands.some(({ poly }) => multiContains([poly], 800, 800)), "тусклая зона не видна");
+  assert.ok(plan.rings.some(({ level, multi }) => level === 0 && multiContains(multi, 800, 800)), "у тусклой зоны нет поволоки");
+});
+
+test("зона «тьма» гасит глобальный свет и тёмное зрение", () => {
+  const dark = { x: 800, y: 800, ownerId: "p1", vision: { mode: "dark", range: 60 } };
+  const scene = makeScene([dark], "bright");
+  scene.fogAreas = { z1: zoneRect("z1", 800, 800, 40, "dark", { revealed: true }) };
+  const plan = computeVisionPlan(scene, false, WORKING_QUANTUM);
+  assert.ok(!plan.dimIslands.some(({ poly }) => multiContains([poly], 800, 800)), "тьма пробита светом или тёмным зрением");
+  assert.ok(plan.dimIslands.some(({ poly }) => multiContains([poly], 800, 880)), "тьма погасила карту снаружи зоны");
+});
+
+test("зона без света и скрытая зона на расчёт освещения не влияют", () => {
+  const base = makeScene([{ x: 800, y: 800 }], "");
+  const plain = { ...base, fogAreas: { z1: zoneRect("z1", 800, 800, 60, "", { revealed: true }) } };
+  assert.equal(computeVisionPlan(plain, false, WORKING_QUANTUM).dimIslands.length, 0);
+  // Скрытая зона — сплошная тьма поверх всего (manual-fog.js), её свет не считается.
+  const hidden = { ...base, fogAreas: { z1: zoneRect("z1", 800, 800, 60, "bright") } };
+  assert.equal(computeVisionPlan(hidden, false, WORKING_QUANTUM).dimIslands.length, 0);
+});
+
+test("смена света зоны сбрасывает кэш плана", () => {
+  const memo = {};
+  const scene = makeScene([{ x: 800, y: 800 }], "");
+  scene.fogAreas = { z1: zoneRect("z1", 800, 800, 60, "", { revealed: true }) };
+  const first = computeVisionPlanWithFallback(scene, false, memo);
+  assert.equal(first.plan.dimIslands.length, 0);
+  const lit = { ...scene, fogAreas: { z1: zoneRect("z1", 800, 800, 60, "bright", { revealed: true }) } };
+  const second = computeVisionPlanWithFallback(lit, false, memo);
+  assert.ok(!second.unchanged, "правка света зоны не заметилась планом");
+  assert.ok(second.plan.dimIslands.length > 0);
+});

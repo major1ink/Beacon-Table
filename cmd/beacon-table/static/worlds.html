@@ -43,11 +43,12 @@
     header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
     h1 { font-size: 20px; margin: 0; }
     #subtitle { opacity: 0.6; font-size: 12px; margin: 4px 0 20px; }
-    #logoutBtn {
+    #logoutBtn, #fullscreenBtn {
       background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px;
       padding: 6px 10px; border-radius: var(--radius); transition: background .12s ease, color .12s ease;
     }
-    #logoutBtn:hover { background: var(--surface); color: var(--text); }
+    #logoutBtn:hover, #fullscreenBtn:hover { background: var(--surface); color: var(--text); }
+    #fullscreenBtn { display: flex; align-items: center; }
 
     #list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
     #emptyMsg { font-size: 13px; opacity: 0.6; padding: 10px 2px; }
@@ -70,13 +71,9 @@
     #createBox { border-top: 1px solid var(--border); padding-top: 18px; }
     #createBox h2 { font-size: 13px; margin: 0 0 12px; opacity: 0.75; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     #createForm { display: flex; gap: 8px; }
-    #createForm input, #createForm select {
-      background: var(--surface); border: 1px solid var(--border); color: var(--text);
-      border-radius: var(--radius); padding: 9px 10px; font-size: 13px; font: inherit;
-    }
-    #createForm input { flex: 1 1 auto; min-width: 0; }
-    #createForm select { flex: 0 0 auto; }
-    #createForm input:focus, #createForm select:focus { outline: none; border-color: var(--accent); }
+    /* Вид полей — общий, theme.css. */
+    #createForm input { flex: 1 1 auto; }
+    #createForm select { flex: 0 0 auto; width: auto; }
     #createForm button {
       flex: 0 0 auto; border: none; border-radius: var(--radius); background: var(--green); color: #fff;
       font-size: 13px; font-weight: 600; padding: 9px 14px; cursor: pointer; transition: background .12s ease;
@@ -111,11 +108,7 @@
     #passwordBox h2 { font-size: 13px; margin: 0 0 6px; font-weight: 600; }
     .pwd-hint { font-size: 12px; opacity: 0.75; margin: 0 0 10px; line-height: 1.45; }
     #passwordForm { display: flex; gap: 8px; flex-wrap: wrap; }
-    #passwordForm input {
-      flex: 1 1 140px; min-width: 0; background: var(--surface); border: 1px solid var(--border); color: var(--text);
-      border-radius: var(--radius); padding: 9px 10px; font-size: 13px; font: inherit;
-    }
-    #passwordForm input:focus { outline: none; border-color: var(--accent); }
+    #passwordForm input { flex: 1 1 140px; width: auto; }
     #passwordForm button {
       flex: 0 0 auto; border: none; border-radius: var(--radius); background: var(--green); color: #fff;
       font-size: 13px; font-weight: 600; padding: 9px 14px; cursor: pointer;
@@ -132,14 +125,13 @@
       #createForm { flex-wrap: wrap; }
       #createForm input { flex: 1 1 100%; }
       #createForm select { flex: 1 1 auto; }
-      /* iOS зумит страницу на фокусе в поле мельче 16px. */
-      #createForm input, #createForm select, input, select { font-size: 16px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/worlds-BogJFctf.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-2Z6wmMg5.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
+  <script type="module" crossorigin src="/assets/worlds-DyKV2hM1.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-CRH5FZYK.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-1TVglnLx.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-CfSpnEwL.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-YC0bg39S.css">
 </head>
 <body>
   <div id="splash"></div>
@@ -151,6 +143,7 @@
         <div id="subtitle">выбери мир, чтобы продолжить — на столе может быть запущен только один</div>
       </div>
       <div id="headerActions">
+        <button id="fullscreenBtn" type="button"></button>
         <button id="logoutBtn">Выйти</button>
         <button id="shutdownBtn" title="Остановить программу: мир сохранится, стол закроется у всех">Выключить сервер</button>
       </div>

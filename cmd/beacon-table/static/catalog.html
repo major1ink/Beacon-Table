@@ -19,11 +19,6 @@
     }
     button { cursor: pointer; border: none; border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; padding: 8px 10px; transition: background .12s ease; }
     button:hover { background: var(--surface-hover); }
-    input[type="text"] {
-      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
-      border-radius: 8px; padding: 7px 10px; font: inherit; width: 100%;
-    }
-    input:focus { outline: none; border-color: var(--accent); }
     .hint { opacity: 0.6; font-size: 11px; line-height: 1.5; margin: 0 0 8px; }
 
     #topBar {
@@ -31,57 +26,109 @@
       border-bottom: 1px solid var(--border); background: var(--panel-bg);
     }
     #catalogTitle { font-weight: 700; font-size: 15px; margin-right: auto; }
-    #closeBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
+    #closeBtn, #fullscreenBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
 
-    #app { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    #app { flex: 1 1 auto; min-height: 0; display: flex; }
+    #catalogMain { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* Боковая колонка: поиск + фильтры (cfg.sidebar в catalog.js). */
+    #catalogSide {
+      display: flex; flex-direction: column; gap: 14px; flex: 0 0 200px;
+      padding: 14px 12px 14px 16px; overflow-y: auto; border-right: 1px solid var(--border);
+    }
+    .side-title { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin: 0 0 6px; }
+    .side-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .side-chip {
+      min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text-dim);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .side-chip:hover { background: var(--surface); color: var(--text); }
+    .side-chip.on { background: var(--accent-bg); border-color: var(--accent); color: var(--text); }
+    .side-list { display: flex; flex-direction: column; gap: 1px; }
+    .side-item {
+      display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+      background: none; padding: 6px 8px; border-radius: 8px; color: var(--text-dim); font-size: 12.5px;
+    }
+    .side-item:hover { background: var(--surface); color: var(--text); }
+    .side-item.on { background: var(--accent-bg); color: var(--text); }
+    .side-item svg { flex: 0 0 auto; }
+
+    .catalog-group { margin-top: 10px; }
+    .catalog-group:first-child { margin-top: 0; }
+    .catalog-group-title {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim);
+      padding: 0 0 6px 8px; border-bottom: 1px solid var(--border); margin-bottom: 2px;
+    }
 
     #catalogRows { display: flex; flex-direction: column; }
     #catalogRows:empty { display: none; }
 
-    #catalogCreateForm { display: flex; gap: 6px; }
+    #catalogTools { display: flex; gap: 6px; flex-wrap: wrap; }
+    #catalogCreateForm { display: flex; gap: 6px; flex: 1 1 220px; }
     #catalogCreateForm input { flex: 1 1 auto; }
-    #catalogCreateForm button { flex: 0 0 auto; }
+    #catalogCreateForm button { flex: 0 0 auto; white-space: nowrap; }
 
     #catalogImportLabel {
-      display: inline-flex; align-items: center; gap: 6px; width: fit-content;
-      background: var(--surface); font-size: 12px;
+      display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+      background: var(--surface); font-size: 12px; white-space: nowrap;
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
     }
     #catalogImportLabel:hover { background: var(--surface-hover); }
     #catalogImportProgress { display: none; }
     #catalogSystemHint { display: none; }
+
+    /* Телефон: фильтры сверху. */
+    @media (max-width: 640px) {
+      #app { flex-direction: column; overflow-y: auto; }
+      #catalogSide { flex: 0 0 auto; border-right: none; border-bottom: 1px solid var(--border); overflow: visible; padding: 12px 16px; }
+      #catalogMain { overflow: visible; flex: 1 0 auto; }
+      .side-list { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+      .side-item { width: auto; padding: 5px 9px; background: var(--panel-bg); border: 1px solid var(--border); }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/catalog-BV4LozJW.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-2Z6wmMg5.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-BWmvgheC.js">
-  <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-DwlZmB-I.js">
+  <script type="module" crossorigin src="/assets/catalog-De1U-bKi.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-CRH5FZYK.js">
+  <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
+  <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-Bt57mwnP.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-text-8Hqfz_vU.js">
-  <link rel="modulepreload" crossorigin href="/assets/monster-import-C8RqF1qG.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/condition-import-DxmzJH5i.js">
-  <link rel="modulepreload" crossorigin href="/assets/spell-import-DA2ETYNI.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-import-D5jhMcLo.js">
+  <link rel="modulepreload" crossorigin href="/assets/monster-import-tFVJ0eli.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
+  <link rel="modulepreload" crossorigin href="/assets/condition-import-BwXadBiG.js">
+  <link rel="modulepreload" crossorigin href="/assets/spell-import-BxnQzz3k.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-import-BRCrUdm8.js">
   <link rel="modulepreload" crossorigin href="/assets/reference-import-DZB4I6CS.js">
+  <link rel="modulepreload" crossorigin href="/assets/reference-kind-DdtxYxsX.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-1TVglnLx.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-CfSpnEwL.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-YC0bg39S.css">
 </head>
 <body>
   <div id="topBar">
     <span id="catalogTitle">—</span>
+    <button id="fullscreenBtn" type="button"></button>
     <button id="closeBtn" type="button" title="Закрыть"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
   </div>
   <div id="app">
-    <input type="text" id="catalogSearch" placeholder="🔍 Поиск по имени…" />
-    <div id="catalogRows"></div>
-    <form id="catalogCreateForm">
-      <input type="text" id="catalogCreateName" maxlength="120" placeholder="Имя новой записи" />
-      <button type="submit">+ Создать</button>
-    </form>
-    <label id="catalogImportLabel">Импортировать JSON (Foundry VTT — можно сразу несколько файлов)
-      <input type="file" id="catalogImportFile" accept="application/json,.json" multiple style="display:none;" />
-    </label>
-    <p class="hint" id="catalogImportProgress"></p>
-    <p class="hint" id="catalogSystemHint">Каталог «из коробки» — зашит в бинарник на этапе сборки, только для чтения. Открой запись и нажми «Клонировать», чтобы получить редактируемую копию в своей библиотеке.</p>
+    <aside id="catalogSide">
+      <input type="text" id="catalogSearch" placeholder="🔍 Поиск по имени…" />
+    </aside>
+    <div id="catalogMain">
+      <div id="catalogTools">
+        <form id="catalogCreateForm">
+          <input type="text" id="catalogCreateName" maxlength="120" placeholder="Имя новой записи" />
+          <button type="submit">+ Создать</button>
+        </form>
+        <label id="catalogImportLabel" title="Foundry VTT — можно выбрать сразу несколько файлов">Импорт JSON
+          <input type="file" id="catalogImportFile" accept="application/json,.json" multiple style="display:none;" />
+        </label>
+      </div>
+      <p class="hint" id="catalogImportProgress"></p>
+      <p class="hint" id="catalogSystemHint">Каталог «из коробки» — зашит в бинарник на этапе сборки, только для чтения. Открой запись и нажми «Клонировать», чтобы получить редактируемую копию в своей библиотеке.</p>
+      <div id="catalogRows"></div>
+    </div>
   </div>
 
 </body>

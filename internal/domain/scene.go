@@ -238,6 +238,9 @@ type TokenVision struct {
 // web/src/geometry.js:wallBlocksSight), во всём остальном обычная стена.
 // Door и Window взаимоисключающие — сервер сам сбрасывает одно при
 // выставлении другого (см. room.go: "set_wall_door"/"set_wall_window").
+//
+// DoorSound — звук этой двери при открытии/закрытии; пусто — берётся
+// SceneState.DoorSoundURL.
 
 type Wall struct {
 	ID           string  `json:"id"`
@@ -249,6 +252,7 @@ type Wall struct {
 	DoorState    string  `json:"doorState,omitempty"`
 	Window       bool    `json:"window,omitempty"`
 	LightThrough bool    `json:"lightThrough,omitempty"`
+	DoorSound    string  `json:"doorSound,omitempty"`
 }
 
 // Point — вершина многоугольника FogArea.
@@ -257,13 +261,62 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 
-// FogArea — область ручного тумана произвольной формы. Постоянный оверрайд
-// DM: скрывает область у игроков ДАЖЕ если туда дотягивается обзор токена.
+// FogArea — зона ручного тумана: замкнутый контур, который ДМ скрывает у
+// игроков ДАЖЕ там, куда дотягивается обзор токена, и снимает по своей
+// команде (Revealed), не стирая саму фигуру — её можно накрыть снова.
+//
+// Shape — как контур рисовался и как правится ("poly" — вершины по
+// одной, "rect" — 4 угла, "circle" — 36-угольник по центру и радиусу).
+// Points во всех трёх случаях уже готовый многоугольник: сервер, слой у
+// игрока и расчёт света работают с одним представлением, а фигуру
+// сохраняет только правка на клиенте (см. web/src/geometry.js:
+// fogAreaHandles/moveFogHandle).
+//
+// Скрытая зона (Revealed=false) у игрока — сплошная тьма: ни свет, ни
+// тёмное зрение в неё не заглядывают, это и есть туман. Light —
+// освещение внутри ПОКАЗАННОЙ зоны поверх обычного расчёта (см.
+// web/src/vtt/vision-plan.js): "" — без изменений, "bright"/"dim" —
+// зона освещена независимо от источников, "dark" — магическая тьма:
+// гасит и свет, и тёмное зрение. У скрытой зоны света не бывает
+// (Normalize сбрасывает): включить свет — значит показать зону.
 type FogArea struct {
-	ID     string  `json:"id"`
-	Points []Point `json:"points"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name,omitempty"`
+	Shape    string  `json:"shape,omitempty"`
+	Points   []Point `json:"points"`
+	Revealed bool    `json:"revealed,omitempty"`
+	Light    string  `json:"light,omitempty"`
 	// Locked — см. Token.Locked (общий для всех объектов карты флаг).
 	Locked bool `json:"locked,omitempty"`
+}
+
+// FogAreaShapes / FogAreaLights — допустимые значения FogArea.Shape/Light;
+// всё прочее сервер приводит к "" (см. service.Room.applyMutation).
+var (
+	FogAreaShapes = map[string]bool{"poly": true, "rect": true, "circle": true}
+	FogAreaLights = map[string]bool{"bright": true, "dim": true, "dark": true}
+)
+
+// maxFogAreaNameLen — предел имени зоны в рунах: имя видно только ДМ на
+// его карте и в списке зон, длиннее одной строки ему незачем.
+const maxFogAreaNameLen = 60
+
+// Normalize — санитария зоны от клиента: контур из < 3 точек не образует
+// фигуры (false), недопустимые Shape/Light — сброс, имя — обрезка.
+func (f *FogArea) Normalize() bool {
+	if f == nil || len(f.Points) < 3 {
+		return false
+	}
+	if !FogAreaShapes[f.Shape] {
+		f.Shape = ""
+	}
+	if !FogAreaLights[f.Light] || !f.Revealed {
+		f.Light = ""
+	}
+	if r := []rune(f.Name); len(r) > maxFogAreaNameLen {
+		f.Name = string(r[:maxFogAreaNameLen])
+	}
+	return true
 }
 
 // Building — здание: ЗАМКНУТЫЙ многоугольник (Points, как у FogArea — контур
@@ -368,6 +421,38 @@ type NoteMarker struct {
 	FoundryFolder string `json:"foundryFolder,omitempty"`
 }
 
+// Teleport — портал на карте: ведёт на сцену TargetSceneID либо к порталу
+// TargetTeleportID той же сцены (см. service/room_teleports.go). Label —
+// подпись, Size — диаметр в мировых px (0 — клетка сетки).
+type Teleport struct {
+	ID            string  `json:"id"`
+	X             float64 `json:"x"`
+	Y             float64 `json:"y"`
+	Size          float64 `json:"size,omitempty"`
+	Label         string  `json:"label"`
+	TargetSceneID string  `json:"targetSceneId"`
+	// TargetTeleportID — портал той же сцены; TargetSceneID тогда пуст.
+	TargetTeleportID string `json:"targetTeleportId,omitempty"`
+	// Locked — см. Token.Locked.
+	Locked bool `json:"locked,omitempty"`
+}
+
+// Local — портал ведёт к другому порталу той же сцены.
+func (t *Teleport) Local() bool {
+	return t.TargetTeleportID != ""
+}
+
+// Radius — половина Size, либо половина клетки сетки cell.
+func (t *Teleport) Radius(cell float64) float64 {
+	if t.Size > 0 {
+		return t.Size / 2
+	}
+	if cell <= 0 {
+		cell = 48
+	}
+	return cell / 2
+}
+
 // SceneState — состояние ОДНОЙ сцены: имя, фон, размер холста, туман войны,
 // сетка и все объекты на ней. Сцена — самостоятельная именованная сущность
 // со своим ID, НЕ привязанная к URL фона.
@@ -381,6 +466,8 @@ type SceneState struct {
 	Grid          GridSettings `json:"grid"`
 	AmbientURL    string       `json:"ambientUrl,omitempty"`
 	AmbientVolume float64      `json:"ambientVolume,omitempty"`
+	// DoorSoundURL — звук дверей сцены по умолчанию (см. Wall.DoorSound).
+	DoorSoundURL string `json:"doorSoundUrl,omitempty"`
 	// GlobalLight — освещение на ВСЮ карту (кнопки тулбара ДМ), независимо от
 	// расставленных источников света на токенах: "" — выключено (карта
 	// освещена только тем, что расставил DM — см. Token.Light), "dim" —
@@ -394,6 +481,7 @@ type SceneState struct {
 	FogAreas    map[string]*FogArea    `json:"fogAreas"`
 	Buildings   map[string]*Building   `json:"buildings"`
 	Drawings    map[string]*Drawing    `json:"drawings"`
+	Teleports   map[string]*Teleport   `json:"teleports"`
 }
 
 // NewScene создаёт пустую сцену с разумными дефолтами "из коробки".
@@ -421,6 +509,7 @@ func NewScene(id, name string) *SceneState {
 		FogAreas:    make(map[string]*FogArea),
 		Buildings:   make(map[string]*Building),
 		Drawings:    make(map[string]*Drawing),
+		Teleports:   make(map[string]*Teleport),
 	}
 }
 
@@ -488,6 +577,7 @@ type PublicScene struct {
 	Grid          GridSettings           `json:"grid"`
 	AmbientURL    string                 `json:"ambientUrl,omitempty"`
 	AmbientVolume float64                `json:"ambientVolume,omitempty"`
+	DoorSoundURL  string                 `json:"doorSoundUrl,omitempty"`
 	GlobalLight   string                 `json:"globalLight,omitempty"`
 	Tokens        map[string]*Token      `json:"tokens"`
 	NoteMarkers   map[string]*NoteMarker `json:"noteMarkers"`
@@ -495,6 +585,7 @@ type PublicScene struct {
 	FogAreas      map[string]*FogArea    `json:"fogAreas"`
 	Buildings     map[string]*Building   `json:"buildings"`
 	Drawings      map[string]*Drawing    `json:"drawings"`
+	Teleports     map[string]*Teleport   `json:"teleports"`
 }
 
 // SceneListEntry — одна строка в переключателе сцен DM. ViewerCount
@@ -504,6 +595,14 @@ type SceneListEntry struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	ViewerCount int    `json:"viewerCount"`
+}
+
+// SceneCard — сцена для карточки на доске (GET /api/scenes).
+type SceneCard struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	MapURL  string `json:"mapUrl,omitempty"`
+	Current bool   `json:"current"`
 }
 
 // RoomSnapshot — то, что repository.SceneRepository.Load отдаёт сервисному

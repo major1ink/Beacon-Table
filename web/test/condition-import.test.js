@@ -57,7 +57,7 @@ test("эффект внутри предмета даёт карточку со�
   assert.equal(cards[0].defaultRounds, 10);
   // Путь к иконке Foundry ведёт внутрь её установки — подставляем свой глиф,
   // а исходный путь оставляем следом в тегах.
-  assert.equal(cards[0].icon, "⚡");
+  assert.equal(cards[0].icon, "zap");
   assert.ok(cards[0].tags.includes("foundry:paralysis.svg"));
 });
 

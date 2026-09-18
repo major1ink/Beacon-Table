@@ -239,10 +239,14 @@ func extractFile(entry *zip.File, target string, budget int64) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("не удалось записать %s: %w", entry.Name, err)
 	}
-	defer out.Close()
 	n, err := io.Copy(out, io.LimitReader(rc, budget+1))
 	if err != nil {
+		_ = out.Close()
 		return n, fmt.Errorf("обрыв распаковки %s: %w", entry.Name, err)
+	}
+	// Ошибка записи может всплыть только на закрытии — не глотаем её.
+	if err := out.Close(); err != nil {
+		return n, fmt.Errorf("не удалось записать %s: %w", entry.Name, err)
 	}
 	if n > budget {
 		return n, fmt.Errorf("распакованный модуль больше допустимых %d ГиБ", int64(maxUnpackedBytes)>>30)

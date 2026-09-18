@@ -60,16 +60,18 @@ type Condition struct {
 	// Уникальность slug'а НЕ обеспечивается сервером (это тот же «умный
 	// бланк»): при двух карточках с одним slug побеждает та, что раньше в
 	// алфавитном списке — см. service.ConditionService.BySlug.
+	//
+	// В конструкторе slug не показывается: ДМ либо выбирает код Foundry из
+	// списка, либо не выбирает ничего — тогда сервер ставит ключ из ID
+	// (см. service.defaultConditionSlug), и пустым slug после сохранения не
+	// бывает.
 	Slug string `json:"slug,omitempty"`
 
-	// Icon — ОДИН символ-глиф (эмодзи), которым состояние рисуется значком
-	// на токене и чипом в трекере. Именно эмодзи, а не имя иконки из
-	// web/src/icons.js: значок нужен одновременно в HTML (палитра, чипы) и в
-	// WebGL-сцене, а в Pixi эмодзи ставится обычным PIXI.Text — тем же
-	// приёмом, которым уже нарисованы лампочка источника света и череп
-	// мёртвого токена (см. web/src/vtt/layers/tokens.js). SVG из icons.js
-	// пришлось бы растеризовать через data-URI отдельным путём ради того же
-	// результата.
+	// Icon — имя SVG-глифа из набора web/src/condition-glyphs.js ("eye-off"),
+	// которым состояние рисуется значком на токене, в палитре и чипом в
+	// трекере; в WebGL-сцене глиф растеризуется через data-URI в цвет
+	// карточки. Старые карточки могут хранить тут эмодзи — незнакомое имя
+	// клиент рисует текстом, как раньше.
 	Icon string `json:"icon,omitempty"`
 	// ImageURL — необязательный собственный арт вместо глифа (загружается в
 	// ту же категорию /uploads/tokens, что аватары и токен-арт монстров).
@@ -127,10 +129,18 @@ type Condition struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// DefaultConditionSlug — ключ карточки без кода Foundry: из ID, потому что
+// имя русское и в slug не ложится. Хранилище подставляет его старым
+// карточкам при чтении (заведены до того, как ключ стал обязательным), а
+// сервис — при сохранении. Префикс отличает такие ключи от кодов Foundry.
+func DefaultConditionSlug(id string) string {
+	return "c-" + id
+}
+
 // NewCondition создаёт пустую карточку состояния с разумными дефолтами —
 // как NewReference/NewItem/NewMonster/NewSpell, готова сразу отдаваться на
 // редактирование (или на импорт поверх себя, см.
 // web/src/condition-import.js).
 func NewCondition(id, name string) *Condition {
-	return &Condition{ID: id, Name: name, Icon: "❔"}
+	return &Condition{ID: id, Name: name, Icon: "question"}
 }

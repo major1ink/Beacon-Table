@@ -15,8 +15,10 @@ import { openStatusPalette, refreshStatusPalette } from "../status-palette.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDrawOptions } from "../draw-options.js";
 import { createBoardList } from "../board-list.js";
-import { attachTooltip } from "../tooltip.js";
-import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
+import { sceneLinksOf } from "../board/links.js";
+import { attachTooltip, hideTooltip, renderWithKeys } from "../tooltip.js";
+import { TOOL_HELP, PANEL_HELP, RAIL_HELP } from "../tool-help.js";
+import { zoneStyle } from "../vtt/layers/manual-fog.js";
 import {
   fetchMe,
   apiLogout,
@@ -55,6 +57,8 @@ import {
   movePlaylistTrack,
   fetchJournal,
   fetchMonster,
+  fetchBoards,
+  fetchBoardScene,
   fetchFoundryModules,
   checkFoundryModuleUpdates,
   deleteFoundryModule,
@@ -97,6 +101,8 @@ let isDemoGuest = false;
   // и лишь ССЫЛАЮТСЯ на vtt внутри колбэков — к моменту, когда пользователь
   // реально на что-то нажмёт, boot() уже успеет отработать.
   vtt = await initVTT({ canvasId: "scene", role: "dm" });
+  // Полоса хода появилась только сейчас и первый vtt:chromeInset пропустила.
+  updateChromeInset();
   // Плейлист двигает вперёд сам клиент ДМ (см. handleCueEnded ниже) —
   // vtt.cueAudio появляется только сейчас, поэтому слушатель вешаем здесь.
   vtt.cueAudio.addEventListener("ended", handleCueEnded);
@@ -107,13 +113,13 @@ let isDemoGuest = false;
   // (см. vtt/side-menu.js — vtt.sideMenu тоже появляется только теперь).
   // Сама панель — только лоток (кнопки-счётчики кубиков, модификатор, поле
   // формулы, "Бросить", см. dice.js); лог результатов — отдельный виджет
-  // (roll-log.js) в плашке #diceLog сверху канваса (см. dm.html).
+  // (roll-log.js) в плавающем окне поверх канваса, хост — #diceLog (см. dm.html).
   const dicePanel = vtt.sideMenu.addIcon(icon("dice", { size: 16 }), "Кубы", { width: 240, tip: PANEL_HELP.dice });
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
   initDiceRoller(diceControls, (msg) => vtt.send(msg));
-  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate", corner: "top-right" });
   document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   // Справочник — та же боковая колонка, следующая иконка после кубов (см.
   // compendium-menu.js: дерево категорий, само содержимое — отдельные
@@ -184,7 +190,6 @@ let isDemoGuest = false;
   boardsClose.title = "Закрыть";
   boardsClose.innerHTML = icon("close", { size: 13 });
   boardsClose.onclick = () => boardsPanel.close();
-  boardsPanel.style.position = "relative";
   boardsPanel.appendChild(boardsClose);
 
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });
@@ -251,10 +256,8 @@ function hideOwnerOnlyUI() {
 // стол закрывается, игроки отключаются, рестарт сервера не поднимет мир сам —
 // ДМ вернётся и выберет мир заново. Единственное место, где стол снимается;
 // сам заход на worlds.html его не трогает.
-// Полный экран (см. src/fullscreen.js) — в рейле значок без подписи.
-initFullscreenButton(document.getElementById("fullscreenBtn"), (active) =>
-  `<span class="rail-icon">${icon(active ? "fullscreen-exit" : "fullscreen", { size: 20 })}</span>`
-);
+// Полный экран (см. src/fullscreen.js) — в HUD зума.
+initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
 
 document.getElementById("worldsBtn")?.addEventListener("click", async () => {
   if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;
@@ -263,7 +266,7 @@ document.getElementById("worldsBtn")?.addEventListener("click", async () => {
 });
 
 // ================= выезжающая панель: реестр "открыть → подгрузить данные" =================
-// Разделы "Аккаунты"/"Плейлисты"/"Настроить сцену" регистрируют сюда коллбэк
+// Разделы "Аккаунты"/"Плейлисты"/"Сцена" регистрируют сюда коллбэк
 // сразу при определении (выше по файлу, чем сама механика рейла+панели ниже),
 // поэтому panelOpenHandlers/onPanelOpen объявлены здесь, в самом начале.
 const panelOpenHandlers = {};
@@ -678,6 +681,7 @@ const wallBtn = document.getElementById("wallBtn");
 const buildingBtn = document.getElementById("buildingBtn");
 const fogBtn = document.getElementById("fogBtn");
 const rulerBtn = document.getElementById("rulerBtn");
+const teleportBtn = document.getElementById("teleportBtn");
 
 function toggleTool(name) {
   const current = document.querySelector("[data-tool].active");
@@ -688,10 +692,12 @@ wallBtn.dataset.tool = "wall";
 buildingBtn.dataset.tool = "building";
 fogBtn.dataset.tool = "fog";
 rulerBtn.dataset.tool = "ruler";
+teleportBtn.dataset.tool = "teleport";
 wallBtn.onclick = () => toggleTool("wall");
 buildingBtn.onclick = () => toggleTool("building");
 fogBtn.onclick = () => toggleTool("fog");
 rulerBtn.onclick = () => toggleTool("ruler");
+teleportBtn.onclick = () => toggleTool("teleport");
 
 const gridEditDone = document.getElementById("gridEditDone");
 document.addEventListener("vtt:toolChanged", (e) => {
@@ -699,6 +705,7 @@ document.addEventListener("vtt:toolChanged", (e) => {
   buildingBtn.classList.toggle("active", e.detail === "building");
   fogBtn.classList.toggle("active", e.detail === "fog");
   rulerBtn.classList.toggle("active", e.detail === "ruler");
+  teleportBtn.classList.toggle("active", e.detail === "teleport");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
 });
 
@@ -709,10 +716,11 @@ attachTooltip(wallBtn, TOOL_HELP.wall);
 attachTooltip(buildingBtn, TOOL_HELP.building);
 attachTooltip(fogBtn, TOOL_HELP.fog);
 attachTooltip(rulerBtn, TOOL_HELP.ruler);
+attachTooltip(teleportBtn, TOOL_HELP.teleport);
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
-  showSidePanelSection("sceneSettings"); // вернуться в раздел с уже актуальными offsetX/Y
-  openSceneSettings("grid");
+  showSidePanelSection("scene"); // вернуться в раздел с уже актуальными offsetX/Y
+  openSceneSettings(currentSceneId, "grid");
 };
 
 // ================= глобальный свет "на всю карту" =================
@@ -850,6 +858,8 @@ function lightFields() {
 }
 function setLightFieldsVisible(on) {
   for (const el of lightFields()) el.classList.toggle("visible", on);
+  // Поля раскрылись — меню подросло и могло уехать за нижний край экрана.
+  clampMenu(tokenMenu);
 }
 function syncLightFieldsVisibility(checkbox) {
   setLightFieldsVisible(checkbox.checked);
@@ -873,13 +883,12 @@ document.addEventListener("vtt:wallPointContextMenu", (e) => {
   closeCanvasMenu();
   closeTokenMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
   menuWallIds = [...new Set(e.detail.refs.map((r) => r.wallId))];
-  wallPointMenu.style.left = e.detail.pageX + "px";
-  wallPointMenu.style.top = e.detail.pageY + "px";
-  wallPointMenu.style.display = "block";
+  placeMenu(wallPointMenu, e.detail.pageX, e.detail.pageY);
 });
 
 wallPointMenuDelete.onclick = () => {
@@ -887,11 +896,18 @@ wallPointMenuDelete.onclick = () => {
   closeWallPointMenu();
 };
 
-// ================= меню фигуры ручного тумана (ПКМ внутри контура) =================
-// Раньше ПКМ сразу удалял фигуру без подтверждения — теперь фигуру можно ещё
-// и двигать/переформовывать (см. interaction.js), поэтому снос вынесен в
-// меню, как у токена/значка заметки, а не остаётся единственным ПКМ-действием.
+// ================= меню зоны тумана (ПКМ внутри контура) =================
+// То же, что строка зоны в панели «Туман» (см. renderFogZoneList), но под
+// курсором: показать/скрыть игрокам, переименовать, свет внутри, замок,
+// удалить. Снос — только отсюда и из панели, не голым ПКМ: зону можно
+// двигать/переформовывать (interaction.js), случайный клик не должен её
+// сносить.
 const fogAreaMenu = document.getElementById("fogAreaMenu");
+const fogAreaMenuTitle = document.getElementById("fogAreaMenuTitle");
+const fogAreaMenuRevealBtn = document.getElementById("fogAreaMenuRevealBtn");
+const fogAreaMenuRevealLabel = document.getElementById("fogAreaMenuRevealLabel");
+const fogAreaMenuRenameBtn = document.getElementById("fogAreaMenuRenameBtn");
+const fogAreaMenuLights = document.getElementById("fogAreaMenuLights");
 const fogAreaMenuDelete = document.getElementById("fogAreaMenuDelete");
 const fogAreaMenuLockBtn = document.getElementById("fogAreaMenuLockBtn");
 const fogAreaMenuLockLabel = document.getElementById("fogAreaMenuLockLabel");
@@ -902,6 +918,30 @@ function closeFogAreaMenu() {
   menuFogAreaId = null;
 }
 
+// FOG_LIGHT_LABELS — подписи режимов света зоны (domain.FogArea.Light) —
+// общие для меню, списка и подсказок.
+const FOG_LIGHT_LABELS = { "": "без света", bright: "ярко", dim: "тускло", dark: "тьма" };
+
+// updateFogArea — правка полей зоны: interaction.js накладывает patch на
+// живую зону и шлёт её целиком (см. vtt:updateFogArea).
+function updateFogArea(id, patch) {
+  document.dispatchEvent(new CustomEvent("vtt:updateFogArea", { detail: { id, patch } }));
+}
+
+// fogZoneTitle — имя зоны для меню/окон; безымянная — по фигуре.
+function fogZoneTitle(zone) {
+  if (zone.name) return zone.name;
+  return zone.shape === "rect" ? "Прямоугольник" : zone.shape === "circle" ? "Круг" : "Зона тумана";
+}
+
+async function renameFogArea(id) {
+  const zone = (vtt.getScene().fogAreas || {})[id];
+  if (!zone) return;
+  const name = await showPrompt("Название зоны — видно только ДМ:", { title: "Переименовать зону", okLabel: "Сохранить", value: zone.name || "" });
+  if (name == null) return;
+  updateFogArea(id, { name: name.trim().slice(0, 60) });
+}
+
 document.addEventListener("vtt:fogAreaContextMenu", (e) => {
   closeCanvasMenu();
   closeTokenMenu();
@@ -910,11 +950,43 @@ document.addEventListener("vtt:fogAreaContextMenu", (e) => {
   closeWallMenu();
   closeBuildingMenu();
   menuFogAreaId = e.detail.id;
-  wireMapObjectLock("fogArea", menuFogAreaId, fogAreaMenuLockBtn, fogAreaMenuLockLabel, [fogAreaMenuDelete], closeFogAreaMenu);
-  fogAreaMenu.style.left = e.detail.pageX + "px";
-  fogAreaMenu.style.top = e.detail.pageY + "px";
-  fogAreaMenu.style.display = "block";
+  const zone = (vtt.getScene().fogAreas || {})[menuFogAreaId] || e.detail.area || {};
+  fogAreaMenuTitle.textContent = fogZoneTitle(zone);
+  fogAreaMenuRevealLabel.textContent = zone.revealed ? "Скрыть от игроков" : "Показать игрокам";
+  for (const b of fogAreaMenuLights.querySelectorAll("[data-light]")) {
+    b.classList.toggle("on", (zone.light || "") === b.dataset.light);
+    b.setAttribute("aria-checked", String((zone.light || "") === b.dataset.light));
+  }
+  wireMapObjectLock(
+    "fogArea",
+    menuFogAreaId,
+    fogAreaMenuLockBtn,
+    fogAreaMenuLockLabel,
+    [fogAreaMenuDelete, fogAreaMenuRenameBtn, fogAreaMenuLights],
+    closeFogAreaMenu
+  );
+  placeMenu(fogAreaMenu, e.detail.pageX, e.detail.pageY);
 });
+
+// Показать/скрыть — доступно и у запертой зоны: замок бережёт контур от
+// случайного драга, а снятие тумана — то, ради чего зоны и рисуют.
+fogAreaMenuRevealBtn.onclick = () => {
+  if (!menuFogAreaId) return;
+  const zone = (vtt.getScene().fogAreas || {})[menuFogAreaId];
+  if (zone) updateFogArea(menuFogAreaId, { revealed: !zone.revealed });
+  closeFogAreaMenu();
+};
+fogAreaMenuRenameBtn.onclick = () => {
+  const id = menuFogAreaId;
+  closeFogAreaMenu();
+  if (id) renameFogArea(id);
+};
+fogAreaMenuLights.onclick = (e) => {
+  const b = e.target.closest("[data-light]");
+  if (!b || !menuFogAreaId) return;
+  updateFogArea(menuFogAreaId, { light: b.dataset.light });
+  closeFogAreaMenu();
+};
 
 fogAreaMenuDelete.onclick = () => {
   if (!menuFogAreaId) return;
@@ -935,6 +1007,7 @@ fogAreaMenuDelete.onclick = () => {
 const wallMenu = document.getElementById("wallMenu");
 const wallMenuToggleOpen = document.getElementById("wallMenuToggleOpen");
 const wallMenuToggleLock = document.getElementById("wallMenuToggleLock");
+const wallMenuDoorSound = document.getElementById("wallMenuDoorSound");
 const wallMenuMakeDoor = document.getElementById("wallMenuMakeDoor");
 const wallMenuMakeWindow = document.getElementById("wallMenuMakeWindow");
 const wallMenuMakeSecret = document.getElementById("wallMenuMakeSecret");
@@ -955,6 +1028,7 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeBuildingMenu();
   menuWallId = e.detail.id;
@@ -980,6 +1054,7 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   wallMenuToggleOpen.textContent = menuWall && menuWall.doorState === "open" ? "🚪 Закрыть" : "🚪 Открыть";
   wallMenuToggleLock.style.display = isSelectMode && isDoor ? "flex" : "none";
   wallMenuToggleLock.textContent = menuWall && menuWall.doorState === "locked" ? "🔓 Отпереть" : "🔒 Запереть";
+  wallMenuDoorSound.style.display = isSelectMode && isDoor ? "flex" : "none";
   wallMenuMakeDoor.style.display = isWallMode && isPlain ? "flex" : "none";
   wallMenuMakeWindow.style.display = isWallMode && isPlain ? "flex" : "none";
   wallMenuMakeSecret.style.display = isWallMode && isDoor && !isSecret ? "flex" : "none";
@@ -987,9 +1062,7 @@ document.addEventListener("vtt:wallContextMenu", (e) => {
   wallMenuUnsetSpecial.style.display = isWallMode && (isDoor || isWindow) ? "flex" : "none";
   wallMenuDelete.style.display = isWallMode ? "flex" : "none";
 
-  wallMenu.style.left = e.detail.pageX + "px";
-  wallMenu.style.top = e.detail.pageY + "px";
-  wallMenu.style.display = "block";
+  placeMenu(wallMenu, e.detail.pageX, e.detail.pageY);
 });
 
 wallMenuToggleOpen.onclick = () => {
@@ -1002,6 +1075,37 @@ wallMenuToggleLock.onclick = () => {
   const locked = menuWall.doorState !== "locked";
   document.dispatchEvent(new CustomEvent("vtt:setDoorLock", { detail: { id: menuWallId, locked } }));
   closeWallMenu();
+};
+// звук отдельной двери перекрывает общий звук дверей сцены (fDoorSoundUrl)
+wallMenuDoorSound.onclick = async () => {
+  if (!menuWallId || !menuWall) return;
+  const wallId = menuWallId;
+  const current = menuWall.doorSound || "";
+  closeWallMenu();
+  let select;
+  await openModal({
+    title: "Звук двери",
+    okLabel: "Сохранить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const field = document.createElement("div");
+      field.className = "field";
+      field.innerHTML = "<label>Играет при открытии и закрытии</label>";
+      select = document.createElement("select");
+      fillDoorSoundSelect(select, current, "— как у всей сцены —");
+      field.appendChild(select);
+      body.appendChild(field);
+      const hint = document.createElement("p");
+      hint.className = "bt-modal-text dim";
+      hint.textContent = "Загрузить новый файл можно в «Плейлисты» или «Сцена → ⚙ → Аудио».";
+      body.appendChild(hint);
+      return select;
+    },
+    onOk: () => {
+      document.dispatchEvent(new CustomEvent("vtt:setDoorSound", { detail: { id: wallId, url: select.value } }));
+    },
+    onCancel: () => undefined,
+  });
 };
 wallMenuMakeDoor.onclick = () => {
   if (!menuWallId) return;
@@ -1060,13 +1164,12 @@ document.addEventListener("vtt:buildingContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   menuBuildingId = e.detail.id;
   wireMapObjectLock("building", menuBuildingId, buildingMenuLockBtn, buildingMenuLockLabel, [buildingMenuDelete], closeBuildingMenu);
-  buildingMenu.style.left = e.detail.pageX + "px";
-  buildingMenu.style.top = e.detail.pageY + "px";
-  buildingMenu.style.display = "block";
+  placeMenu(buildingMenu, e.detail.pageX, e.detail.pageY);
 });
 
 buildingMenuDelete.onclick = () => {
@@ -1104,14 +1207,12 @@ document.addEventListener("vtt:noteMarkerContextMenu", (e) => {
     [noteMarkerResizeBtn, noteMarkerDeleteBtn],
     closeNoteMarkerMenu
   );
-  noteMarkerMenu.style.left = e.detail.pageX + "px";
-  noteMarkerMenu.style.top = e.detail.pageY + "px";
-  noteMarkerMenu.style.display = "flex";
+  placeMenu(noteMarkerMenu, e.detail.pageX, e.detail.pageY, "flex");
 });
 
 noteMarkerResizeBtn.onclick = () => {
   if (!menuNoteMarkerId) return;
-  document.dispatchEvent(new CustomEvent("vtt:armNoteMarkerResize", { detail: { id: menuNoteMarkerId } }));
+  document.dispatchEvent(new CustomEvent("vtt:armMapObjectResize", { detail: { kind: "noteMarker", id: menuNoteMarkerId } }));
   closeNoteMarkerMenu();
   showAlert("Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер значка" });
 };
@@ -1122,6 +1223,238 @@ noteMarkerDeleteBtn.onclick = () => {
   closeNoteMarkerMenu();
 };
 
+// ================= порталы (инструмент «Телепорт», ПКМ по порталу) =================
+// Портал ведёт на сцену, связанную с текущей на доске (sceneLinksOf), либо к
+// порталу этой же карты (targetTeleportId); перенос делает сервер.
+const teleportMenu = document.getElementById("teleportMenu");
+const teleportMenuLockBtn = document.getElementById("teleportMenuLockBtn");
+const teleportMenuLockLabel = document.getElementById("teleportMenuLockLabel");
+const teleportMoveAllBtn = document.getElementById("teleportMoveAllBtn");
+const teleportTargetBtn = document.getElementById("teleportTargetBtn");
+const teleportResizeBtn = document.getElementById("teleportResizeBtn");
+const teleportDeleteBtn = document.getElementById("teleportDeleteBtn");
+let menuTeleportId = null;
+
+function closeTeleportMenu() {
+  teleportMenu.style.display = "none";
+  menuTeleportId = null;
+}
+
+document.addEventListener("vtt:teleportContextMenu", (e) => {
+  closeCanvasMenu();
+  closeTokenMenu();
+  closeWallPointMenu();
+  closeNoteMarkerMenu();
+  closeTeleportMenu();
+  closeFogAreaMenu();
+  closeWallMenu();
+  closeBuildingMenu();
+  menuTeleportId = e.detail.id;
+  wireMapObjectLock("teleport", menuTeleportId, teleportMenuLockBtn, teleportMenuLockLabel, [teleportTargetBtn, teleportResizeBtn, teleportDeleteBtn], closeTeleportMenu);
+  placeMenu(teleportMenu, e.detail.pageX, e.detail.pageY, "flex");
+});
+
+// linkedScenesOf — соседи сцены по стрелкам на всех досках:
+// [{scene, boards}], boards — названия досок, где связь нарисована.
+async function linkedScenesOf(sceneId) {
+  let boards = [];
+  try {
+    boards = await fetchBoards();
+  } catch {
+    boards = [];
+  }
+  const via = new Map();
+  await Promise.all(
+    boards.map(async (b) => {
+      let scene;
+      try {
+        scene = await fetchBoardScene(b.id);
+      } catch {
+        return;
+      }
+      for (const to of sceneLinksOf(scene.elements).get(sceneId) || []) {
+        if (!via.has(to)) via.set(to, []);
+        via.get(to).push(b.name);
+      }
+    })
+  );
+  return [...via]
+    .map(([id, names]) => ({ scene: sceneList.find((s) => s.id === id), boards: names }))
+    .filter((r) => r.scene);
+}
+
+// teleportName — подпись портала в списках, как на карте; без подписи — координаты.
+function teleportName(t) {
+  if (!t.label) return `портал (${Math.round(t.x)}; ${Math.round(t.y)})`;
+  return t.targetSceneId && !t.targetTeleportId ? "→ " + t.label : t.label;
+}
+
+// pickTeleportTarget — выбор цели портала: связанная сцена либо портал этой
+// карты. Возвращает {label, targetSceneId, targetTeleportId} или null; self —
+// id правимого портала, исключается из списка.
+async function pickTeleportTarget(current, self) {
+  const linked = await linkedScenesOf(currentSceneId);
+  const local = Object.values(vtt.getScene().teleports || {}).filter((t) => t.id !== self);
+  if (!linked.length && !local.length) {
+    showAlert(
+      "Порталу некуда вести: на карте нет других порталов, а сцена ни с чем не связана. Поставь пару порталов (Ctrl + перетягивание в инструменте «Телепорт») или свяжи сцену стрелкой с другой на доске.",
+      { title: "Телепорт" }
+    );
+    return null;
+  }
+  const targets = [
+    ...linked.map(({ scene, boards }) => ({
+      key: "scene:" + scene.id,
+      group: "Сцены",
+      text: scene.name + " · " + boards.join(", "),
+      value: { label: scene.name, targetSceneId: scene.id, targetTeleportId: "" },
+    })),
+    ...local.map((t) => ({
+      key: "tp:" + t.id,
+      group: "Порталы этой карты",
+      text: teleportName(t),
+      value: { label: t.label, targetSceneId: "", targetTeleportId: t.id },
+    })),
+  ];
+  let select;
+  return openModal({
+    title: "Куда ведёт портал",
+    okLabel: "Готово",
+    buildBody: (body) => {
+      select = document.createElement("select");
+      select.className = "bt-modal-input";
+      const groups = new Map();
+      for (const t of targets) {
+        if (!groups.has(t.group)) {
+          const g = document.createElement("optgroup");
+          g.label = t.group;
+          groups.set(t.group, g);
+          select.appendChild(g);
+        }
+        const opt = document.createElement("option");
+        opt.value = t.key;
+        opt.textContent = t.text;
+        groups.get(t.group).appendChild(opt);
+      }
+      const cur = current && (current.targetTeleportId ? "tp:" + current.targetTeleportId : "scene:" + current.targetSceneId);
+      if (cur && targets.some((t) => t.key === cur)) select.value = cur;
+      body.appendChild(select);
+      return select;
+    },
+    onOk: () => targets.find((t) => t.key === select.value)?.value || null,
+    onCancel: () => null,
+  });
+}
+
+function newTeleportId() {
+  counter++;
+  return "tp-" + Date.now() + "-" + counter;
+}
+
+async function placeTeleportAt(x, y) {
+  const target = await pickTeleportTarget();
+  if (!target) return;
+  vtt.send({ type: "add_teleport", teleport: { id: newTeleportId(), x, y, ...target } });
+}
+
+// placeTeleportPair — пара порталов карты, ведущих друг к другу, с общей подписью «Портал N».
+function placeTeleportPair(from, to) {
+  const used = new Set(Object.values(vtt.getScene().teleports || {}).map((t) => t.label));
+  let n = 1;
+  while (used.has("Портал " + n)) n++;
+  const label = "Портал " + n;
+  const a = newTeleportId();
+  const b = newTeleportId();
+  vtt.send({ type: "add_teleport", teleport: { id: a, x: from.x, y: from.y, label, targetSceneId: "", targetTeleportId: b } });
+  vtt.send({ type: "add_teleport", teleport: { id: b, x: to.x, y: to.y, label, targetSceneId: "", targetTeleportId: a } });
+}
+
+document.addEventListener("vtt:placeTeleport", (e) => placeTeleportAt(e.detail.x, e.detail.y));
+document.addEventListener("vtt:placeTeleportPair", (e) => placeTeleportPair(e.detail.from, e.detail.to));
+
+teleportTargetBtn.onclick = async () => {
+  const t = menuTeleportId && vtt.getScene().teleports?.[menuTeleportId];
+  closeTeleportMenu();
+  if (!t) return;
+  const target = await pickTeleportTarget(t, t.id);
+  if (!target) return;
+  vtt.send({ type: "move_teleport", teleport: { ...t, ...target } });
+};
+
+teleportResizeBtn.onclick = () => {
+  if (!menuTeleportId) return;
+  document.dispatchEvent(new CustomEvent("vtt:armMapObjectResize", { detail: { kind: "teleport", id: menuTeleportId } }));
+  closeTeleportMenu();
+  showAlert("Теперь потяни от центра портала на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер портала" });
+};
+
+teleportDeleteBtn.onclick = () => {
+  if (!menuTeleportId) return;
+  document.dispatchEvent(new CustomEvent("vtt:removeTeleport", { detail: { id: menuTeleportId } }));
+  closeTeleportMenu();
+};
+
+// teleportStillLinked — портал на месте и его цель (парный портал или связанная сцена) ещё есть.
+async function teleportStillLinked(teleportId) {
+  const t = vtt.getScene().teleports?.[teleportId];
+  if (!t) {
+    showAlert("Портала на карте уже нет.", { title: "Телепорт" });
+    return null;
+  }
+  if (t.targetTeleportId) {
+    if (!vtt.getScene().teleports?.[t.targetTeleportId]) {
+      showAlert("Парного портала на карте уже нет — портал не работает.", { title: "Телепорт" });
+      return null;
+    }
+    return t;
+  }
+  const linked = await linkedScenesOf(currentSceneId);
+  if (!linked.some((l) => l.scene.id === t.targetSceneId)) {
+    showAlert(`Сцена «${t.label}» больше не связана с текущей на доске — портал не работает.`, { title: "Телепорт" });
+    return null;
+  }
+  return t;
+}
+
+// «Переместить всех персонажей» — токены игроков и персонажей текущей сцены.
+teleportMoveAllBtn.onclick = async () => {
+  const id = menuTeleportId;
+  closeTeleportMenu();
+  if (!id) return;
+  const t = await teleportStillLinked(id);
+  if (!t) return;
+  const tokens = Object.values(vtt.getScene().tokens || {}).filter((tok) => tok.ownerId || tok.characterId);
+  if (!tokens.length) {
+    showAlert("На сцене нет ни одного персонажа.", { title: "Телепорт" });
+    return;
+  }
+  const ok = await showConfirm(
+    t.targetTeleportId
+      ? `Переместить ${tokens.length} перс. к парному порталу «${teleportName(t)}»?`
+      : `Переместить ${tokens.length} перс. на сцену «${t.label}»? Стол переключится туда же.`,
+    { title: "Телепорт", okLabel: "Переместить" }
+  );
+  if (!ok) return;
+  vtt.send({ type: "teleport_tokens", id, tokenIds: tokens.map((tok) => tok.id) });
+};
+
+// Игрок встал на портал (см. room_teleports.go: noticeTeleport) — спросить ДМ.
+document.addEventListener("vtt:teleportRequest", async (e) => {
+  const d = e.detail;
+  if (!d.targetTeleportId && d.targetSceneId === currentSceneId) return;
+  const who = `${d.playerName || "Игрок"}: «${d.tokenLabel || "токен"}»`;
+  const ok = await showConfirm(
+    d.targetTeleportId
+      ? `${who} встал на портал «${d.targetLabel || "портал"}». Переместить к парному порталу?`
+      : `${who} встал на портал в сцену «${d.targetSceneName}». Переместить? Стол переключится туда же.`,
+    { title: "Телепорт", okLabel: "Переместить", cancelLabel: "Не пускать" }
+  );
+  if (!ok) return;
+  const t = await teleportStillLinked(d.teleportId);
+  if (!t) return;
+  vtt.send({ type: "teleport_tokens", id: d.teleportId, tokenIds: [d.tokenId] });
+});
+
 function updateLightToggleBtnLabel() {
   tokenMenuLightToggleBtn.innerHTML = icon("bulb", { size: 14 }) + " " + (menuLightEnabled ? "Выключить свет" : "Включить свет");
 }
@@ -1130,6 +1463,7 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   closeCanvasMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
@@ -1272,28 +1606,41 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLockLabel.textContent = menuTokenLocked ? "Разблокировать" : "Заблокировать";
   applyTokenMenuLockState();
 
-  placeTokenMenu(pageX, pageY);
+  placeMenu(tokenMenu, pageX, pageY);
 });
 
-// placeTokenMenu — меню у курсора, но целиком в пределах окна. Раньше оно
-// ставилось строго в точку клика и у нижнего/правого края уезжало за экран:
-// пунктов в нём прибавилось (зрение, цвет, конус), и на ноутбучном экране
-// нижняя половина оказывалась недосягаема.
-function placeTokenMenu(pageX, pageY) {
+// placeMenu — любое ПКМ-меню у курсора, но целиком в пределах окна: не
+// влезло вниз/вправо — сдвигаем к краю; выше экрана — прижимаем к верху,
+// дальше работает прокрутка самого меню. display — "block"/"flex", как у
+// меню в dm.html.
+function placeMenu(menu, pageX, pageY, display = "block") {
   const margin = 8;
-  tokenMenu.style.visibility = "hidden";
-  tokenMenu.style.left = "0px";
-  tokenMenu.style.top = "0px";
-  tokenMenu.style.display = "block";
-  const { width, height } = tokenMenu.getBoundingClientRect();
-  // По вертикали: не влезло вниз — поднимаем так, чтобы низ меню был у края
-  // окна; не влезло вообще (меню выше экрана) — прижимаем к верху, дальше
-  // работает собственная прокрутка меню (см. max-height в dm.html).
+  menu.style.visibility = "hidden";
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  menu.style.display = display;
+  const { width, height } = menu.getBoundingClientRect();
   const left = Math.max(margin, Math.min(pageX, window.innerWidth - width - margin));
   const top = Math.max(margin, Math.min(pageY, window.innerHeight - height - margin));
-  tokenMenu.style.left = left + "px";
-  tokenMenu.style.top = top + "px";
-  tokenMenu.style.visibility = "";
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  menu.style.visibility = "";
+}
+
+// clampMenu — уже открытое меню подросло (в нём раскрылись поля) и должно
+// остаться целиком в окне: тот же зажим, что у placeMenu, но от текущей
+// позиции. Меряем после раскладки — иначе высота ещё старая.
+function clampMenu(menu) {
+  if (menu.style.display === "none") return;
+  requestAnimationFrame(() => {
+    if (menu.style.display === "none") return;
+    const margin = 8;
+    const { width, height } = menu.getBoundingClientRect();
+    const left = Math.max(margin, Math.min(parseFloat(menu.style.left) || 0, window.innerWidth - width - margin));
+    const top = Math.max(margin, Math.min(parseFloat(menu.style.top) || 0, window.innerHeight - height - margin));
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+  });
 }
 
 // applyTokenMenuLockState — гасит в открытом меню всё, что правит запертый
@@ -1436,22 +1783,21 @@ tokenMenuCopyBtn.onclick = () => {
   closeTokenMenu();
 };
 
-// ПКМ по пустому месту карты (см. interaction.js: vtt:canvasContextMenu) —
-// меню появляется, только если есть что вставлять: пустое меню на каждый
-// промах мимо токена раздражало бы сильнее, чем помогало.
+// ПКМ по пустому месту карты (см. interaction.js: vtt:canvasContextMenu):
+// вставка из буфера; пусто в буфере — меню не открывается.
 document.addEventListener("vtt:canvasContextMenu", (e) => {
   closeTokenMenu();
   closeWallPointMenu();
   closeNoteMarkerMenu();
+  closeTeleportMenu();
   closeFogAreaMenu();
   closeWallMenu();
   closeBuildingMenu();
+  closeTeleportMenu();
   if (!mapClipboard) return;
   canvasMenuAt = { x: e.detail.x, y: e.detail.y };
   canvasMenuPasteLabel.textContent = "Вставить: " + (mapClipboard.object.label || "объект");
-  canvasMenu.style.left = e.detail.pageX + "px";
-  canvasMenu.style.top = e.detail.pageY + "px";
-  canvasMenu.style.display = "block";
+  placeMenu(canvasMenu, e.detail.pageX, e.detail.pageY);
 });
 
 canvasMenuPasteBtn.onclick = () => {
@@ -1707,7 +2053,7 @@ const playersCount = document.getElementById("playersCount");
 const playersOnline = document.getElementById("playersOnline");
 
 function renderPlayersOnline(players) {
-  playersCount.textContent = "игроков онлайн: " + players.length;
+  playersCount.innerHTML = '<span class="status-label">игроков онлайн: </span>' + players.length;
   playersOnline.replaceChildren();
   if (!players.length) {
     const empty = document.createElement("span");
@@ -1740,6 +2086,19 @@ document.addEventListener("click", (e) => {
 // ================= управление аккаунтами =================
 const accountsList = document.getElementById("accountsList");
 const accountsBadge = document.getElementById("accountsBadge");
+// Точка на «⋯»: горит, пока горит любой из источников (ждущие аккаунты,
+// экраны на трансляцию) — они гаснут независимо, поэтому множество.
+const railMoreBtn = document.getElementById("railMoreBtn");
+const railMoreBadge = (() => {
+  const lit = new Set();
+  return {
+    set(source, on) {
+      if (on) lit.add(source);
+      else lit.delete(source);
+      railMoreBtn.classList.toggle("has-badge", lit.size > 0);
+    },
+  };
+})();
 
 async function refreshAccountsBadge() {
   try {
@@ -1747,6 +2106,7 @@ async function refreshAccountsBadge() {
     const pending = accs.filter((a) => a.status === "pending").length;
     accountsBadge.textContent = pending;
     accountsBadge.classList.toggle("show", pending > 0);
+    railMoreBadge.set("accounts", pending > 0);
   } catch (err) {
     console.error("не удалось проверить заявки на аккаунты:", err);
   }
@@ -1928,14 +2288,31 @@ const serverSettingsSaveBtn = document.getElementById("serverSettingsSaveBtn");
 let serverSettingsInputs = new Map();
 let serverSettingsSaved = new Map();
 
+// settingField — строка «подпись и подсказка слева, контрол справа»
+// (.settings-row, theme.css).
 function settingField(setting) {
   const wrap = document.createElement("div");
-  wrap.className = "srv-set" + (setting.editable ? "" : " readonly");
+  wrap.className = "settings-row" + (setting.editable ? "" : " readonly");
 
+  const text = document.createElement("div");
+  text.className = "settings-row-text";
   const title = document.createElement("div");
-  title.className = "srv-set-title";
+  title.className = "settings-row-title";
   title.textContent = setting.title;
-  wrap.appendChild(title);
+  text.appendChild(title);
+  if (setting.hint) {
+    const hint = document.createElement("div");
+    hint.className = "settings-row-hint";
+    hint.textContent = setting.hint;
+    text.appendChild(hint);
+  }
+  if (setting.locked) {
+    const locked = document.createElement("div");
+    locked.className = "settings-row-hint locked";
+    locked.textContent = setting.locked;
+    text.appendChild(locked);
+  }
+  wrap.appendChild(text);
 
   let input;
   if (setting.kind === "bool" || setting.kind === "enum") {
@@ -1954,21 +2331,11 @@ function settingField(setting) {
     input.value = setting.value;
   }
   input.disabled = !setting.editable;
-  wrap.appendChild(input);
+  const control = document.createElement("div");
+  control.className = "settings-row-control";
+  control.appendChild(input);
+  wrap.appendChild(control);
   if (setting.editable) serverSettingsInputs.set(setting.key, input);
-
-  if (setting.hint) {
-    const hint = document.createElement("div");
-    hint.className = "srv-set-hint";
-    hint.textContent = setting.hint;
-    wrap.appendChild(hint);
-  }
-  if (setting.locked) {
-    const locked = document.createElement("div");
-    locked.className = "srv-set-locked";
-    locked.textContent = setting.locked;
-    wrap.appendChild(locked);
-  }
   return wrap;
 }
 
@@ -2231,6 +2598,7 @@ async function renderBroadcastRequests() {
   // Точка на иконке рейла — единственный способ узнать о ждущем экране, не
   // открывая раздел; ДМ во время игры смотрит на карту, а не в настройки.
   settingsRailBtn.classList.toggle("has-badge", requests.length > 0);
+  railMoreBadge.set("broadcast", requests.length > 0);
   // Раздел закрыт — перерисовывать нечего, но точку выше обновить надо было.
   if (!broadcastRequestsBox.offsetParent) return;
   drawBroadcastRequests(requests);
@@ -2543,7 +2911,6 @@ async function assignPregenFlow(pregen) {
       label.textContent = "Игрок:";
       label.style.cssText = "display:block;font-size:12px;opacity:0.7;margin-bottom:6px;";
       select = document.createElement("select");
-      select.style.cssText = "width:100%;padding:7px 8px;font-size:13px;";
       for (const a of accounts) {
         const opt = document.createElement("option");
         opt.value = a.id;
@@ -2765,17 +3132,17 @@ sceneCanvasEl.addEventListener("dragover", (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = "copy";
 });
-sceneCanvasEl.addEventListener("drop", async (e) => {
+sceneCanvasEl.addEventListener("drop", (e) => {
   const monsterId = e.dataTransfer.getData("application/x-beacon-monster");
   if (!monsterId) return;
   e.preventDefault();
-  const { x, y } = vtt.pointToWorld(e); // читаем координаты СРАЗУ — e затухает после конца обработчика, а fetch ниже асинхронный
-  // Свежий fetch, а не bestiaryList.find(...): список в панели обновляется
-  // только при открытии панели (onPanelOpen), а редактирование монстра
-  // (включая загрузку токен-арта) идёт в отдельном плавающем окне
-  // (bestiary.html) — без этого перетащенный токен мог получить пустой/
-  // устаревший imageUrl, если DM поменял арт после последнего открытия
-  // панели, не закрывая её.
+  addMonsterToken(monsterId, vtt.pointToWorld(e)); // координаты СРАЗУ — e затухает после обработчика
+});
+
+// addMonsterToken — токен NPC в точке карты. Свежий fetch, а не
+// bestiaryList.find(...): список в панели обновляется только при её
+// открытии, а арт монстра правят в отдельном окне (bestiary.html).
+async function addMonsterToken(monsterId, { x, y }) {
   let m;
   try {
     m = await fetchMonster(monsterId);
@@ -2800,7 +3167,14 @@ sceneCanvasEl.addEventListener("drop", async (e) => {
       monsterId: m.id,
     },
   });
-});
+}
+
+// viewCenterWorld — точка карты под серединой экрана: куда ставить токен,
+// когда его просят не жестом по карте, а кнопкой (карточка на доске).
+function viewCenterWorld() {
+  const r = sceneCanvasEl.getBoundingClientRect();
+  return vtt.pointToWorld({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+}
 
 // ---- перетаскивание плитки ассета (раздел "Ассеты") на карту — создаёт
 // обычный токен-декорацию ----
@@ -2878,6 +3252,7 @@ sceneCanvasEl.addEventListener("drop", (e) => {
 // постоянно занимающую место форму внизу панели. Порядок треков — drag-and-
 // drop (см. renderTrackRow) вместо кнопок вверх/вниз.
 const playlistAccordion = document.getElementById("playlistAccordion");
+const sfxBoards = document.getElementById("sfxBoards");
 const nowPlayingLabel = document.getElementById("nowPlayingLabel");
 const nowPlayingProgressBar = document.getElementById("nowPlayingProgressBar");
 const nowPlayingProgressFill = document.getElementById("nowPlayingProgressFill");
@@ -2958,9 +3333,155 @@ function cueBtnState(active) {
   return { icon: "pause", title: "Пауза", action: "pause" };
 }
 
+// isSfx — панель эффектов: не в аккордеоне, а сеткой кнопок (renderSfxBoards)
+function isSfx(p) {
+  return p.kind === "sfx";
+}
+
 function renderPlaylistAccordion() {
   playlistAccordion.innerHTML = "";
-  for (const p of playlists) playlistAccordion.appendChild(renderPlaylistItem(p));
+  for (const p of playlists) if (!isSfx(p)) playlistAccordion.appendChild(renderPlaylistItem(p));
+  renderSfxBoards();
+}
+
+// playlistHeaderButtons — «+ / переименовать / удалить», общие для плейлиста и панели эффектов
+function playlistHeaderButtons(p, { addTitle, renameTitle, delTitle, delMsg }) {
+  const addBtn = document.createElement("button");
+  addBtn.className = "icon-btn";
+  addBtn.title = addTitle;
+  addBtn.innerHTML = icon("plus", { size: 13 });
+  addBtn.onclick = (e) => {
+    e.stopPropagation();
+    openTrackModal({ playlist: p });
+  };
+
+  const renameBtn = document.createElement("button");
+  renameBtn.className = "icon-btn";
+  renameBtn.title = renameTitle;
+  renameBtn.innerHTML = icon("pencil", { size: 13 });
+  renameBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const newName = await showPrompt("Новое название:", { title: renameTitle, value: p.name, okLabel: "Переименовать" });
+    if (!newName) return;
+    try {
+      await renamePlaylist(p.id, newName);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = delTitle;
+  delBtn.innerHTML = icon("trash", { size: 13 });
+  delBtn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!(await showConfirm(delMsg, { title: delTitle, okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylist(p.id);
+      openPlaylistIds.delete(p.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+  return [addBtn, renameBtn, delBtn];
+}
+
+// ---- панель эффектов: кнопка = трек, play_sfx у всех поверх музыки ----
+function renderSfxBoards() {
+  sfxBoards.innerHTML = "";
+  for (const p of playlists) {
+    if (!isSfx(p)) continue;
+    const wrap = document.createElement("div");
+    wrap.className = "bt-sfx-board";
+
+    const header = document.createElement("div");
+    header.className = "bt-sfx-header";
+    const name = document.createElement("span");
+    name.className = "bt-playlist-name";
+    name.textContent = p.name;
+    const count = document.createElement("span");
+    count.className = "bt-playlist-count";
+    count.textContent = (p.tracks || []).length;
+    header.append(
+      name,
+      count,
+      ...playlistHeaderButtons(p, {
+        addTitle: "Добавить эффект",
+        renameTitle: "Переименовать панель",
+        delTitle: "Удалить панель",
+        delMsg: `Удалить панель «${p.name}» вместе со всеми эффектами?`,
+      })
+    );
+    wrap.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.className = "bt-sfx-grid";
+    const tracks = p.tracks || [];
+    if (!tracks.length) {
+      const hint = document.createElement("div");
+      hint.className = "bt-playlist-empty-hint";
+      hint.style.padding = "2px 4px 6px";
+      hint.textContent = "Нет эффектов — добавь через +";
+      grid.appendChild(hint);
+    }
+    for (const t of tracks) grid.appendChild(renderSfxButton(p, t));
+    wrap.appendChild(grid);
+    sfxBoards.appendChild(wrap);
+  }
+}
+
+function renderSfxButton(playlist, t) {
+  const btn = document.createElement("div");
+  btn.className = "bt-sfx-btn";
+  btn.title = t.name;
+  btn.tabIndex = 0;
+  const label = document.createElement("span");
+  label.className = "bt-sfx-label";
+  label.textContent = t.name;
+  const fire = () => {
+    vtt.send({ type: "play_sfx", sfx: { url: t.url, name: t.name, volume: t.volume } });
+    btn.classList.remove("fired");
+    void btn.offsetWidth; // перезапуск анимации вспышки
+    btn.classList.add("fired");
+  };
+  btn.onclick = fire;
+  btn.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      fire();
+    }
+  };
+
+  const tools = document.createElement("span");
+  tools.className = "bt-sfx-tools";
+  const editBtn = document.createElement("button");
+  editBtn.className = "icon-btn";
+  editBtn.title = "Изменить";
+  editBtn.innerHTML = icon("pencil", { size: 11 });
+  editBtn.onclick = (e) => {
+    e.stopPropagation();
+    openTrackModal({ playlist, track: t });
+  };
+  const delBtn = document.createElement("button");
+  delBtn.className = "icon-btn";
+  delBtn.title = "Удалить";
+  delBtn.innerHTML = icon("trash", { size: 11 });
+  delBtn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!(await showConfirm(`Удалить эффект «${t.name}»?`, { title: "Удалить эффект", okLabel: "Удалить", danger: true }))) return;
+    try {
+      await deletePlaylistTrack(playlist.id, t.id);
+      await refreshPlaylists();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+  tools.append(editBtn, delBtn);
+  btn.append(label, tools);
+  return btn;
 }
 
 function renderPlaylistItem(p) {
@@ -3008,48 +3529,18 @@ function renderPlaylistItem(p) {
   count.className = "bt-playlist-count";
   count.textContent = (p.tracks || []).length;
 
-  const addBtn = document.createElement("button");
-  addBtn.className = "icon-btn";
-  addBtn.title = "Добавить трек";
-  addBtn.innerHTML = icon("plus", { size: 13 });
-  addBtn.onclick = (e) => {
-    e.stopPropagation();
-    openTrackModal({ playlist: p });
-  };
-
-  const renameBtn = document.createElement("button");
-  renameBtn.className = "icon-btn";
-  renameBtn.title = "Переименовать плейлист";
-  renameBtn.innerHTML = icon("pencil", { size: 13 });
-  renameBtn.onclick = async (e) => {
-    e.stopPropagation();
-    const newName = await showPrompt("Новое название:", { title: "Переименовать плейлист", value: p.name, okLabel: "Переименовать" });
-    if (!newName) return;
-    try {
-      await renamePlaylist(p.id, newName);
-      await refreshPlaylists();
-    } catch (err) {
-      showAlert(err.message);
-    }
-  };
-
-  const delBtn = document.createElement("button");
-  delBtn.className = "icon-btn";
-  delBtn.title = "Удалить плейлист";
-  delBtn.innerHTML = icon("trash", { size: 13 });
-  delBtn.onclick = async (e) => {
-    e.stopPropagation();
-    if (!(await showConfirm(`Удалить плейлист «${p.name}» вместе со всеми треками?`, { title: "Удалить плейлист", okLabel: "Удалить", danger: true }))) return;
-    try {
-      await deletePlaylist(p.id);
-      openPlaylistIds.delete(p.id);
-      await refreshPlaylists();
-    } catch (err) {
-      showAlert(err.message);
-    }
-  };
-
-  header.append(caret, playBtn, name, count, addBtn, renameBtn, delBtn);
+  header.append(
+    caret,
+    playBtn,
+    name,
+    count,
+    ...playlistHeaderButtons(p, {
+      addTitle: "Добавить трек",
+      renameTitle: "Переименовать плейлист",
+      delTitle: "Удалить плейлист",
+      delMsg: `Удалить плейлист «${p.name}» вместе со всеми треками?`,
+    })
+  );
   wrap.appendChild(header);
   if (expanded) wrap.appendChild(renderTrackList(p));
   return wrap;
@@ -3241,13 +3732,16 @@ async function reorderPlaylistTrack(playlist, trackId, targetId, before) {
 // нет), и для правки существующей (задан track): url трека неизменяем после
 // создания (см. updatePlaylistTrack — там нет параметра url), поэтому в
 // режиме правки вместо загрузки/библиотеки показывается имя файла как текст.
+// Для панели эффектов — без «зациклен», зато с локальным «прослушать».
 function openTrackModal({ playlist, track }) {
   const isEdit = !!track;
+  const sfx = isSfx(playlist);
   let pendingUrl = "";
   let nameInput, librarySelect, volumeInput, loopInput, msgEl;
+  let preview = null; // <audio> локального прослушивания эффекта
 
   openModal({
-    title: isEdit ? "Изменить трек" : "Добавить трек",
+    title: sfx ? (isEdit ? "Изменить эффект" : "Добавить эффект") : isEdit ? "Изменить трек" : "Добавить трек",
     okLabel: isEdit ? "Сохранить" : "Добавить",
     cancelLabel: "Отмена",
     buildBody: (body) => {
@@ -3319,13 +3813,31 @@ function openTrackModal({ playlist, track }) {
       volField.appendChild(volumeInput);
       body.appendChild(volField);
 
-      const loopRow = document.createElement("label");
-      loopRow.className = "checkbox-row";
-      loopInput = document.createElement("input");
-      loopInput.type = "checkbox";
-      loopInput.checked = track ? track.loop : false;
-      loopRow.append(loopInput, " зациклен");
-      body.appendChild(loopRow);
+      if (sfx) {
+        const previewBtn = document.createElement("button");
+        previewBtn.type = "button";
+        previewBtn.className = "bt-modal-btn";
+        previewBtn.innerHTML = icon("play", { size: 12 }) + " Прослушать";
+        previewBtn.title = "Только у тебя — игроки не услышат";
+        previewBtn.onclick = () => {
+          const url = isEdit ? track.url : pendingUrl || (librarySelect && librarySelect.value);
+          if (!url) return;
+          if (preview) preview.pause();
+          preview = new Audio(url);
+          preview.volume = volumeInput.value / 100;
+          preview.play().catch(() => undefined);
+        };
+        body.appendChild(previewBtn);
+      } else {
+        const loopRow = document.createElement("label");
+        loopRow.className = "checkbox-row";
+        loopInput = document.createElement("input");
+        loopInput.type = "checkbox";
+        loopInput.className = "switch";
+        loopInput.checked = track ? track.loop : false;
+        loopRow.append(loopInput, " зациклен");
+        body.appendChild(loopRow);
+      }
 
       msgEl = document.createElement("p");
       msgEl.className = "bt-modal-text dim";
@@ -3341,7 +3853,8 @@ function openTrackModal({ playlist, track }) {
         return;
       }
       const volume = volumeInput.value / 100;
-      const loop = loopInput.checked;
+      const loop = loopInput ? loopInput.checked : false;
+      if (preview) preview.pause();
       try {
         if (isEdit) {
           await updatePlaylistTrack(playlist.id, track.id, name, volume, loop);
@@ -3360,13 +3873,27 @@ function openTrackModal({ playlist, track }) {
         showAlert(err.message);
       }
     },
-    onCancel: () => undefined,
+    onCancel: () => {
+      if (preview) preview.pause();
+    },
   });
 }
 
 onPanelOpen("playlists", async () => {
   await refreshPlaylists();
 });
+
+// Вкладки «Плейлисты | Эффекты»; выбор запоминаем — в бою нужны эффекты.
+const AUDIO_TAB_KEY = "beacon-dm-audio-tab";
+const audioTabButtons = [...document.querySelectorAll(".audio-tabs .audio-tab")];
+const audioTabPanels = [...document.querySelectorAll(".audio-tab-panel")];
+function switchAudioTab(name) {
+  audioTabButtons.forEach((b) => b.classList.toggle("active", b.dataset.audioTab === name));
+  audioTabPanels.forEach((p) => p.classList.toggle("active", p.dataset.audioPanel === name));
+  localStorage.setItem(AUDIO_TAB_KEY, name);
+}
+audioTabButtons.forEach((b) => (b.onclick = () => switchAudioTab(b.dataset.audioTab)));
+if (localStorage.getItem(AUDIO_TAB_KEY) === "sfx") switchAudioTab("sfx");
 
 // Плейлисты поменялись мимо этой вкладки — другая вкладка ДМ или импорт
 // Foundry (см. RoomService.NotifyPlaylistsChanged/net.js: "playlists_changed").
@@ -3383,6 +3910,20 @@ document.getElementById("newPlaylistForm").addEventListener("submit", async (e) 
     const p = await createPlaylist(name);
     nameInput.value = "";
     if (p && p.id) openPlaylistIds.add(p.id); // сразу разворачиваем новый — добавлять треки некуда, кроме как внутрь
+    await refreshPlaylists();
+  } catch (err) {
+    showAlert(err.message);
+  }
+});
+document.getElementById("sfxStopBtn").onclick = () => vtt.send({ type: "stop_sfx" });
+document.getElementById("newSfxBoardForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nameInput = document.getElementById("newSfxBoardName");
+  const name = nameInput.value.trim();
+  if (!name) return;
+  try {
+    await createPlaylist(name, "sfx");
+    nameInput.value = "";
     await refreshPlaylists();
   } catch (err) {
     showAlert(err.message);
@@ -3415,7 +3956,7 @@ document.addEventListener("vtt:cueChanged", (e) => {
   if (currentCue) {
     // авто-разворачиваем плейлист с играющим треком — как и в Foundry, сразу
     // видно, что и где сейчас звучит, не нужно искать вручную.
-    const owner = playlists.find((pl) => (pl.tracks || []).some((t) => t.url === currentCue.url));
+    const owner = playlists.find((pl) => !isSfx(pl) && (pl.tracks || []).some((t) => t.url === currentCue.url));
     if (owner) openPlaylistIds.add(owner.id);
   }
   renderPlaylistAccordion();
@@ -3450,7 +3991,7 @@ function updateCueProgress() {
 // когда vtt уже существует). Работает, пока открыта вкладка ДМ.
 function handleCueEnded() {
   if (!currentCue) return;
-  const playlist = playlists.find((p) => (p.tracks || []).some((t) => t.url === currentCue.url));
+  const playlist = playlists.find((p) => !isSfx(p) && (p.tracks || []).some((t) => t.url === currentCue.url));
   if (!playlist) return;
   const tracks = playlist.tracks;
   const idx = tracks.findIndex((t) => t.url === currentCue.url);
@@ -3565,6 +4106,29 @@ window.addEventListener("message", async (e) => {
         (n) => norm(n.textContent) === norm(p.name)
       );
       if (row) row.scrollIntoView({ block: "center" });
+    }
+  } else if (e.data.type === "beacon:playCue") {
+    // Карточка трека на доске (pages/board.js): сокет сцены есть только здесь.
+    const c = e.data.cue;
+    if (vtt && c && typeof c.url === "string") {
+      vtt.send({ type: "play_cue", cue: { url: c.url, name: c.name || "", volume: c.volume, loop: !!c.loop } });
+    }
+  } else if (e.data.type === "beacon:switchSceneId") {
+    // Карточка сцены на доске (pages/board.js): «перейти» и телепорт.
+    if (vtt && typeof e.data.id === "string" && e.data.id !== currentSceneId && sceneList.some((s) => s.id === e.data.id)) {
+      vtt.send({ type: "switch_scene", sceneId: e.data.id });
+    }
+  } else if (e.data.type === "beacon:placeMonster") {
+    // Карточка монстра на доске: токен в центр текущего вида.
+    if (vtt && typeof e.data.id === "string") addMonsterToken(e.data.id, viewCenterWorld());
+  } else if (e.data.type === "beacon:addCombatant") {
+    if (vtt && typeof e.data.monsterId === "string") vtt.send({ type: "add_combatant", monsterId: e.data.monsterId });
+  } else if (e.data.type === "beacon:stopCue") {
+    if (vtt) vtt.send({ type: "stop_cue" });
+  } else if (e.data.type === "beacon:playSfx") {
+    const s = e.data.sfx;
+    if (vtt && s && typeof s.url === "string") {
+      vtt.send({ type: "play_sfx", sfx: { url: s.url, name: s.name || "", volume: s.volume } });
     }
   } else if (e.data.type === "beacon:characterSaved") {
     // Имя/аватар поменяли в листе — dmCharacters держит свою копию (она же
@@ -3792,7 +4356,7 @@ function openCardInDock(target) {
     url: target.url,
     // Колонка встаёт между панелью рейла и картой и накрывает канвас —
     // плашке статуса надо отъехать правее, ровно как при открытии панели.
-    onLayoutChange: () => updateChromeInset(panelWidth),
+    onLayoutChange: () => updateChromeInset(),
   });
 }
 setCardOpener(openCardInDock);
@@ -3894,6 +4458,7 @@ document.addEventListener("mousedown", (e) => {
   if (tokenMenu.style.display === "block" && !tokenMenu.contains(e.target)) closeTokenMenu();
   if (wallPointMenu.style.display === "block" && !wallPointMenu.contains(e.target)) closeWallPointMenu();
   if (noteMarkerMenu.style.display === "flex" && !noteMarkerMenu.contains(e.target)) closeNoteMarkerMenu();
+  if (teleportMenu.style.display === "flex" && !teleportMenu.contains(e.target)) closeTeleportMenu();
   if (fogAreaMenu.style.display === "block" && !fogAreaMenu.contains(e.target)) closeFogAreaMenu();
   if (wallMenu.style.display === "block" && !wallMenu.contains(e.target)) closeWallMenu();
   if (buildingMenu.style.display === "block" && !buildingMenu.contains(e.target)) closeBuildingMenu();
@@ -3910,18 +4475,21 @@ document.addEventListener("mousedown", (e) => {
 // он сам подхватит новую ширину родителя канваса).
 const sidePanel = document.getElementById("panel");
 const panelResizer = document.getElementById("panelResizer");
-const railSectionBtns = [...document.querySelectorAll("#rail .rail-btn[data-section]")];
+const railSectionBtns = [...document.querySelectorAll("#rail [data-section], #railMenu [data-section]")];
 const panelSections = [...document.querySelectorAll(".panel-section[data-panel]")];
 let openPanelSection = null;
 
-// Разделы "Настроить сцену" / "Аккаунты" / "Плейлисты" раньше были модалками
+// Разделы "Аккаунты" / "Плейлисты" раньше были модалками
 // со своим открытием (fetch + рендер при клике). Теперь это такие же секции
 // общей выезжающей панели, как "Освещение" — но данные всё ещё нужно
 // подгружать/освежать именно в момент открытия, а не заранее. panelOpenHandlers
 // объявлен в самом начале файла (см. onPanelOpen выше) — секции регистрируют
 // коллбэки там же, где определены, вызывается он отсюда.
-function setSidePanelSection(name) {
+function setSidePanelSection(name, { focus = false } = {}) {
   const opening = openPanelSection !== name;
+  // Панель в DOM после рейла: с клавиатуры фокус заводим в неё сами и
+  // возвращаем на иконку при закрытии.
+  const closingBtn = !opening && sidePanel.contains(document.activeElement) ? railSectionBtns.find((b) => b.dataset.section === name) : null;
   openPanelSection = openPanelSection === name ? null : name;
   sidePanel.classList.toggle("open", !!openPanelSection);
   panelResizer.classList.toggle("visible", !!openPanelSection);
@@ -3937,18 +4505,89 @@ function setSidePanelSection(name) {
     sidePanel.style.flexBasis = "";
     sidePanel.style.width = "";
   }
-  updateChromeInset(panelWidth);
-  railSectionBtns.forEach((b) => b.classList.toggle("active", b.dataset.section === openPanelSection));
+  updateChromeInset();
+  if (openPanelSection) placeSidePanel();
+  // Панель и колонка инструментов стоят на одном месте — вместе не бывают.
+  if (openPanelSection) setToolsFlyout(false);
+  closeRailMenu();
+  // Фокус от клика успевает показать подсказку по focus — гасим.
+  hideTooltip();
+  railSectionBtns.forEach((b) => {
+    b.classList.toggle("active", b.dataset.section === openPanelSection);
+    b.setAttribute("aria-expanded", String(b.dataset.section === openPanelSection));
+  });
+  // «⋯» подсвечен, пока открыт один из его разделов (аккаунты, настройки).
+  railMoreBtn.classList.toggle("active", !!openPanelSection && railMenu.querySelector(`[data-section="${openPanelSection}"]`) !== null);
   panelSections.forEach((s) => s.classList.toggle("active", s.dataset.panel === openPanelSection));
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
     panelOpenHandlers[openPanelSection]();
+  }
+  if (closingBtn) closingBtn.focus();
+  if (focus && openPanelSection) {
+    requestAnimationFrame(() => sidePanel.querySelector(".panel-section.active .panel-header button, .panel-section.active button, .panel-section.active input")?.focus());
   }
   // Токены света редактируются на карте ТОЛЬКО пока открыт этот раздел (см.
   // interaction.js: lightEditActive). Событие шлём на каждое переключение
   // раздела, а не только на открытие/закрытие света: уход в любой другой
   // раздел так же выключает режим, как и закрытие панели.
   document.dispatchEvent(new CustomEvent("vtt:lightEditMode", { detail: { active: openPanelSection === "light" } }));
+  // Раздел «Туман» — то же, что инструмент «Туман» (см. панель зон ниже):
+  // ей нужно знать и о закрытии, и об уходе в другой раздел.
+  document.dispatchEvent(new CustomEvent("vtt:panelSection", { detail: { section: openPanelSection } }));
 }
+
+// placeSidePanel — центр по высоте через margin-top, а не align-self:
+// center: центр считается от высоты панели, и ниже ResizeObserver зовёт
+// его заново, когда содержимое дорастает (списки приходят с сервера уже
+// после открытия). На телефоне панель прибита к верху (dm.html: @media).
+const MOBILE_MQ = window.matchMedia("(max-width: 860px), (max-height: 500px)");
+function placeSidePanel() {
+  const section = openPanelSection;
+  requestAnimationFrame(() => {
+    if (openPanelSection !== section) return;
+    if (MOBILE_MQ.matches) {
+      sidePanel.style.marginTop = "";
+      sidePanel.style.maxHeight = "";
+      panelResizer.style.marginTop = "";
+      return;
+    }
+    sidePanel.style.maxHeight = ""; // мерить без прошлого потолка
+    // Без transition: иначе ширина ещё едет от нуля и высота меряется с переносами.
+    sidePanel.style.transition = "none";
+    const host = sidePanel.parentElement.clientHeight;
+    const h = sidePanel.offsetHeight;
+    requestAnimationFrame(() => (sidePanel.style.transition = ""));
+    let top = Math.max(14, Math.round((host - h) / 2));
+    // Полоса хода под панель не сдвигается (updateChromeInset) — при
+    // пересечении опускаем панель под неё.
+    const bar = document.querySelector(".vtt-combat-bar");
+    if (bar && bar.style.display !== "none") {
+      const b = bar.getBoundingClientRect();
+      // Целевая ширина: в этот кадр панель ещё едет от нуля.
+      const left = sidePanel.getBoundingClientRect().left;
+      const right = left + panelWidth;
+      const hostTop = sidePanel.parentElement.getBoundingClientRect().top;
+      if (b.width && right > b.left && left < b.right && top + hostTop < b.bottom + 8) top = Math.round(b.bottom + 8 - hostTop);
+    }
+    sidePanel.style.marginTop = top + "px";
+    // Растёт только вниз, до нижнего поля.
+    const maxH = host - top - 14;
+    sidePanel.style.maxHeight = maxH + "px";
+    // Ручка ширины — по середине высоты панели, а не окна.
+    panelResizer.style.marginTop = Math.round(top + Math.min(h, maxH) / 2 - panelResizer.offsetHeight / 2) + "px";
+  });
+}
+window.addEventListener("resize", () => {
+  if (openPanelSection) placeSidePanel();
+});
+// Тело большинства разделов наполняется после открытия (персонажи,
+// плейлисты, ассеты — fetch; подменю настроек сцены — клик): панель,
+// отцентрованная по пустому телу, потом росла только вниз и висела ниже
+// центра. Повторный вызов при той же высоте ничего не меняет, так что
+// наблюдатель не зацикливается на собственных правках max-height.
+new ResizeObserver(() => {
+  if (openPanelSection) placeSidePanel();
+}).observe(sidePanel);
 
 // showSidePanelSection — «показать раздел», в отличие от setSidePanelSection
 // («переключить»): нужен тем, кто открывает раздел не кликом по рейлу, а по
@@ -3977,8 +4616,112 @@ function refreshOpenPanel(name) {
 function closeSidePanel() {
   if (openPanelSection) setSidePanelSection(openPanelSection);
 }
-railSectionBtns.forEach((b) => (b.onclick = () => setSidePanelSection(b.dataset.section)));
+railSectionBtns.forEach((b) => (b.onclick = (e) => setSidePanelSection(b.dataset.section, { focus: e && e.detail === 0 })));
 document.querySelectorAll(".panel-close[data-close]").forEach((b) => (b.onclick = closeSidePanel));
+
+// ---- «Инструменты»: выпадающая колонка иконок вместо раздела панели ----
+// Клики по карте её не закрывают — инструментом работают на карте. Кнопка
+// рейла .active, пока взведён инструмент, даже при свёрнутой колонке.
+const railToolsBtn = document.getElementById("railTools");
+const toolsFlyout = document.getElementById("toolsFlyout");
+let toolsFlyoutOpen = false;
+
+function setToolsFlyout(open, { focus = false } = {}) {
+  // Колонка в DOM после рейла: фокус с клавиатуры заводим и возвращаем сами.
+  const wasInside = toolsFlyout.contains(document.activeElement);
+  toolsFlyoutOpen = open;
+  toolsFlyout.hidden = !open;
+  if (!open && wasInside) railToolsBtn.focus();
+  if (open && focus) requestAnimationFrame(() => toolsFlyout.querySelector("[data-tool]")?.focus());
+  railToolsBtn.classList.toggle("open", open);
+  railToolsBtn.setAttribute("aria-expanded", String(open));
+  if (!open) return;
+  closeSidePanel();
+  closeRailMenu();
+  hideTooltip();
+  // По центру кнопки; top — относительно #appBody.
+  const host = toolsFlyout.offsetParent || document.body;
+  const btn = railToolsBtn.getBoundingClientRect();
+  const hostRect = host.getBoundingClientRect();
+  const h = toolsFlyout.offsetHeight;
+  const top = btn.top + btn.height / 2 - h / 2 - hostRect.top;
+  toolsFlyout.style.top = Math.round(Math.max(8, Math.min(top, hostRect.height - h - 8))) + "px";
+}
+railToolsBtn.onclick = (e) => setToolsFlyout(!toolsFlyoutOpen, { focus: e && e.detail === 0 });
+document.addEventListener("vtt:toolChanged", (e) => {
+  railToolsBtn.classList.toggle("active", !!toolsFlyout.querySelector(`[data-tool="${e.detail}"]`));
+  for (const b of toolsFlyout.querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", String(b.dataset.tool === e.detail));
+});
+// Esc по ступеням: обрыв цепочки (interaction.js) → снять инструмент → свернуть колонку.
+document.addEventListener("vtt:escape", (e) => {
+  if (e.detail.aborted) return;
+  const active = toolsFlyout.querySelector("[data-tool].active");
+  if (active) document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
+  else if (toolsFlyoutOpen) setToolsFlyout(false);
+});
+window.addEventListener("resize", () => {
+  if (toolsFlyoutOpen) setToolsFlyout(true);
+});
+
+// ---- «⋯»: меню служебных пунктов внизу рейла ----
+const railMenu = document.getElementById("railMenu");
+
+function closeRailMenu() {
+  // Фокус из меню — обратно на кнопку, иначе упадёт на body.
+  const inside = railMenu.contains(document.activeElement);
+  railMenu.hidden = true;
+  railMoreBtn.classList.remove("open");
+  railMoreBtn.setAttribute("aria-expanded", "false");
+  if (inside) railMoreBtn.focus();
+}
+railMoreBtn.onclick = (e) => {
+  if (!railMenu.hidden) return closeRailMenu();
+  // С клавиатуры (detail 0) — фокус на первый пункт.
+  const byKeyboard = e && e.detail === 0;
+  setToolsFlyout(false);
+  // Меню стоит на месте панели и уже её — открытый раздел торчал бы из-под него.
+  closeSidePanel();
+  hideTooltip();
+  railMenu.hidden = false;
+  railMoreBtn.classList.add("open");
+  // Нижний край — по кнопке; top относительно #appBody.
+  const host = railMenu.offsetParent || document.body;
+  const btn = railMoreBtn.getBoundingClientRect();
+  const hostRect = host.getBoundingClientRect();
+  const top = btn.bottom - hostRect.top - railMenu.offsetHeight;
+  railMenu.style.top = Math.round(Math.max(8, top)) + "px";
+  railMoreBtn.setAttribute("aria-expanded", "true");
+  if (byKeyboard) railMenu.querySelector("[role=menuitem]")?.focus();
+};
+// Стрелки и Home/End по пунктам (паттерн WAI-ARIA menu).
+railMenu.addEventListener("keydown", (e) => {
+  const items = [...railMenu.querySelectorAll("[role=menuitem]")];
+  const i = items.indexOf(document.activeElement);
+  const go = (n) => { e.preventDefault(); items[(n + items.length) % items.length].focus(); };
+  if (e.key === "ArrowDown") go(i + 1);
+  else if (e.key === "ArrowUp") go(i - 1);
+  else if (e.key === "Home") go(0);
+  else if (e.key === "End") go(items.length - 1);
+});
+// Пункт выбран — меню закрывается; действие делают свои обработчики.
+railMenu.addEventListener("click", (e) => {
+  if (e.target.closest(".rail-menu-item")) closeRailMenu();
+});
+document.addEventListener("pointerdown", (e) => {
+  if (!railMenu.hidden && !railMenu.contains(e.target) && !railMoreBtn.contains(e.target)) closeRailMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeRailMenu();
+});
+
+// ---- подсказки иконок рейла (RAIL_HELP) ----
+// Пока раздел открыт, его подсказка молчит — накрывала бы панель.
+for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-section]")) {
+  attachTooltip(btn, () => (openPanelSection === btn.dataset.section ? null : RAIL_HELP[btn.dataset.section]));
+}
+attachTooltip(railToolsBtn, () => (toolsFlyoutOpen ? null : RAIL_HELP.tools));
+attachTooltip(document.getElementById("journalBtn"), RAIL_HELP.journal);
+attachTooltip(railMoreBtn, () => (railMenu.hidden ? RAIL_HELP.more : null));
 
 // ---- ширина панели: тянется мышью за #panelResizer ----
 // Ширину ставим inline'ом на сам #panel: это состояние времени выполнения,
@@ -4004,7 +4747,7 @@ function applyPanelWidth(px) {
     sidePanel.style.flexBasis = w + "px";
     sidePanel.style.width = w + "px";
   }
-  updateChromeInset(w);
+  updateChromeInset();
   return w;
 }
 
@@ -4013,21 +4756,21 @@ function applyPanelWidth(px) {
 // не знает, и всё, что центрируется "по карте", обязано узнать это число
 // снаружи. Сегодняшний потребитель один — верхний оверлей хода
 // (vtt/combat-bar.js): без этого он центрировался по всему окну и наезжал на
-// шапку колонки со статблоком. Числа — из тех же margin/border, что в
-// dm.html: рейл 14+60, панель 10 + ширина + 2 (рамка), ручка 10.
-const RAIL_RIGHT = 74;
-function updateChromeInset(width) {
+// шапку колонки со статблоком. Число — рейл 14+46 из dm.html. Ширина панели
+// не входит: полоса не должна прыгать на каждое открытие раздела; если
+// панель до неё дотянулась, placeSidePanel опускает панель.
+const RAIL_RIGHT = 60;
+function updateChromeInset() {
   // Колонка со статблоком (см. openCardInDock) — такой же слой поверх
   // канваса, как рейл и панель, и её ширину ДМ тянет мышью: меряем по факту,
   // а не по константе.
   const dock = document.getElementById("sheetDock");
   const dockWidth = dock && dock.classList.contains("open") ? dock.offsetWidth + 10 : 0;
-  const chromeRight = (openPanelSection ? RAIL_RIGHT + 10 + width + 2 + 10 : RAIL_RIGHT) + dockWidth;
-  document.dispatchEvent(new CustomEvent("vtt:chromeInset", { detail: { left: chromeRight + 10 } }));
+  document.dispatchEvent(new CustomEvent("vtt:chromeInset", { detail: { left: RAIL_RIGHT + dockWidth + 10 } }));
 }
 
 let panelWidth = Math.min(Math.max(Number(localStorage.getItem(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN), panelWidthMax());
-updateChromeInset(panelWidth);
+updateChromeInset();
 window.addEventListener("resize", () => {
   panelWidth = applyPanelWidth(panelWidth); // окно сузили — подрезать панель под новый максимум
 });
@@ -4058,6 +4801,36 @@ panelResizer.addEventListener("pointerdown", (e) => {
 panelResizer.addEventListener("dblclick", () => {
   panelWidth = applyPanelWidth(PANEL_WIDTH_DEFAULT);
   localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+});
+
+// Ручка — фокусируемый separator: ширина и с клавиатуры (WCAG 2.5.7).
+const PANEL_WIDTH_STEP = 24;
+function syncResizerAria() {
+  panelResizer.setAttribute("aria-valuemin", String(PANEL_WIDTH_MIN));
+  panelResizer.setAttribute("aria-valuemax", String(panelWidthMax()));
+  panelResizer.setAttribute("aria-valuenow", String(panelWidth));
+}
+panelResizer.addEventListener("keydown", (e) => {
+  const next =
+    e.key === "ArrowRight" ? panelWidth + PANEL_WIDTH_STEP
+    : e.key === "ArrowLeft" ? panelWidth - PANEL_WIDTH_STEP
+    : e.key === "Home" ? PANEL_WIDTH_MIN
+    : e.key === "End" ? panelWidthMax()
+    : e.key === "Enter" ? PANEL_WIDTH_DEFAULT
+    : null;
+  if (next === null) return;
+  e.preventDefault();
+  panelWidth = applyPanelWidth(next);
+  localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+  syncResizerAria();
+});
+panelResizer.addEventListener("focus", syncResizerAria);
+attachTooltip(panelResizer, {
+  title: "Ширина панели",
+  rows: [
+    ["Мышь", "потяни за ручку · двойной [ЛКМ] — вернуть по умолчанию"],
+    ["Клавиатура", "[←] / [→] — шаг, [Home] / [End] — минимум и максимум, [Enter] — по умолчанию"],
+  ],
 });
 
 // ================= токен света: отдельная быстрая кнопка =================
@@ -4226,6 +4999,197 @@ document.addEventListener("vtt:sceneUpdated", () => {
   if (openPanelSection === "light") renderLightList();
 });
 
+// ================= панель «Туман»: фигура и список зон =================
+// Открытая панель И ЕСТЬ включённый инструмент «Туман» (как у пометок):
+// выбор инструмента из колонки открывает раздел, закрытие раздела снимает
+// инструмент. Здесь же — какой фигурой рисовать следующую зону
+// (interaction.js слушает "vtt:fogSettings") и список зон сцены: у зоны на
+// карте нет своего UI кроме контура и ручек, а показать/скрыть игрокам —
+// самое частое действие за сессию, и искать для него зону мышью в тумане
+// каждый раз слишком долго.
+const fogShapes = document.getElementById("fogShapes");
+const fogShapeHint = document.getElementById("fogShapeHint");
+const fogZoneList = document.getElementById("fogZoneList");
+let fogToolActive = false;
+let fogShape = "poly";
+
+const FOG_SHAPES = [
+  { id: "poly", label: "Контур", glyph: "⬠", hint: "[Ctrl] + [ЛКМ] — первая точка, дальше клик за кликом; замкнуть — клик по стартовой точке или двойной [ЛКМ]." },
+  { id: "rect", label: "Прямоугольник", glyph: "▭", hint: "[Ctrl] + перетягивание по диагонали." },
+  { id: "circle", label: "Круг", glyph: "◯", hint: "[Ctrl] + перетягивание от центра." },
+];
+const fogShapeBtns = new Map();
+for (const shape of FOG_SHAPES) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "draw-shape";
+  btn.setAttribute("role", "radio");
+  btn.innerHTML = `<span class="draw-shape-glyph">${shape.glyph}</span>${shape.label}`;
+  btn.onclick = () => setFogShape(shape.id);
+  fogShapeBtns.set(shape.id, btn);
+  fogShapes.appendChild(btn);
+}
+function setFogShape(id) {
+  fogShape = id;
+  for (const [sid, b] of fogShapeBtns) {
+    b.classList.toggle("active", sid === id);
+    b.setAttribute("aria-checked", String(sid === id));
+  }
+  fogShapeHint.textContent = "";
+  renderWithKeys(fogShapeHint, FOG_SHAPES.find((sh) => sh.id === id).hint);
+  document.dispatchEvent(new CustomEvent("vtt:fogSettings", { detail: { shape: fogShape } }));
+}
+setFogShape("poly");
+
+// fogZonesSorted — зоны текущей сцены в стабильном порядке (см.
+// lightTokensSorted — те же соображения про порядок ключей с сервера).
+function fogZonesSorted() {
+  return Object.entries(vtt.getScene().fogAreas || {}).sort(
+    (a, b) => (a[1].name || "").localeCompare(b[1].name || "", "ru") || a[0].localeCompare(b[0])
+  );
+}
+
+function renderFogZoneList() {
+  // Те же две предосторожности, что у renderLightList: не сбивать печать
+  // имени и вернуть фокус кнопке, пересозданной вместе со строкой.
+  const editing = document.activeElement;
+  if (editing && fogZoneList.contains(editing) && editing.classList.contains("light-row-name")) return;
+  const refocus = editing && fogZoneList.contains(editing) && editing.dataset && editing.dataset.zoneBtn
+    ? { id: editing.dataset.zoneId, btn: editing.dataset.zoneBtn }
+    : null;
+  fogZoneList.innerHTML = "";
+  const rows = fogZonesSorted();
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "На сцене пока нет зон тумана. Выбери фигуру выше и нарисуй первую с зажатым Ctrl.";
+    fogZoneList.appendChild(empty);
+    return;
+  }
+  for (const [id, zone] of rows) {
+    const revealed = !!zone.revealed;
+    const locked = !!zone.locked;
+    const row = document.createElement("div");
+    row.className = "light-row" + (revealed ? " revealed" : "") + (locked ? " locked" : "");
+
+    const swatch = document.createElement("span");
+    swatch.className = "light-row-swatch";
+    swatch.style.background = "#" + zoneStyle(zone).color.toString(16).padStart(6, "0");
+    swatch.title = revealed ? "Показана игрокам" : "Скрыта от игроков";
+
+    const name = document.createElement("input");
+    name.className = "light-row-name";
+    name.value = zone.name || "";
+    name.placeholder = fogZoneTitle(zone);
+    name.title = "Название зоны — видно только ДМ";
+    name.disabled = locked;
+    name.onblur = () => {
+      const next = name.value.trim().slice(0, 60);
+      if (next !== (zone.name || "")) updateFogArea(id, { name: next });
+      else renderFogZoneList();
+    };
+    name.onkeydown = (e) => {
+      if (e.key === "Enter") name.blur();
+      if (e.key === "Escape") {
+        name.value = zone.name || "";
+        name.blur();
+      }
+    };
+
+    const lightTag = document.createElement("span");
+    lightTag.className = "light-row-radii";
+    lightTag.textContent = zone.light ? zoneStyle(zone).glyph + " " + FOG_LIGHT_LABELS[zone.light] : "";
+    lightTag.title = "Свет внутри зоны";
+
+    // Показать/скрыть — и у запертой: замок бережёт контур, не туман.
+    const eye = document.createElement("button");
+    eye.type = "button";
+    eye.className = revealed ? "" : "on";
+    eye.innerHTML = icon(revealed ? "eye-off" : "eye", { size: 14 });
+    eye.title = revealed ? "Скрыть от игроков — накрыть зону туманом снова" : "Показать игрокам — снять туман с зоны";
+    eye.dataset.zoneId = id;
+    eye.dataset.zoneBtn = "eye";
+    eye.onclick = () => updateFogArea(id, { revealed: !revealed });
+
+    // Лампочка — по кругу: нет → ярко → тускло → тьма → нет.
+    const bulb = document.createElement("button");
+    bulb.type = "button";
+    bulb.className = zone.light ? "on" : "";
+    bulb.innerHTML = icon("bulb", { size: 14 });
+    bulb.title = "Свет внутри зоны: сейчас " + FOG_LIGHT_LABELS[zone.light || ""] + " — клик переключает по кругу";
+    bulb.disabled = locked;
+    bulb.dataset.zoneId = id;
+    bulb.dataset.zoneBtn = "bulb";
+    bulb.onclick = () => {
+      const order = ["", "bright", "dim", "dark"];
+      updateFogArea(id, { light: order[(order.indexOf(zone.light || "") + 1) % order.length] });
+    };
+
+    const focusBtn = document.createElement("button");
+    focusBtn.type = "button";
+    focusBtn.innerHTML = icon("target", { size: 14 });
+    focusBtn.title = "Показать на карте — камера наведётся и подсветит зону";
+    focusBtn.dataset.zoneId = id;
+    focusBtn.dataset.zoneBtn = "focus";
+    focusBtn.onclick = () => document.dispatchEvent(new CustomEvent("vtt:focusMapObject", { detail: { kind: "fogArea", id } }));
+
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.className = locked ? "on" : "";
+    lockBtn.innerHTML = icon("lock", { size: 14 });
+    lockBtn.title = locked ? "Снять замок — зона снова двигается и правится" : "Запереть — зона не двигается и не правится, пока замок не снят";
+    lockBtn.dataset.zoneId = id;
+    lockBtn.dataset.zoneBtn = "lock";
+    lockBtn.onclick = () =>
+      document.dispatchEvent(new CustomEvent("vtt:setMapObjectLocked", { detail: { kind: "fogArea", id, locked: !locked } }));
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.innerHTML = icon("trash", { size: 14 });
+    del.title = "Удалить зону";
+    del.disabled = locked;
+    del.dataset.zoneId = id;
+    del.dataset.zoneBtn = "del";
+    del.onclick = () => document.dispatchEvent(new CustomEvent("vtt:removeFogArea", { detail: { id } }));
+
+    row.append(swatch, name, lightTag, eye, bulb, focusBtn, lockBtn, del);
+    fogZoneList.appendChild(row);
+  }
+
+  if (refocus) {
+    const again = fogZoneList.querySelector(`[data-zone-id="${CSS.escape(refocus.id)}"][data-zone-btn="${refocus.btn}"]`);
+    if (again && !again.disabled) again.focus();
+  }
+}
+
+onPanelOpen("fog", () => {
+  renderFogZoneList();
+  if (!fogToolActive) document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "fog" }));
+});
+document.addEventListener("vtt:sceneUpdated", () => {
+  if (openPanelSection === "fog") renderFogZoneList();
+});
+document.addEventListener("vtt:toolChanged", (e) => {
+  fogToolActive = e.detail === "fog";
+  if (fogToolActive && openPanelSection !== "fog") setSidePanelSection("fog");
+  else if (!fogToolActive && openPanelSection === "fog") closeSidePanel();
+});
+// Раздел закрыли или ушли в другой — инструмент снимается, чтобы открытая
+// панель не врала про то, что сейчас в руке (см. пометки выше).
+document.addEventListener("vtt:panelSection", (e) => {
+  if (fogToolActive && e.detail.section !== "fog") document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
+});
+// Только что нарисованная зона — сразу в поле имени: назвать её, пока
+// помнишь, что накрыл.
+document.addEventListener("vtt:fogAreaCreated", (e) => {
+  if (openPanelSection !== "fog") return;
+  renderFogZoneList();
+  const rows = [...fogZoneList.querySelectorAll(".light-row")];
+  const row = rows.find((r) => r.querySelector(`[data-zone-id="${CSS.escape(e.detail.id)}"]`));
+  const name = row && row.querySelector(".light-row-name");
+  if (name) name.focus();
+});
+
 // ===================================================================
 // ==================== переключатель сцен ==========================
 // ===================================================================
@@ -4237,17 +5201,24 @@ let sceneList = []; // [{id,name,viewerCount}]
 let currentSceneId = "";
 
 function renderSceneDropdown() {
+  // Подменю настроек — один узел, который живёт под строкой своей сцены;
+  // перед перестройкой списка убираем его в парковку, иначе innerHTML
+  // унесёт его вместе со строками.
+  parkSceneSettingsDrawer();
   sceneDropdown.innerHTML = "";
   for (const s of sceneList) {
     const row = document.createElement("div");
-    row.className = "scene-row row-card" + (s.id === currentSceneId ? " active" : "");
-    const handle = document.createElement("span");
-    handle.className = "drag-handle";
-    handle.innerHTML = icon("grip-vertical", { size: 14 });
+    row.className = "scene-row row-card" + (s.id === currentSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
+    // Переключение — <button> на всю строку, корзина — отдельная кнопка
+    // рядом: вложенные интерактивы недопустимы.
+    const pick = document.createElement("button");
+    pick.type = "button";
+    pick.className = "scene-pick";
+    pick.setAttribute("aria-pressed", String(s.id === currentSceneId));
     const nameSpan = document.createElement("span");
     nameSpan.className = "scene-name";
     nameSpan.textContent = s.name;
-    nameSpan.onclick = () => {
+    pick.onclick = () => {
       if (s.id !== currentSceneId) vtt.send({ type: "switch_scene", sceneId: s.id });
       closeSidePanel();
     };
@@ -4255,10 +5226,20 @@ function renderSceneDropdown() {
     viewers.className = "scene-viewers pill-badge";
     viewers.innerHTML = icon("user", { size: 11 });
     viewers.append(" " + s.viewerCount);
-    // Полные настройки сцены (фон/аудио/сетка) переехали в отдельный раздел
-    // рейла "Настроить сцену" и относятся только к активной сцене (см.
-    // openSceneSettings ниже) — здесь остаётся быстрое удаление ЛЮБОЙ сцены
-    // из списка, не обязательно активной.
+    // Шестерёнка — полные настройки этой сцены (фон/аудио/сетка) подменю
+    // под строкой (см. openSceneSettings ниже); корзина — удаление. Обе —
+    // для ЛЮБОЙ сцены из списка, не обязательно активной.
+    const gear = document.createElement("button");
+    gear.type = "button";
+    gear.className = "scene-gear scene-gear--settings icon-btn";
+    gear.innerHTML = icon("gear", { size: 13 });
+    gear.title = "Настроить сцену";
+    gear.setAttribute("aria-expanded", String(s.id === settingsSceneId));
+    gear.onclick = (ev) => {
+      ev.stopPropagation();
+      if (s.id === settingsSceneId) closeSceneSettings();
+      else openSceneSettings(s.id, "basic");
+    };
     const del = document.createElement("button");
     del.className = "scene-gear icon-btn";
     del.innerHTML = icon("trash", { size: 13 });
@@ -4269,9 +5250,14 @@ function renderSceneDropdown() {
       if (!(await showConfirm(`Удалить сцену «${s.name}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
-    row.append(handle, nameSpan, viewers, del);
+    pick.append(nameSpan, viewers);
+    row.append(pick, gear, del);
     sceneDropdown.appendChild(row);
+    if (s.id === settingsSceneId) row.after(sceneSettingsDrawer);
   }
+  // Сцену, которую правили, удалили (в этом или другом окне) — подменю
+  // закрываем, а не оставляем висеть в парковке с чужими полями.
+  if (settingsSceneId && !sceneList.some((x) => x.id === settingsSceneId)) closeSceneSettings();
 }
 
 // "+ Сцена" теперь статична в шапке панели (dm.html), а не пересоздаётся
@@ -4290,15 +5276,63 @@ document.addEventListener("vtt:sceneList", (e) => {
   const active = sceneList.find((s) => s.id === currentSceneId);
   sceneSwitchName.textContent = active ? active.name : "Сцена";
   renderSceneDropdown();
+  if (openPanelSection === "scene") renderTeleport();
+});
+
+// ---- телепорт: соседи активной сцены по стрелкам на досках ----
+// Связи живут в досках (см. board/links.js: sceneLinksOf), а не в сцене:
+// доски читаем заново при каждом показе — их правят в других окнах.
+const teleportList = document.getElementById("teleportList");
+let teleportSeq = 0;
+
+async function renderTeleport() {
+  const seq = ++teleportSeq;
+  const from = currentSceneId;
+  teleportList.innerHTML = "";
+  if (!from) return;
+  const rows = await linkedScenesOf(from);
+  if (seq !== teleportSeq) return; // сцену уже переключили
+  teleportList.innerHTML = "";
+  if (!rows.length) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Свяжи сцены стрелками на доске — сюда попадут соседи текущей.";
+    teleportList.appendChild(hint);
+    return;
+  }
+  for (const { scene, boards: names } of rows) {
+    const row = document.createElement("div");
+    row.className = "scene-row row-card";
+    row.innerHTML = icon("arrow-right", { size: 14 });
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "scene-name";
+    nameSpan.textContent = scene.name;
+    const meta = document.createElement("span");
+    meta.className = "pill-badge";
+    meta.textContent = names.join(", ");
+    meta.title = "Доска, где нарисована связь";
+    row.append(nameSpan, meta);
+    row.onclick = () => {
+      vtt.send({ type: "switch_scene", sceneId: scene.id });
+      closeSidePanel();
+    };
+    teleportList.appendChild(row);
+  }
+}
+
+// Открыли раздел заново — подменю настроек свёрнуто: за списком сцен
+// приходят чаще, чем за настройками, а нужные — в шестерёнке.
+onPanelOpen("scene", () => {
+  closeSceneSettings();
+  renderTeleport();
 });
 
 // ===================================================================
-// ================= раздел "Настроить сцену" ========================
+// ================= настройки сцены (⚙ в строке списка "Сцена") ==========
 // ===================================================================
-// Раньше это была модалка, открывавшаяся по шестерёнке у ЛЮБОЙ строки в
-// списке сцен (даже неактивной — тогда ждали get_scene с сервера). Теперь
-// это обычный раздел рейла, как "Освещение", и правит он ВСЕГДА активную
-// сцену — данные уже есть локально (vtt.getScene()), round-trip не нужен.
+// Раньше это была модалка по шестерёнке у строки, потом — свой раздел рейла
+// только для активной сцены. Теперь снова у каждой строки, но подменю
+// раскрывается под ней (см. openSceneSettings ниже).
 const tabButtons = [...document.querySelectorAll(".modal-tabs button")];
 const tabPanels = [...document.querySelectorAll(".modal-tab-panel")];
 const bgTab = document.querySelector('.modal-tabs button[data-tab="bg"]');
@@ -4324,6 +5358,32 @@ const gridEditorBtn = document.getElementById("gridEditorBtn");
 const fAmbientUrl = document.getElementById("fAmbientUrl");
 const fAmbientVolume = document.getElementById("fAmbientVolume");
 const fAmbientVolumeLabel = document.getElementById("fAmbientVolumeLabel");
+const fDoorSoundUrl = document.getElementById("fDoorSoundUrl");
+
+// fillDoorSoundSelect — выбор звука дверей из библиотеки; current остаётся,
+// даже если файла уже нет, иначе форма молча сбросила бы настройку.
+function fillDoorSoundSelect(select, current, emptyLabel) {
+  select.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = emptyLabel;
+  select.appendChild(none);
+  let found = !current;
+  for (const a of latestAssets.audio || []) {
+    const opt = document.createElement("option");
+    opt.value = a.url;
+    opt.textContent = a.name;
+    if (a.url === current) found = true;
+    select.appendChild(opt);
+  }
+  if (!found) {
+    const opt = document.createElement("option");
+    opt.value = current;
+    opt.textContent = decodeURIComponent(current.split("/").pop()) + " (нет в библиотеке)";
+    select.appendChild(opt);
+  }
+  select.value = current;
+}
 
 function switchTab(name) {
   tabButtons.forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
@@ -4344,6 +5404,7 @@ function fillSceneSettingsFrom(s) {
   const ambientPct = Math.round((s.ambientVolume == null ? 0.6 : s.ambientVolume) * 100);
   fAmbientVolume.value = ambientPct;
   fAmbientVolumeLabel.textContent = ambientPct + "%";
+  fillDoorSoundSelect(fDoorSoundUrl, s.doorSoundUrl || "", "— нет —");
   const g = s.grid || {};
   fGridSize.value = g.size || 0;
   fGridOffX.value = g.offsetX || 0;
@@ -4359,18 +5420,54 @@ function fillSceneSettingsFrom(s) {
   document.getElementById("sceneDeleteBtn").disabled = sceneList.length <= 1;
 }
 
-function openSceneSettings(tab) {
-  switchTab(tab || "basic");
-  fillSceneSettingsFrom(vtt.getScene());
-}
-onPanelOpen("sceneSettings", () => openSceneSettings("basic"));
+// ---- подменю настроек под шестерёнкой в строке сцены ----
+// Раньше это был свой раздел рейла (только для активной сцены); теперь
+// раскрывается под строкой любой сцены списка — dm.html держит узел
+// #sceneSettingsDrawer припаркованным перед списком, сюда он переезжает под
+// нужную строку (renderSceneDropdown). Активная сцена есть локально
+// (vtt.getScene()), неактивную просим у сервера (get_scene → scene_detail):
+// snapshot несёт только активную.
+const sceneSettingsDrawer = document.getElementById("sceneSettingsDrawer");
+const sceneSettingsPark = sceneSettingsDrawer.parentElement;
+let settingsSceneId = ""; // чья сцена в подменю; "" — закрыто
 
-// раздел открыт и активная сцена обновилась (например, после drag
-// "Редактора сетки") — держим поля актуальными.
-document.addEventListener("vtt:sceneUpdated", (e) => {
-  if (openPanelSection === "sceneSettings" && e.detail.id === currentSceneId) {
-    fillSceneSettingsFrom(e.detail);
+function parkSceneSettingsDrawer() {
+  if (sceneSettingsDrawer.parentElement !== sceneSettingsPark) sceneSettingsPark.prepend(sceneSettingsDrawer);
+}
+
+function openSceneSettings(sceneId, tab) {
+  settingsSceneId = sceneId;
+  switchTab(tab || "basic");
+  if (sceneId === currentSceneId) {
+    fillSceneSettingsFrom(vtt.getScene());
+  } else {
+    // Пока едет ответ — хотя бы имя из списка, а не поля прошлой сцены.
+    fillSceneSettingsFrom({ name: sceneList.find((x) => x.id === sceneId)?.name || "" });
+    vtt.send({ type: "get_scene", sceneId });
   }
+  // Редактор сетки рисует поверх карты — только для сцены, что на ней.
+  gridEditorBtn.disabled = sceneId !== currentSceneId;
+  gridEditorBtn.title = gridEditorBtn.disabled ? "Редактор сетки работает только на активной сцене — сначала переключись на неё" : "Редактировать сетку прямо на карте";
+  sceneSettingsDrawer.hidden = false;
+  renderSceneDropdown(); // подсветить строку и подставить подменю под неё
+  sceneSettingsDrawer.scrollIntoView({ block: "nearest" });
+}
+
+function closeSceneSettings() {
+  if (!settingsSceneId) return;
+  settingsSceneId = "";
+  sceneSettingsDrawer.hidden = true;
+  renderSceneDropdown();
+}
+
+document.addEventListener("vtt:sceneDetail", (e) => {
+  if (settingsSceneId && e.detail && e.detail.id === settingsSceneId) fillSceneSettingsFrom(e.detail);
+});
+
+// подменю открыто и его сцена обновилась (например, после drag
+// "Редактора сетки" на активной) — держим поля актуальными.
+document.addEventListener("vtt:sceneUpdated", (e) => {
+  if (settingsSceneId && e.detail.id === settingsSceneId) fillSceneSettingsFrom(e.detail);
 });
 
 // ---- вкладка "Фон" ----
@@ -4476,6 +5573,7 @@ document.getElementById("bgUpload").onchange = async (e) => {
 function renderAudioAssetTable() {
   const wrap = document.getElementById("audioAssetTableWrap");
   wrap.innerHTML = "";
+  fillDoorSoundSelect(fDoorSoundUrl, fDoorSoundUrl.value, "— нет —");
   for (const a of latestAssets.audio || []) {
     const row = document.createElement("div");
     row.className = "asset-row" + (a.url === fAmbientUrl.value ? " selected" : "");
@@ -4571,19 +5669,19 @@ gridEditorBtn.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "grid-edit" }));
 };
 
-// ---- удаление / сохранение (всегда активная сцена) ----
+// ---- удаление / сохранение (сцена, чьё подменю открыто) ----
 document.getElementById("sceneDeleteBtn").onclick = async () => {
   if (sceneList.length <= 1) return;
-  const s = sceneList.find((x) => x.id === currentSceneId);
-  if (!(await showConfirm(`Удалить сцену «${s ? s.name : currentSceneId}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
-  vtt.send({ type: "delete_scene", sceneId: currentSceneId });
+  const s = sceneList.find((x) => x.id === settingsSceneId);
+  if (!(await showConfirm(`Удалить сцену «${s ? s.name : settingsSceneId}»?`, { title: "Удалить сцену", okLabel: "Удалить", danger: true, hint: "Это необратимо." }))) return;
+  vtt.send({ type: "delete_scene", sceneId: settingsSceneId });
   closeSidePanel();
 };
 
 document.getElementById("modalSaveBtn").onclick = () => {
   vtt.send({
     type: "update_scene",
-    sceneId: currentSceneId,
+    sceneId: settingsSceneId,
     sceneName: fName.value.trim() || "Без названия",
     mapUrl: fMapUrl.value.trim(),
     width: parseFloat(fWidth.value) || 1280,
@@ -4591,6 +5689,7 @@ document.getElementById("modalSaveBtn").onclick = () => {
     fogOfWar: fFogOfWar.checked,
     ambientUrl: fAmbientUrl.value.trim(),
     ambientVolume: (parseFloat(fAmbientVolume.value) || 0) / 100,
+    doorSoundUrl: fDoorSoundUrl.value,
     grid: {
       size: parseFloat(fGridSize.value) || 0,
       offsetX: parseFloat(fGridOffX.value) || 0,

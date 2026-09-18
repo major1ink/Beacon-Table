@@ -967,4 +967,15 @@ func TestMapPlaylist(t *testing.T) {
 	if p.Tracks[0].Volume != 0.4 || !p.Tracks[0].Loop {
 		t.Fatalf("настройки трека потерялись: %+v", p.Tracks[0])
 	}
+	if p.Kind != "" {
+		t.Fatalf("обычный плейлист получил kind %q", p.Kind)
+	}
+
+	sb := MapPlaylist(context.Background(), Doc{
+		"name": "Эффекты", "mode": float64(-1),
+		"sounds": []any{map[string]any{"name": "Гром", "path": "tavern.ogg"}},
+	}, assets)
+	if sb.Kind != domain.PlaylistKindSFX {
+		t.Fatalf("soundboard Foundry (mode -1) не распознан: %+v", sb)
+	}
 }

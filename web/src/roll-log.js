@@ -10,21 +10,29 @@
 // Вид карточки — в стиле Foundry: строка «кто», тусклая строка-формула
 // («рецепт» — что кидали), ниже раскладка блоками (значение каждой кости +
 // модификатор-чип + итог). Поведение — в стиле Roll20: новые карточки снизу,
-// тело всегда проскроллено вниз, лог сам не скрывается (прячется только пока
-// не было ни одного броска).
+// тело всегда проскроллено вниз. На столе (plate) лог — плавающее окно:
+// таскается, тянется, сворачивается, закрывается до кнопки «Чат».
 
 import { rollGroups } from "./dice.js";
+import { icon } from "./icons.js";
+import { attachDrag } from "./drag.js";
 
 // createRollLog(container, opts) → { push, clear, el }
 //   container — элемент-хост; модуль строит внутри .roll-log-body и вешает
 //     классы .roll-log / .roll-log--<layout>.
-//   opts.layout — "plate" (плавающая плашка в углу канваса, стол; в какой угол —
-//     решает страница своим CSS) | "strip" (нижняя приклеенная лента в панели).
+//   opts.layout — "plate" (плавающее окно поверх канваса, стол) | "strip"
+//     (нижняя приклеенная лента в панели).
 //   opts.max — сколько карточек держать (по умолчанию 30).
-export function createRollLog(container, { layout = "strip", max = 30 } = {}) {
+//   opts.corner — только для plate: угол, где живёт кнопка «Чат» и откуда
+//     впервые появляется окно ("bottom-left" | "top-right").
+//   opts.storageKey — только для plate: ключ localStorage для положения,
+//     размера и состояния окна (по умолчанию — по пути страницы).
+export function createRollLog(container, { layout = "strip", max = 30, corner = "bottom-left", storageKey } = {}) {
   container.classList.add("roll-log", `roll-log--${layout}`);
-  // Пока броска не было — лога не видно (плашка не мешает канвасу, лента не
-  // ест высоту панели). Первый push его показывает.
+  if (layout === "plate") return createPlate(container, { max, corner, storageKey });
+
+  // Пока броска не было — лога не видно (лента не ест высоту панели).
+  // Первый push его показывает.
   container.classList.add("hidden");
 
   const body = document.createElement("div");
@@ -45,6 +53,199 @@ export function createRollLog(container, { layout = "strip", max = 30 } = {}) {
   }
 
   return { push, clear, el: container };
+}
+
+// ---- plate: плавающее окно поверх канваса ----
+// Хост на весь канвас (клики сквозь него), внутри кнопка «Чат» и окно.
+// Координаты — left/top относительно хоста, а не угол экрана: перетаскивание
+// и растягивание не спорят с прибитым углом, окно не уходит за карту.
+const MIN_W = 200;
+const MIN_H = 140;
+const EDGE = 10;
+
+function createPlate(container, { max, corner, storageKey }) {
+  container.classList.add(corner === "top-right" ? "roll-log--tr" : "roll-log--bl");
+  const key = storageKey || "beacon:rollLog:" + location.pathname;
+
+  // shown — в режиме open окно не лезет на карту, пока броска не было и
+  // пользователь сам не нажал «Чат».
+  const state = Object.assign({ x: null, y: null, w: 264, h: 240, mode: "open" }, load(key));
+  let shown = false;
+  let unread = 0;
+
+  const fab = document.createElement("button");
+  fab.type = "button";
+  fab.className = "roll-log-fab";
+  fab.title = "Открыть лог бросков";
+  const fabBadge = document.createElement("span");
+  fabBadge.className = "roll-log-badge";
+  fab.innerHTML = icon("chat", { size: 15 });
+  fab.append("Чат", fabBadge);
+
+  const win = document.createElement("div");
+  win.className = "roll-log-win";
+
+  const head = document.createElement("div");
+  head.className = "roll-log-head";
+  const title = document.createElement("span");
+  title.className = "roll-log-title";
+  title.textContent = "Броски";
+  const headBadge = document.createElement("span");
+  headBadge.className = "roll-log-badge";
+  const collapseBtn = document.createElement("button");
+  collapseBtn.type = "button";
+  collapseBtn.className = "icon-btn";
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "icon-btn";
+  closeBtn.title = "Убрать — вернуть можно кнопкой «Чат»";
+  closeBtn.innerHTML = icon("close", { size: 13 });
+  head.append(title, headBadge, collapseBtn, closeBtn);
+
+  const body = document.createElement("div");
+  body.className = "roll-log-body";
+  const empty = document.createElement("div");
+  empty.className = "roll-log-empty";
+  empty.textContent = "Бросков пока не было";
+
+  const grip = document.createElement("div");
+  grip.className = "roll-log-resize";
+  grip.title = "Потяни, чтобы изменить размер";
+
+  win.append(head, body, empty, grip);
+  container.append(fab, win);
+
+  function save() {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {
+      /* приватный режим */
+    }
+  }
+
+  function hostSize() {
+    return { W: container.clientWidth, H: container.clientHeight };
+  }
+
+  // state не трогаем: временное сжатие хоста (лоток кубов на телефоне) не
+  // должно переезжать окно навсегда.
+  function place() {
+    const { W, H } = hostSize();
+    if (!W || !H) return;
+    const collapsed = state.mode === "collapsed";
+    const w = Math.max(MIN_W, Math.min(state.w, W - EDGE));
+    const h = collapsed ? head.offsetHeight || 36 : Math.max(MIN_H, Math.min(state.h, H - EDGE));
+    if (state.x === null || state.y === null) {
+      state.x = corner === "top-right" ? W - w - EDGE : EDGE;
+      state.y = corner === "top-right" ? EDGE : H - h - EDGE;
+    }
+    win.style.width = w + "px";
+    win.style.height = collapsed ? "" : h + "px";
+    win.style.left = Math.max(0, Math.min(state.x, W - w)) + "px";
+    win.style.top = Math.max(0, Math.min(state.y, H - h)) + "px";
+  }
+
+  function render() {
+    const closed = state.mode === "closed";
+    const collapsed = state.mode === "collapsed";
+    const visible = !closed && shown;
+    win.hidden = !visible;
+    fab.hidden = visible;
+    win.classList.toggle("collapsed", collapsed);
+    empty.hidden = body.children.length > 0;
+    collapseBtn.title = collapsed ? "Развернуть" : "Свернуть до шапки";
+    collapseBtn.innerHTML = icon(collapsed ? "chevron-down" : "minus", { size: 13 });
+    if (visible && !collapsed) unread = 0;
+    for (const b of [fabBadge, headBadge]) {
+      b.textContent = unread > 99 ? "99+" : String(unread);
+      b.hidden = unread === 0;
+    }
+    if (visible) place();
+  }
+
+  fab.onclick = () => {
+    state.mode = "open";
+    shown = true;
+    save();
+    render();
+    body.scrollTop = body.scrollHeight;
+  };
+  closeBtn.onclick = () => {
+    state.mode = "closed";
+    shown = false;
+    save();
+    render();
+  };
+  collapseBtn.onclick = () => {
+    state.mode = state.mode === "collapsed" ? "open" : "collapsed";
+    save();
+    render();
+    if (state.mode === "open") body.scrollTop = body.scrollHeight;
+  };
+
+  let start = null;
+  attachDrag(head, {
+    onStart: () => {
+      start = { x: state.x, y: state.y };
+    },
+    onMove: (dx, dy) => {
+      const { W, H } = hostSize();
+      state.x = Math.max(0, Math.min(start.x + dx, W - win.offsetWidth));
+      state.y = Math.max(0, Math.min(start.y + dy, H - win.offsetHeight));
+      place();
+    },
+    onEnd: save,
+  });
+  attachDrag(grip, {
+    onStart: () => {
+      start = { w: state.w, h: state.h };
+    },
+    onMove: (dx, dy) => {
+      const { W, H } = hostSize();
+      state.w = Math.max(MIN_W, Math.min(start.w + dx, W - state.x));
+      state.h = Math.max(MIN_H, Math.min(start.h + dy, H - state.y));
+      place();
+    },
+    onEnd: save,
+  });
+  head.addEventListener("dblclick", (e) => {
+    if (!e.target.closest("button")) collapseBtn.onclick();
+  });
+
+  // Канвас сжался (панели, поворот телефона) — окно не должно остаться за краем.
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => !win.hidden && place()).observe(container);
+
+  function push(data) {
+    body.appendChild(renderCard(data));
+    while (body.children.length > max) body.removeChild(body.firstChild);
+    if (state.mode === "closed" || state.mode === "collapsed") unread += 1;
+    else shown = true;
+    render();
+    // Roll20-поведение: свежий бросок всегда виден, старые уезжают вверх.
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function clear() {
+    body.replaceChildren();
+    unread = 0;
+    render();
+  }
+
+  render();
+  return { push, clear, el: container };
+}
+
+function load(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || "null");
+    if (!v || typeof v !== "object") return {};
+    const out = {};
+    for (const k of ["x", "y", "w", "h"]) if (Number.isFinite(v[k])) out[k] = v[k];
+    if (["open", "collapsed", "closed"].includes(v.mode)) out.mode = v.mode;
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 function renderCard({ name, label, formula, rolls, modifier, total }) {

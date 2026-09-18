@@ -19,11 +19,6 @@
     button:hover:not(:disabled) { background: var(--surface-hover); }
     button:disabled { opacity: 0.5; cursor: default; }
     button.primary { background: var(--accent); color: #fff; }
-    input[type="text"] {
-      background: var(--panel-bg); border: 1px solid var(--border); color: var(--text);
-      border-radius: 8px; padding: 7px 10px; font: inherit; width: 100%;
-    }
-    input:focus { outline: none; border-color: var(--accent); }
     .hint { opacity: 0.6; font-size: 11px; line-height: 1.5; margin: 0; }
     .error { color: var(--danger, #e06c75); }
 
@@ -32,7 +27,7 @@
       border-bottom: 1px solid var(--border); background: var(--panel-bg);
     }
     #topBar .title { font-weight: 700; font-size: 15px; margin-right: auto; }
-    #closeBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
+    #closeBtn, #fullscreenBtn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
 
     #app { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -127,21 +122,24 @@
       100% { margin-left: 100%; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/foundryImport-B8WqE_Tp.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/api-2Z6wmMg5.js">
+  <script type="module" crossorigin src="/assets/foundryImport-Cc6u4gT3.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-CRH5FZYK.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-text-8Hqfz_vU.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-import-D5jhMcLo.js">
-  <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-DwlZmB-I.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifiers-Dj5K-hWg.js">
-  <link rel="modulepreload" crossorigin href="/assets/condition-import-DxmzJH5i.js">
-  <link rel="modulepreload" crossorigin href="/assets/spell-import-DA2ETYNI.js">
-  <link rel="modulepreload" crossorigin href="/assets/monster-import-C8RqF1qG.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-import-BRCrUdm8.js">
+  <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
+  <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-Bt57mwnP.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
+  <link rel="modulepreload" crossorigin href="/assets/condition-import-BwXadBiG.js">
+  <link rel="modulepreload" crossorigin href="/assets/spell-import-BxnQzz3k.js">
+  <link rel="modulepreload" crossorigin href="/assets/monster-import-tFVJ0eli.js">
   <link rel="modulepreload" crossorigin href="/assets/reference-import-DZB4I6CS.js">
-  <link rel="stylesheet" crossorigin href="/assets/api-CuNJlGka.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-CfSpnEwL.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-YC0bg39S.css">
 </head>
 <body>
   <div id="topBar">
     <span class="title">Импорт из Foundry VTT</span>
+    <button id="fullscreenBtn" type="button"></button>
     <button id="closeBtn" type="button" title="Закрыть"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
   </div>
   <div id="app">

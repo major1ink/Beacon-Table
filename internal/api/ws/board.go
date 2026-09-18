@@ -78,7 +78,7 @@ func registerBoardRoute(mux *http.ServeMux, mgr *app.CompanyManager, auth servic
 func serveBoardWs(gw *Gateway, hub *service.BoardHub, boardID string, w http.ResponseWriter, r *http.Request, accountID, accountName string, canEdit bool) {
 	conn, err := gw.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		slog.Warn("отклонён WS-хендшейк доски", "origin", r.Header.Get("Origin"), "err", err)
+		slog.Warn("Отклонён WS-хендшейк доски", "origin", r.Header.Get("Origin"), "err", err)
 		return
 	}
 	if !gw.track(conn) {

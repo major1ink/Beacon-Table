@@ -5,6 +5,7 @@
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
 import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // Версия сервера в углу — как на экране входа (index.js). Молча пусто при ошибке.
 fetchVersion()
@@ -120,6 +121,8 @@ async function render() {
   });
 }
 
+initFullscreenButton(document.getElementById("fullscreenBtn"));
+
 document.getElementById("logoutBtn").onclick = async () => {
   await apiLogout();
   location.href = "/";
@@ -198,9 +201,10 @@ function askExportOptions() {
       p.textContent = "Скачать мир одним .zip: сцены, журнал, библиотеки, плейлисты, загрузки.";
       body.appendChild(p);
       const label = document.createElement("label");
-      label.style.cssText = "display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:6px;cursor:pointer;";
+      label.style.cssText = "display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px;cursor:pointer;";
       cb = document.createElement("input");
       cb.type = "checkbox";
+      cb.className = "switch";
       label.append(cb, document.createTextNode(" Перенести аккаунты игроков с персонажами"));
       body.appendChild(label);
       const hint = document.createElement("p");

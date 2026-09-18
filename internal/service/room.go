@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"math"
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"beacon-table/internal/domain"
@@ -77,6 +77,9 @@ type RoomService interface {
 	// стола к эталону
 	// (см. cmd/beacon-table/demo.go: demoResetter).
 	Announce(text string)
+	// ListScenes — все сцены комнаты в порядке переключателя ДМ: карточки
+	// сцен на доске (см. web/src/pages/board.js).
+	ListScenes(ctx context.Context) ([]domain.SceneCard, error)
 }
 
 type inboundMsg struct {
@@ -147,6 +150,12 @@ type Room struct {
 	// room_guest.go: RemoveOwnerTokens): свой канал по той же причине, что и
 	// spawnToken выше — это не команда клиента и роль по ней не проверяется.
 	dropTokens chan dropTokensReq
+	// listScenes — «дай список сцен» из HTTP-хендлера (см. ListScenes):
+	// свой канал по той же причине, что и spawnToken выше.
+	listScenes chan chan []domain.SceneCard
+	// teleportArmed — id токена → id портала, на котором он стоит и о котором
+	// ДМ уже спросили (см. room_teleports.go: noticeTeleport).
+	teleportArmed map[string]string
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -252,6 +261,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		linkTokens:     make(chan linkTokensReq),
 		spawnToken:     make(chan spawnTokenReq),
 		dropTokens:     make(chan dropTokensReq),
+		listScenes:     make(chan chan []domain.SceneCard),
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
@@ -497,6 +507,23 @@ func (r *Room) run() {
 				r.cue = nil
 				r.broadcastCue()
 				continue
+			case "play_sfx":
+				// эфемерно, как animate_attack
+				if im.msg.Sfx != nil {
+					r.broadcastSfx(im.msg.Sfx.URL, im.msg.Sfx.Name, im.msg.Sfx.Volume)
+				}
+				continue
+			case "stop_sfx":
+				r.broadcastSfxStop()
+				continue
+			case "set_door_sound":
+				// не applyMutation: нужна проверка, что стена — дверь
+				if w, ok := r.scene.Walls[im.msg.ID]; ok && w.Door != "" {
+					w.DoorSound = strings.TrimSpace(im.msg.DoorSound)
+					r.markDirty(r.currentSceneID)
+					r.broadcastAll()
+				}
+				continue
 			case "set_cue_volume":
 				// живая правка громкости уже играющего трека — НЕ трогает
 				// StartedAtMs, иначе у всех перематывало бы трек на каждый
@@ -694,6 +721,12 @@ func (r *Room) run() {
 			r.applyMutation(im.msg)
 			r.broadcastAll()
 			r.broadcastSceneList()
+			// ДМ поставил токен на портал — тот же вопрос, что и у игрока.
+			if im.msg.Type == "move_token" && im.msg.Token != nil {
+				if tok, ok := r.scene.Tokens[im.msg.Token.ID]; ok {
+					r.noticeTeleport("ДМ", tok)
+				}
+			}
 
 		case req := <-r.importScenes:
 			req.reply <- r.addScenes(req.scenes)
@@ -706,6 +739,9 @@ func (r *Room) run() {
 
 		case req := <-r.dropTokens:
 			req.reply <- r.removeOwnerTokens(req.ownerID)
+
+		case reply := <-r.listScenes:
+			reply <- r.sceneCards()
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
@@ -770,25 +806,25 @@ func (r *Room) flushIfDirty() {
 			continue
 		}
 		if err := r.store.SaveScene(ctx, id, s); err != nil {
-			log.Println("не удалось сохранить сцену, попробую ещё раз позже:", id, err)
+			slog.Warn("Не удалось сохранить сцену, попробую ещё раз позже", "scene_id", id, "err", err)
 			continue // не сбрасываем — повторим именно эту сцену на следующем тике
 		}
 		delete(r.dirtyScenes, id)
 	}
 	if err := r.store.SaveMeta(ctx, r.currentSceneID, r.sceneOrder); err != nil {
-		slog.Error("не удалось сохранить активную сцену", "err", err)
+		slog.Error("Не удалось сохранить активную сцену", "err", err)
 		return
 	}
 	if r.combatDirty {
 		if err := r.store.SaveCombat(ctx, r.combat); err != nil {
-			log.Println("не удалось сохранить трекер инициативы, попробую ещё раз позже:", err)
+			slog.Warn("Не удалось сохранить трекер инициативы, попробую ещё раз позже", "err", err)
 		} else {
 			r.combatDirty = false
 		}
 	}
 	if r.hubDirty {
 		if err := r.store.SaveHub(ctx, r.hub); err != nil {
-			log.Println("не удалось сохранить хаб лута, попробую ещё раз позже:", err)
+			slog.Warn("Не удалось сохранить хаб лута, попробую ещё раз позже", "err", err)
 		} else {
 			r.hubDirty = false
 		}
@@ -843,6 +879,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 		Grid:          r.scene.Grid,
 		AmbientURL:    r.scene.AmbientURL,
 		AmbientVolume: r.scene.AmbientVolume,
+		DoorSoundURL:  r.scene.DoorSoundURL,
 		GlobalLight:   r.scene.GlobalLight,
 		Tokens:        tokens,
 		NoteMarkers:   noteMarkers,
@@ -850,6 +887,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 		FogAreas:      r.scene.FogAreas,
 		Buildings:     r.scene.Buildings,
 		Drawings:      r.scene.Drawings,
+		Teleports:     r.scene.Teleports,
 	}
 }
 
@@ -876,6 +914,31 @@ func (r *Room) snapshotPayload(c RoomClient) map[string]any {
 func (r *Room) broadcastAll() {
 	for c := range r.clients {
 		c.Send(r.snapshotPayload(c))
+	}
+}
+
+// doorSoundVolume — у двери своей громкости нет, клиент поправит локальным
+// ползунком «Эффекты».
+const doorSoundVolume = 0.8
+
+// broadcastSfx — одноразовый звук всем; громкость 0 клиент счёл бы тишиной,
+// поэтому clampVolume.
+func (r *Room) broadcastSfx(url, name string, volume float64) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return
+	}
+	payload := map[string]any{"type": "audio_sfx", "sfx": &domain.SfxEvent{URL: url, Name: name, Volume: clampVolume(volume)}}
+	for c := range r.clients {
+		c.Send(payload)
+	}
+}
+
+// broadcastSfxStop — оборвать все эффекты у всех.
+func (r *Room) broadcastSfxStop() {
+	payload := map[string]any{"type": "audio_sfx_stop"}
+	for c := range r.clients {
+		c.Send(payload)
 	}
 }
 
@@ -1012,6 +1075,7 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	existing.Y = msg.Token.Y
 	r.markDirty(r.currentSceneID)
 	r.broadcastAll()
+	r.noticeTeleport(c.PlayerName(), existing)
 }
 
 // handleToggleDoor переключает дверь closed<->open. Разрешено и ДМ, и
@@ -1036,6 +1100,12 @@ func (r *Room) handleToggleDoor(from RoomClient, msg domain.ClientMsg) {
 	}
 	r.markDirty(r.currentSceneID)
 	r.broadcastAll()
+	// звук с сервера: дверь открывает и игрок, а слышать должны все
+	if url := w.DoorSound; url != "" {
+		r.broadcastSfx(url, "", doorSoundVolume)
+	} else if r.scene.DoorSoundURL != "" {
+		r.broadcastSfx(r.scene.DoorSoundURL, "", doorSoundVolume)
+	}
 }
 
 // handleSetDoorLock — запереть/отпереть дверь, только ДМ (authorize не
@@ -1247,6 +1317,49 @@ func (r *Room) Announce(text string) {
 	case r.announce <- text:
 	default:
 	}
+}
+
+// switchScene — сделать сцену активной; неизвестный id молча пропускается.
+func (r *Room) switchScene(id string) {
+	s, ok := r.scenes[id]
+	if !ok {
+		return
+	}
+	r.currentSceneID = id
+	r.scene = s
+	r.dirty = true                                // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
+	r.ambientStartedAtMs = time.Now().UnixMilli() // новая активная сцена — амбиент (если есть) стартует заново у всех
+	r.mapStartedAtMs = time.Now().UnixMilli()     // и видео-фон (если есть) — аналогично
+}
+
+// ListScenes — см. RoomService. ctx — чтобы не залипнуть на остановленной
+// комнате, как у ImportScenes.
+func (r *Room) ListScenes(ctx context.Context) ([]domain.SceneCard, error) {
+	reply := make(chan []domain.SceneCard, 1)
+	select {
+	case r.listScenes <- reply:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	select {
+	case cards := <-reply:
+		return cards, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// sceneCards — тело ListScenes уже внутри горутины комнаты.
+func (r *Room) sceneCards() []domain.SceneCard {
+	out := make([]domain.SceneCard, 0, len(r.sceneOrder))
+	for _, id := range r.sceneOrder {
+		s, ok := r.scenes[id]
+		if !ok {
+			continue
+		}
+		out = append(out, domain.SceneCard{ID: s.ID, Name: s.Name, MapURL: s.MapURL, Current: id == r.currentSceneID})
+	}
+	return out
 }
 
 // broadcastAnnounce — уже внутри горутины run(). Всем ролям разом (ДМ,
@@ -2363,7 +2476,15 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 
 	case "remove_token":
 		delete(r.scene.Tokens, msg.ID)
+		delete(r.teleportArmed, msg.ID)
 		r.markDirty(r.currentSceneID)
+
+	case "add_teleport", "move_teleport":
+		r.handleTeleportUpsert(msg.Teleport)
+	case "remove_teleport":
+		r.handleTeleportRemove(msg.ID)
+	case "teleport_tokens":
+		r.handleTeleportTokens(msg)
 
 	case "reveal_token":
 		if t, ok := r.scene.Tokens[msg.ID]; ok {
@@ -2471,7 +2592,9 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		r.markDirty(r.currentSceneID)
 
 	case "add_fog_area":
-		if msg.FogArea != nil {
+		// Апсерт по id — тем же сообщением зона и создаётся, и правится
+		// (контур, имя, показ игрокам, свет, замок).
+		if msg.FogArea != nil && msg.FogArea.Normalize() {
 			r.scene.FogAreas[msg.FogArea.ID] = msg.FogArea
 			r.markDirty(r.currentSceneID)
 		}
@@ -2533,7 +2656,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		r.sceneOrder = removeString(r.sceneOrder, msg.SceneID)
 		delete(r.dirtyScenes, msg.SceneID)
 		if err := r.store.DeleteScene(context.Background(), msg.SceneID); err != nil {
-			log.Println("не удалось удалить файл сцены:", msg.SceneID, err)
+			slog.Error("Не удалось удалить файл сцены", "scene_id", msg.SceneID, "err", err)
 		}
 		if r.currentSceneID == msg.SceneID {
 			nextID := ""
@@ -2551,13 +2674,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		}
 
 	case "switch_scene":
-		if s, ok := r.scenes[msg.SceneID]; ok {
-			r.currentSceneID = msg.SceneID
-			r.scene = s
-			r.dirty = true                                // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
-			r.ambientStartedAtMs = time.Now().UnixMilli() // новая активная сцена — амбиент (если есть) стартует заново у всех
-			r.mapStartedAtMs = time.Now().UnixMilli()     // и видео-фон (если есть) — аналогично
-		}
+		r.switchScene(msg.SceneID)
 
 	case "update_scene":
 		s, ok := r.scenes[msg.SceneID]
@@ -2584,6 +2701,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		}
 		s.AmbientURL = msg.AmbientURL
 		s.AmbientVolume = msg.AmbientVolume
+		s.DoorSoundURL = strings.TrimSpace(msg.DoorSoundURL)
 		if oldW > 0 && oldH > 0 && (s.Width != oldW || s.Height != oldH) {
 			s.RescaleGeometry(oldW, oldH)
 		}

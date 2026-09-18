@@ -10,6 +10,7 @@ import { createBackgroundLayer } from "./layers/background.js";
 import { createGridLayer } from "./layers/grid.js";
 import { createTokensLayer } from "./layers/tokens.js";
 import { createNoteMarkersLayer } from "./layers/note-markers.js";
+import { createTeleportsLayer } from "./layers/teleports.js";
 import { createWallsLayer } from "./layers/walls.js";
 import { createDoorsLayer } from "./layers/doors.js";
 import { createWindowsLayer } from "./layers/windows.js";
@@ -32,7 +33,7 @@ import { installVideoUploaderFix } from "./gl-video-uploader.js";
 // role: "dm" — полный контроль. role: "tv" — чистый зритель без авторизации.
 // role: "player" — авторизован сессией аккаунта, может тащить СВОИ токены
 // (Token.ownerId === playerId) и бросать кубы.
-export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
+export async function initVTT({ canvasId, role, playerId }) {
   const isDM = role === "dm";
   const isPlayer = role === "player";
   const canvas = document.getElementById(canvasId);
@@ -79,7 +80,6 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
     camera: createCamera(),
     dirty: createDirtyFlags(),
     mapStartedAt: 0,
-    combatBarMount: combatBarMount || null,
     // Лампочки токенов света у ДМ: дефолт — прятать вне раздела "Освещение"
     // (как nil у domain.CombatState.HideLightMarkers). Обновляют слушатели
     // vtt:combatState / vtt:lightEditMode ниже, читает layers/tokens.js.
@@ -109,10 +109,7 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   const audio = createAudio(ctx, sideMenu);
   // combatBar — "чей сейчас ход" (см. combat-bar.js), общий для всех трёх
   // ролей; сам решает, показываться ли (только когда трекер инициативы
-  // реально в бою). У игрока встраивается прямо в топбар (ctx.combatBarMount,
-  // см. player.html/#combatBarMount) вместо плавающего оверлея — иначе полоса
-  // накрывала собой кнопки топбара; у ДМ/TV mount не передают, и полоса
-  // остаётся отдельным центрированным оверлеем над канвасом, как раньше.
+  // реально в бою) и сам встаёт по центру свободной части карты.
   createCombatBar(ctx);
 
   // ---- слои, в порядке отрисовки (снизу вверх) — тот же Z-order, что был
@@ -125,6 +122,9 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   // и в Canvas2D-фолбэке, без промежуточного рендер-таргета.
   const background = createBackgroundLayer(ctx);
   const grid = createGridLayer(ctx);
+  // teleports — порталы (см. layers/teleports.js) ПОД токенами: токен
+  // стоит на портале, а не под ним.
+  const teleports = createTeleportsLayer(ctx);
   const tokens = createTokensLayer(ctx);
   const noteMarkers = createNoteMarkersLayer(ctx);
   const walls = createWallsLayer(ctx);
@@ -152,6 +152,7 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   world.addChild(
     background.container,
     grid.container,
+    teleports.container,
     tokens.container,
     noteMarkers.container,
     walls.container,
@@ -165,7 +166,7 @@ export async function initVTT({ canvasId, role, playerId, combatBarMount }) {
   );
   ctx.spawnFx = fx.spawnFx;
 
-  const layers = [background, grid, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, drawings, fx];
+  const layers = [background, grid, teleports, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, drawings, fx];
 
   // render — вызывается на каждый WS-снапшот и на каждое локальное
   // взаимодействие (драг токена/камера/инструменты ДМ), НЕ на каждый кадр

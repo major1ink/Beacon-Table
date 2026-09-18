@@ -112,9 +112,21 @@ function makeBoundText(el, text) {
   return label.containerId === el.id ? label : newElementWith(label, { containerId: el.id });
 }
 
+// edgePoint — точка на рамке el в сторону (tx, ty): отсюда стрелка между
+// карточками начинается у края, а не из центра.
+function edgePoint(el, tx, ty) {
+  const cx = el.x + el.width / 2;
+  const cy = el.y + el.height / 2;
+  const dx = tx - cx;
+  const dy = ty - cy;
+  if (!dx && !dy) return { x: cx, y: cy };
+  const k = Math.min(dx ? el.width / 2 / Math.abs(dx) : Infinity, dy ? el.height / 2 / Math.abs(dy) : Infinity);
+  return { x: cx + dx * k, y: cy + dy * k };
+}
+
 // mountBoardEditor монтирует редактор в el. scene — холст, прочитанный по
 // HTTP для первой отрисовки; дальше всё идёт через WebSocket.
-export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen, renderNote, isNoteLink, uploadImage } = {}) {
+export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatus, onPeers, onSelection, onLinkOpen, renderEmbed, isEmbedLink, uploadImage } = {}) {
   const root = createRoot(el);
 
   let api = null;
@@ -276,10 +288,14 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
   // selectedElement — выделенный элемент, если он ровно один. Связывать с
   // заметкой скопом нечего: ссылка у элемента одна.
   function selectedElement() {
-    if (!api) return null;
-    const ids = Object.keys(api.getAppState().selectedElementIds || {});
-    if (ids.length !== 1) return null;
-    return api.getSceneElements().find((e) => e.id === ids[0]) || null;
+    const list = selectedElements();
+    return list.length === 1 ? list[0] : null;
+  }
+
+  function selectedElements() {
+    if (!api) return [];
+    const ids = api.getAppState().selectedElementIds || {};
+    return api.getSceneElements().filter((e) => ids[e.id]);
   }
 
   function handlePointer({ pointer }) {
@@ -327,13 +343,13 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       UIOptions: UI_OPTIONS,
       // Ходит на oss-ai.excalidraw.com.
       aiEnabled: false,
-      // Врезки пускаем только свои — ссылки на записи журнала. Всё чужое
-      // (YouTube, Figma) осталось запрещённым: тянуть посторонние страницы в
-      // iframe столу незачем. В файле такие элементы сохраняются, просто не
-      // отрисовываются.
-      validateEmbeddable: (link) => !!isNoteLink?.(link),
-      // Содержимое врезки рисуем сами — см. renderNote в pages/board.js.
-      renderEmbeddable: (element) => renderNote?.(element) ?? null,
+      // Врезки пускаем только свои — записи журнала и карточки стола. Всё
+      // чужое (YouTube, Figma) осталось запрещённым: тянуть посторонние
+      // страницы в iframe столу незачем. В файле такие элементы сохраняются,
+      // просто не отрисовываются.
+      validateEmbeddable: (link) => !!isEmbedLink?.(link),
+      // Содержимое врезки рисуем сами — см. renderEmbed в pages/board.js.
+      renderEmbeddable: (element) => renderEmbed?.(element) ?? null,
     })
   );
 
@@ -351,6 +367,10 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
       flushChanges();
     },
     selectedElement,
+    selectedElements,
+    elements() {
+      return api ? api.getSceneElements() : [];
+    },
     // insertImage кладёт на середину экрана картинку, уже лежащую в загрузках
     // стола. fileId считается от адреса, поэтому одна и та же картинка,
     // вставленная дважды, не удваивается в файле доски.
@@ -382,6 +402,69 @@ export function mountBoardEditor(el, { boardId, scene, readOnly = false, onStatu
         elements: [...api.getSceneElementsIncludingDeleted(), ...made],
         captureUpdate: CaptureUpdateAction.IMMEDIATELY,
       });
+      handleChange();
+    },
+    // insertCard — врезка-карточка (см. board/links.js) в центре экрана.
+    // Рамку берём у прямоугольника: заготовки для embeddable у конвертера нет.
+    insertCard({ link, width, height }) {
+      if (!api || readOnly) return;
+      const state = api.getAppState();
+      const at = viewportCoordsToSceneCoords(
+        { clientX: state.width / 2, clientY: state.height / 2 },
+        state
+      );
+      const [rect] = convertToExcalidrawElements([
+        { type: "rectangle", x: at.x - width / 2, y: at.y - height / 2, width, height },
+      ]);
+      const card = newElementWith(rect, { type: "embeddable", link });
+      api.updateScene({
+        elements: [...api.getSceneElementsIncludingDeleted(), card],
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+      handleChange();
+    },
+    // linkCards — двусторонняя стрелка между двумя карточками, привязанная к
+    // обеим: двигаешь карточку — стрелка тянется следом, как нарисованная
+    // рукой. Привязку считаем сами: конвертер связывает только элементы из
+    // своей же пачки.
+    linkCards(aId, bId) {
+      if (!api || readOnly || aId === bId) return;
+      const all = api.getSceneElementsIncludingDeleted();
+      const a = all.find((e) => e.id === aId);
+      const b = all.find((e) => e.id === bId);
+      if (!a || !b) return;
+      const gap = 6;
+      const p = edgePoint(a, b.x + b.width / 2, b.y + b.height / 2);
+      const q = edgePoint(b, a.x + a.width / 2, a.y + a.height / 2);
+      const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+      const ux = (q.x - p.x) / len;
+      const uy = (q.y - p.y) / len;
+      const x = p.x + ux * gap;
+      const y = p.y + uy * gap;
+      const [arrow] = convertToExcalidrawElements([
+        {
+          type: "arrow",
+          x,
+          y,
+          points: [
+            [0, 0],
+            [q.x - ux * gap - x, q.y - uy * gap - y],
+          ],
+          startArrowhead: "arrow",
+          endArrowhead: "arrow",
+          strokeColor: a.strokeColor,
+        },
+      ]);
+      const bound = newElementWith(arrow, {
+        startBinding: { elementId: a.id, focus: 0, gap },
+        endBinding: { elementId: b.id, focus: 0, gap },
+      });
+      const tie = { type: "arrow", id: bound.id };
+      const next = all.map((e) =>
+        e.id === a.id || e.id === b.id ? newElementWith(e, { boundElements: [...(e.boundElements || []), tie] }) : e
+      );
+      next.push(bound);
+      api.updateScene({ elements: next, captureUpdate: CaptureUpdateAction.IMMEDIATELY });
       handleChange();
     },
     // linkedNotes — названия записей, на которые ссылается доска: страница по

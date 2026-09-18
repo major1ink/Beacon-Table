@@ -80,7 +80,7 @@ func TestCompanyManager_DeleteForceCascades(t *testing.T) {
 		t.Fatalf("pregen: %v", err)
 	}
 	ps := sqlite.NewPlaylistStore(m.db, c.ID)
-	if err := ps.Create(ctx, "pl-1", "Бой"); err != nil {
+	if err := ps.Create(ctx, "pl-1", "Бой", ""); err != nil {
 		t.Fatalf("playlist: %v", err)
 	}
 	if err := ps.AddTrack(ctx, "tr-1", "pl-1", "u", "т", 0.5, false); err != nil {

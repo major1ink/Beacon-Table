@@ -1,5 +1,7 @@
 import { Graphics } from "pixi.js";
 import { MAX_ZOOM } from "./camera.js";
+import { NOTE_MARKER_MIN_SIZE, NOTE_MARKER_MAX_SIZE } from "./layers/note-markers.js";
+import { TELEPORT_MIN_SIZE, TELEPORT_MAX_SIZE } from "./layers/teleports.js";
 
 // Универсальная механика "объектов карты" — то общее, что есть у токена,
 // значка заметки, фигуры тумана и здания, и чего раньше не было ни у кого:
@@ -10,6 +12,8 @@ import { MAX_ZOOM } from "./camera.js";
 //     тем, что у него появляется то же поле locked (см. коммент у
 //     domain.Token.Locked о том, почему поле одно и то же, а не своё на
 //     каждую структуру).
+//   * РЕЗАЙЗ (resize) — драг от центра задаёт size: fromDist переводит
+//     расстояние курсора в size, min/max — пределы (см. interaction.js).
 //   * ФОКУСИРОВКА — "покажи мне, где он": камера едет в центр объекта и на
 //     пару секунд вокруг него пульсирует кольцо. Нужна везде, где объект
 //     ищут по СПИСКУ, а не глазами по карте (список источников света в
@@ -27,7 +31,18 @@ import { MAX_ZOOM } from "./camera.js";
 // vtt:setMapObjectLocked / vtt:focusMapObject.
 export const MAP_OBJECT_KINDS = {
   token: { collection: "tokens", saveType: "move_token", payload: "token" },
-  noteMarker: { collection: "noteMarkers", saveType: "move_note_marker", payload: "noteMarker" },
+  noteMarker: {
+    collection: "noteMarkers",
+    saveType: "move_note_marker",
+    payload: "noteMarker",
+    resize: { min: NOTE_MARKER_MIN_SIZE, max: NOTE_MARKER_MAX_SIZE, fromDist: (d) => d },
+  },
+  teleport: {
+    collection: "teleports",
+    saveType: "move_teleport",
+    payload: "teleport",
+    resize: { min: TELEPORT_MIN_SIZE, max: TELEPORT_MAX_SIZE, fromDist: (d) => 2 * d },
+  },
   fogArea: { collection: "fogAreas", saveType: "add_fog_area", payload: "fogArea" },
   building: { collection: "buildings", saveType: "add_building", payload: "building" },
 };

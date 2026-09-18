@@ -106,10 +106,10 @@ func backupNow(ctx context.Context, o Options) {
 		if ctx.Err() != nil {
 			return // остановка сервера — не ошибка
 		}
-		slog.Error("бэкап не удался", "err", err)
+		slog.Error("Бэкап не удался", "err", err)
 		return
 	}
-	slog.Info("бэкап готов", "path", path)
+	slog.Info("Бэкап готов", "path", path)
 }
 
 // checkDB открывает снимок и убеждается, что он читается и целостен —
@@ -126,7 +126,7 @@ func checkDB(ctx context.Context, path string) error {
 		return err
 	}
 	if result != "ok" {
-		return fmt.Errorf("integrity_check: %s", result)
+		return fmt.Errorf("проверка целостности базы не пройдена: %s", result)
 	}
 	// Заодно — что схема на месте и таблицы читаются.
 	var n int
@@ -296,7 +296,7 @@ func rotate(dest string, keep int) {
 	}
 	for _, name := range archives[:len(archives)-keep] {
 		if err := os.Remove(filepath.Join(dest, name)); err != nil {
-			slog.Warn("не удалось удалить старый бэкап", "err", err)
+			slog.Warn("Не удалось удалить старый бэкап", "err", err)
 		}
 	}
 }

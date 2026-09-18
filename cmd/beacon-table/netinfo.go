@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net"
 	"strings"
 )
@@ -17,7 +17,7 @@ import (
 func printAccessURLs(addr string) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		log.Printf("Стол: http://localhost%s/", addr)
+		slog.Info("Стол доступен по адресу", "url", "http://localhost"+addr+"/")
 		return
 	}
 	ips := []string{host}
@@ -28,10 +28,10 @@ func printAccessURLs(addr string) {
 		}
 	}
 	for _, ip := range ips {
-		log.Printf("Стол: http://%s:%s/  (ДМ и игроки входят через одну страницу)", ip, port)
+		slog.Info("Стол доступен по адресу — ДМ и игроки входят через одну страницу", "url", "http://"+net.JoinHostPort(ip, port)+"/")
 	}
 
-	log.Println("Трансляция (ТВ/проектор): ссылку с ключом ДМ берёт на столе, раздел «Настройки»")
+	slog.Info("Трансляция (ТВ/проектор): ссылку с ключом ДМ берёт на столе, раздел «Настройки»")
 }
 
 // virtualIfaceHints — куски имён интерфейсов, по которым отсеиваем адреса

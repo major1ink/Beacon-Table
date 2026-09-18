@@ -19,6 +19,7 @@
 // выносится кнопкой ⧉ в плавающее окно.
 
 import { openFloatingWindow } from "./floating-window.js";
+import { attachDrag } from "./drag.js";
 
 const WIDTH_KEY = "beacon:sheetDockWidth";
 const MIN_WIDTH = 300;
@@ -54,7 +55,7 @@ function injectStyle() {
        ширина запоминается в localStorage на все следующие открытия. */
     .sheet-dock-resizer {
       position: absolute; top: 0; right: -3px; bottom: 0; width: 7px; z-index: 3;
-      cursor: col-resize; background: transparent;
+      cursor: col-resize; background: transparent; touch-action: none;
     }
     .sheet-dock-resizer:hover, .sheet-dock.resizing .sheet-dock-resizer {
       background: linear-gradient(90deg, transparent 2px, var(--accent, #7c6cf0) 2px, var(--accent, #7c6cf0) 5px, transparent 5px);
@@ -145,24 +146,21 @@ function build(hostEl) {
 
   const resizer = document.createElement("div");
   resizer.className = "sheet-dock-resizer";
-  resizer.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = dockEl.offsetWidth;
-    dockEl.classList.add("resizing");
-    function onMove(ev) {
-      dockEl.style.width = clampWidth(startW + (ev.clientX - startX)) + "px";
+  let startW = 0;
+  attachDrag(resizer, {
+    onStart: () => {
+      startW = dockEl.offsetWidth;
+      dockEl.classList.add("resizing");
+    },
+    onMove: (dx) => {
+      dockEl.style.width = clampWidth(startW + dx) + "px";
       notifyLayout();
-    }
-    function onUp() {
+    },
+    onEnd: () => {
       dockEl.classList.remove("resizing");
       localStorage.setItem(WIDTH_KEY, String(dockEl.offsetWidth));
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
       notifyLayout();
-    }
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    },
   });
 
   dockEl.append(header, body, resizer);

@@ -282,3 +282,48 @@ func TestEffectiveACFromStatuses(t *testing.T) {
 		t.Errorf("базовый КД изменился на %d — он должен оставаться прежним", cmb.AC)
 	}
 }
+
+// Истощение: «−5 скорости за уровень» — множитель берётся из уровня метки,
+// снимок в метке остаётся неумноженным.
+func TestPerLevelModifierScalesWithStatusLevel(t *testing.T) {
+	r := testRoom()
+	r.conditions = &fakeConditions{list: []*domain.Condition{{
+		ID: "sys-exhaustion", Name: "Истощение", Slug: "exhaustion", Levels: 6,
+		Modifiers: []domain.Modifier{{Target: domain.ModifierTargetSpeed, Mode: domain.ModifierAdd, Value: "-5", PerLevel: true}},
+	}}}
+	cmb := &domain.Combatant{ID: "c1", Name: "Гоблин", TokenID: "tok-1", AC: 15}
+	r.combat.Combatants["c1"] = cmb
+
+	r.handleApplyStatus(domain.ClientMsg{CombatantID: "c1", StatusSlug: "exhaustion"})
+	if got := r.effectiveStat(cmb, 30, domain.ModifierTargetSpeed); got != 25 {
+		t.Fatalf("уровень 1: скорость = %d, ожидалось 25", got)
+	}
+	lvl := 3
+	r.handleSetStatusLevel(domain.ClientMsg{CombatantID: "c1", StatusSlug: "exhaustion", Level: &lvl})
+	if got := r.effectiveStat(cmb, 30, domain.ModifierTargetSpeed); got != 15 {
+		t.Fatalf("уровень 3: скорость = %d, ожидалось 15", got)
+	}
+	if st := r.statusesOf(cmb); len(st) != 1 || st[0].Modifiers[0].Value != "-5" {
+		t.Fatalf("снимок в метке умножен: %+v", st)
+	}
+}
+
+// «Вдвое» применяется после прибавок и до границ, с округлением вниз:
+// лежащий с +10 к скорости на базе 25 ползёт (25+10)/2 = 17.
+func TestApplyModifiersDiv(t *testing.T) {
+	mods := []domain.Modifier{
+		mod(domain.ModifierTargetSpeed, domain.ModifierDiv, "2"),
+		mod(domain.ModifierTargetSpeed, domain.ModifierAdd, "10"),
+		mod(domain.ModifierTargetSpeed, domain.ModifierMin, "20"),
+	}
+	if got := domain.ApplyModifiers(25, domain.ModifierTargetSpeed, mods); got != 20 {
+		t.Errorf("скорость = %d, ожидалось 20 (floor(35/2)=17, не ниже 20)", got)
+	}
+	if got := domain.ApplyModifiers(25, domain.ModifierTargetSpeed, mods[:2]); got != 17 {
+		t.Errorf("без границы: %d, ожидалось 17", got)
+	}
+	// Делитель 0/1 — ничего не делает.
+	if got := domain.ApplyModifiers(30, domain.ModifierTargetSpeed, []domain.Modifier{mod(domain.ModifierTargetSpeed, domain.ModifierDiv, "1")}); got != 30 {
+		t.Errorf("делитель 1: %d", got)
+	}
+}

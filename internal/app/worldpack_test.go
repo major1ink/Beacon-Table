@@ -109,7 +109,7 @@ func seedWorldContent(t *testing.T, m *CompanyManager, c *domain.Company, ownerA
 	writeFile(t, filepath.Join(uploads, "tokens", "g.png"), "PNGDATA-goblin")
 
 	ps := sqlite.NewPlaylistStore(m.db, c.ID)
-	if err := ps.Create(ctx, "pl-1", "Бой"); err != nil {
+	if err := ps.Create(ctx, "pl-1", "Бой", domain.PlaylistKindSFX); err != nil {
 		t.Fatalf("playlist: %v", err)
 	}
 	if err := ps.AddTrack(ctx, "tr-1", "pl-1", url+"audio/x.mp3", "Драка", 0.7, true); err != nil {
@@ -178,7 +178,7 @@ func TestWorldPack_RoundTrip_ContentOnly(t *testing.T) {
 		t.Fatalf("загрузка не перенесена дословно: %q", got)
 	}
 	pls, err := sqlite.NewPlaylistStore(dstM.db, dst.ID).List(ctx)
-	if err != nil || len(pls) != 1 || len(pls[0].Tracks) != 1 || pls[0].Tracks[0].URL != dstURL+"audio/x.mp3" {
+	if err != nil || len(pls) != 1 || pls[0].Kind != domain.PlaylistKindSFX || len(pls[0].Tracks) != 1 || pls[0].Tracks[0].URL != dstURL+"audio/x.mp3" {
 		t.Fatalf("плейлист: %+v (err %v)", pls, err)
 	}
 	pgs, err := sqlite.NewPregenStore(dstM.db, dst.ID).List(ctx)

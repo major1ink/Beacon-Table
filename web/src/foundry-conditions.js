@@ -19,6 +19,8 @@
 // Всё, что здесь не перечислено, используется как есть (наши slug'и
 // каталога «из коробки» намеренно взяты равными кодам dnd5e —
 // cmd/beacon-table/systemdata/conditions/<system>/<slug>.json).
+import { GLYPH_FOR_SLUG } from "./condition-glyphs.js";
+
 const FOUNDRY_ALIASES = {
   // ядро Foundry (generic-набор)
   blind: "blinded",
@@ -130,46 +132,9 @@ export function conditionName(slug) {
   return ru.charAt(0).toUpperCase() + ru.slice(1);
 }
 
-// DEFAULT_ICONS — глиф по умолчанию для импортированного состояния, у
-// которого в библиотеке ещё нет карточки (см. condition-import.js). Совпадает
-// с иконками каталога «из коробки», чтобы импортированная копия выглядела
-// так же, как встроенная.
-export const DEFAULT_ICONS = {
-  blinded: "🙈",
-  charmed: "💗",
-  deafened: "🙉",
-  exhaustion: "🪫",
-  frightened: "😱",
-  grappled: "🤼",
-  incapacitated: "🚫",
-  invisible: "👻",
-  paralyzed: "⚡",
-  petrified: "🗿",
-  poisoned: "🤢",
-  prone: "🛌",
-  restrained: "🕸️",
-  stunned: "💫",
-  unconscious: "😵",
-  surprised: "❗",
-  concentrating: "🧠",
-  dodging: "💨",
-  hiding: "🫥",
-  marked: "🎯",
-  dead: "💀",
-  stable: "🩹",
-  bleeding: "🩸",
-  burning: "🔥",
-  cursed: "🌚",
-  diseased: "🦠",
-  silenced: "🤐",
-  transformed: "🦎",
-  ethereal: "🌫️",
-  flying: "🕊️",
-  hovering: "🎈",
-  burrowing: "⛏️",
-  sleeping: "💤",
-};
-
+// defaultIcon — глиф по умолчанию для импортированного состояния, у
+// которого в библиотеке ещё нет карточки (см. condition-import.js).
+// Совпадает с каталогом «из коробки» (см. condition-glyphs.js).
 export function defaultIcon(slug) {
-  return DEFAULT_ICONS[normalizeSlug(slug)] || "❔";
+  return GLYPH_FOR_SLUG[normalizeSlug(slug)] || "question";
 }

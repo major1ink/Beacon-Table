@@ -9,21 +9,32 @@
 // web/src/item-import.js (чистая функция, без побочных эффектов), этот файл
 // только вызывает её и мержит результат в текущую карточку.
 import { fetchMe, fetchItem, createItem, updateItem, deleteItem, uploadFile } from "../api.js";
+import { mergeInPlace } from "../merge-in-place.js";
 import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
 import { renderNoteHtml } from "../notes/markdown.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
-import { renderModifierEditor, loadModifierTargets, ensureModifierEditorCSS, describeModifier } from "../modifier-editor.js";
+import { renderStatEditor, loadTargets } from "../stat-editor.js";
+import { loadStand, renderStandSelect } from "../stand.js";
+import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
+import { renderKvTable } from "../kv-table.js";
+import { renderInventoryPreview } from "../inventory-preview.js";
+import { glyphNode } from "../condition-glyphs.js";
+import { itemGlyphName } from "../item-glyph.js";
+import { RARITY, rarityColor } from "../item-rarity.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // ==================== state ====================
 
 let itemId = null;
 let item = null; // объект domain.Item целиком (сервер отдаёт camelCase — см. json-теги)
+// standEntries — существа и персонажи для «примерить на» (см. stand.js).
+let standEntries = [];
 let rollWS = null;
 let rollLog = null; // общий виджет лога бросков (см. web/src/roll-log.js)
 let isAdminView = false; // роль текущего аккаунта (см. boot()) — определяет /ws/dm или /ws/player
@@ -38,28 +49,9 @@ function normalizeItem(raw) {
   return it;
 }
 
-// ==================== DOM helpers (та же схема, что spellbook.js) ====================
+// ==================== DOM helpers ====================
 
-function h(tag, attrs, children) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") e.className = v;
-    else if (k === "text") e.textContent = v;
-    else if (k === "html") e.innerHTML = v;
-    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of [].concat(children || [])) {
-    if (c === undefined || c === null || c === false) continue;
-    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-  }
-  return e;
-}
-
-function field(labelText, inputEl) {
-  return h("label", { class: "field" }, [h("span", { text: labelText }), inputEl]);
-}
+const h = hh;
 
 function textInput(get, set, opts) {
   const inp = h("input", Object.assign({ type: "text" }, opts || {}));
@@ -71,39 +63,50 @@ function textInput(get, set, opts) {
   return inp;
 }
 
-function numberInput(get, set, opts) {
-  const inp = h("input", Object.assign({ type: "number" }, opts || {}));
-  inp.value = get() ?? 0;
-  inp.addEventListener("input", () => {
-    set(parseFloat(inp.value) || 0);
-    scheduleSave();
-  });
-  return inp;
-}
-
-function checkboxField(labelText, get, set) {
-  const cb = h("input", { type: "checkbox" });
-  cb.checked = !!get();
-  cb.addEventListener("change", () => {
-    set(cb.checked);
-    scheduleSave();
-  });
-  return h("label", { class: "check-row" }, [cb, labelText]);
-}
-
-// mdBlock — textarea markdown/HTML слева + живой рендер справа (тот же
-// `marked`, что и заметки ДМ/бестиарий/заклинания, см. web/src/notes/markdown.js).
-function mdBlock(labelText, get, set, opts) {
+// mdBlock — textarea markdown/HTML + живой рендер (тот же `marked`, что и
+// заметки ДМ, см. web/src/notes/markdown.js).
+function mdBlock(labelText, get, set) {
   const render = h("div", { class: "md-render" });
   render.innerHTML = renderNoteHtml(get());
-  const t = h("textarea", opts || {});
+  const t = h("textarea", { "aria-label": labelText });
   t.value = get() ?? "";
   t.addEventListener("input", () => {
     set(t.value);
     render.innerHTML = renderNoteHtml(t.value);
     scheduleSave();
   });
-  return h("div", { class: "section" }, [h("h3", { text: labelText }), h("div", { class: "md-block" }, [t, render])]);
+  return h("div", { class: "md-block" }, [t, render]);
+}
+
+// attunementText — «требует настройки (колдуном)» для плашки и подзаголовка.
+function attunementText(it) {
+  if (!it.requiresAttunement) return "";
+  return it.attunementNote ? `требует настройки (${it.attunementNote})` : "требует настройки";
+}
+
+function heroPills() {
+  return [
+    item.rarity ? pill(item.rarity, "rar") : null,
+    item.requiresAttunement ? pill(attunementText(item), "att") : null,
+    item.source ? pill(item.source, "gold") : null,
+    ...item.tags.map((t) => pill(t)),
+  ];
+}
+
+// kvRows — строки таблицы «показатель · значение» (kv-table.js).
+function kvRows() {
+  return [
+    { label: "Стоимость", get: () => item.cost, set: (v) => (item.cost = v), placeholder: "50 зм.", mono: true },
+    { label: "Вес", get: () => item.weight, set: (v) => (item.weight = v), placeholder: "1 фунт.", mono: true },
+    // weightLb — тот же вес числом (см. domain.Item.WeightLb) для суммы
+    // инвентаря на листе; с текстовым «Вес» не синхронизируется.
+    { label: "Вес числом, фнт", get: () => item.weightLb, set: (v) => (item.weightLb = v), placeholder: "0", mono: true, type: "number", min: "0", step: "any", unit: " фнт" },
+    { label: "Активация", get: () => item.activation, set: (v) => (item.activation = v), placeholder: "1 действие" },
+    { label: "Урон", get: () => item.damage, set: (v) => (item.damage = v), placeholder: "1к8 рубящий", mono: true },
+    { label: "Класс доспеха", get: () => item.armorClass, set: (v) => (item.armorClass = v), placeholder: "14 + Лов (макс 2)", mono: true },
+    { label: "Свойства", get: () => item.properties, set: (v) => (item.properties = v), placeholder: "лёгкое, фехтовальное" },
+    { label: "Заряды", get: () => item.charges, set: (v) => (item.charges = v), placeholder: "3 заряда, 1к3 на рассвете" },
+  ];
 }
 
 // ==================== рендер ====================
@@ -116,11 +119,7 @@ function renderApp() {
 }
 
 function renderEditView(root) {
-  // ---- шапка: иконка + имя/тип/редкость/источник/теги ----
-  const portrait = item.imageUrl
-    ? h("img", { class: "portrait-img", src: item.imageUrl })
-    : h("div", { class: "portrait-placeholder", text: "нет иконки" });
-  const upload = h("input", { type: "file", accept: "image/*" });
+  const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
     if (!file) return;
@@ -128,141 +127,153 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       item.imageUrl = url;
       scheduleSave();
-      renderApp();
+      hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl);
+      artBtn.textContent = "Убрать арт";
+      preview.update();
     } catch (err) {
       showAlert("Не удалось загрузить иконку: " + err.message);
     }
   });
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("div", { class: "portrait-wrap" }, [portrait, h("div", { class: "col", style: "flex:1 1 auto;gap:6px;" }, [
-        field("Имя", textInput(() => item.name, (v) => { item.name = v; document.getElementById("itemTitle").textContent = v || "Без имени"; })),
-        field("Иконка", upload),
-      ])]),
-      h("div", { class: "row" }, [
-        field("Тип", textInput(() => item.type, (v) => (item.type = v), { placeholder: "Чудесный предмет" })),
-        field("Редкость", textInput(() => item.rarity, (v) => (item.rarity = v), { placeholder: "обычный" })),
-        field("Источник", textInput(() => item.source, (v) => (item.source = v), { placeholder: "XGE" })),
+  const artBtn = h("button", {
+    type: "button",
+    text: item.imageUrl ? "Убрать арт" : "Загрузить свой…",
+    onclick: () => {
+      if (item.imageUrl) {
+        item.imageUrl = "";
+        scheduleSave();
+        hero.setGlyph(glyphNode(itemGlyphName(item), ""), "");
+        artBtn.textContent = "Загрузить свой…";
+        preview.update();
+      } else upload.click();
+    },
+  });
+
+  // Редкость — известные значения списком, любое другое остаётся текстом.
+  const raritySel = h("select", {});
+  raritySel.appendChild(h("option", { value: "", text: "—" }));
+  for (const r of RARITY) raritySel.appendChild(h("option", { value: r.ru, text: r.ru }));
+  if (item.rarity && !RARITY.some((r) => r.ru === item.rarity)) raritySel.appendChild(h("option", { value: item.rarity, text: item.rarity }));
+  raritySel.value = item.rarity || "";
+  raritySel.addEventListener("change", () => {
+    item.rarity = raritySel.value;
+    scheduleSave();
+    refreshHead();
+  });
+  const attCb = h("input", { type: "checkbox" });
+  attCb.checked = !!item.requiresAttunement;
+  attCb.addEventListener("change", () => {
+    item.requiresAttunement = attCb.checked;
+    scheduleSave();
+    attNoteBox.hidden = !item.requiresAttunement;
+    refreshHead();
+  });
+  const attNote = textInput(() => item.attunementNote, (v) => { item.attunementNote = v; refreshHead(); }, { placeholder: "колдуном", style: "width:180px" });
+  const attNoteBox = labeled("Кем", attNote);
+  attNoteBox.hidden = !item.requiresAttunement;
+
+  // Книжный подзаголовок: тип правится прямо в нём.
+  const typeInp = textInput(() => item.type, (v) => { item.type = v; typeInp.size = Math.max(14, v.length + 1); hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl); preview.update(); }, { placeholder: "Доспех (кольчуга)", "aria-label": "Тип" });
+  typeInp.size = Math.max(14, (item.type || "").length + 1);
+  const subTail = h("span", {});
+  const subtitle = h("div", { class: "card-sub" }, [typeInp, subTail]);
+  const refreshHead = () => {
+    subTail.textContent = [item.rarity ? ", " + item.rarity : "", item.requiresAttunement ? " (" + attunementText(item) + ")" : ""].join("");
+    hero.setPills(heroPills());
+    hero.setColor(rarityColor(item.rarity) || "");
+  };
+
+  const hero = renderHero({
+    glyph: glyphNode(itemGlyphName(item), ""),
+    imageUrl: item.imageUrl,
+    color: rarityColor(item.rarity) || "",
+    name: item.name,
+    namePlaceholder: "Название предмета",
+    pills: heroPills(),
+    square: true,
+    subtitle,
+    controls: [labeled("Редкость", raritySel), h("div", { class: "field" }, [h("span", { text: "Требует" }), h("label", { class: "card-toggle" }, [attCb, "настройки"])]), attNoteBox, h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    onName: (v) => {
+      item.name = v;
+      document.getElementById("itemTitle").textContent = v || "Без имени";
+      scheduleSave();
+      preview.update();
+    },
+  });
+  refreshHead();
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+
+  const stand = renderStandSelect(standEntries);
+  const preview = renderInventoryPreview(item, { stand, sendRoll });
+  const kv = renderKvTable(kvRows(), { onChange: () => { scheduleSave(); preview.update(); }, hint: "Пустые строки в режиме чтения скрываются. Формулы кубов кликабельны." });
+  const worn = h("div", {}, [
+    h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: "Пока надет" })]),
+    renderStatEditor(item.modifiers, () => { scheduleSave(); preview.update(); }, { stand, periodic: false }),
+  ]);
+
+  const descFold = fold({ title: "Описание", summary: item.description || "что это и как выглядит", body: [mdBlock("Описание", () => item.description, (v) => { item.description = v; descFold.setSummary(v || "что это и как выглядит"); })] });
+  const compatSummary = () => [item.source, item.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
+  const compatFold = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary(),
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => item.source, (v) => { item.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "DMG'24" })),
+        labeled("Модуль Foundry", textInput(() => item.foundryModuleId, (v) => { item.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.items" }), "Откуда импортирован — чтобы повторный импорт нашёл карточку."),
       ]),
-      h("div", { class: "checkbox-row" }, [checkboxField("Требует настройки", () => item.requiresAttunement, (v) => (item.requiresAttunement = v))]),
-      field("Кем/чем настраивается", textInput(() => item.attunementNote, (v) => (item.attunementNote = v), { placeholder: "колдуном" })),
-      tagsField(),
-    ])
-  );
+      tagsField(() => hero.setPills(heroPills())),
+    ],
+  });
 
-  // ---- характеристики ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Характеристики" }),
-      h("div", { class: "row" }, [
-        field("Стоимость", textInput(() => item.cost, (v) => (item.cost = v), { placeholder: "50 зм." })),
-        field("Вес", textInput(() => item.weight, (v) => (item.weight = v), { placeholder: "1 фунт." })),
-        // weightLb — тот же вес, но числом (см. domain.Item.WeightLb), для
-        // подсчёта суммарного веса инвентаря (сумма quantity*weightLb, см.
-        // pages/character-sheet.js: totalWeight) — не синхронизируется со
-        // свободнотекстовым "Вес" выше, оба поля независимы.
-        field("Вес, фунты (число)", numberInput(() => item.weightLb, (v) => (item.weightLb = v), { min: 0, step: "any" })),
-        field("Активация", textInput(() => item.activation, (v) => (item.activation = v), { placeholder: "1 действие" })),
-      ]),
-      h("div", { class: "row" }, [
-        field("Урон", textInput(() => item.damage, (v) => (item.damage = v), { placeholder: "1к8 рубящий" })),
-        field("Класс доспеха", textInput(() => item.armorClass, (v) => (item.armorClass = v), { placeholder: "14 + Лов (макс 2)" })),
-      ]),
-      field("Свойства", textInput(() => item.properties, (v) => (item.properties = v), { placeholder: "лёгкое, фехтовальное" })),
-      field("Заряды", textInput(() => item.charges, (v) => (item.charges = v), { placeholder: "3 заряда, 1к3 на рассвете" })),
-    ])
-  );
-
-  // ---- изменения, которые даёт НАДЕТЫЙ предмет (см. domain.Modifier) ----
-  root.appendChild(
-    h("div", { class: "section" }, [
-      h("h3", { text: "Изменения, пока предмет надет" }),
-      renderModifierEditor(item.modifiers, scheduleSave, {
-        hint:
-          "Лист персонажа применяет это, когда предмет отмечен «надет» в инвентаре: КД, скорость, характеристики. Поле «Класс доспеха» выше — текстовая формулировка целиком («14 + Лов (макс 2)»), а тут — та её часть, которую приложение умеет посчитать; заполнять оба не обязательно.",
-      }),
-    ])
-  );
-
-  // ---- описание ----
-  root.appendChild(mdBlock("Описание", () => item.description, (v) => (item.description = v)));
-
-  // ---- импорт из Foundry VTT ----
-  root.appendChild(importSection());
+  root.appendChild(renderBody([kv, worn, h("div", { class: "card-folds" }, [descFold, compatFold, importSection()])], [preview]));
 }
 
 // ==================== read-режим (по умолчанию) ====================
 
-function lineIf(label, value) {
-  const v = (value ?? "").toString().trim();
-  if (!v) return null;
-  return h("div", { class: "ib-line" }, [h("strong", { text: label + " " }), v]);
-}
-
-function attunementText(it) {
-  if (!it.requiresAttunement) return "";
-  return it.attunementNote ? `требуется настройка (${it.attunementNote})` : "требуется настройка";
-}
-
-function readHeader() {
-  const portrait = item.imageUrl
-    ? h("img", { class: "ib-portrait", src: item.imageUrl })
-    : null;
-  const subtitleBits = [item.type, item.rarity].filter(Boolean).join(", ");
-  const pills = [...(item.source ? [item.source] : []), ...item.tags].map((t) => h("span", { class: "ib-tag-pill", text: t }));
-  const text = h("div", { class: "ib-header-text" }, [
-    h("h2", { class: "ib-name", text: item.name || "Без имени" }),
-    h("div", { class: "ib-subtitle", text: subtitleBits }),
-    pills.length ? h("div", { class: "ib-tags" }, pills) : null,
-  ]);
-  return portrait ? h("div", { class: "ib-header" }, [portrait, text]) : text;
-}
-
-function readInfoGrid() {
-  const wrap = h("div", { class: "ib-info" });
-  const add = (label, value) => {
-    const line = lineIf(label, value);
-    if (line) wrap.appendChild(line);
-  };
-  add("Настройка:", attunementText(item));
-  add("Стоимость:", item.cost);
-  add("Вес:", item.weight);
-  add("Вес (число):", item.weightLb ? item.weightLb + " фнт" : "");
-  add("Активация:", item.activation);
-  add("Урон:", item.damage);
-  add("Класс доспеха:", item.armorClass);
-  add("Свойства:", item.properties);
-  add("Заряды:", item.charges);
-  for (const m of item.modifiers) add("Пока надет:", describeModifier(m));
-  return wrap;
-}
-
 function renderReadView(root) {
-  root.appendChild(readHeader());
-  root.appendChild(h("div", { class: "ib-hr" }));
-  const info = readInfoGrid();
-  root.appendChild(info);
-  enhanceRolls(info, sendRoll); // формула урона и т.п. в этих строках — кликабельная
+  const subtitle = h("div", { class: "card-sub", text: [item.type, item.rarity].filter(Boolean).join(", ") + (item.requiresAttunement ? " (" + attunementText(item) + ")" : "") });
+  const hero = renderHero({
+    glyph: glyphNode(itemGlyphName(item), ""),
+    imageUrl: item.imageUrl,
+    color: rarityColor(item.rarity) || "",
+    name: item.name,
+    pills: heroPills(),
+    square: true,
+    subtitle,
+    readOnly: true,
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
 
+  const stand = renderStandSelect(standEntries);
+  const preview = renderInventoryPreview(item, { stand, sendRoll });
+  const kv = renderKvTable(kvRows(), { readOnly: true, sendRoll });
+  const worn = item.modifiers.length
+    ? h("div", {}, [h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: "Пока надет" })]), renderStatEditor(item.modifiers, () => {}, { stand, periodic: false, readOnly: true })])
+    : null;
+
+  const folds = [];
   const desc = item.description && item.description.trim();
   if (desc) {
-    root.appendChild(h("div", { class: "ib-hr" }));
-    const body = h("div", { class: "ib-prose" });
+    const body = h("div", { class: "card-prose" });
     body.innerHTML = renderNoteHtml(item.description);
     enhanceRolls(body, sendRoll);
     wireCatalogLinks(body);
-    root.appendChild(h("div", { class: "ib-block" }, [h("h3", { class: "ib-section-title", text: "Описание" }), body]));
+    folds.push(fold({ title: "Описание", body: [body], open: true }));
   }
+  const compat = [item.source, item.foundryModuleId].filter(Boolean).join(" · ");
+  if (compat) folds.push(fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }));
+
+  root.appendChild(renderBody([kv, worn, folds.length ? h("div", { class: "card-folds" }, folds) : null], [preview]));
 }
 
-function tagsField() {
-  const wrap = h("div", {});
-  const list = h("div", { class: "tag-list" });
+function tagsField(onChange) {
+  const list = h("div", { class: "card-chips" });
   function renderTags() {
     list.innerHTML = "";
     item.tags.forEach((tag, i) => {
       list.appendChild(
-        h("span", { class: "tag-pill" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), onclick: () => { item.tags.splice(i, 1); scheduleSave(); renderTags(); } })])
+        h("span", { class: "card-chip" }, [tag, h("button", { type: "button", html: icon("close", { size: 11 }), "aria-label": "Убрать тег", onclick: () => { item.tags.splice(i, 1); scheduleSave(); renderTags(); onChange(); } })])
       );
     });
   }
@@ -277,9 +288,9 @@ function tagsField() {
     input.value = "";
     scheduleSave();
     renderTags();
+    onChange();
   });
-  wrap.append(field("Теги", input), list);
-  return wrap;
+  return h("div", {}, [labeled("Теги", input), list]);
 }
 
 // applyImport — общая точка для файла и вставленного текста: парсит JSON,
@@ -321,14 +332,17 @@ function importSection() {
   });
   const textarea = h("textarea", { id: "importTextarea", placeholder: "...или вставь сюда содержимое JSON-файла" });
   const importBtn = h("button", { type: "button", id: "importBtn", text: "Импортировать вставленный JSON", onclick: () => applyImport(textarea.value, msg) });
-  return h("div", { class: "section", id: "importSection" }, [
-    h("h3", { text: "Импорт из Foundry VTT" }),
-    h("p", { class: "hint" }, "Экспортируй предмет (оружие/доспех/чудесный предмет и т.п.) из Foundry VTT в JSON и выбери файл ниже (или вставь содержимое текстом). У предметов ttg.club, в отличие от заклинаний/существ, своей кнопки экспорта нет. Поля карточки заменятся тем, что удастся разобрать из файла."),
-    field("Файл экспорта", fileInput),
-    textarea,
-    importBtn,
-    msg,
-  ]);
+  return fold({
+    title: "Импорт из Foundry VTT",
+    summary: "JSON-экспорт предмета",
+    body: [
+      h("p", { class: "card-note" }, "Экспортируй предмет (оружие/доспех/чудесный предмет и т.п.) из Foundry VTT в JSON и выбери файл ниже (или вставь содержимое текстом). У предметов ttg.club, в отличие от заклинаний/существ, своей кнопки экспорта нет. Поля карточки заменятся тем, что удастся разобрать из файла."),
+      labeled("Файл экспорта", fileInput),
+      textarea,
+      importBtn,
+      msg,
+    ],
+  });
 }
 
 // ==================== autosave ====================
@@ -363,7 +377,7 @@ async function doSave() {
   dirty = false;
   setSaveStatus("saving");
   try {
-    item = normalizeItem(await updateItem(itemId, item));
+    mergeInPlace(item, normalizeItem(await updateItem(itemId, item)));
     setSaveStatus("saved");
     // Панель "Предметы" в dm.html/player.html кэширует список (обновляется
     // только при открытии) — без этого пинга её строка оставалась бы видимо
@@ -421,6 +435,8 @@ editToggleBtn.onclick = () => {
   updateEditToggleBtn();
   renderApp();
 };
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {
@@ -491,8 +507,8 @@ function currentId() {
     document.getElementById("loadingHint").textContent = "Не указан id предмета (?id=...).";
     return;
   }
-  ensureModifierEditorCSS();
-  await loadModifierTargets(); // справочник целей для таблицы «Изменения»
+  await loadTargets(); // подписи целей для статблока
+  standEntries = await loadStand();
   try {
     item = normalizeItem(await fetchItem(itemId));
   } catch (err) {

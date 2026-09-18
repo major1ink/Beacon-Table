@@ -77,6 +77,12 @@ func validateConditionName(name string) (string, error) {
 	return name, nil
 }
 
+// defaultConditionSlug — см. domain.DefaultConditionSlug; нормализация на
+// случай ID с символами вне [a-z0-9-].
+func defaultConditionSlug(id string) string {
+	return NormalizeConditionSlug(domain.DefaultConditionSlug(id))
+}
+
 // NormalizeConditionSlug — приведение машинного ключа к каноничному виду
 // (нижний регистр, пробелы/подчёркивания в дефис, всё остальное вырезано).
 // Экспортируется, потому что тем же ключом ходят команды наложения метки в
@@ -94,14 +100,17 @@ func NormalizeConditionSlug(slug string) string {
 // sanitizeReference клампит карточку справочника: молча, без ошибки.
 func sanitizeCondition(c domain.Condition) domain.Condition {
 	c.Slug = NormalizeConditionSlug(c.Slug)
+	if c.Slug == "" {
+		c.Slug = defaultConditionSlug(c.ID)
+	}
 	c.Source = clampRunes(c.Source, maxConditionShortText)
 	c.ImageURL = clampRunes(c.ImageURL, maxConditionShortText)
 	c.Color = clampRunes(c.Color, 32)
-	// Icon — один глиф-эмодзи (см. domain.Condition.Icon). Режем по рунам, а
-	// не по байтам: эмодзи многобайтовый, и составные (с модификаторами кожи/
-	// ZWJ-склейки вроде 🧝‍♀️) занимают несколько рун — 8 хватает любому
-	// разумному варианту и всё равно отсекает вставленный целиком абзац.
-	c.Icon = clampRunes(strings.TrimSpace(c.Icon), 8)
+	// Icon — имя SVG-глифа или эмодзи (см. domain.Condition.Icon). Режем по
+	// рунам, а не по байтам: эмодзи многобайтовый, составные (ZWJ-склейки
+	// вроде 🧝‍♀️) занимают несколько рун; 32 хватает и им, и самому длинному
+	// имени глифа, но отсекает вставленный целиком абзац.
+	c.Icon = clampRunes(strings.TrimSpace(c.Icon), 32)
 	c.Description = clampRunes(c.Description, maxConditionLongText)
 	c.Mechanics = clampRunes(c.Mechanics, maxConditionText)
 	c.Modifiers = sanitizeModifiers(c.Modifiers)
@@ -174,11 +183,7 @@ func (s *conditionService) Create(ctx context.Context, name string) (*domain.Con
 		return nil, err
 	}
 	c := domain.NewCondition(newID(), name)
-	// Slug из имени НЕ выводим: имя русское, а slug должен быть латинским
-	// кодом, совпадающим с кодом Foundry ("blinded" у «Ослепления») —
-	// угадать его из имени нельзя, это осознанный ввод ДМ в конструкторе
-	// (см. web/src/pages/conditions.js). Пустой slug — валидное состояние
-	// карточки: она просто не участвует в сопоставлении с импортом.
+	c.Slug = defaultConditionSlug(c.ID)
 	c.UpdatedAt = time.Now()
 	if err := s.conditions.Create(ctx, c.ID, c); err != nil {
 		return nil, err
@@ -192,8 +197,8 @@ func (s *conditionService) Update(ctx context.Context, id string, c domain.Condi
 		return nil, err
 	}
 	c.Name = name
-	c = sanitizeCondition(c)
 	c.ID = id
+	c = sanitizeCondition(c)
 	c.UpdatedAt = time.Now()
 	found, err := s.conditions.Update(ctx, id, &c)
 	if err != nil {

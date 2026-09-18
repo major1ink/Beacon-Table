@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"beacon-table/internal/domain"
 )
@@ -43,7 +43,7 @@ func (r *Room) syncCharacterHP(cmb *domain.Combatant) {
 		// Не роняем ход боя из-за недоступной базы: трекер продолжает
 		// работать на своих числах, разъедется только бланк — и об этом
 		// должно быть видно в логе сервера, а не только по жалобе за столом.
-		log.Printf("не удалось записать хиты в лист персонажа %s: %v", cmb.CharacterID, err)
+		slog.Error("Не удалось записать хиты в лист персонажа", "character_id", cmb.CharacterID, "err", err)
 		return
 	}
 	r.broadcastCharacterHP(cmb)

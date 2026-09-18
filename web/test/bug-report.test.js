@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildBody, issueURLFitting } from "../src/bug-report.js";
+import { buildBody, issueURLFitting, mailtoURLFitting } from "../src/bug-report.js";
 
 test("тело issue идёт по разделам шаблона, пустые поля — прочерком", () => {
   const body = buildBody({ what: " карта чёрная ", steps: "", expected: "", tech: "—", withTech: false });
@@ -32,4 +32,19 @@ test("длинный отчёт режется, пока ссылка не вл�
   assert.ok(url.length <= 8000, `длина ссылки ${url.length}`);
   // Пробелы в query — плюсами, поэтому ищем слово, а не фразу целиком.
   assert.ok(decodeURIComponent(url).includes("обрезан"));
+});
+
+test("письмо уходит на почту проекта, пробелы в теле не превращаются в плюсы", () => {
+  const { url, trimmed } = mailtoURLFitting("Баг", "карта чёрная после смены сцены");
+  assert.equal(trimmed, false);
+  assert.ok(url.startsWith("mailto:info@beacontable.ru?subject="));
+  assert.ok(decodeURIComponent(url).includes("[Beacon Table] Баг"));
+  assert.ok(url.includes("%20"));
+  assert.ok(!url.includes("+"));
+});
+
+test("длинное письмо режется по тому же потолку, что и ссылка на GitHub", () => {
+  const { url, trimmed } = mailtoURLFitting("Баг", "Стена текста кириллицей. ".repeat(600));
+  assert.equal(trimmed, true);
+  assert.ok(url.length <= 8000, `длина ссылки ${url.length}`);
 });

@@ -94,6 +94,25 @@ func (a *API) handleBoardList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleSceneList — сцены стола для карточки сцены на доске. Только ДМ:
+// игрок видит имя сцены из самой ссылки карточки (см. web/src/board/links.js),
+// а список неоткрытых сцен ему знать незачем.
+func (a *API) handleSceneList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireAdminAccount(w, r); !ok {
+		return
+	}
+	world, ok := a.requireWorld(w)
+	if !ok {
+		return
+	}
+	cards, err := world.Room.ListScenes(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
+		return
+	}
+	writeJSON(w, http.StatusOK, cards)
+}
+
 func (a *API) handleBoardCreate(w http.ResponseWriter, r *http.Request) {
 	acc, ok := a.requireAccount(w, r)
 	if !ok {

@@ -4,7 +4,7 @@ import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
 import { createRollLog } from "../roll-log.js";
 import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
-import { openSheetDock } from "../sheet-dock.js";
+import { openSheetDock, isSheetDockOpen } from "../sheet-dock.js";
 import { setCardOpener } from "../combatant-card.js";
 import {
   fetchMe,
@@ -24,7 +24,6 @@ import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createDrawOptions } from "../draw-options.js";
 import { createBoardList } from "../board-list.js";
-import { attachTooltip } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import { isPlayer } from "../roles.js";
 import { uploadAvatarFile } from "../avatar-cropper.js";
@@ -58,9 +57,28 @@ function openCharacterSheet(c) {
     // Док отнимает ширину у карты — канвас должен перемериться сразу, а не
     // ждать, пока сработает ResizeObserver внутри vtt (см. vtt/index.js:
     // "vtt:relayout" — там же, почему на один только наблюдатель полагаться
-    // нельзя).
-    onLayoutChange: () => document.dispatchEvent(new CustomEvent("vtt:relayout")),
+    // нельзя). Тот же момент меняет, чей лист в доке, — отсюда подсветка чипа.
+    onLayoutChange: () => {
+      document.dispatchEvent(new CustomEvent("vtt:relayout"));
+      syncCharDockOpen();
+    },
   });
+}
+
+// syncCharDockOpen — кольцо на чипе, чей лист в доке (.char-chip.open).
+// Что в доке, знает sheet-dock.js — своей копии состояния не держим.
+function syncCharDockOpen() {
+  for (const chip of document.querySelectorAll("#charDock .char-chip")) {
+    chip.classList.toggle("open", isSheetDockOpen("char-" + chip.dataset.id));
+  }
+}
+
+// syncChromeInset — ширина столбика трекеру боя (combat-bar.js:
+// vtt:chromeInset), иначе на узком экране он ляжет поверх аватаров.
+function syncChromeInset() {
+  const dock = document.getElementById("charDock");
+  const left = dock.childElementCount ? dock.offsetWidth + 10 : 0;
+  document.dispatchEvent(new CustomEvent("vtt:chromeInset", { detail: { left } }));
 }
 
 // Клик по фишке в верхнем оверлее хода (vtt/combat-bar.js) открывает лист
@@ -69,11 +87,9 @@ function openCharacterSheet(c) {
 // права решает combatant-card.js, здесь только место показа.
 setCardOpener((target, cmb) => openCharacterSheet({ id: cmb.characterId, name: cmb.name }));
 
-// renderCharDock — ряд компактных "чипов" своих персонажей в топбаре (см.
-// player.html: #charDock): аватар + имя, клик открывает лист. Раньше до
-// листа надо было идти через модалку "Мои персонажи" — а лист за игру
-// открывают чаще, чем правят список персонажей. Модалка остаётся местом,
-// где персонажей заводят/правят/удаляют, док — местом, где их открывают.
+// renderCharDock — столбик аватаров в углу карты (player.html: #charDock),
+// клик открывает лист: за игру его открывают чаще, чем правят список.
+// Модалка «Мои персонажи» (по «+») — где заводят/правят/удаляют.
 // chars — уже загруженный список, если он у вызывающего есть (renderChars),
 // иначе тянем сами.
 async function renderCharDock(chars) {
@@ -91,20 +107,27 @@ async function renderCharDock(chars) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "char-chip";
+    chip.dataset.id = c.id;
     chip.title = `${c.name} — открыть лист персонажа`;
-    const avatar = document.createElement("span");
-    avatar.className = "char-chip-avatar";
+    chip.setAttribute("aria-label", chip.title);
     // Видео-аватар (webm/mp4 токен-арт) как background не покажется —
     // такому персонажу оставляем ту же букву-заглушку, что и безаватарному.
-    if (c.avatarUrl && !isVideoUrl(c.avatarUrl)) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
-    else avatar.textContent = (c.name || "?").trim().charAt(0).toUpperCase();
-    const name = document.createElement("span");
-    name.className = "char-chip-name";
-    name.textContent = c.name;
-    chip.append(avatar, name);
+    if (c.avatarUrl && !isVideoUrl(c.avatarUrl)) chip.style.backgroundImage = `url("${c.avatarUrl}")`;
+    else chip.textContent = (c.name || "?").trim().charAt(0).toUpperCase();
     chip.onclick = () => openCharacterSheet(c);
     dock.appendChild(chip);
   }
+  const add = document.createElement("button");
+  add.type = "button";
+  add.id = "charAddBtn";
+  add.className = "rail-btn";
+  add.title = "Мои персонажи";
+  add.setAttribute("aria-label", add.title);
+  add.innerHTML = icon("plus", { size: 15 });
+  add.onclick = openCharsModal;
+  dock.appendChild(add);
+  syncCharDockOpen();
+  syncChromeInset();
 }
 
 let me = null;
@@ -147,7 +170,7 @@ const PLAYER_DRAW_HELP = {
     location.href = "/";
     return;
   }
-  document.getElementById("topbarUsername").textContent = me.username;
+  document.getElementById("settingsUsername").textContent = me.username;
   document.getElementById("app").classList.add("ready");
 
   // Лоток кубов — ДО initVTT, и отдельным контейнером от лога: сам лоток
@@ -157,24 +180,21 @@ const PLAYER_DRAW_HELP = {
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
   initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg));
-  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate" });
+  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate", corner: "bottom-left" });
   document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
   renderCharDock();
 
-  vtt = await initVTT({
-    canvasId: "scene",
-    role: "player",
-    playerId: me.id,
-    // Трекер инициативы встраивается в топбар (см. player.html), а не
-    // плавает отдельным оверлеем поверх него (см. vtt/index.js/combat-bar.js).
-    combatBarMount: document.getElementById("combatBarMount"),
-  });
-  // Справочник — та же боковая колонка канваса, что и у ДМ (см. pages/dm.js —
-  // тот же sticky, см. комментарий там), первая иконка тут (игрок кубы
-  // бросает через #diceDock снизу, не через sideMenu — у него это основной
-  // инструмент, и он всегда на виду, а не за иконкой).
-  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });
-  mountCompendiumMenu(compendiumPanel, { role: "player" });
+  vtt = await initVTT({ canvasId: "scene", role: "player", playerId: me.id });
+  // Столбик мог отрисоваться раньше трекера боя — сообщаем ширину ещё раз.
+  syncChromeInset();
+
+  // ---- колонка иконок (vtt/side-menu.js) — вся навигация, как рейл ДМ.
+  // Первой уже стоит громкость (audio.js). Группы: инструменты ·
+  // справочники и окна · аккаунт.
+  vtt.sideMenu.addSeparator();
+
+  // Линейка — инструмент, не панель: .active держит setPlayerTool.
+  rulerBtn = vtt.sideMenu.addButton(RULER_ICON, "Линейка", () => setPlayerTool(playerTool === "ruler" ? "select" : "ruler"), { tip: TOOL_HELP.ruler });
 
   // Пометки — та же иконка и та же панель, что у ДМ (см. pages/dm.js и
   // web/src/draw-options.js), только без кнопки «Очистить слой»: она стирает
@@ -208,6 +228,12 @@ const PLAYER_DRAW_HELP = {
       drawOptions.reset();
     }
   });
+  vtt.sideMenu.addSeparator();
+
+  // Справочник — как у ДМ (pages/dm.js: там же про sticky).
+  const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });
+  mountCompendiumMenu(compendiumPanel, { role: "player" });
+
   // Доски — тот же список, что у ДМ (см. board-list.js). Игрок заводит свои
   // и видит те чужие, которые ему открыли: разбирается с этим сервер, панель
   // одинаковая.
@@ -230,7 +256,6 @@ const PLAYER_DRAW_HELP = {
   boardsClose.title = "Закрыть";
   boardsClose.innerHTML = icon("close", { size: 13 });
   boardsClose.onclick = () => boardsPanel.close();
-  boardsPanel.style.position = "relative";
   boardsPanel.appendChild(boardsClose);
 
   // Журнал стола — та же страница, что и у ДМ (см. web/journal.html):
@@ -238,6 +263,21 @@ const PLAYER_DRAW_HELP = {
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
   // выезжающей плашке бокового меню.
   vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow, { tip: PANEL_HELP.journal });
+  vtt.sideMenu.addButton(icon("backpack", { size: 16 }), "Хаб", openLootHub, { tip: PANEL_HELP.hub });
+
+  vtt.sideMenu.addSeparator();
+
+  // Кубы — только на телефоне (player.html: #diceBtn). Класс на <body>:
+  // от него зависят и соседи — HUD зума и лог бросков.
+  const diceBtn = vtt.sideMenu.addButton(icon("dice", { size: 16 }), "Кубы", () => {
+    const open = document.body.classList.toggle("dice-open");
+    diceBtn.classList.toggle("open", open);
+  }, { tip: PANEL_HELP.dice });
+  diceBtn.id = "diceBtn";
+  vtt.sideMenu.addButton(icon("sliders", { size: 16 }), "Настройки", openSettings, { tip: PANEL_HELP.settings });
+  vtt.sideMenu.addButton(icon("log-out", { size: 16 }), "Выйти", logout, {
+    tip: { title: "Выйти", summary: `Завершить сессию ${me.username} и вернуться на вход.` },
+  });
 
   // Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
   // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
@@ -273,10 +313,10 @@ function openJournalWindow(entryId) {
 // записи игроку не открывали, окно покажет обычную ошибку «не найдено».
 document.addEventListener("vtt:journalShown", (e) => openJournalWindow(e.detail.id));
 
-document.getElementById("logoutBtn").onclick = async () => {
+async function logout() {
   await apiLogout();
   location.href = "/";
-};
+}
 
 // ================= HUD зума =================
 // Те же кнопки/события, что у ДМ (см. web/src/pages/dm.js) — interaction.js
@@ -286,33 +326,21 @@ document.getElementById("zoomInBtn").onclick = () => document.dispatchEvent(new 
 document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:zoomBy", { detail: 1 / 1.3 }));
 document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
 
-// ================= лоток кубов на телефоне =================
-// На десктопе лоток — полоса внизу, кнопка спрятана стилями (player.html).
-// Класс на <body>, а не на доке: от него зависят и соседи — HUD зума и лог
-// бросков.
-const diceBtn = document.getElementById("diceBtn");
-diceBtn.onclick = () => {
-  const open = document.body.classList.toggle("dice-open");
-  diceBtn.classList.toggle("open", open);
-};
-
-initFullscreenButton(
-  document.getElementById("fullscreenBtn"),
-  (active) =>
-    icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }) +
-    `<span class="tb-label">${active ? "Свернуть" : "Во весь экран"}</span>`
-);
+initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
 
 // ================= инструменты карты =================
-// Линейка живёт в топбаре, пометки — иконкой в боковой колонке над канвасом
-// (как у ДМ, см. pages/dm.js: там панель тоже уехала из общего списка в
-// быстрый доступ). Инструмент один на двоих: включил линейку — пометки
-// выключились, и наоборот.
-const rulerBtn = document.getElementById("rulerBtn");
+// Линейка и пометки — иконки в колонке над канвасом (как у ДМ). Инструмент
+// один на двоих: включил линейку — пометки выключились, и наоборот.
+// Иконки линейки в icons.js нет.
+const RULER_ICON =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
+  '<rect x="3" y="7" width="18" height="10" rx="1" transform="rotate(-25 12 12)"/>' +
+  '<path d="M6.5 9.7l1 1M9 8l1.2 1.2M11.6 6.4l1 1M14.1 4.6l1.2 1.2" transform="rotate(-25 12 12)"/></svg>';
+let rulerBtn = null;
 let playerTool = "select";
 function setPlayerTool(name) {
   playerTool = name;
-  rulerBtn.classList.toggle("active", name === "ruler");
+  if (rulerBtn) rulerBtn.classList.toggle("active", name === "ruler");
   // Панель пометок И ЕСТЬ включённый инструмент (см. её onToggle ниже):
   // ушли на другой инструмент — закрываем её.
   if (name !== "draw" && drawPanel) {
@@ -323,15 +351,12 @@ function setPlayerTool(name) {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: name }));
 }
 
-rulerBtn.onclick = () => setPlayerTool(playerTool === "ruler" ? "select" : "ruler");
-attachTooltip(rulerBtn, TOOL_HELP.ruler);
-
 // ================= "Настройки" =================
 // Версия сервера (см. cmd/beacon-table/version.go) и кнопка «Сообщить о
 // баге» (см. web/src/bug-report.js); раздел заведён отдельно, чтобы будущим
 // общим настройкам приложения было куда встать.
 const settingsOverlay = document.getElementById("settingsOverlay");
-document.getElementById("settingsBtn").onclick = async () => {
+async function openSettings() {
   settingsOverlay.classList.add("open");
   const el = document.getElementById("appVersion");
   try {
@@ -340,7 +365,7 @@ document.getElementById("settingsBtn").onclick = async () => {
   } catch {
     el.textContent = "неизвестна";
   }
-};
+}
 document.getElementById("settingsCloseBtn").onclick = () => settingsOverlay.classList.remove("open");
 document.getElementById("bugReportBtn").onclick = () => openBugReport();
 settingsOverlay.addEventListener("mousedown", (e) => {
@@ -532,13 +557,13 @@ charSaveBtn.onclick = async () => {
   }
 };
 
-document.getElementById("charsBtn").onclick = async () => {
+async function openCharsModal() {
   resetCharForm();
   charsOverlay.classList.add("open");
   await renderChars();
-};
-// ДМ назначил (или отобрал) персонажа — обновляемся сами, без F5. Ряд фишек
-// в топбаре перерисовываем всегда, список в модалке — только пока она
+}
+// ДМ назначил (или отобрал) персонажа — обновляемся сами, без F5. Столбик
+// аватаров перерисовываем всегда, список в модалке — только пока она
 // открыта, чтобы не дёргать сервер зря.
 document.addEventListener("vtt:charactersChanged", () => {
   if (charsOverlay.classList.contains("open")) renderChars();
@@ -550,7 +575,7 @@ charsOverlay.addEventListener("mousedown", (e) => {
 });
 
 // ================= Компендиум (см. compendium-menu.js/catalog.js) =================
-// Заклинания/Предметы/Справочник переехали из topbar-модалок в один
+// Заклинания/Предметы/Справочник переехали из модалок в один
 // плавающий список категорий на правой колонке канваса (иконка монтируется в
 // boot(), см. vtt.sideMenu.addIcon ниже) — тот же компонент, что и у ДМ (см.
 // pages/dm.js — идентичный блок, те же два моста, см. комментарий там).
@@ -596,7 +621,7 @@ async function myCharactersForLoot() {
   }
 }
 
-document.getElementById("lootHubBtn").onclick = async () => {
+async function openLootHub() {
   const characters = await myCharactersForLoot();
   showLootTakeModal({
     title: "Хаб",
@@ -607,7 +632,7 @@ document.getElementById("lootHubBtn").onclick = async () => {
       return Promise.resolve();
     },
   });
-};
+}
 
 // vtt:tokenLootRequest — диспатчится interaction.js при ПКМ по мёртвому
 // токену с непустым Loot (и только пока ДМ включил

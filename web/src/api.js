@@ -336,8 +336,9 @@ export async function deleteAdminPregen(id) {
 export async function fetchAdminPlaylists() {
   return apiFetch("/api/admin/playlists");
 }
-export async function createPlaylist(name) {
-  return apiFetch("/api/admin/playlists", { method: "POST", body: JSON.stringify({ name }) });
+// kind — "" | "sfx" (панель эффектов)
+export async function createPlaylist(name, kind = "") {
+  return apiFetch("/api/admin/playlists", { method: "POST", body: JSON.stringify({ name, kind }) });
 }
 export async function renamePlaylist(id, name) {
   return apiFetch(`/api/admin/playlists/${id}`, { method: "PUT", body: JSON.stringify({ name }) });
@@ -433,6 +434,11 @@ export async function fetchBoardScene(id) {
 // та библиотека ДМ-ская, а доску правит и игрок.
 export async function fetchBoardImages() {
   return apiFetch("/api/board-images");
+}
+// fetchScenes — сцены стола для карточек на доске: [{id, name, mapUrl,
+// current}]; mapUrl отдаётся только ДМ.
+export async function fetchScenes() {
+  return apiFetch("/api/scenes");
 }
 // importBoard — доска из файла Excalidraw: .excalidraw.md из ваулта Obsidian
 // либо голый .excalidraw. Имя необязательно: без него сервер возьмёт имя

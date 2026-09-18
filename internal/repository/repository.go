@@ -165,7 +165,8 @@ type SessionRepository interface {
 
 // PlaylistRepository — библиотека плейлистов канала ДМ.
 type PlaylistRepository interface {
-	Create(ctx context.Context, id, name string) error
+	// Create — kind: "" (обычный) | domain.PlaylistKindSFX.
+	Create(ctx context.Context, id, name, kind string) error
 	Rename(ctx context.Context, id, name string) (bool, error)
 	Delete(ctx context.Context, id string) error
 	// List — все плейлисты с уже подгруженными треками одним заходом.

@@ -28,6 +28,7 @@ import { mapFoundryMonsterJson } from "../monster-import.js";
 import { mapFoundryCharacterJson } from "../character-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
+import { initFullscreenButton } from "../fullscreen.js";
 
 // tokenArt/itemArt — картинка документа Foundry. Мапперы карточек её не
 // трогают (существу/предмету арт задаёт ДМ, а не экспорт), но при импорте
@@ -668,7 +669,7 @@ async function resolveConflict(target, info) {
 function askConflict(target, { title, where, existingInfo, incomingInfo, allowOverwrite = true }) {
   return new Promise((resolve) => {
     const overlay = h("div", { class: "modal-overlay" });
-    const applyAll = h("input", { type: "checkbox" });
+    const applyAll = h("input", { type: "checkbox", class: "switch" });
 
     const finish = (action) => {
       if (applyAll.checked && action !== "stop") conflictDefaults[target.id] = action;
@@ -754,6 +755,8 @@ window.addEventListener("beforeunload", (e) => {
   e.preventDefault();
   e.returnValue = "";
 });
+
+initFullscreenButton(document.getElementById("fullscreenBtn"));
 
 document.getElementById("closeBtn").onclick = () => {
   if (running && !confirm(CLOSE_WARNING)) return;
