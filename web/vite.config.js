@@ -5,8 +5,7 @@ import { cp, rm } from "node:fs/promises";
 // Собирает web/ (исходники, HTML — рукописный источник) в
 // cmd/beacon-table/static/ (чистый build output, коммитится в git — иначе
 // `go build ./cmd/beacon-table`, у которого //go:embed static, перестанет
-// работать без Node.js на чистом клоне). См. README "Фронтенд" и
-// /home/major/.claude/plans/imperative-baking-thunder.md.
+// работать без Node.js на чистом клоне). См. README "Фронтенд".
 
 // excalidrawAssets — шрифты редактора доски. Excalidraw грузит их в рантайме
 // по window.EXCALIDRAW_ASSET_PATH, в бандл они не попадают. Копируем из

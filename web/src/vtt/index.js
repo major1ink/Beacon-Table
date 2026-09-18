@@ -23,8 +23,7 @@ import { installVideoUploaderFix } from "./gl-video-uploader.js";
 
 // initVTT — единая точка входа движка для DM/TV/Player страниц. Публичный
 // контракт (аргументы, {send, getScene, cueAudio}) не поменялся со старой
-// Canvas2D-версии — изменилась только внутренняя механика рендера (см. план:
-// /home/major/.claude/plans/imperative-baking-thunder.md). Единственное
+// Canvas2D-версии — изменилась только внутренняя механика рендера. Единственное
 // вынужденное отличие: initVTT теперь ASYNC (PIXI.Application.init() в v8 —
 // промис) — обе вызывающих страницы (dm.html/player.html) уже вызывали её
 // внутри async boot(), так что там достаточно добавить await; broadcast.html
