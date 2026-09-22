@@ -102,7 +102,7 @@ func (r *Room) spawnPlayerToken(req spawnTokenReq) bool {
 		t.Light = &domain.TokenLight{Enabled: true, Bright: guestTorchBright, Dim: guestTorchDim}
 	}
 	r.scene.Tokens[t.ID] = t
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 	return true
 }

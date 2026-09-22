@@ -1,10 +1,22 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"beacon-table/internal/domain"
 )
+
+// noopSceneStore — хранилище сцен, которое ничего не пишет: тестам удаления
+// сцены нужен только сам вызов, не диск.
+type noopSceneStore struct{}
+
+func (noopSceneStore) Load(context.Context) (*domain.RoomSnapshot, error)          { return nil, nil }
+func (noopSceneStore) SaveScene(context.Context, string, *domain.SceneState) error { return nil }
+func (noopSceneStore) DeleteScene(context.Context, string) error                   { return nil }
+func (noopSceneStore) SaveMeta(context.Context, string, []string) error            { return nil }
+func (noopSceneStore) SaveCombat(context.Context, *domain.CombatState) error       { return nil }
+func (noopSceneStore) SaveHub(context.Context, *domain.LootHub) error              { return nil }
 
 // TestSceneCardsFollowSwitcherOrder — карточки сцен идут в порядке
 // переключателя ДМ, с фоном и отметкой активной.
@@ -24,5 +36,157 @@ func TestSceneCardsFollowSwitcherOrder(t *testing.T) {
 	}
 	if cards[1].ID != "scene-1" || cards[1].Name != "Тест" || !cards[1].Current {
 		t.Errorf("вторая карточка: %+v", cards[1])
+	}
+}
+
+// sceneClient — RoomClient, запоминающий присланное: тесты смотрят, какую
+// сцену несёт snapshot и что в scene_list.
+type sceneClient struct {
+	role     domain.ClientRole
+	playerID string
+	got      []map[string]any
+}
+
+func (c *sceneClient) Send(payload any) {
+	if m, ok := payload.(map[string]any); ok {
+		c.got = append(c.got, m)
+	}
+}
+func (c *sceneClient) Close()                  {}
+func (c *sceneClient) Role() domain.ClientRole { return c.role }
+func (c *sceneClient) PlayerID() string        { return c.playerID }
+func (c *sceneClient) PlayerName() string      { return c.playerID }
+
+// last — последнее сообщение данного типа.
+func (c *sceneClient) last(typ string) map[string]any {
+	for i := len(c.got) - 1; i >= 0; i-- {
+		if c.got[i]["type"] == typ {
+			return c.got[i]
+		}
+	}
+	return nil
+}
+
+func snapshotSceneID(m map[string]any) string {
+	if m == nil {
+		return ""
+	}
+	return m["scene"].(*domain.PublicScene).ID
+}
+
+// viewRoom — две сцены, активная scene-1; ДМ, игрок и трансляция за столом.
+func viewRoom() (*Room, *sceneClient, *sceneClient, *sceneClient) {
+	r := testRoom()
+	r.store = noopSceneStore{}
+	second := domain.NewScene("scene-2", "Подвал")
+	second.AmbientURL = "/uploads/cellar.mp3"
+	r.scenes["scene-2"] = second
+	r.sceneOrder = []string{"scene-1", "scene-2"}
+	r.scenes["scene-1"].AmbientURL = "/uploads/tavern.mp3"
+	dm := &sceneClient{role: domain.RoleDM, playerID: "admin"}
+	pl := &sceneClient{role: domain.RolePlayer, playerID: "acc-1"}
+	tv := &sceneClient{role: domain.RoleTV}
+	for _, c := range []RoomClient{dm, pl, tv} {
+		r.clients[c] = true
+	}
+	return r, dm, pl, tv
+}
+
+// TestViewSceneOpensOnlyForSender — view_scene открывает сцену у ДМ, игрок и
+// трансляция остаются на активной; scene_list различает активную и открытую.
+func TestViewSceneOpensOnlyForSender(t *testing.T) {
+	r, dm, pl, tv := viewRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "view_scene", SceneID: "scene-2"}})
+
+	if got := snapshotSceneID(dm.last("snapshot")); got != "scene-2" {
+		t.Errorf("ДМ видит %q, ожидалась scene-2", got)
+	}
+	if r.currentSceneID != "scene-1" {
+		t.Errorf("активная сцена сменилась на %q", r.currentSceneID)
+	}
+	for name, c := range map[string]RoomClient{"игрок": pl, "трансляция": tv} {
+		if got := r.sceneFor(c).ID; got != "scene-1" {
+			t.Errorf("%s видит %q, ожидалась активная scene-1", name, got)
+		}
+	}
+	list := dm.last("scene_list")
+	if list["currentSceneId"] != "scene-1" || list["viewSceneId"] != "scene-2" {
+		t.Errorf("scene_list: current=%v view=%v", list["currentSceneId"], list["viewSceneId"])
+	}
+	if entries := list["scenes"].([]domain.SceneListEntry); entries[0].ViewerCount != 2 || entries[1].ViewerCount != 0 {
+		t.Errorf("зрители считаются не по факту: %+v", entries)
+	}
+	// Ответ ушёл только ДМ — игроку и трансляции слать нечего.
+	if pl.last("snapshot") != nil || tv.last("snapshot") != nil {
+		t.Error("view_scene не должен рассылать снапшоты остальным")
+	}
+}
+
+// TestDMMutationLandsInViewedScene — правка ДМ ложится в открытую у него
+// сцену, а не в активную; после обработки комната снова на активной.
+func TestDMMutationLandsInViewedScene(t *testing.T) {
+	r, dm, pl, _ := viewRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "view_scene", SceneID: "scene-2"}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "add_token", Token: &domain.Token{ID: "tok-new", Label: "Крыса"}}})
+
+	if _, ok := r.scenes["scene-2"].Tokens["tok-new"]; !ok {
+		t.Fatal("токен не попал в открытую у ДМ сцену")
+	}
+	if _, ok := r.scenes["scene-1"].Tokens["tok-new"]; ok {
+		t.Error("токен попал в активную сцену")
+	}
+	if !r.dirtyScenes["scene-2"] || r.dirtyScenes["scene-1"] {
+		t.Errorf("грязные сцены: %v", r.dirtyScenes)
+	}
+	if r.scene != r.scenes["scene-1"] {
+		t.Error("между сообщениями r.scene должна быть активной сценой")
+	}
+	if got := snapshotSceneID(pl.last("snapshot")); got != "scene-1" {
+		t.Errorf("игроку после правки ушла сцена %q", got)
+	}
+}
+
+// TestSwitchSceneBringsEveryoneAlong — «показать игрокам» переключает
+// активную и возвращает всех на неё, включая ДМ, смотревшего другую.
+func TestSwitchSceneBringsEveryoneAlong(t *testing.T) {
+	r, dm, pl, tv := viewRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "view_scene", SceneID: "scene-2"}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "switch_scene", SceneID: "scene-2"}})
+
+	if r.currentSceneID != "scene-2" {
+		t.Fatalf("активная %q", r.currentSceneID)
+	}
+	if len(r.viewing) != 0 {
+		t.Errorf("viewing не сброшен: %v", r.viewing)
+	}
+	for name, c := range map[string]*sceneClient{"ДМ": dm, "игрок": pl, "трансляция": tv} {
+		if got := snapshotSceneID(c.last("snapshot")); got != "scene-2" {
+			t.Errorf("%s видит %q", name, got)
+		}
+	}
+}
+
+// TestSnapshotAmbientFollowsActiveScene — музыка в снапшоте от активной
+// сцены, даже когда ДМ открыл у себя другую.
+func TestSnapshotAmbientFollowsActiveScene(t *testing.T) {
+	r, dm, _, _ := viewRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "view_scene", SceneID: "scene-2"}})
+	snap := dm.last("snapshot")
+	if snap["ambientUrl"] != "/uploads/tavern.mp3" {
+		t.Errorf("ambientUrl = %v, ожидался трек активной сцены", snap["ambientUrl"])
+	}
+}
+
+// TestDeleteViewedSceneFallsBackToActive — удалили сцену, открытую у ДМ —
+// он возвращается на активную.
+func TestDeleteViewedSceneFallsBackToActive(t *testing.T) {
+	r, dm, _, _ := viewRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "view_scene", SceneID: "scene-2"}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "delete_scene", SceneID: "scene-2"}})
+	if _, ok := r.viewing[dm]; ok {
+		t.Error("viewing всё ещё ссылается на удалённую сцену")
+	}
+	if got := snapshotSceneID(dm.last("snapshot")); got != "scene-1" {
+		t.Errorf("ДМ видит %q после удаления", got)
 	}
 }

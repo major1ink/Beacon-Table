@@ -738,7 +738,7 @@ attachTooltip(teleportBtn, TOOL_HELP.teleport);
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
   showSidePanelSection("scene"); // вернуться в раздел с уже актуальными offsetX/Y
-  openSceneSettings(currentSceneId, "grid");
+  openSceneSettings(viewSceneId, "grid");
 };
 
 // ================= глобальный свет "на всю карту" =================
@@ -1311,7 +1311,7 @@ function teleportName(t) {
 // карты. Возвращает {label, targetSceneId, targetTeleportId} или null; self —
 // id правимого портала, исключается из списка.
 async function pickTeleportTarget(current, self) {
-  const linked = await linkedScenesOf(currentSceneId);
+  const linked = await linkedScenesOf(viewSceneId);
   const local = Object.values(vtt.getScene().teleports || {}).filter((t) => t.id !== self);
   if (!linked.length && !local.length) {
     showAlert(
@@ -1426,7 +1426,7 @@ async function teleportStillLinked(teleportId) {
     }
     return t;
   }
-  const linked = await linkedScenesOf(currentSceneId);
+  const linked = await linkedScenesOf(viewSceneId);
   if (!linked.some((l) => l.scene.id === t.targetSceneId)) {
     showAlert(`Сцена «${t.label}» больше не связана с текущей на доске — портал не работает.`, { title: "Телепорт" });
     return null;
@@ -1459,7 +1459,7 @@ teleportMoveAllBtn.onclick = async () => {
 // Игрок встал на портал (см. room_teleports.go: noticeTeleport) — спросить ДМ.
 document.addEventListener("vtt:teleportRequest", async (e) => {
   const d = e.detail;
-  if (!d.targetTeleportId && d.targetSceneId === currentSceneId) return;
+  if (!d.targetTeleportId && d.targetSceneId === d.sceneId) return;
   const who = `${d.playerName || "Игрок"}: «${d.tokenLabel || "токен"}»`;
   const ok = await showConfirm(
     d.targetTeleportId
@@ -1468,9 +1468,16 @@ document.addEventListener("vtt:teleportRequest", async (e) => {
     { title: "Телепорт", okLabel: "Переместить", cancelLabel: "Не пускать" }
   );
   if (!ok) return;
-  const t = await teleportStillLinked(d.teleportId);
-  if (!t) return;
-  vtt.send({ type: "teleport_tokens", id: d.teleportId, tokenIds: [d.tokenId] });
+  // Портал стоит на сцене игрока (d.sceneId); у ДМ в этот момент может быть
+  // открыта другая — тогда локально проверить нечего, портал и цель проверит
+  // сервер, здесь только связь сцен на доске.
+  if (d.sceneId === viewSceneId) {
+    if (!(await teleportStillLinked(d.teleportId))) return;
+  } else if (d.targetSceneId && !(await linkedScenesOf(d.sceneId)).some((l) => l.scene.id === d.targetSceneId)) {
+    showAlert(`Сцена «${d.targetSceneName}» больше не связана с той, где стоит портал — портал не работает.`, { title: "Телепорт" });
+    return;
+  }
+  vtt.send({ type: "teleport_tokens", sceneId: d.sceneId, id: d.teleportId, tokenIds: [d.tokenId] });
 });
 
 function updateLightToggleBtnLabel() {
@@ -4192,8 +4199,8 @@ window.addEventListener("message", async (e) => {
     const scene = sceneList.find((s) => norm(s.name) === norm(e.data.name));
     if (!scene) {
       showAlert(`Сцены «${e.data.name}» нет за столом — импортируй карту из модуля или проверь её название.`);
-    } else if (vtt && scene.id !== currentSceneId) {
-      vtt.send({ type: "switch_scene", sceneId: scene.id });
+    } else if (vtt) {
+      openSceneHere(scene.id); // у себя: стол переключит «Показать игрокам»
       closeSidePanel(); // убрать панель с карты, чтобы новую сцену было видно
     }
   } else if (e.data.type === "beacon:openPlaylist") {
@@ -4222,9 +4229,9 @@ window.addEventListener("message", async (e) => {
       vtt.send({ type: "play_cue", cue: { url: c.url, name: c.name || "", volume: c.volume, loop: !!c.loop } });
     }
   } else if (e.data.type === "beacon:switchSceneId") {
-    // Карточка сцены на доске (pages/board.js): «перейти» и телепорт.
-    if (vtt && typeof e.data.id === "string" && e.data.id !== currentSceneId && sceneList.some((s) => s.id === e.data.id)) {
-      vtt.send({ type: "switch_scene", sceneId: e.data.id });
+    // Карточка сцены на доске (pages/board.js): «перейти» — открыть у себя.
+    if (vtt && typeof e.data.id === "string" && sceneList.some((s) => s.id === e.data.id)) {
+      openSceneHere(e.data.id);
     }
   } else if (e.data.type === "beacon:placeMonster") {
     // Карточка монстра на доске: токен в центр текущего вида.
@@ -5303,10 +5310,27 @@ document.addEventListener("vtt:fogAreaCreated", (e) => {
 // ===================================================================
 // Открытие/закрытие самой панели теперь общее для всех разделов рейла —
 // см. блок "левое меню" ниже; здесь только наполнение раздела "Сцена".
+// Две сцены, а не одна: viewSceneId — что открыто на карте у ЭТОГО ДМ
+// (view_scene: подготовить следующую локацию, не дёргая стол), activeSceneId
+// — что видят игроки и трансляция (switch_scene, «Показать игрокам»). Всё,
+// что про «текущую карту» ДМ — редактор сетки, телепорты, настройки — идёт
+// от viewSceneId (см. internal/service/room.go: viewing/sceneOf).
 const sceneSwitchName = document.getElementById("sceneSwitchName");
+const sceneShowBtn = document.getElementById("sceneShowBtn");
 const sceneDropdown = document.getElementById("sceneDropdown");
 let sceneList = []; // [{id,name,viewerCount}]
-let currentSceneId = "";
+let viewSceneId = "";
+let activeSceneId = "";
+
+// showSceneToPlayers — сделать сцену активной для стола.
+function showSceneToPlayers(id) {
+  if (id && id !== activeSceneId) vtt.send({ type: "switch_scene", sceneId: id });
+}
+// openSceneHere — открыть сцену только у себя.
+function openSceneHere(id) {
+  if (id && id !== viewSceneId) vtt.send({ type: "view_scene", sceneId: id });
+}
+sceneShowBtn.onclick = () => showSceneToPlayers(viewSceneId);
 
 function renderSceneDropdown() {
   // Подменю настроек — один узел, который живёт под строкой своей сцены;
@@ -5316,24 +5340,44 @@ function renderSceneDropdown() {
   sceneDropdown.innerHTML = "";
   for (const s of sceneList) {
     const row = document.createElement("div");
-    row.className = "scene-row row-card" + (s.id === currentSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
-    // Переключение — <button> на всю строку, корзина — отдельная кнопка
-    // рядом: вложенные интерактивы недопустимы.
+    row.className = "scene-row row-card" + (s.id === viewSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
+    // Открыть у себя — <button> на всю строку, ▶/шестерёнка/корзина —
+    // отдельные кнопки рядом: вложенные интерактивы недопустимы.
     const pick = document.createElement("button");
     pick.type = "button";
     pick.className = "scene-pick";
-    pick.setAttribute("aria-pressed", String(s.id === currentSceneId));
+    pick.setAttribute("aria-pressed", String(s.id === viewSceneId));
     const nameSpan = document.createElement("span");
     nameSpan.className = "scene-name";
     nameSpan.textContent = s.name;
     pick.onclick = () => {
-      if (s.id !== currentSceneId) vtt.send({ type: "switch_scene", sceneId: s.id });
+      openSceneHere(s.id);
       closeSidePanel();
     };
     const viewers = document.createElement("span");
     viewers.className = "scene-viewers pill-badge";
     viewers.innerHTML = icon("user", { size: 11 });
     viewers.append(" " + s.viewerCount);
+    // Активная для стола — глаз-метка (только значок: имени сцены и так
+    // тесно); остальные — ▶ «показать игрокам».
+    let live;
+    if (s.id === activeSceneId) {
+      live = document.createElement("span");
+      live.className = "scene-live";
+      live.innerHTML = icon("eye", { size: 14 });
+      live.title = "Эту сцену видят игроки и трансляция";
+      live.setAttribute("aria-label", "у игроков");
+    } else {
+      live = document.createElement("button");
+      live.type = "button";
+      live.className = "scene-gear scene-gear--show icon-btn";
+      live.innerHTML = icon("play", { size: 13 });
+      live.title = "Показать игрокам";
+      live.onclick = (ev) => {
+        ev.stopPropagation();
+        showSceneToPlayers(s.id);
+      };
+    }
     // Шестерёнка — полные настройки этой сцены (фон/аудио/сетка) подменю
     // под строкой (см. openSceneSettings ниже); корзина — удаление. Обе —
     // для ЛЮБОЙ сцены из списка, не обязательно активной.
@@ -5359,7 +5403,7 @@ function renderSceneDropdown() {
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
     pick.append(nameSpan, viewers);
-    row.append(pick, gear, del);
+    row.append(pick, live, gear, del);
     sceneDropdown.appendChild(row);
     if (s.id === settingsSceneId) row.after(sceneSettingsDrawer);
   }
@@ -5380,9 +5424,11 @@ document.getElementById("sceneCreateBtn").onclick = async () => {
 
 document.addEventListener("vtt:sceneList", (e) => {
   sceneList = e.detail.scenes || [];
-  currentSceneId = e.detail.currentSceneId || "";
-  const active = sceneList.find((s) => s.id === currentSceneId);
-  sceneSwitchName.textContent = active ? active.name : "Сцена";
+  activeSceneId = e.detail.currentSceneId || "";
+  viewSceneId = e.detail.viewSceneId || activeSceneId;
+  const viewed = sceneList.find((s) => s.id === viewSceneId);
+  sceneSwitchName.textContent = viewed ? viewed.name : "Сцена";
+  sceneShowBtn.hidden = viewSceneId === activeSceneId;
   renderSceneDropdown();
   if (openPanelSection === "scene") renderTeleport();
 });
@@ -5395,7 +5441,7 @@ let teleportSeq = 0;
 
 async function renderTeleport() {
   const seq = ++teleportSeq;
-  const from = currentSceneId;
+  const from = viewSceneId;
   teleportList.innerHTML = "";
   if (!from) return;
   const rows = await linkedScenesOf(from);
@@ -5421,7 +5467,7 @@ async function renderTeleport() {
     meta.title = "Доска, где нарисована связь";
     row.append(nameSpan, meta);
     row.onclick = () => {
-      vtt.send({ type: "switch_scene", sceneId: scene.id });
+      openSceneHere(scene.id);
       closeSidePanel();
     };
     teleportList.appendChild(row);
@@ -5546,7 +5592,7 @@ function parkSceneSettingsDrawer() {
 function openSceneSettings(sceneId, tab) {
   settingsSceneId = sceneId;
   switchTab(tab || "basic");
-  if (sceneId === currentSceneId) {
+  if (sceneId === viewSceneId) {
     fillSceneSettingsFrom(vtt.getScene());
   } else {
     // Пока едет ответ — хотя бы имя из списка, а не поля прошлой сцены.
@@ -5554,7 +5600,7 @@ function openSceneSettings(sceneId, tab) {
     vtt.send({ type: "get_scene", sceneId });
   }
   // Редактор сетки рисует поверх карты — только для сцены, что на ней.
-  gridEditorBtn.disabled = sceneId !== currentSceneId;
+  gridEditorBtn.disabled = sceneId !== viewSceneId;
   gridEditorBtn.title = gridEditorBtn.disabled ? "Редактор сетки работает только на активной сцене — сначала переключись на неё" : "Редактировать сетку прямо на карте";
   sceneSettingsDrawer.hidden = false;
   renderSceneDropdown(); // подсветить строку и подставить подменю под неё

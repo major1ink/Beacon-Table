@@ -72,7 +72,10 @@ export function createNet(ctx, audio) {
       diffAndMarkDirty(ctx.dirty, ctx.scene, nextScene);
       ctx.scene = nextScene;
       ctx.mapStartedAt = data.mapStartedAt;
-      audio.applyAmbient(nextScene.ambientUrl || "", data.ambientStartedAt, nextScene.ambientVolume);
+      // Амбиент — верхним уровнем, от АКТИВНОЙ сцены стола, а не от той, что
+      // в scene: ДМ, открывший у себя другую карту (view_scene), слышит ту же
+      // музыку, что игроки (см. snapshotPayload в internal/service/room.go).
+      audio.applyAmbient(data.ambientUrl || "", data.ambientStartedAt, data.ambientVolume);
       ctx.render();
       document.dispatchEvent(new CustomEvent("vtt:sceneUpdated", { detail: ctx.scene }));
     } else if (data.type === "fx") {

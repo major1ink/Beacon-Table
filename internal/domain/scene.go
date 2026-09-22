@@ -588,9 +588,10 @@ type PublicScene struct {
 	Teleports     map[string]*Teleport   `json:"teleports"`
 }
 
-// SceneListEntry — одна строка в переключателе сцен DM. ViewerCount
-// ненулевой только у активной сцены — комната показывает всем не-DM
-// клиентам ровно одну сцену одновременно.
+// SceneListEntry — одна строка в переключателе сцен DM. ViewerCount —
+// сколько игроков и трансляций смотрит сцену сейчас (см.
+// service.Room.sceneOf): обычно все на активной, но после телепорта и
+// (позже) по своему выбору игрок может быть и на другой.
 type SceneListEntry struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`

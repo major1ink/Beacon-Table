@@ -24,7 +24,7 @@ func (r *Room) handleTeleportUpsert(t *domain.Teleport) {
 		r.scene.Teleports = make(map[string]*domain.Teleport)
 	}
 	r.scene.Teleports[t.ID] = t
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 }
 
 func (r *Room) handleTeleportRemove(id string) {
@@ -36,7 +36,7 @@ func (r *Room) handleTeleportRemove(id string) {
 			t.TargetTeleportID = ""
 		}
 	}
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 }
 
 // teleportUnder — портал активной сцены, на котором стоит точка.
@@ -67,6 +67,7 @@ func (r *Room) noticeTeleport(who string, tok *domain.Token) {
 	r.teleportArmed[tok.ID] = t.ID
 	payload := map[string]any{
 		"type":       "teleport_request",
+		"sceneId":    r.scene.ID, // ДМ может в этот момент смотреть другую сцену — портал ищем здесь
 		"teleportId": t.ID,
 		"tokenId":    tok.ID,
 		"tokenLabel": tok.Label,
@@ -98,20 +99,29 @@ func (r *Room) noticeTeleport(who string, tok *domain.Token) {
 // переключить стол туда. Приземляются у обратного портала (того, что на
 // сцене назначения ведёт сюда), иначе — в центре карты; рядом друг с другом
 // по клетке сетки.
+//
+// msg.SceneID — сцена портала (из teleport_request): ДМ, подтверждающий
+// перенос, может в это время смотреть другую сцену. Пусто — сцена
+// отправителя.
 func (r *Room) handleTeleportTokens(msg domain.ClientMsg) {
-	t, ok := r.scene.Teleports[msg.ID]
+	from := r.scene
+	if msg.SceneID != "" {
+		if s, ok := r.scenes[msg.SceneID]; ok {
+			from = s
+		}
+	}
+	t, ok := from.Teleports[msg.ID]
 	if !ok {
 		return
 	}
 	if t.Local() {
-		r.teleportWithin(t, msg.TokenIDs)
+		r.teleportWithin(from, t, msg.TokenIDs)
 		return
 	}
 	target, ok := r.scenes[t.TargetSceneID]
-	if !ok || target == r.scene {
+	if !ok || target == from {
 		return
 	}
-	from := r.scene
 	cell := target.Grid.Size
 	if cell <= 0 {
 		cell = 48
@@ -146,20 +156,20 @@ func (r *Room) handleTeleportTokens(msg domain.ClientMsg) {
 	r.switchScene(target.ID)
 }
 
-// teleportWithin — перенос к порталу той же сцены: клетка правее него.
-func (r *Room) teleportWithin(t *domain.Teleport, ids []string) {
-	dest, ok := r.scene.Teleports[t.TargetTeleportID]
+// teleportWithin — перенос к порталу той же сцены sc: клетка правее него.
+func (r *Room) teleportWithin(sc *domain.SceneState, t *domain.Teleport, ids []string) {
+	dest, ok := sc.Teleports[t.TargetTeleportID]
 	if !ok || dest == t {
 		return
 	}
-	cell := r.scene.Grid.Size
+	cell := sc.Grid.Size
 	if cell <= 0 {
 		cell = 48
 	}
 	at := point{dest.X + dest.Radius(cell) + cell/2, dest.Y}
 	moved := 0
 	for _, id := range ids {
-		tok, ok := r.scene.Tokens[id]
+		tok, ok := sc.Tokens[id]
 		if !ok {
 			continue
 		}
@@ -171,7 +181,7 @@ func (r *Room) teleportWithin(t *domain.Teleport, ids []string) {
 	if moved == 0 {
 		return
 	}
-	r.markDirty(r.currentSceneID)
+	r.markDirty(sc.ID)
 }
 
 type point struct{ x, y float64 }

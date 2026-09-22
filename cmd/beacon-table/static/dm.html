@@ -245,6 +245,15 @@
     }
     #statusBar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #sceneSwitchName { font-weight: 600; flex: 1 0 auto; min-width: 6ch; max-width: 100%; }
+    /* «Показать игрокам» — открытая у ДМ сцена не та, что у стола (см.
+       view_scene в pages/dm.js); пока совпадают — кнопки нет. */
+    #sceneShowBtn {
+      display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+      padding: 3px 9px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600;
+      background: var(--accent); color: #fff; border: 0; cursor: pointer;
+    }
+    #sceneShowBtn:hover { background: var(--accent-hover); }
+    #sceneShowBtn[hidden] { display: none; }
     /* Приглушение — на самом счётчике, а не на #playersHint целиком: opacity
        на родителе гасила бы и всплывающий список, который должен читаться. */
     #playersHint { cursor: default; display: inline-flex; align-items: center; gap: 4px; position: relative; }
@@ -506,6 +515,12 @@
     .scene-pick:hover { background: transparent; }
     .scene-row .scene-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .scene-row .scene-viewers { flex: 0 0 auto; }
+    /* «У игроков» — какую сцену видит стол; ▶ в строке остальных — сделать
+       её такой. Строка .active — та, что открыта у самого ДМ. */
+    .scene-row .scene-live { flex: 0 0 auto; display: inline-flex; align-items: center; padding: 0 6px; color: var(--accent); }
+    .scene-row .scene-gear--show { opacity: 0; color: var(--accent); }
+    .scene-row:hover .scene-gear--show, .scene-row .scene-gear--show:focus-visible { opacity: 1; }
+    @media (hover: none) { .scene-row .scene-gear--show { opacity: 0.7; } }
     .scene-row .scene-gear { opacity: 0; }
     .scene-row:hover .scene-gear, .scene-row .scene-gear:focus-visible { opacity: 1; }
     @media (hover: none) { .scene-row .scene-gear { opacity: 0.55; } }
@@ -1067,34 +1082,34 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-CzJ7rfn2.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-PCqdvGdP.js">
+  <script type="module" crossorigin src="/assets/dm-CaLMNdPy.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-D-aZ-3A3.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DZG9eNQU.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-CocItXEd.js">
   <link rel="modulepreload" crossorigin href="/assets/drag-DVDIF09E.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-Bs13Sqoq.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-FohJT2_9.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-Bdf5nkKY.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-BDKu9tbM.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-D32fY0_M.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-D_N-4f3l.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CE1Zj0kX.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-vQcdAnml.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-CjAJesjg.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-C66qU6q6.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CVX7_5YD.js">
-  <link rel="modulepreload" crossorigin href="/assets/card-shell-h99gB_zM.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-CEKbiDz8.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
-  <link rel="modulepreload" crossorigin href="/assets/stat-editor-DxQ06mxz.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-BgqsJCML.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-CMHMUFPY.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-ygjO9kMr.js">
+  <link rel="modulepreload" crossorigin href="/assets/stat-editor-iK40xmCY.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-C4TeAoJH.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-fpMcQXUQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-Cv7ILJYe.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-vlwUcDmZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-DR5Bg2qr.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-CktJiw0c.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-DvqNWsl6.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-kEYtKZ8x.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-DoOvKCg_.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-BoLZ9UCg.js">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-CpaXm8mY.js">
   <link rel="stylesheet" crossorigin href="/assets/icons-gJ1-5IYd.css">
 </head>
 <body>
@@ -1578,6 +1593,7 @@
       <canvas id="scene"></canvas>
       <div id="statusBar">
         <span id="sceneSwitchName">Сцена</span>
+        <button id="sceneShowBtn" type="button" hidden title="Игроки и трансляция сейчас на другой сцене — переключить их сюда"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4l13 8-13 8z"/></svg> Показать игрокам</button>
         <span class="status-sep">·</span>
         <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg><span id="playersCount"><span class="status-label">игроков онлайн: </span>0</span><span id="playersOnline"></span></span>
         <span class="status-sep">·</span>
