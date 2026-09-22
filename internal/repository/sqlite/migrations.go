@@ -41,6 +41,7 @@ type migration struct {
 var schemaMigrations = []migration{
 	{version: 1, name: "исходная схема", apply: migrateV1},
 	{version: 2, name: "тип плейлиста (панель эффектов)", apply: migrateV2},
+	{version: 3, name: "чат за столом", apply: migrateV3},
 }
 
 // sqlExec — общее у *sql.DB и *sql.Tx: чтобы вспомогательные функции
@@ -111,6 +112,32 @@ func applyOne(db *sql.DB, m migration) error {
 // migrateV2 — playlists.kind (см. domain.PlaylistKindSFX).
 func migrateV2(tx *sql.Tx) error {
 	return addColumnIfMissing(tx, "playlists", "kind", `TEXT NOT NULL DEFAULT ''`)
+}
+
+// migrateV3 — chat_messages (см. domain.ChatMessage, sqlite/chat.go).
+// company_id денормализован на строку, как у pregen_characters: стор
+// company-scoped, JOIN не нужен. Индекс по (company_id, at) — история
+// читается и режется по времени.
+func migrateV3(tx *sql.Tx) error {
+	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS chat_messages (
+			id TEXT PRIMARY KEY,
+			company_id TEXT NOT NULL,
+			at INTEGER NOT NULL,
+			from_role INTEGER NOT NULL,
+			from_id TEXT NOT NULL DEFAULT '',
+			from_name TEXT NOT NULL,
+			to_id TEXT NOT NULL DEFAULT '',
+			to_name TEXT NOT NULL DEFAULT '',
+			text TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_messages_company_at ON chat_messages(company_id, at)`,
+	} {
+		if _, err := tx.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func userVersion(db *sql.DB) (int, error) {

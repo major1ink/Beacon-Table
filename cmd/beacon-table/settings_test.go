@@ -28,7 +28,7 @@ func settingsFixture(t *testing.T, body string) (*settingsStore, string) {
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	return newSettingsStore(cfg, args, new(slog.LevelVar), quota.New(t.TempDir(), 0, 0)), path
+	return newSettingsStore(cfg, args, new(slog.LevelVar), quota.New(t.TempDir(), 0, 0), nil), path
 }
 
 // TestSettingsListMarksReadOnly — пути и порт видно, но менять их из веба

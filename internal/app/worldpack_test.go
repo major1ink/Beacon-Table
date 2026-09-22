@@ -99,8 +99,6 @@ func seedWorldContent(t *testing.T, m *CompanyManager, c *domain.Company, ownerA
 		`{"id":"scene-1","mapUrl":"`+url+`maps/map.png","tokens":{"t1":{"id":"t1","label":"Гвен","ownerId":"`+ownerAcc+`","characterId":"`+ownerChar+`"},"t2":{"id":"t2","label":"Гоблин","monsterId":"m1"}}}`)
 	writeFile(t, filepath.Join(data, "scenes", "combat.json"),
 		`{"active":false,"round":0,"combatants":{"c1":{"id":"c1","name":"Гвен","ownerId":"`+ownerAcc+`","characterId":"`+ownerChar+`"}}}`)
-	writeFile(t, filepath.Join(data, "scenes", "chat.json"),
-		`{"messages":[{"id":"c1","at":1,"fromRole":2,"fromId":"`+ownerAcc+`","fromName":"Гвен","text":"всем привет"},{"id":"c2","at":2,"fromRole":1,"fromName":"ДМ","to":"`+ownerAcc+`","toName":"Гвен","text":"дверь приоткрыта"}]}`)
 	writeFile(t, filepath.Join(data, "journal", "Глава 1", "e1.md"),
 		"---\nowner: "+ownerAcc+"\nownerName: Гвен\ndefault: observer\naccess:\n  "+ownerAcc+": owner\n---\n# Таверна\n\n![map]("+url+"maps/map.png)\n")
 	writeFile(t, filepath.Join(data, "boards", "b1.md"),
@@ -153,10 +151,6 @@ func TestWorldPack_RoundTrip_ContentOnly(t *testing.T) {
 	combat := readFile(t, filepath.Join(dstData, "scenes", "combat.json"))
 	if strings.Contains(combat, "acc-123") || strings.Contains(combat, `"ownerId"`) {
 		t.Fatalf("владелец combatant не обнулён: %s", combat)
-	}
-	chat := readFile(t, filepath.Join(dstData, "scenes", "chat.json"))
-	if strings.Contains(chat, "acc-123") || strings.Contains(chat, "дверь приоткрыта") || !strings.Contains(chat, "всем привет") {
-		t.Fatalf("чат без аккаунтов: личное/fromId должны пропасть, общее остаться: %s", chat)
 	}
 	journal := readFile(t, filepath.Join(dstData, "journal", "Глава 1", "e1.md"))
 	if strings.Contains(journal, "owner:") || strings.Contains(journal, "acc-123") {
@@ -263,10 +257,6 @@ func TestWorldPack_RoundTrip_WithAccounts(t *testing.T) {
 	scene := readFile(t, filepath.Join(dstData, "scenes", "scenes", "scene-1.json"))
 	if !strings.Contains(scene, `"ownerId":"acc-gwen"`) || !strings.Contains(scene, `"characterId":"char-gwen"`) {
 		t.Fatalf("владелец токена потерян при переносе с аккаунтами: %s", scene)
-	}
-	chat := readFile(t, filepath.Join(dstData, "scenes", "chat.json"))
-	if !strings.Contains(chat, `"to":"acc-gwen"`) || !strings.Contains(chat, "дверь приоткрыта") {
-		t.Fatalf("личное сообщение потеряно при переносе с аккаунтами: %s", chat)
 	}
 	journal := readFile(t, filepath.Join(dstData, "journal", "Глава 1", "e1.md"))
 	if !strings.Contains(journal, "owner: acc-gwen") || !strings.Contains(journal, "acc-gwen: owner") {

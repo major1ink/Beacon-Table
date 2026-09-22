@@ -195,9 +195,18 @@ type SceneRepository interface {
 	// SaveHub персистит хаб лута ДМ (domain.LootHub) — тем же принципом, что
 	// и SaveCombat: свой файл, не привязан к сцене/бою.
 	SaveHub(ctx context.Context, hub *domain.LootHub) error
-	// SaveChat персистит историю чата стола (domain.ChatLog) — тем же
-	// принципом, что SaveCombat/SaveHub: свой файл, не привязан к сцене.
-	SaveChat(ctx context.Context, chat *domain.ChatLog) error
+}
+
+// ChatRepository — история чата стола (domain.ChatMessage), company-scoped,
+// как PlaylistRepository. Сколько хранить, решает service.Room (см.
+// ChatHistoryLimit): репозиторий только пишет, читает и режет хвост.
+type ChatRepository interface {
+	// List — вся история в порядке отправки.
+	List(ctx context.Context) ([]*domain.ChatMessage, error)
+	Add(ctx context.Context, m *domain.ChatMessage) error
+	// Trim оставляет keep самых свежих сообщений, остальные удаляет.
+	Trim(ctx context.Context, keep int) error
+	Clear(ctx context.Context) error
 }
 
 // JournalRepository — журнал стола, файл-на-запись (см.

@@ -40,15 +40,3 @@ func (m *ChatMessage) VisibleTo(role ClientRole, playerID string) bool {
 		return false
 	}
 }
-
-// ChatLog — история чата стола: не привязана к сцене, живёт всё время
-// стола и персистится своим файлом, как CombatState/LootHub (см.
-// internal/repository/scenefile: SaveChat). Хвост обрезает service.Room.
-type ChatLog struct {
-	Messages []*ChatMessage `json:"messages"`
-}
-
-// NewChatLog — пустая история (первый запуск/нет chat.json), см. NewLootHub.
-func NewChatLog() *ChatLog {
-	return &ChatLog{Messages: []*ChatMessage{}}
-}

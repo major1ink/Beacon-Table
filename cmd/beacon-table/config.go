@@ -101,6 +101,12 @@ type Config struct {
 	UploadsQuota      int64
 	UploadsWorldQuota int64
 
+	// ---- чат за столом ----
+	// ChatHistory — сколько сообщений чата хранить между перезапусками
+	// (см. service.ChatHistoryLimit). 0 — не хранить: история живёт, пока
+	// запущен сервер.
+	ChatHistory int
+
 	// ---- публичное демо ----
 	// DemoMode — сервер работает витриной: на странице входа появляется
 	// выбор «я ведущий / я игрок». Гость-ведущий получает права ДМ ВНУТРИ
@@ -128,6 +134,7 @@ const (
 	defaultBackupInterval = 24 * time.Hour // раз в сутки: игра идёт вечерами, чаще смысла нет
 	defaultBackupKeep     = 7              // неделя архивов
 	defaultDemoReset      = 3 * time.Hour  // демо-стол живёт одну игровую сессию
+	defaultChatHistory    = 500            // несколько сессий переписки, см. service.DefaultChatHistory
 )
 
 func defaultConfig() Config {
@@ -143,6 +150,7 @@ func defaultConfig() Config {
 		LogFormat:      "text",
 		OpenBrowser:    "auto",
 		DemoReset:      defaultDemoReset,
+		ChatHistory:    defaultChatHistory,
 	}
 }
 
@@ -199,6 +207,8 @@ const (
 
 	envUploadsQuota      = "BEACON_UPLOADS_QUOTA"
 	envUploadsWorldQuota = "BEACON_UPLOADS_WORLD_QUOTA"
+
+	envChatHistory = "BEACON_CHAT_HISTORY"
 
 	envDemoMode  = "BEACON_DEMO_MODE"
 	envDemoWorld = "BEACON_DEMO_WORLD"
@@ -343,6 +353,7 @@ func envValues() map[string]string {
 		envOpenBrowser,
 		envUploadsQuota, envUploadsWorldQuota,
 		envDemoMode, envDemoWorld, envDemoReset,
+		envChatHistory,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			values[key] = v
@@ -411,6 +422,13 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 			return fmt.Errorf("%s в %s: %q — ожидалось целое число не меньше 1", envBackupKeep, source, v)
 		}
 		cfg.BackupKeep = n
+	}
+	if v, ok := values[envChatHistory]; ok && v != "" {
+		n, err := strconv.Atoi(unquote(v))
+		if err != nil || n < 0 {
+			return fmt.Errorf("%s в %s: %q — ожидалось целое число не меньше 0", envChatHistory, source, v)
+		}
+		cfg.ChatHistory = n
 	}
 	if v, ok := values[envLogLevel]; ok && v != "" {
 		level := strings.ToLower(unquote(v))
@@ -525,6 +543,7 @@ func bindFlags(cfg *Config, args []string) error {
 	fs.StringVar(&cfg.BackupDir, "backup-dir", cfg.BackupDir, "куда складывать архивы бэкапов (по умолчанию <data>/backups)")
 	fs.DurationVar(&cfg.BackupInterval, "backup-interval", cfg.BackupInterval, "как часто делать бэкап")
 	fs.IntVar(&cfg.BackupKeep, "backup-keep", cfg.BackupKeep, "сколько последних архивов хранить")
+	fs.IntVar(&cfg.ChatHistory, "chat-history", cfg.ChatHistory, "сколько сообщений чата хранить между перезапусками (0 — не хранить)")
 	fs.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "подробность журнала: debug, info, warn, error")
 	fs.StringVar(&cfg.LogFormat, "log-format", cfg.LogFormat, "формат журнала: text или json")
 	fs.StringVar(&cfg.LogFile, "log-file", cfg.LogFile, "файл журнала (по умолчанию <data>/beacon.log, off — не писать)")
@@ -556,6 +575,7 @@ func bindFlags(cfg *Config, args []string) error {
 		"log-level": envLogLevel, "log-format": envLogFormat, "log-file": envLogFile,
 		"open-browser":  envOpenBrowser,
 		"uploads-quota": envUploadsQuota, "uploads-world-quota": envUploadsWorldQuota,
+		"chat-history": envChatHistory,
 	}
 	fs.Visit(func(f *flag.Flag) {
 		if key, ok := flagToEnv[f.Name]; ok {

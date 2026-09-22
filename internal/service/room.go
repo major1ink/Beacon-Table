@@ -204,10 +204,12 @@ type Room struct {
 	hub      *domain.LootHub
 	hubDirty bool
 
-	// chat — история чата стола (см. domain.ChatLog, room_chat.go), не
-	// привязана к сцене, живёт всё время стола, тем же принципом, что hub.
-	chat      *domain.ChatLog
-	chatDirty bool
+	// chatLog — история чата стола в памяти (см. room_chat.go): то, что
+	// клиенты получают при входе. chatRepo — её копия в базе, если
+	// chatLimit разрешает хранить (nil — не хранить вообще, только тесты).
+	chatLog   []*domain.ChatMessage
+	chatRepo  repository.ChatRepository
+	chatLimit *ChatHistoryLimit
 
 	// ambientStartedAtMs — момент, с которого отсчитывается позиция амбиента
 	// АКТИВНОЙ сцены (см. SceneState.AmbientURL и CueState.StartedAtMs — тот
@@ -234,8 +236,12 @@ type Room struct {
 // conditionRepo — см. Room.characters/Room.monsters/Room.items/
 // Room.conditions, только для чтения (кроме точечных мутаций инвентаря
 // персонажа при луте, см. handleHubTakeItem/handleLootTakeItem).
-func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository) (*Room, error) {
+func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit) (*Room, error) {
 	rs, err := sceneRepo.Load(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	chatLog, err := loadChatLog(chatRepo, chatLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -246,10 +252,6 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 	hub := rs.Hub
 	if hub == nil {
 		hub = domain.NewLootHub()
-	}
-	chat := rs.Chat
-	if chat == nil {
-		chat = domain.NewChatLog()
 	}
 	r := &Room{
 		store:          sceneRepo,
@@ -281,7 +283,9 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
 		hub:                   hub,
-		chat:                  chat,
+		chatLog:               chatLog,
+		chatRepo:              chatRepo,
+		chatLimit:             chatLimit,
 	}
 	r.scene = r.scenes[r.currentSceneID]
 	r.ambientStartedAtMs = time.Now().UnixMilli() // амбиент активной сцены (если есть) стартует заново при запуске сервера
@@ -846,14 +850,7 @@ func (r *Room) flushIfDirty() {
 			r.hubDirty = false
 		}
 	}
-	if r.chatDirty {
-		if err := r.store.SaveChat(ctx, r.chat); err != nil {
-			slog.Warn("Не удалось сохранить историю чата, попробую ещё раз позже", "err", err)
-		} else {
-			r.chatDirty = false
-		}
-	}
-	if len(r.dirtyScenes) == 0 && !r.combatDirty && !r.hubDirty && !r.chatDirty {
+	if len(r.dirtyScenes) == 0 && !r.combatDirty && !r.hubDirty {
 		r.dirty = false
 	}
 }

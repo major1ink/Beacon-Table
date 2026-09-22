@@ -173,5 +173,6 @@ func allSettingKeys() []string {
 		envAddr, envDataDir, envUploadsDir, envBehindProxy, envAllowedOrigins,
 		envBackupEnabled, envBackupDir, envBackupInterval, envBackupKeep,
 		envLogLevel, envLogFormat, envUploadsQuota, envUploadsWorldQuota,
+		envChatHistory,
 	}
 }

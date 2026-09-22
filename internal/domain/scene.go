@@ -609,16 +609,14 @@ type SceneCard struct {
 // слою при старте: все сцены комнаты плюс какая из них активна и в каком
 // порядке они идут в переключателе DM, плюс трекер инициативы (см.
 // CombatState — не привязан к конкретной сцене, персистится отдельным
-// файлом, см. internal/repository/scenefile), хаб лута ДМ (см. LootHub —
-// та же логика, отдельный файл, не привязан к сцене/бою) и историю чата
-// стола (см. ChatLog — то же самое).
+// файлом, см. internal/repository/scenefile) и хаб лута ДМ (см. LootHub —
+// та же логика, отдельный файл, не привязан к сцене/бою).
 type RoomSnapshot struct {
 	CurrentSceneID string
 	SceneOrder     []string
 	Scenes         map[string]*SceneState
 	Combat         *CombatState
 	Hub            *LootHub
-	Chat           *ChatLog
 }
 
 // LootHub — общий стол ДМ: сюда ДМ скидывает добычу (см. "hub_add_item" в
