@@ -3,9 +3,10 @@
 // поднят на сервере (см. internal/app.CompanyManager — активен ровно один).
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
-import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer } from "../api.js";
+import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer, fetchTutorial, saveTutorial } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { startTour } from "../tutorial.js";
 
 // Версия сервера в углу — как на экране входа (index.js). Молча пусто при ошибке.
 fetchVersion()
@@ -262,11 +263,73 @@ createForm.addEventListener("submit", async (e) => {
 
 // guard — только admin. Игрок (или гость без сессии) уводится на "/", тем же
 // принципом, что и dm.js/player.js проверяют роль перед рендером.
-fetchMe().then((me) => {
+fetchMe().then(async (me) => {
   if (!me || me.role !== "admin") {
     location.href = "/";
     return;
   }
   if (me.mustChangePassword) passwordBox.style.display = "";
-  render();
+  await render();
+  initTutorial();
 });
+
+// ---- режим обучения ----
+// Первый вход ведущего — единственный момент, когда стол ещё ничего не
+// показал и уместно спросить, нужен ли тур (см. web/src/tutorial.js;
+// состояние — на сервере, api.js: fetchTutorial). Здесь у тура три коротких
+// шага — пароль, мир, запуск, — дальше он продолжается на экране ДМ
+// (tutorial-dm.js). Шаги без прогресса в localStorage: каждый уже
+// сделанный закрывается сам через waitFor.
+async function askTutorial() {
+  const ok = await showConfirm(
+    "Показать, как пользоваться столом? Короткий тур на 10–15 минут: сцены и карты, импорт модулей и персонажей, инициатива, доски и журнал.",
+    { title: "Режим обучения", okLabel: "Показать", cancelLabel: "Разберусь сам", hint: "Включить или выключить обучение можно потом в «Настройки → Стол»." }
+  );
+  const state = ok ? "on" : "off";
+  await saveTutorial(state);
+  return state;
+}
+
+function worldsTourSteps() {
+  return [
+    {
+      title: "Свой пароль",
+      target: "#passwordBox",
+      placement: "bottom",
+      waitFor: () => passwordBox.style.display === "none",
+      text:
+        "Ты вошёл по временному паролю — он выдаётся заново при каждом запуске программы. Задай свой: он один и навсегда.\n\n" +
+        "После сохранения нужно будет войти заново — тур продолжится.",
+    },
+    {
+      title: "Мир",
+      target: "#createBox",
+      placement: "top",
+      waitFor: () => !!listEl.querySelector(".world-card"),
+      text:
+        "Мир — одна кампания: свои сцены, персонажи, библиотека и аккаунты игроков. Создай первый: назови его и выбери систему — D&D 2024 или 5e 2014; потом её не поменять.\n\n" +
+        "Уже есть выгрузка мира (.zip)? Тогда «Импортировать мир».",
+    },
+    {
+      title: "Запуск",
+      target: () => listEl.querySelector(".launch-btn, .open-btn"),
+      placement: "bottom",
+      text:
+        "Стол открывается кнопкой «Запустить» (или «Открыть стол», если мир уже поднят). Запущен всегда ровно один мир — игроки садятся именно в него.\n\n" +
+        "Нажми — продолжим за ширмой.",
+    },
+  ];
+}
+
+async function initTutorial() {
+  let state;
+  try {
+    ({ state } = await fetchTutorial());
+    if (state === "") state = await askTutorial();
+  } catch (err) {
+    console.error("режим обучения: не удалось узнать состояние:", err);
+    return;
+  }
+  if (state !== "on") return;
+  startTour(worldsTourSteps(), { onSkip: () => saveTutorial("off").catch(() => {}) });
+}
