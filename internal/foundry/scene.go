@@ -2,7 +2,9 @@ package foundry
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"beacon-table/internal/domain"
@@ -33,18 +35,150 @@ import (
 //     service.FoundryService.LinkSceneTokens. Ничего не угадывается по имени:
 //     сводятся ровно одинаковые id;
 //   - гексагональная сетка ложится квадратной (гексов у нас нет), плитки
-//     (tiles), рисунки (drawings) и шаблоны эффектов не переносятся вовсе;
+//     (tiles), рисунки (drawings) и шаблоны эффектов не переносятся вовсе —
+//     кроме плиток-этажей модуля Levels, см. MapScenes;
 //   - значки на карте (notes) — в domain.NoteMarker, если ix знает, куда
 //     приехала запись, на которую значок ссылается (см. mapNoteMarker).
 //
 // ix — индекс перекрёстных ссылок модуля (см. LinkIndex): нужен только для
 // значков, для остального можно передать nil.
 func MapScene(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex) *domain.SceneState {
+	return mapScene(ctx, d, assets, ix, nil)
+}
+
+// MapScenes — то же, но сцена с этажами модуля Levels (flags.levels.
+// sceneLevels) раскладывается в несколько наших сцен одного здания
+// (domain.SceneState.Building): у каждого этажа своя карта, стены, свет и
+// токены по своему диапазону высот. Без этажей — одна сцена, как MapScene.
+//
+// Что переносится по этажам и как:
+//
+//   - карта этажа — самая большая плитка (tiles) с flags.levels.rangeBottom/
+//     rangeTop внутри диапазона этажа; холст этажа = размер плитки, геометрия
+//     сдвигается к её углу. Этаж без плитки, содержащий высоту фона (обычно
+//     земля), берёт фон сцены; прочие без плитки остаются без карты, но со
+//     стенами. Этаж, склеенный из нескольких плиток, переедет одной —
+//     плитки как сущность мы всё ещё не импортируем;
+//   - стены — по flags.wall-height.top/bottom (нет флага — на всех этажах);
+//   - токены — по elevation; свет — по flags.levels.rangeBottom/rangeTop
+//     (нет — на всех); значки — только на этаже с фоном.
+func MapScenes(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex) []*domain.SceneState {
+	levels := sceneLevels(d)
+	if len(levels) < 2 {
+		return []*domain.SceneState{mapScene(ctx, d, assets, ix, nil)}
+	}
+	out := make([]*domain.SceneState, 0, len(levels))
+	for i := range levels {
+		out = append(out, mapScene(ctx, d, assets, ix, &levels[i]))
+	}
+	return out
+}
+
+// levelRange — этаж модуля Levels: диапазон высот и имя; Floor — порядковый
+// номер снизу, Ground — этаж, которому достаётся фон сцены.
+type levelRange struct {
+	bottom, top float64
+	name        string
+	floor       int
+	ground      bool
+}
+
+// sceneLevels — flags.levels.sceneLevels: [[низ, верх, имя], …] (числа
+// приезжают и строками). Сортируются по низу; нулевой этаж — тот, что
+// содержит высоту 0, иначе самый нижний.
+func sceneLevels(d Doc) []levelRange {
+	var out []levelRange
+	for _, raw := range asSlice(dig(d, "flags", "levels", "sceneLevels")) {
+		row := asSlice(raw)
+		if len(row) < 2 {
+			continue
+		}
+		lv := levelRange{bottom: num(row[0], 0), top: num(row[1], 0)}
+		if len(row) > 2 {
+			lv.name = strings.TrimSpace(asString(row[2]))
+		}
+		if lv.top <= lv.bottom {
+			continue
+		}
+		out = append(out, lv)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].bottom < out[j].bottom })
+	ground := -1
+	for i, lv := range out {
+		if lv.bottom <= 0 && 0 < lv.top {
+			ground = i
+			break
+		}
+	}
+	if ground < 0 && len(out) > 0 {
+		ground = 0
+	}
+	for i := range out {
+		out[i].floor = i - ground
+		out[i].ground = i == ground
+		if out[i].name == "" {
+			out[i].name = fmt.Sprintf("Этаж %d", out[i].floor)
+		}
+	}
+	return out
+}
+
+// within — диапазон [lo, hi] объекта пересекается с этажом; отсутствующие
+// границы — бесконечность (объект на всех этажах).
+func (lv *levelRange) within(lo, hi any) bool {
+	if lv == nil {
+		return true
+	}
+	bottom, top := math.Inf(-1), math.Inf(1)
+	if lo != nil {
+		bottom = num(lo, bottom)
+	}
+	if hi != nil {
+		top = num(hi, top)
+	}
+	return bottom < lv.top && top > lv.bottom
+}
+
+// levelTile — самая большая плитка этажа: сначала целиком внутри диапазона,
+// иначе пересекающая его.
+func levelTile(d Doc, lv *levelRange) map[string]any {
+	var best map[string]any
+	bestArea, bestInside := 0.0, false
+	for _, raw := range asSlice(d["tiles"]) {
+		t := asMap(raw)
+		if t == nil {
+			continue
+		}
+		lo, hi := dig(t, "flags", "levels", "rangeBottom"), dig(t, "flags", "levels", "rangeTop")
+		if lo == nil && hi == nil {
+			continue // плитка без этажа — декорация, не карта этажа
+		}
+		if !lv.within(lo, hi) {
+			continue
+		}
+		inside := num(lo, math.Inf(-1)) >= lv.bottom && num(hi, math.Inf(1)) <= lv.top
+		area := num(t["width"], 0) * num(t["height"], 0)
+		if best == nil || (inside && !bestInside) || (inside == bestInside && area > bestArea) {
+			best, bestArea, bestInside = t, area, inside
+		}
+	}
+	return best
+}
+
+func mapScene(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex, lv *levelRange) *domain.SceneState {
 	name := strings.TrimSpace(asString(d["name"]))
 	if name == "" {
 		name = "Сцена из Foundry"
 	}
+	building := name
+	if lv != nil {
+		name = name + " — " + lv.name
+	}
 	s := domain.NewScene(newID(), name)
+	if lv != nil {
+		s.Building = building
+		s.Floor = lv.floor
+	}
 
 	width := digNum(d, 0, "width")
 	height := digNum(d, 0, "height")
@@ -65,6 +199,20 @@ func MapScene(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex) *domain
 	offsetX += digNum(d, 0, "background", "offsetX")
 	offsetY += digNum(d, 0, "background", "offsetY")
 
+	// Карта этажа — плитка: холст этажа = плитка, геометрия — от её угла
+	// (координаты плиток и стен у Foundry в одном пространстве холста с
+	// полями, поэтому padding тут не вычитается).
+	var tile map[string]any
+	if lv != nil {
+		tile = levelTile(d, lv)
+	}
+	if tile != nil {
+		if tw, th := num(tile["width"], 0), num(tile["height"], 0); tw > 0 && th > 0 {
+			s.Width, s.Height = tw, th
+		}
+		offsetX, offsetY = num(tile["x"], 0), num(tile["y"], 0)
+	}
+
 	if gridType == 0 {
 		s.Grid.Size = 0 // "gridless" в Foundry — сетки нет, привязки нет
 	} else {
@@ -79,8 +227,15 @@ func MapScene(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex) *domain
 	}
 	s.Grid.LineOpacity = digNum(d, digNum(d, 0.5, "gridAlpha"), "grid", "alpha")
 
-	s.MapURL = assets.URL(ctx, domain.AssetKindMaps, firstNonEmpty(digString(d, "background", "src"), asString(d["img"])))
-	if ambient := firstNonEmpty(digString(d, "playlistSound", "path"), asString(d["ambient"])); ambient != "" {
+	switch {
+	case tile != nil:
+		s.MapURL = assets.URL(ctx, domain.AssetKindMaps, firstNonEmpty(digString(tile, "texture", "src"), asString(tile["img"])))
+	case lv == nil || lv.ground:
+		s.MapURL = assets.URL(ctx, domain.AssetKindMaps, firstNonEmpty(digString(d, "background", "src"), asString(d["img"])))
+	}
+	// Амбиент — только нулевому этажу: остальные наследуют его в комнате
+	// (см. service.Room.ambientOf), дублировать трек по этажам незачем.
+	if ambient := firstNonEmpty(digString(d, "playlistSound", "path"), asString(d["ambient"])); ambient != "" && (lv == nil || lv.ground) {
 		s.AmbientURL = assets.URL(ctx, domain.AssetKindAudio, ambient)
 	}
 
@@ -95,23 +250,40 @@ func MapScene(ctx context.Context, d Doc, assets *Assets, ix *LinkIndex) *domain
 	}
 
 	for _, raw := range asSlice(d["walls"]) {
-		if w := mapWall(asMap(raw), offsetX, offsetY); w != nil {
+		m := asMap(raw)
+		if !lv.within(dig(m, "flags", "wall-height", "bottom"), dig(m, "flags", "wall-height", "top")) {
+			continue
+		}
+		if w := mapWall(m, offsetX, offsetY); w != nil {
 			s.Walls[w.ID] = w
 		}
 	}
 	for _, raw := range asSlice(d["lights"]) {
-		if t := mapLight(asMap(raw), offsetX, offsetY, s.Grid.Size); t != nil {
+		m := asMap(raw)
+		if !lv.within(dig(m, "flags", "levels", "rangeBottom"), dig(m, "flags", "levels", "rangeTop")) {
+			continue
+		}
+		if t := mapLight(m, offsetX, offsetY, s.Grid.Size); t != nil {
 			s.Tokens[t.ID] = t
 		}
 	}
 	for _, raw := range asSlice(d["tokens"]) {
-		if t := mapToken(ctx, asMap(raw), offsetX, offsetY, gridSize, assets); t != nil {
+		m := asMap(raw)
+		if lv != nil {
+			e := num(m["elevation"], 0)
+			if e < lv.bottom || e >= lv.top {
+				continue
+			}
+		}
+		if t := mapToken(ctx, m, offsetX, offsetY, gridSize, assets); t != nil {
 			s.Tokens[t.ID] = t
 		}
 	}
-	for _, raw := range asSlice(d["notes"]) {
-		if nm := mapNoteMarker(asMap(raw), offsetX, offsetY, ix); nm != nil {
-			s.NoteMarkers[nm.ID] = nm
+	if lv == nil || lv.ground {
+		for _, raw := range asSlice(d["notes"]) {
+			if nm := mapNoteMarker(asMap(raw), offsetX, offsetY, ix); nm != nil {
+				s.NoteMarkers[nm.ID] = nm
+			}
 		}
 	}
 	return s

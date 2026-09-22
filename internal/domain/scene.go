@@ -1,5 +1,7 @@
 package domain
 
+import "math"
+
 // Token — фигурка на карте. Image — необязательная ссылка на загруженную
 // картинку; если пусто — рисуем цветной кружок с подписью. Hidden — токен
 // существует в состоянии, но НЕ уходит игрокам, пока DM не снимет флаг
@@ -255,6 +257,40 @@ type Wall struct {
 	DoorSound    string  `json:"doorSound,omitempty"`
 }
 
+// ViewZone — см. SceneState.ViewZone: левый верхний угол и размер в
+// координатах карты.
+type ViewZone struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
+// Normalize приводит зону к границам карты w×h; пустая или вырожденная
+// (меньше клетки) — nil, то есть «вся карта».
+func (z *ViewZone) Normalize(w, h float64) *ViewZone {
+	if z == nil {
+		return nil
+	}
+	x0, y0 := math.Max(0, math.Min(z.X, z.X+z.W)), math.Max(0, math.Min(z.Y, z.Y+z.H))
+	x1, y1 := math.Min(w, math.Max(z.X, z.X+z.W)), math.Min(h, math.Max(z.Y, z.Y+z.H))
+	if x1-x0 < 8 || y1-y0 < 8 {
+		return nil
+	}
+	if x0 == 0 && y0 == 0 && x1 == w && y1 == h {
+		return nil
+	}
+	return &ViewZone{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
+}
+
+// Clamp вжимает точку в зону; nil — точка как есть.
+func (z *ViewZone) Clamp(x, y float64) (float64, float64) {
+	if z == nil {
+		return x, y
+	}
+	return math.Max(z.X, math.Min(x, z.X+z.W)), math.Max(z.Y, math.Min(y, z.Y+z.H))
+}
+
 // Point — вершина многоугольника FogArea.
 type Point struct {
 	X float64 `json:"x"`
@@ -421,25 +457,36 @@ type NoteMarker struct {
 	FoundryFolder string `json:"foundryFolder,omitempty"`
 }
 
-// Teleport — портал на карте: ведёт на сцену TargetSceneID либо к порталу
-// TargetTeleportID той же сцены (см. service/room_teleports.go). Label —
-// подпись, Size — диаметр в мировых px (0 — клетка сетки).
+// Teleport — портал на карте (см. service/room_teleports.go). Куда ведёт —
+// по трём полям:
+//
+//   - TargetSceneID — на другую сцену: соседний этаж того же здания, этаж
+//     другого здания, просто связанная сцена. Приземление — у портала
+//     TargetTeleportID, если он указан, иначе у обратного портала той же
+//     сцены, иначе в центре карты;
+//   - TargetTeleportID без TargetSceneID — портал ТОЙ ЖЕ сцены (Local):
+//     токены встают рядом с ним, стол не переключается;
+//   - оба вместе — конкретный портал на другой сцене. Нужно там, где между
+//     двумя сценами не один переход: две лестницы между этажами иначе
+//     высаживали бы в одно и то же место (обратный портал ищется по сцене,
+//     а их два).
+//
+// Label — подпись, Size — диаметр в мировых px (0 — клетка сетки).
 type Teleport struct {
-	ID            string  `json:"id"`
-	X             float64 `json:"x"`
-	Y             float64 `json:"y"`
-	Size          float64 `json:"size,omitempty"`
-	Label         string  `json:"label"`
-	TargetSceneID string  `json:"targetSceneId"`
-	// TargetTeleportID — портал той же сцены; TargetSceneID тогда пуст.
-	TargetTeleportID string `json:"targetTeleportId,omitempty"`
+	ID               string  `json:"id"`
+	X                float64 `json:"x"`
+	Y                float64 `json:"y"`
+	Size             float64 `json:"size,omitempty"`
+	Label            string  `json:"label"`
+	TargetSceneID    string  `json:"targetSceneId"`
+	TargetTeleportID string  `json:"targetTeleportId,omitempty"`
 	// Locked — см. Token.Locked.
 	Locked bool `json:"locked,omitempty"`
 }
 
-// Local — портал ведёт к другому порталу той же сцены.
+// Local — портал ведёт к другому порталу ТОЙ ЖЕ сцены.
 func (t *Teleport) Local() bool {
-	return t.TargetTeleportID != ""
+	return t.TargetTeleportID != "" && t.TargetSceneID == ""
 }
 
 // Radius — половина Size, либо половина клетки сетки cell.
@@ -474,7 +521,26 @@ type SceneState struct {
 	// вся карта минимум тускло освещена, "bright" — вся карта ярко освещена
 	// (эквивалент выключенного тумана войны по свету, но не по обзору
 	// токена — см. web/src/vtt/layers/vision-fog.js).
-	GlobalLight string                 `json:"globalLight,omitempty"`
+	GlobalLight string `json:"globalLight,omitempty"`
+	// PlayerAccess — игроки могут открывать сцену сами (см.
+	// service.Room.handleViewScene): она попадает в их список «Карты» и
+	// по ней можно ходить, не дожидаясь, пока ДМ её покажет. Активная сцена
+	// доступна всегда, флаг про остальные.
+	PlayerAccess bool `json:"playerAccess,omitempty"`
+	// ViewZone — прямоугольник карты, который видят игроки и трансляция:
+	// камера у них не выходит за него, всё снаружи отрезано, токен игрока
+	// за край не двигается (см. service.Room.applyOwnTokenMove). nil — вся
+	// карта. ДМ видит карту целиком, зона у него нарисована рамкой.
+	ViewZone *ViewZone `json:"viewZone,omitempty"`
+	// Building/Floor — этажи: сцены с одним непустым Building — одно здание
+	// (башня, подземелье), Floor — порядок этажа (0 — земля, ниже —
+	// отрицательные). Сцена при этом остаётся сценой со своими стенами,
+	// светом и туманом: «уровень» — группировка, не новая сущность. Что даёт
+	// здание: переключатель этажей у ДМ, игрок видит этаж, где стоит его
+	// токен (service.Room.sceneOf), общий амбиент (AmbientOf) и перенос
+	// токенов между этажами без смены активной сцены.
+	Building    string                 `json:"building,omitempty"`
+	Floor       int                    `json:"floor,omitempty"`
 	Tokens      map[string]*Token      `json:"tokens"`
 	NoteMarkers map[string]*NoteMarker `json:"noteMarkers"`
 	Walls       map[string]*Wall       `json:"walls"`
@@ -553,6 +619,12 @@ func (s *SceneState) RescaleGeometry(oldW, oldH float64) {
 		}
 		d.Width *= scaleX
 	}
+	if z := s.ViewZone; z != nil {
+		z.X *= scaleX
+		z.Y *= scaleY
+		z.W *= scaleX
+		z.H *= scaleY
+	}
 	// Token.Light.Bright/Dim НЕ масштабируем: они хранятся в единицах линейки
 	// сцены (см. TokenLight), не в пикселях, — как и Grid.UnitsPerCell чуть
 	// ниже, они resolution-independent сами по себе. Пиксельный радиус для
@@ -579,6 +651,10 @@ type PublicScene struct {
 	AmbientVolume float64                `json:"ambientVolume,omitempty"`
 	DoorSoundURL  string                 `json:"doorSoundUrl,omitempty"`
 	GlobalLight   string                 `json:"globalLight,omitempty"`
+	PlayerAccess  bool                   `json:"playerAccess,omitempty"`
+	ViewZone      *ViewZone              `json:"viewZone,omitempty"`
+	Building      string                 `json:"building,omitempty"`
+	Floor         int                    `json:"floor,omitempty"`
 	Tokens        map[string]*Token      `json:"tokens"`
 	NoteMarkers   map[string]*NoteMarker `json:"noteMarkers"`
 	Walls         map[string]*Wall       `json:"walls"`
@@ -588,13 +664,26 @@ type PublicScene struct {
 	Teleports     map[string]*Teleport   `json:"teleports"`
 }
 
-// SceneListEntry — одна строка в переключателе сцен DM. ViewerCount
-// ненулевой только у активной сцены — комната показывает всем не-DM
-// клиентам ровно одну сцену одновременно.
+// SceneListEntry — одна строка в переключателе сцен DM. ViewerCount —
+// сколько игроков и трансляций смотрит сцену сейчас (см.
+// service.Room.sceneOf): обычно все на активной, но после телепорта и
+// (позже) по своему выбору игрок может быть и на другой.
 type SceneListEntry struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	ViewerCount int    `json:"viewerCount"`
+	// PlayerAccess — см. SceneState.PlayerAccess. Игроку список приходит
+	// уже отфильтрованным (доступные плюс активная), ДМ видит флаг у всех.
+	PlayerAccess bool `json:"playerAccess,omitempty"`
+	// Building/Floor — см. SceneState.Building: переключатель группирует
+	// этажи одного здания.
+	Building string `json:"building,omitempty"`
+	Floor    int    `json:"floor,omitempty"`
+}
+
+// SameBuilding — обе сцены в одном здании (см. SceneState.Building).
+func (s *SceneState) SameBuilding(o *SceneState) bool {
+	return s != nil && o != nil && s.Building != "" && s.Building == o.Building
 }
 
 // SceneCard — сцена для карточки на доске (GET /api/scenes).

@@ -148,7 +148,7 @@ func (r *Room) handleAddDrawing(c RoomClient, msg domain.ClientMsg) {
 		AuthorID:   authorID,
 		AuthorName: authorName,
 	}
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 }
 
@@ -160,7 +160,7 @@ func (r *Room) handleRemoveDrawing(c RoomClient, msg domain.ClientMsg) {
 		return
 	}
 	delete(r.scene.Drawings, msg.ID)
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 }
 
@@ -171,7 +171,7 @@ func (r *Room) handleClearDrawings() {
 		return
 	}
 	r.scene.Drawings = make(map[string]*domain.Drawing)
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 }
 

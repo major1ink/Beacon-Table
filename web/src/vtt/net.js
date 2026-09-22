@@ -69,10 +69,16 @@ export function createNet(ctx, audio) {
       if (!nextScene.drawings) nextScene.drawings = {};
       if (!nextScene.teleports) nextScene.teleports = {};
       if (!nextScene.grid) nextScene.grid = { size: 0, offsetX: 0, offsetY: 0 };
+      // Зона показа ограничивает камеру только у игрока и трансляции; ДМ
+      // видит карту целиком, у него зона — рамка (см. camera.js: viewBounds).
+      if (!ctx.isDM && nextScene.viewZone) nextScene.viewBounds = nextScene.viewZone;
       diffAndMarkDirty(ctx.dirty, ctx.scene, nextScene);
       ctx.scene = nextScene;
       ctx.mapStartedAt = data.mapStartedAt;
-      audio.applyAmbient(nextScene.ambientUrl || "", data.ambientStartedAt, nextScene.ambientVolume);
+      // Амбиент — верхним уровнем, от АКТИВНОЙ сцены стола, а не от той, что
+      // в scene: ДМ, открывший у себя другую карту (view_scene), слышит ту же
+      // музыку, что игроки (см. snapshotPayload в internal/service/room.go).
+      audio.applyAmbient(data.ambientUrl || "", data.ambientStartedAt, data.ambientVolume);
       ctx.render();
       document.dispatchEvent(new CustomEvent("vtt:sceneUpdated", { detail: ctx.scene }));
     } else if (data.type === "fx") {
@@ -155,6 +161,12 @@ export function createNet(ctx, audio) {
       // Игрок встал на портал (см. service/room_teleports.go) — решает ДМ
       // (pages/dm.js).
       document.dispatchEvent(new CustomEvent("vtt:teleportRequest", { detail: data }));
+    } else if (data.type === "summon_list" || data.type === "summon_status" || data.type === "summon_request") {
+      // Призыв существ игроком (см. internal/service/room_summon.go):
+      // список разрешённых и статус — игроку (summon-panel.js), запрос —
+      // ДМ (pages/dm.js). Состояние мира не трогают, токены приедут снапшотом.
+      const name = { summon_list: "vtt:summonList", summon_status: "vtt:summonStatus", summon_request: "vtt:summonRequest" }[data.type];
+      document.dispatchEvent(new CustomEvent(name, { detail: data }));
     } else if (data.type === "table_notice") {
       // Текст сервера для всех за столом (см. Room.Announce) — сейчас
       // только предупреждение демо о скором сбросе. connection-banner.js

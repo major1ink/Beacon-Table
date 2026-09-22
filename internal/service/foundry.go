@@ -366,7 +366,7 @@ func (s *foundryService) ImportPack(ctx context.Context, account *domain.Account
 		}
 		switch e.Target {
 		case foundry.TargetScenes:
-			scenes = append(scenes, foundry.MapScene(ctx, e.Doc, assets, links))
+			scenes = append(scenes, foundry.MapScenes(ctx, e.Doc, assets, links)...)
 		case foundry.TargetPlaylists:
 			if err := s.applyPlaylist(ctx, foundry.MapPlaylist(ctx, e.Doc, assets)); err != nil {
 				result.Warnings = appendWarning(result.Warnings, err.Error())

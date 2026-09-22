@@ -718,6 +718,7 @@ rulerBtn.onclick = () => toggleTool("ruler");
 teleportBtn.onclick = () => toggleTool("teleport");
 
 const gridEditDone = document.getElementById("gridEditDone");
+const viewZoneHint = document.getElementById("viewZoneHint");
 document.addEventListener("vtt:toolChanged", (e) => {
   wallBtn.classList.toggle("active", e.detail === "wall");
   buildingBtn.classList.toggle("active", e.detail === "building");
@@ -725,6 +726,7 @@ document.addEventListener("vtt:toolChanged", (e) => {
   rulerBtn.classList.toggle("active", e.detail === "ruler");
   teleportBtn.classList.toggle("active", e.detail === "teleport");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
+  viewZoneHint.classList.toggle("open", e.detail === "view-zone");
 });
 
 // Всплывающие подсказки инструментов — вместо абзацев, которые раньше
@@ -738,7 +740,7 @@ attachTooltip(teleportBtn, TOOL_HELP.teleport);
 gridEditDone.onclick = () => {
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "select" }));
   showSidePanelSection("scene"); // вернуться в раздел с уже актуальными offsetX/Y
-  openSceneSettings(currentSceneId, "grid");
+  openSceneSettings(viewSceneId, "grid");
 };
 
 // ================= глобальный свет "на всю карту" =================
@@ -807,6 +809,7 @@ const tokenMenuLightDimField = document.getElementById("tokenMenuLightDimField")
 const tokenMenuLightToggleBtn = document.getElementById("tokenMenuLightToggleBtn");
 const tokenMenuStatusBtn = document.getElementById("tokenMenuStatusBtn");
 const tokenMenuCopyBtn = document.getElementById("tokenMenuCopyBtn");
+const tokenMenuFloorBtn = document.getElementById("tokenMenuFloorBtn");
 const tokenMenuLockBtn = document.getElementById("tokenMenuLockBtn");
 const tokenMenuLockLabel = document.getElementById("tokenMenuLockLabel");
 const tokenMenuDelete = document.getElementById("tokenMenuDelete");
@@ -1242,8 +1245,10 @@ noteMarkerDeleteBtn.onclick = () => {
 };
 
 // ================= порталы (инструмент «Телепорт», ПКМ по порталу) =================
-// Портал ведёт на сцену, связанную с текущей на доске (sceneLinksOf), либо к
-// порталу этой же карты (targetTeleportId); перенос делает сервер.
+// Портал ведёт на соседний этаж своего здания, на сцену, связанную с текущей
+// стрелкой на доске (sceneLinksOf), на этаж такого связанного здания либо к
+// порталу этой же карты (targetTeleportId без targetSceneId). Перенос делает
+// сервер (см. internal/service/room_teleports.go).
 const teleportMenu = document.getElementById("teleportMenu");
 const teleportMenuLockBtn = document.getElementById("teleportMenuLockBtn");
 const teleportMenuLockLabel = document.getElementById("teleportMenuLockLabel");
@@ -1301,30 +1306,121 @@ async function linkedScenesOf(sceneId) {
     .filter((r) => r.scene);
 }
 
+// sameBuildingAs — сцена назначения на этаже того же здания, что открытая:
+// тогда стол при переносе остаётся на месте (см. handleTeleportTokens).
+function sameBuildingAs(sceneId) {
+  const from = sceneList.find((s) => s.id === viewSceneId);
+  const to = sceneList.find((s) => s.id === sceneId);
+  return !!(from && to && from.building && from.building === to.building);
+}
+
 // teleportName — подпись портала в списках, как на карте; без подписи — координаты.
 function teleportName(t) {
   if (!t.label) return `портал (${Math.round(t.x)}; ${Math.round(t.y)})`;
-  return t.targetSceneId && !t.targetTeleportId ? "→ " + t.label : t.label;
+  return t.targetSceneId ? "→ " + t.label : t.label;
 }
 
-// pickTeleportTarget — выбор цели портала: связанная сцена либо портал этой
-// карты. Возвращает {label, targetSceneId, targetTeleportId} или null; self —
-// id правимого портала, исключается из списка.
+// teleportTargetScenes — куда портал со сцены fromId вообще может вести:
+// этажи её здания (лестница между этажами — самый частый портал, доска для
+// неё не нужна), сцены, связанные стрелками на досках, и этажи их зданий
+// (переход в другое здание — на любой его этаж). Общая точка для выбора цели
+// и для проверки «портал ещё рабочий» (teleportStillLinked).
+async function teleportTargetScenes(fromId) {
+  const from = sceneList.find((s) => s.id === fromId);
+  const out = new Map();
+  const add = (scene, group, text) => {
+    if (scene && scene.id !== fromId && !out.has(scene.id)) out.set(scene.id, { scene, group, text });
+  };
+  const floors = (building) => {
+    for (const f of floorsOf(building)) add(f, "Этажи · " + building, (f.floor || 0) + " · " + f.name);
+  };
+  if (from && from.building) floors(from.building);
+  for (const { scene, boards } of await linkedScenesOf(fromId)) {
+    add(scene, "Связанные сцены", scene.name + " · " + boards.join(", "));
+    if (scene.building) floors(scene.building);
+  }
+  return [...out.values()];
+}
+
+// sceneDetail — данные неактивной сцены по запросу (get_scene → scene_detail,
+// см. internal/service/room.go): снапшот несёт только открытую. Ответа может
+// и не быть (сцену удалили) — не ждём вечно.
+function sceneDetail(sceneId) {
+  return new Promise((resolve) => {
+    const done = (v) => {
+      clearTimeout(timer);
+      document.removeEventListener("vtt:sceneDetail", onDetail);
+      resolve(v);
+    };
+    const onDetail = (e) => {
+      if (e.detail && e.detail.id === sceneId) done(e.detail);
+    };
+    const timer = setTimeout(() => done(null), 3000);
+    document.addEventListener("vtt:sceneDetail", onDetail);
+    vtt.send({ type: "get_scene", sceneId });
+  });
+}
+
+// pickTeleportExit — на какой именно портал сцены назначения высаживать.
+// Спрашиваем, только когда переходов там несколько (две лестницы между
+// этажами): иначе сервер сам найдёт обратный портал (см. landing).
+async function pickTeleportExit(target, current) {
+  const detail = await sceneDetail(target.targetSceneId);
+  const portals = Object.values((detail && detail.teleports) || {});
+  if (portals.length < 2) return target;
+  const options = [
+    { key: "", text: "Автоматически — к обратному порталу" },
+    ...portals.map((t) => ({ key: t.id, text: teleportName(t) })),
+  ];
+  let select;
+  const chosen = await openModal({
+    title: "Где выйти",
+    okLabel: "Готово",
+    buildBody: (body) => {
+      const l = document.createElement("p");
+      l.className = "bt-modal-text";
+      l.textContent = `На сцене «${target.label}» несколько порталов — рядом с каким появятся токены?`;
+      body.appendChild(l);
+      select = document.createElement("select");
+      select.className = "bt-modal-input";
+      for (const o of options) {
+        const opt = document.createElement("option");
+        opt.value = o.key;
+        opt.textContent = o.text;
+        select.appendChild(opt);
+      }
+      if (current && current.targetSceneId === target.targetSceneId && options.some((o) => o.key === current.targetTeleportId)) {
+        select.value = current.targetTeleportId || "";
+      }
+      body.appendChild(select);
+      return select;
+    },
+    onOk: () => ({ id: select.value }),
+    onCancel: () => null,
+  });
+  if (!chosen) return null;
+  return { ...target, targetTeleportId: chosen.id };
+}
+
+// pickTeleportTarget — выбор цели портала: сцена (см. teleportTargetScenes)
+// либо портал этой же карты. Возвращает {label, targetSceneId,
+// targetTeleportId} или null; self — id правимого портала, исключается из
+// списка.
 async function pickTeleportTarget(current, self) {
-  const linked = await linkedScenesOf(currentSceneId);
+  const scenes = await teleportTargetScenes(viewSceneId);
   const local = Object.values(vtt.getScene().teleports || {}).filter((t) => t.id !== self);
-  if (!linked.length && !local.length) {
+  if (!scenes.length && !local.length) {
     showAlert(
-      "Порталу некуда вести: на карте нет других порталов, а сцена ни с чем не связана. Поставь пару порталов (Ctrl + перетягивание в инструменте «Телепорт») или свяжи сцену стрелкой с другой на доске.",
+      "Порталу некуда вести: на карте нет других порталов, в здании нет других этажей, и стрелкой на доске сцена ни с чем не связана. Поставь пару порталов (Ctrl + перетягивание в инструменте «Телепорт»), задай сценам общее здание с разными этажами в их настройках или свяжи сцену стрелкой с другой на доске.",
       { title: "Телепорт" }
     );
     return null;
   }
   const targets = [
-    ...linked.map(({ scene, boards }) => ({
+    ...scenes.map(({ scene, group, text }) => ({
       key: "scene:" + scene.id,
-      group: "Сцены",
-      text: scene.name + " · " + boards.join(", "),
+      group,
+      text,
       value: { label: scene.name, targetSceneId: scene.id, targetTeleportId: "" },
     })),
     ...local.map((t) => ({
@@ -1361,7 +1457,7 @@ async function pickTeleportTarget(current, self) {
     },
     onOk: () => targets.find((t) => t.key === select.value)?.value || null,
     onCancel: () => null,
-  });
+  }).then((picked) => (picked && picked.targetSceneId ? pickTeleportExit(picked, current) : picked));
 }
 
 function newTeleportId() {
@@ -1412,23 +1508,23 @@ teleportDeleteBtn.onclick = () => {
   closeTeleportMenu();
 };
 
-// teleportStillLinked — портал на месте и его цель (парный портал или связанная сцена) ещё есть.
+// teleportStillLinked — портал на месте и его цель (парный портал этой карты
+// либо доступная сцена, см. teleportTargetScenes) ещё есть.
 async function teleportStillLinked(teleportId) {
   const t = vtt.getScene().teleports?.[teleportId];
   if (!t) {
     showAlert("Портала на карте уже нет.", { title: "Телепорт" });
     return null;
   }
-  if (t.targetTeleportId) {
+  if (!t.targetSceneId) {
     if (!vtt.getScene().teleports?.[t.targetTeleportId]) {
       showAlert("Парного портала на карте уже нет — портал не работает.", { title: "Телепорт" });
       return null;
     }
     return t;
   }
-  const linked = await linkedScenesOf(currentSceneId);
-  if (!linked.some((l) => l.scene.id === t.targetSceneId)) {
-    showAlert(`Сцена «${t.label}» больше не связана с текущей на доске — портал не работает.`, { title: "Телепорт" });
+  if (!(await teleportTargetScenes(viewSceneId)).some((r) => r.scene.id === t.targetSceneId)) {
+    showAlert(`Сцена «${t.label}» больше не доступна отсюда: ни этаж этого здания, ни связанная стрелкой на доске — портал не работает.`, { title: "Телепорт" });
     return null;
   }
   return t;
@@ -1447,9 +1543,9 @@ teleportMoveAllBtn.onclick = async () => {
     return;
   }
   const ok = await showConfirm(
-    t.targetTeleportId
+    !t.targetSceneId
       ? `Переместить ${tokens.length} перс. к парному порталу «${teleportName(t)}»?`
-      : `Переместить ${tokens.length} перс. на сцену «${t.label}»? Стол переключится туда же.`,
+      : `Переместить ${tokens.length} перс. на сцену «${t.label}»?` + (sameBuildingAs(t.targetSceneId) ? " Это этаж того же здания — стол останется на месте." : " Стол переключится туда же."),
     { title: "Телепорт", okLabel: "Переместить" }
   );
   if (!ok) return;
@@ -1459,18 +1555,25 @@ teleportMoveAllBtn.onclick = async () => {
 // Игрок встал на портал (см. room_teleports.go: noticeTeleport) — спросить ДМ.
 document.addEventListener("vtt:teleportRequest", async (e) => {
   const d = e.detail;
-  if (!d.targetTeleportId && d.targetSceneId === currentSceneId) return;
+  if (!d.targetTeleportId && d.targetSceneId === d.sceneId) return;
   const who = `${d.playerName || "Игрок"}: «${d.tokenLabel || "токен"}»`;
   const ok = await showConfirm(
     d.targetTeleportId
       ? `${who} встал на портал «${d.targetLabel || "портал"}». Переместить к парному порталу?`
-      : `${who} встал на портал в сцену «${d.targetSceneName}». Переместить? Стол переключится туда же.`,
+      : `${who} встал на портал в сцену «${d.targetSceneName}». Переместить?` + (d.sameBuilding ? " Это этаж того же здания — стол останется на месте." : " Стол переключится туда же."),
     { title: "Телепорт", okLabel: "Переместить", cancelLabel: "Не пускать" }
   );
   if (!ok) return;
-  const t = await teleportStillLinked(d.teleportId);
-  if (!t) return;
-  vtt.send({ type: "teleport_tokens", id: d.teleportId, tokenIds: [d.tokenId] });
+  // Портал стоит на сцене игрока (d.sceneId); у ДМ в этот момент может быть
+  // открыта другая — тогда локально проверить нечего, портал и цель проверит
+  // сервер, здесь только связь сцен на доске.
+  if (d.sceneId === viewSceneId) {
+    if (!(await teleportStillLinked(d.teleportId))) return;
+  } else if (d.targetSceneId && !(await teleportTargetScenes(d.sceneId)).some((r) => r.scene.id === d.targetSceneId)) {
+    showAlert(`Сцена «${d.targetSceneName}» больше не доступна с той, где стоит портал — портал не работает.`, { title: "Телепорт" });
+    return;
+  }
+  vtt.send({ type: "teleport_tokens", sceneId: d.sceneId, id: d.teleportId, tokenIds: [d.tokenId] });
 });
 
 function updateLightToggleBtnLabel() {
@@ -1594,6 +1697,9 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   // (см. room.go: dropDuplicateCharacterTokens) — паста с тем же
   // characterId тихо снесла бы оригинал, а не завела вторую фигурку.
   tokenMenuCopyBtn.style.display = !menuIsMulti && (menuIsLightOnly || !menuCharacterId) ? "flex" : "none";
+  // «На этаж…» — только если открытая сцена в здании с другими этажами;
+  // работает и для пачки: партия поднимается по лестнице вместе.
+  tokenMenuFloorBtn.style.display = !menuIsLightOnly && otherFloors().length ? "flex" : "none";
 
   // Замок — универсальный для всех объектов карты (см. map-objects.js):
   // здесь он на токене, тем же событием vtt:setMapObjectLocked его получат
@@ -1683,6 +1789,7 @@ function applyTokenMenuLockState() {
     tokenMenuLightDirectionField,
     tokenMenuLightToggleBtn,
     tokenMenuCopyBtn,
+    tokenMenuFloorBtn,
     tokenMenuDelete,
   ];
   for (const el of editable) el.classList.toggle("locked-disabled", menuTokenLocked);
@@ -1783,6 +1890,48 @@ function sendTokenOwner(id, charId) {
 
 tokenMenuOwner.onchange = () => {
   if (menuTokenId) sendTokenOwner(menuTokenId, tokenMenuOwner.value);
+};
+
+// otherFloors — этажи здания открытой сцены, кроме неё самой, сверху вниз.
+function otherFloors() {
+  const cur = sceneList.find((s) => s.id === viewSceneId);
+  if (!cur || !cur.building) return [];
+  return floorsOf(cur.building).filter((s) => s.id !== cur.id);
+}
+
+tokenMenuFloorBtn.onclick = async () => {
+  const ids = menuTokenIds.slice();
+  const floors = otherFloors();
+  closeTokenMenu();
+  if (!ids.length || !floors.length) return;
+  let select = null;
+  const ok = await openModal({
+    title: "На этаж",
+    okLabel: "Переместить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const l = document.createElement("p");
+      l.className = "bt-modal-text";
+      l.textContent = ids.length > 1 ? `Куда перенести ${ids.length} токена?` : "Куда перенести токен?";
+      body.appendChild(l);
+      select = document.createElement("select");
+      select.className = "bt-modal-input";
+      for (const f of floors) {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = `${f.floor || 0} · ${f.name}`;
+        select.appendChild(opt);
+      }
+      body.appendChild(select);
+      const h = document.createElement("p");
+      h.className = "bt-modal-text dim";
+      h.textContent = "Токены встанут на те же координаты этажом выше или ниже; их владельцы увидят новый этаж сами.";
+      body.appendChild(h);
+    },
+    onOk: () => select.value,
+    onCancel: () => null,
+  });
+  if (ok) vtt.send({ type: "move_tokens_to_scene", sceneId: ok, tokenIds: ids });
 };
 
 tokenMenuCopyBtn.onclick = () => {
@@ -4192,8 +4341,8 @@ window.addEventListener("message", async (e) => {
     const scene = sceneList.find((s) => norm(s.name) === norm(e.data.name));
     if (!scene) {
       showAlert(`Сцены «${e.data.name}» нет за столом — импортируй карту из модуля или проверь её название.`);
-    } else if (vtt && scene.id !== currentSceneId) {
-      vtt.send({ type: "switch_scene", sceneId: scene.id });
+    } else if (vtt) {
+      openSceneHere(scene.id); // у себя: стол переключит «Показать игрокам»
       closeSidePanel(); // убрать панель с карты, чтобы новую сцену было видно
     }
   } else if (e.data.type === "beacon:openPlaylist") {
@@ -4222,9 +4371,9 @@ window.addEventListener("message", async (e) => {
       vtt.send({ type: "play_cue", cue: { url: c.url, name: c.name || "", volume: c.volume, loop: !!c.loop } });
     }
   } else if (e.data.type === "beacon:switchSceneId") {
-    // Карточка сцены на доске (pages/board.js): «перейти» и телепорт.
-    if (vtt && typeof e.data.id === "string" && e.data.id !== currentSceneId && sceneList.some((s) => s.id === e.data.id)) {
-      vtt.send({ type: "switch_scene", sceneId: e.data.id });
+    // Карточка сцены на доске (pages/board.js): «перейти» — открыть у себя.
+    if (vtt && typeof e.data.id === "string" && sceneList.some((s) => s.id === e.data.id)) {
+      openSceneHere(e.data.id);
     }
   } else if (e.data.type === "beacon:placeMonster") {
     // Карточка монстра на доске: токен в центр текущего вида.
@@ -4523,6 +4672,53 @@ document.addEventListener("vtt:combatState", (e) => {
 showBuiltinCardsToggle.onchange = () => {
   vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
 };
+
+// summonAllToggle — тот же приём (см. domain.CombatState.SummonAll):
+// игрокам открывается вся библиотека для призыва; точечно — флагом «Можно
+// призывать» на карточке (pages/bestiary.js).
+const summonAllToggle = document.getElementById("summonAllToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  summonAllToggle.checked = !!e.detail.summonAll;
+});
+summonAllToggle.onchange = () => {
+  vtt.send({ type: "set_summon_all", summonAll: summonAllToggle.checked });
+};
+
+// Игрок просит существо на карту (см. room_summon.go) — как телепорт:
+// попап с количеством, «Пустить» / «Отказать». Несколько запросов — по
+// очереди, каждый своим окном.
+document.addEventListener("vtt:summonRequest", async (e) => {
+  const d = e.detail;
+  let countInput = null;
+  const count = await openModal({
+    title: "Призыв",
+    okLabel: "Пустить",
+    cancelLabel: "Отказать",
+    buildBody: (body, submit) => {
+      const l = document.createElement("p");
+      l.className = "bt-modal-text";
+      l.textContent = `${d.playerName || "Игрок"} просит призвать: «${d.monsterName}» × ${d.count}. Токены встанут рядом с его фишкой, водить их будет он.`;
+      body.appendChild(l);
+      countInput = document.createElement("input");
+      countInput.type = "number";
+      countInput.className = "bt-modal-input";
+      countInput.min = "1";
+      countInput.max = "20";
+      countInput.value = String(d.count || 1);
+      countInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          submit();
+        }
+      });
+      body.appendChild(countInput);
+      return countInput;
+    },
+    onOk: () => Math.max(1, Math.min(20, parseInt(countInput.value, 10) || 1)),
+    onCancel: () => 0,
+  });
+  vtt.send({ type: "summon_resolve", requestId: d.requestId, count: count || 0 });
+});
 
 // playerDrawingToggle / hidePlayerDrawingsToggle — тот же приём: общие
 // тумблеры стола, значение приходит внутри "combat_state" (см.
@@ -5303,10 +5499,78 @@ document.addEventListener("vtt:fogAreaCreated", (e) => {
 // ===================================================================
 // Открытие/закрытие самой панели теперь общее для всех разделов рейла —
 // см. блок "левое меню" ниже; здесь только наполнение раздела "Сцена".
+// Две сцены, а не одна: viewSceneId — что открыто на карте у ЭТОГО ДМ
+// (view_scene: подготовить следующую локацию, не дёргая стол), activeSceneId
+// — что видят игроки и трансляция (switch_scene, «Показать игрокам»). Всё,
+// что про «текущую карту» ДМ — редактор сетки, телепорты, настройки — идёт
+// от viewSceneId (см. internal/service/room.go: viewing/sceneOf).
 const sceneSwitchName = document.getElementById("sceneSwitchName");
+const sceneShowBtn = document.getElementById("sceneShowBtn");
 const sceneDropdown = document.getElementById("sceneDropdown");
 let sceneList = []; // [{id,name,viewerCount}]
-let currentSceneId = "";
+let viewSceneId = "";
+let activeSceneId = "";
+
+// showSceneToPlayers — сделать сцену активной для стола.
+function showSceneToPlayers(id) {
+  if (id && id !== activeSceneId) vtt.send({ type: "switch_scene", sceneId: id });
+}
+// openSceneHere — открыть сцену только у себя.
+function openSceneHere(id) {
+  if (id && id !== viewSceneId) vtt.send({ type: "view_scene", sceneId: id });
+}
+sceneShowBtn.onclick = () => showSceneToPlayers(viewSceneId);
+
+// ▲▼ у имени сцены — этажи здания открытой сцены (см. floorsOf): открыть у
+// себя соседний этаж; показать игрокам — как любую сцену, кнопкой ▶.
+const floorSwitch = document.getElementById("floorSwitch");
+const floorUpBtn = document.getElementById("floorUpBtn");
+const floorDownBtn = document.getElementById("floorDownBtn");
+function adjacentFloor(dir) {
+  const cur = sceneList.find((s) => s.id === viewSceneId);
+  if (!cur || !cur.building) return null;
+  const floors = floorsOf(cur.building); // сверху вниз
+  const i = floors.findIndex((s) => s.id === cur.id);
+  return floors[i - dir] || null; // dir=1 — выше (раньше в списке)
+}
+const floorLabel = document.getElementById("floorLabel");
+function renderFloorSwitch() {
+  const cur = sceneList.find((s) => s.id === viewSceneId);
+  floorSwitch.hidden = !cur || !cur.building || floorsOf(cur.building).length < 2;
+  if (floorSwitch.hidden) return;
+  // «Башня · этаж 0» — на карте без подписи не понять, на каком ты этаже.
+  floorLabel.textContent = (cur.building === cur.name ? "" : cur.building + " · ") + `этаж ${cur.floor || 0}`;
+  floorLabel.title = "Здание и этаж открытой сцены";
+  floorUpBtn.disabled = !adjacentFloor(1);
+  floorDownBtn.disabled = !adjacentFloor(-1);
+}
+floorUpBtn.onclick = () => {
+  const s = adjacentFloor(1);
+  if (s) openSceneHere(s.id);
+};
+floorDownBtn.onclick = () => {
+  const s = adjacentFloor(-1);
+  if (s) openSceneHere(s.id);
+};
+
+// floorsOf — этажи здания сверху вниз (как стоит башня); одиночные сцены —
+// сами по себе. Порядок зданий — по первому их этажу в списке.
+function floorsOf(building) {
+  return sceneList.filter((s) => s.building === building).sort((a, b) => (b.floor || 0) - (a.floor || 0));
+}
+function sceneGroups() {
+  const groups = [];
+  const seen = new Set();
+  for (const s of sceneList) {
+    if (!s.building) {
+      groups.push({ scenes: [s] });
+    } else if (!seen.has(s.building)) {
+      seen.add(s.building);
+      groups.push({ building: s.building, scenes: floorsOf(s.building) });
+    }
+  }
+  return groups;
+}
 
 function renderSceneDropdown() {
   // Подменю настроек — один узел, который живёт под строкой своей сцены;
@@ -5314,26 +5578,70 @@ function renderSceneDropdown() {
   // унесёт его вместе со строками.
   parkSceneSettingsDrawer();
   sceneDropdown.innerHTML = "";
-  for (const s of sceneList) {
+  for (const group of sceneGroups()) {
+    if (group.building) {
+      const head = document.createElement("div");
+      head.className = "scene-building";
+      head.innerHTML = icon("building", { size: 12 });
+      head.append(" " + group.building);
+      head.title = "Здание: этажи переключаются ▲▼ у имени сцены";
+      sceneDropdown.appendChild(head);
+    }
+    for (const s of group.scenes) renderSceneRow(s, !!group.building);
+  }
+  // Сцену, которую правили, удалили (в этом или другом окне) — подменю
+  // закрываем, а не оставляем висеть в парковке с чужими полями.
+  if (settingsSceneId && !sceneList.some((x) => x.id === settingsSceneId)) closeSceneSettings();
+}
+
+function renderSceneRow(s, inBuilding) {
+  {
     const row = document.createElement("div");
-    row.className = "scene-row row-card" + (s.id === currentSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
-    // Переключение — <button> на всю строку, корзина — отдельная кнопка
-    // рядом: вложенные интерактивы недопустимы.
+    row.className = "scene-row row-card" + (inBuilding ? " scene-row--floor" : "") + (s.id === viewSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
+    // Открыть у себя — <button> на всю строку, ▶/шестерёнка/корзина —
+    // отдельные кнопки рядом: вложенные интерактивы недопустимы.
     const pick = document.createElement("button");
     pick.type = "button";
     pick.className = "scene-pick";
-    pick.setAttribute("aria-pressed", String(s.id === currentSceneId));
+    pick.setAttribute("aria-pressed", String(s.id === viewSceneId));
     const nameSpan = document.createElement("span");
     nameSpan.className = "scene-name";
     nameSpan.textContent = s.name;
     pick.onclick = () => {
-      if (s.id !== currentSceneId) vtt.send({ type: "switch_scene", sceneId: s.id });
+      openSceneHere(s.id);
       closeSidePanel();
     };
+    if (inBuilding) {
+      const fl = document.createElement("span");
+      fl.className = "scene-floor";
+      fl.textContent = String(s.floor || 0);
+      fl.title = "Этаж";
+      pick.appendChild(fl);
+    }
     const viewers = document.createElement("span");
     viewers.className = "scene-viewers pill-badge";
     viewers.innerHTML = icon("user", { size: 11 });
     viewers.append(" " + s.viewerCount);
+    // Активная для стола — глаз-метка (только значок: имени сцены и так
+    // тесно); остальные — ▶ «показать игрокам».
+    let live;
+    if (s.id === activeSceneId) {
+      live = document.createElement("span");
+      live.className = "scene-live";
+      live.innerHTML = icon("eye", { size: 14 });
+      live.title = "Эту сцену видят игроки и трансляция";
+      live.setAttribute("aria-label", "у игроков");
+    } else {
+      live = document.createElement("button");
+      live.type = "button";
+      live.className = "scene-gear scene-gear--show icon-btn";
+      live.innerHTML = icon("play", { size: 13 });
+      live.title = "Показать игрокам";
+      live.onclick = (ev) => {
+        ev.stopPropagation();
+        showSceneToPlayers(s.id);
+      };
+    }
     // Шестерёнка — полные настройки этой сцены (фон/аудио/сетка) подменю
     // под строкой (см. openSceneSettings ниже); корзина — удаление. Обе —
     // для ЛЮБОЙ сцены из списка, не обязательно активной.
@@ -5348,6 +5656,18 @@ function renderSceneDropdown() {
       if (s.id === settingsSceneId) closeSceneSettings();
       else openSceneSettings(s.id, "basic");
     };
+    // Доступ игрокам (см. domain.SceneState.PlayerAccess) — тумблер прямо в
+    // строке, тот же флаг продублирован чекбоксом в настройках сцены.
+    const access = document.createElement("button");
+    access.type = "button";
+    access.className = "scene-gear scene-gear--access icon-btn" + (s.playerAccess ? " on" : "");
+    access.innerHTML = icon("users", { size: 13 });
+    access.title = s.playerAccess ? "Игроки могут открывать сцену сами — закрыть" : "Открыть сцену игрокам: попадёт в их список «Карты»";
+    access.setAttribute("aria-pressed", String(!!s.playerAccess));
+    access.onclick = (ev) => {
+      ev.stopPropagation();
+      vtt.send({ type: "set_scene_access", sceneId: s.id, playerAccess: !s.playerAccess });
+    };
     const del = document.createElement("button");
     del.className = "scene-gear icon-btn";
     del.innerHTML = icon("trash", { size: 13 });
@@ -5359,13 +5679,10 @@ function renderSceneDropdown() {
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
     pick.append(nameSpan, viewers);
-    row.append(pick, gear, del);
+    row.append(pick, live, access, gear, del);
     sceneDropdown.appendChild(row);
     if (s.id === settingsSceneId) row.after(sceneSettingsDrawer);
   }
-  // Сцену, которую правили, удалили (в этом или другом окне) — подменю
-  // закрываем, а не оставляем висеть в парковке с чужими полями.
-  if (settingsSceneId && !sceneList.some((x) => x.id === settingsSceneId)) closeSceneSettings();
 }
 
 // "+ Сцена" теперь статична в шапке панели (dm.html), а не пересоздаётся
@@ -5380,9 +5697,22 @@ document.getElementById("sceneCreateBtn").onclick = async () => {
 
 document.addEventListener("vtt:sceneList", (e) => {
   sceneList = e.detail.scenes || [];
-  currentSceneId = e.detail.currentSceneId || "";
-  const active = sceneList.find((s) => s.id === currentSceneId);
-  sceneSwitchName.textContent = active ? active.name : "Сцена";
+  activeSceneId = e.detail.currentSceneId || "";
+  viewSceneId = e.detail.viewSceneId || activeSceneId;
+  const viewed = sceneList.find((s) => s.id === viewSceneId);
+  sceneSwitchName.textContent = viewed ? viewed.name : "Сцена";
+  sceneShowBtn.hidden = viewSceneId === activeSceneId;
+  renderFloorSwitch();
+  buildingNames.innerHTML = "";
+  for (const name of new Set(sceneList.map((s) => s.building).filter(Boolean))) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    buildingNames.appendChild(opt);
+  }
+  // Доступ переключили из строки списка (или из другой вкладки) — чекбокс в
+  // открытом подменю не должен отставать.
+  const editing = settingsSceneId && sceneList.find((s) => s.id === settingsSceneId);
+  if (editing) fPlayerAccess.checked = !!editing.playerAccess;
   renderSceneDropdown();
   if (openPanelSection === "scene") renderTeleport();
 });
@@ -5395,7 +5725,7 @@ let teleportSeq = 0;
 
 async function renderTeleport() {
   const seq = ++teleportSeq;
-  const from = currentSceneId;
+  const from = viewSceneId;
   teleportList.innerHTML = "";
   if (!from) return;
   const rows = await linkedScenesOf(from);
@@ -5421,7 +5751,7 @@ async function renderTeleport() {
     meta.title = "Доска, где нарисована связь";
     row.append(nameSpan, meta);
     row.onclick = () => {
-      vtt.send({ type: "switch_scene", sceneId: scene.id });
+      openSceneHere(scene.id);
       closeSidePanel();
     };
     teleportList.appendChild(row);
@@ -5447,9 +5777,40 @@ const bgTab = document.querySelector('.modal-tabs button[data-tab="bg"]');
 const audioTab = document.querySelector('.modal-tabs button[data-tab="audio"]');
 
 const fName = document.getElementById("fName");
+const fBuilding = document.getElementById("fBuilding");
+const fFloor = document.getElementById("fFloor");
+const buildingNames = document.getElementById("buildingNames");
 const fWidth = document.getElementById("fWidth");
 const fHeight = document.getElementById("fHeight");
 const fFogOfWar = document.getElementById("fFogOfWar");
+const fPlayerAccess = document.getElementById("fPlayerAccess");
+// ---- зона для игроков (см. domain.SceneState.ViewZone, layers/view-zone.js) ----
+// Выделяется инструментом «view-zone» прямо на карте — как редактор сетки,
+// только на просматриваемой сцене; «Вся карта» — снять.
+const viewZoneSummary = document.getElementById("viewZoneSummary");
+const viewZonePickBtn = document.getElementById("viewZonePickBtn");
+const viewZoneClearBtn = document.getElementById("viewZoneClearBtn");
+function fillViewZone(s) {
+  const z = s.viewZone;
+  viewZoneSummary.textContent = z ? `${Math.round(z.w)}×${Math.round(z.h)} от (${Math.round(z.x)}, ${Math.round(z.y)})` : "Вся карта";
+  viewZoneClearBtn.disabled = !z;
+}
+viewZonePickBtn.onclick = () => {
+  closeSidePanel();
+  document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "view-zone" }));
+};
+viewZoneClearBtn.onclick = () => {
+  if (settingsSceneId) vtt.send({ type: "set_view_zone", sceneId: settingsSceneId });
+};
+// Протянули зону — вернуться в настройки той же сцены, вкладка «Фон».
+document.addEventListener("vtt:viewZoneDone", () => {
+  showSidePanelSection("scene");
+  openSceneSettings(viewSceneId, "bg");
+});
+// Свой тумблер, а не поле «Сохранить»: то же, что значок в строке списка.
+fPlayerAccess.onchange = () => {
+  if (settingsSceneId) vtt.send({ type: "set_scene_access", sceneId: settingsSceneId, playerAccess: fPlayerAccess.checked });
+};
 const fMapUrl = document.getElementById("fMapUrl");
 const bgPreview = document.getElementById("bgPreview");
 const fGridSize = document.getElementById("fGridSize");
@@ -5503,9 +5864,13 @@ tabButtons.forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
 
 function fillSceneSettingsFrom(s) {
   fName.value = s.name || "";
+  fBuilding.value = s.building || "";
+  fFloor.value = s.floor || 0;
   fWidth.value = s.width || 1280;
   fHeight.value = s.height || 720;
   fFogOfWar.checked = s.fogOfWar !== false;
+  fPlayerAccess.checked = !!s.playerAccess;
+  fillViewZone(s);
   fMapUrl.value = s.mapUrl || "";
   updateBgPreview();
   fAmbientUrl.value = s.ambientUrl || "";
@@ -5546,7 +5911,7 @@ function parkSceneSettingsDrawer() {
 function openSceneSettings(sceneId, tab) {
   settingsSceneId = sceneId;
   switchTab(tab || "basic");
-  if (sceneId === currentSceneId) {
+  if (sceneId === viewSceneId) {
     fillSceneSettingsFrom(vtt.getScene());
   } else {
     // Пока едет ответ — хотя бы имя из списка, а не поля прошлой сцены.
@@ -5554,8 +5919,10 @@ function openSceneSettings(sceneId, tab) {
     vtt.send({ type: "get_scene", sceneId });
   }
   // Редактор сетки рисует поверх карты — только для сцены, что на ней.
-  gridEditorBtn.disabled = sceneId !== currentSceneId;
-  gridEditorBtn.title = gridEditorBtn.disabled ? "Редактор сетки работает только на активной сцене — сначала переключись на неё" : "Редактировать сетку прямо на карте";
+  gridEditorBtn.disabled = sceneId !== viewSceneId;
+  gridEditorBtn.title = gridEditorBtn.disabled ? "Редактор сетки работает только на открытой сцене — сначала открой её" : "Редактировать сетку прямо на карте";
+  viewZonePickBtn.disabled = sceneId !== viewSceneId;
+  viewZonePickBtn.title = viewZonePickBtn.disabled ? "Выделять можно только на открытой сцене — сначала открой её" : "Протянуть прямоугольник по карте";
   sceneSettingsDrawer.hidden = false;
   renderSceneDropdown(); // подсветить строку и подставить подменю под неё
   sceneSettingsDrawer.scrollIntoView({ block: "nearest" });
@@ -5787,6 +6154,14 @@ document.getElementById("sceneDeleteBtn").onclick = async () => {
 };
 
 document.getElementById("modalSaveBtn").onclick = () => {
+  // Здание/этаж — своим сообщением (см. set_scene_building в room.go):
+  // «Сохранить» шлёт его вместе с остальными полями сцены.
+  const editing = sceneList.find((x) => x.id === settingsSceneId);
+  const building = fBuilding.value.trim();
+  const floor = parseInt(fFloor.value, 10) || 0;
+  if (editing && (building !== (editing.building || "") || floor !== (editing.floor || 0))) {
+    vtt.send({ type: "set_scene_building", sceneId: settingsSceneId, buildingName: building, floor });
+  }
   vtt.send({
     type: "update_scene",
     sceneId: settingsSceneId,

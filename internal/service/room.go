@@ -80,6 +80,10 @@ type RoomService interface {
 	// ListScenes — все сцены комнаты в порядке переключателя ДМ: карточки
 	// сцен на доске (см. web/src/pages/board.js).
 	ListScenes(ctx context.Context) ([]domain.SceneCard, error)
+	// PlayerOwnsMonster — у игрока есть свой токен этого существа (призванный
+	// фамильяр): тогда ему можно прочитать карточку бестиария, которая в
+	// остальном только для ДМ (см. api/http: handleMonsterGet).
+	PlayerOwnsMonster(ctx context.Context, playerID, monsterID string) (bool, error)
 }
 
 type inboundMsg struct {
@@ -126,13 +130,21 @@ type Room struct {
 
 	scenes         map[string]*domain.SceneState // все сцены комнаты, ключ — SceneState.ID
 	sceneOrder     []string                      // порядок сцен в переключателе DM
-	currentSceneID string                        // ID активной сейчас сцены — ключ в scenes
-	scene          *domain.SceneState            // == scenes[currentSceneID]; кэш, чтобы не лазить в map на каждую мутацию
-	clients        map[RoomClient]bool
-	join           chan RoomClient
-	leave          chan RoomClient
-	inbound        chan inboundMsg
-	shutdown       chan chan struct{}
+	currentSceneID string                        // ID активной сцены — той, что видят игроки и трансляция по умолчанию
+	// scene — сцена, с которой работает обрабатываемое СЕЙЧАС сообщение: у
+	// ДМ это может быть не активная, а открытая только у него (см. viewing/
+	// sceneOf, handleInbound). Между сообщениями и для запросов из HTTP
+	// (spawnToken, importScenes) — активная.
+	scene *domain.SceneState
+	// viewing — какую сцену смотрит клиент, если не активную: ДМ открыл
+	// другую сцену у себя (view_scene). Нет записи — клиент на активной.
+	// switch_scene сбрасывает всем: «показать игрокам» значит всех на неё.
+	viewing  map[RoomClient]string
+	clients  map[RoomClient]bool
+	join     chan RoomClient
+	leave    chan RoomClient
+	inbound  chan inboundMsg
+	shutdown chan chan struct{}
 	// importScenes — сцены, приехавшие импортом пакета Foundry (см.
 	// ImportScenes): отдельный канал, а не inbound, потому что это не
 	// команда клиента и авторизации по роли у неё нет — вызывающего
@@ -153,9 +165,15 @@ type Room struct {
 	// listScenes — «дай список сцен» из HTTP-хендлера (см. ListScenes):
 	// свой канал по той же причине, что и spawnToken выше.
 	listScenes chan chan []domain.SceneCard
+	// ownsMonster — «есть ли у игрока токен этого существа» из HTTP-хендлера
+	// (см. PlayerOwnsMonster) — тот же приём.
+	ownsMonster chan ownsMonsterReq
 	// teleportArmed — id токена → id портала, на котором он стоит и о котором
 	// ДМ уже спросили (см. room_teleports.go: noticeTeleport).
 	teleportArmed map[string]string
+	// summons — запросы игроков на призыв существ, ждущие решения ДМ (см.
+	// room_summon.go). Эфемерны: перезапуск сервера их забывает.
+	summons map[string]*summonRequest
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -263,6 +281,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		sceneOrder:     rs.SceneOrder,
 		currentSceneID: rs.CurrentSceneID,
 		clients:        make(map[RoomClient]bool),
+		viewing:        make(map[RoomClient]string),
 		join:           make(chan RoomClient),
 		leave:          make(chan RoomClient),
 		inbound:        make(chan inboundMsg, 32),
@@ -272,6 +291,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		spawnToken:     make(chan spawnTokenReq),
 		dropTokens:     make(chan dropTokensReq),
 		listScenes:     make(chan chan []domain.SceneCard),
+		ownsMonster:    make(chan ownsMonsterReq),
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
@@ -426,6 +446,13 @@ func (r *Room) run() {
 		select {
 		case c := <-r.join:
 			r.clients[c] = true
+			// Игрок вошёл, а его токен на другом этаже здания — показать
+			// этот этаж (см. followOwnFloor); дальше — только явные команды.
+			if c.Role() == domain.RolePlayer {
+				if floor := r.floorOfPlayer(r.scenes[r.currentSceneID], c.PlayerID()); floor != nil {
+					r.setViewing(c, floor.ID)
+				}
+			}
 			c.Send(r.snapshotPayload(c))
 			c.Send(r.cuePayload())      // канал ДМ — что уже играет, если играет
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
@@ -437,316 +464,13 @@ func (r *Room) run() {
 
 		case c := <-r.leave:
 			delete(r.clients, c)
+			delete(r.viewing, c)
 			c.Close()
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
 
 		case im := <-r.inbound:
-			if !r.authorize(im.from, im.msg.Type) {
-				continue // роли/сообщению не положено — молча игнорируем
-			}
-			switch im.msg.Type {
-			case "animate_attack":
-				r.relayFx(im.msg) // не трогает state, просто ретранслируем всем
-				continue
-			case "roll_dice":
-				r.handleRollDice(im.from, im.msg) // эфемерно, не трогает state
-				continue
-			case "show_journal":
-				r.relayJournalShow(im.from, im.msg) // эфемерно, как fx: state не трогает
-				continue
-			case "chat_send":
-				r.handleChatSend(im.from, im.msg) // см. room_chat.go
-				continue
-			case "chat_clear":
-				r.handleChatClear()
-				continue
-			case "show_image":
-				// «Показать игрокам» из раздела «Показ» — картинка поверх
-				// всего на экранах игроков и трансляции. Эфемерно, как cue:
-				// в state сцены не пишется (см. showcasePayload).
-				if im.msg.ImageURL == "" {
-					r.showcase = nil
-				} else {
-					r.showcase = &domain.ShowcaseState{URL: im.msg.ImageURL}
-				}
-				r.broadcastShowcase()
-				continue
-			case "hide_image":
-				r.showcase = nil
-				r.broadcastShowcase()
-				continue
-			case "move_own_token":
-				r.applyOwnTokenMove(im.from, im.msg) // сам шлёт broadcastAll при успехе
-				continue
-			case "toggle_door":
-				// Своя ветка, а не applyMutation — единственная мутация стен,
-				// доступная игроку (см. authorize), поэтому нужна ролевая
-				// проверка внутри (секретная/запертая дверь — только ДМ), а
-				// не просто "разрешено/нет" целиком по типу сообщения.
-				r.handleToggleDoor(im.from, im.msg)
-				continue
-			// Пометки — своя ветка, а не applyMutation: нужен отправитель
-			// (сервер сам проставляет автора и не даёт игроку тронуть чужое,
-			// см. room_drawings.go).
-			case "add_drawing":
-				r.handleAddDrawing(im.from, im.msg)
-				continue
-			case "remove_drawing":
-				r.handleRemoveDrawing(im.from, im.msg)
-				continue
-			case "clear_drawings":
-				r.handleClearDrawings()
-				continue
-			case "set_door_lock":
-				// ДМ-only (authorize не пускает игрока), но своя ветка —
-				// нужно перевести Locked в конкретное DoorState, а не просто
-				// присвоить поле как applyMutation делает для прочих стен.
-				r.handleSetDoorLock(im.msg)
-				continue
-			case "get_scene":
-				// точечный запрос: DM открыл "Настроить сцену" для НЕактивной
-				// сцены через шестерёнку в списке — её данных (фон/размер/сетка)
-				// у клиента ещё нет, snapshot несёт только активную сцену.
-				// Ответ уходит только запросившему, состояние комнаты не трогаем.
-				if s, ok := r.scenes[im.msg.SceneID]; ok {
-					im.from.Send(map[string]any{"type": "scene_detail", "scene": s})
-				}
-				continue
-			case "play_cue":
-				if im.msg.Cue != nil {
-					r.cue = &domain.CueState{
-						URL: im.msg.Cue.URL, Name: im.msg.Cue.Name,
-						Volume: im.msg.Cue.Volume, Loop: im.msg.Cue.Loop,
-						StartedAtMs: time.Now().UnixMilli(),
-					}
-					r.broadcastCue()
-				}
-				continue
-			case "stop_cue":
-				r.cue = nil
-				r.broadcastCue()
-				continue
-			case "play_sfx":
-				// эфемерно, как animate_attack
-				if im.msg.Sfx != nil {
-					r.broadcastSfx(im.msg.Sfx.URL, im.msg.Sfx.Name, im.msg.Sfx.Volume)
-				}
-				continue
-			case "stop_sfx":
-				r.broadcastSfxStop()
-				continue
-			case "set_door_sound":
-				// не applyMutation: нужна проверка, что стена — дверь
-				if w, ok := r.scene.Walls[im.msg.ID]; ok && w.Door != "" {
-					w.DoorSound = strings.TrimSpace(im.msg.DoorSound)
-					r.markDirty(r.currentSceneID)
-					r.broadcastAll()
-				}
-				continue
-			case "set_cue_volume":
-				// живая правка громкости уже играющего трека — НЕ трогает
-				// StartedAtMs, иначе у всех перематывало бы трек на каждый
-				// сдвиг слайдера.
-				if r.cue != nil && im.msg.Cue != nil {
-					r.cue.Volume = im.msg.Cue.Volume
-					r.broadcastCue()
-				}
-				continue
-			case "set_cue_loop":
-				// живое переключение "зациклен" у уже играющего трека (см.
-				// dm.js: loopBtn/openTrackModal) — тем же приёмом, что и
-				// set_cue_volume выше. Без этого доигравший до конца трек
-				// останавливался бы/уходил на следующий по СТАРОМУ флагу —
-				// клиент применяет audioEl.loop только из broadcastCue, а
-				// изменение только в БД никак не долетало бы до уже играющего
-				// <audio>.
-				if r.cue != nil && im.msg.Cue != nil {
-					r.cue.Loop = im.msg.Cue.Loop
-					r.broadcastCue()
-				}
-				continue
-			case "pause_cue":
-				// StartedAtMs больше не годится для формулы currentTime = now -
-				// StartedAtMs (время идёт, а трек стоит) — замораживаем позицию
-				// в PositionMs, её же на резюме превратим обратно в StartedAtMs.
-				if r.cue != nil && !r.cue.Paused {
-					r.cue.PositionMs = time.Now().UnixMilli() - r.cue.StartedAtMs
-					r.cue.Paused = true
-					r.broadcastCue()
-				}
-				continue
-			case "resume_cue":
-				if r.cue != nil && r.cue.Paused {
-					r.cue.StartedAtMs = time.Now().UnixMilli() - r.cue.PositionMs
-					r.cue.Paused = false
-					r.broadcastCue()
-				}
-				continue
-			case "seek_cue":
-				// Перемотка — как play_cue, но без пересоздания CueState: имя/
-				// громкость/луп остаются теми же, меняется только позиция. На
-				// паузе сикаем "на месте" (PositionMs), на воспроизведении —
-				// сдвигаем виртуальный старт (StartedAtMs), тем же приёмом, что
-				// resume_cue выше.
-				if r.cue != nil && im.msg.Cue != nil {
-					pos := im.msg.Cue.PositionMs
-					if pos < 0 {
-						pos = 0
-					}
-					if r.cue.Paused {
-						r.cue.PositionMs = pos
-					} else {
-						r.cue.StartedAtMs = time.Now().UnixMilli() - pos
-					}
-					r.broadcastCue()
-				}
-				continue
-
-			// ---- трекер инициативы (см. domain.CombatState/Combatant) —
-			// своя ветка мутаций, а не applyMutation: он живёт вне r.scene и
-			// рассылается отдельным broadcastCombat, а не broadcastAll.
-			case "add_combatant":
-				r.handleAddCombatant(im.msg)
-				continue
-			case "remove_combatant":
-				r.handleRemoveCombatant(im.msg.CombatantID)
-				continue
-			case "set_combatant_initiative":
-				if im.msg.Initiative != nil {
-					r.handleSetCombatantInitiative(im.msg.CombatantID, *im.msg.Initiative)
-				}
-				continue
-			case "set_combatant_ac":
-				if im.msg.AC != nil {
-					r.handleSetCombatantAC(im.msg.CombatantID, *im.msg.AC)
-				}
-				continue
-			case "set_combatant_hp":
-				r.handleSetCombatantHP(im.msg.CombatantID, im.msg.HPCurrent, im.msg.HPMax, im.msg.HPTemp, im.msg.HPDelta)
-				continue
-			case "set_combatant_death_save":
-				if im.msg.DeathSaveValue != nil {
-					r.handleSetCombatantDeathSave(im.msg.CombatantID, im.msg.DeathSaveKind, *im.msg.DeathSaveValue)
-				}
-				continue
-			case "set_show_hp":
-				if im.msg.ShowHP != nil {
-					r.handleSetShowHP(*im.msg.ShowHP)
-				}
-				continue
-			case "place_combatant_token":
-				r.handlePlaceCombatantToken(im.msg.CombatantID, im.msg.TokenX, im.msg.TokenY)
-				continue
-			case "start_combat":
-				r.handleStartCombat()
-				continue
-			case "end_combat":
-				r.handleEndCombat()
-				continue
-			case "next_turn":
-				r.handleTurnStep(1)
-				continue
-			case "prev_turn":
-				r.handleTurnStep(-1)
-				continue
-			case "set_looting_enabled":
-				if im.msg.LootingEnabled != nil {
-					r.handleSetLootingEnabled(*im.msg.LootingEnabled)
-				}
-				continue
-			case "set_highlight_active_token":
-				if im.msg.HighlightActiveToken != nil {
-					r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
-				}
-				continue
-			case "set_show_builtin_cards":
-				if im.msg.ShowBuiltinCards != nil {
-					r.handleSetShowBuiltinCards(*im.msg.ShowBuiltinCards)
-				}
-				continue
-			case "set_hide_light_markers":
-				if im.msg.HideLightMarkers != nil {
-					r.handleSetHideLightMarkers(*im.msg.HideLightMarkers)
-				}
-				continue
-			case "set_player_drawing_enabled":
-				if im.msg.PlayerDrawingEnabled != nil {
-					r.handleSetPlayerDrawingEnabled(*im.msg.PlayerDrawingEnabled)
-				}
-				continue
-			case "set_hide_player_drawings":
-				if im.msg.HidePlayerDrawings != nil {
-					r.handleSetHidePlayerDrawings(*im.msg.HidePlayerDrawings)
-				}
-				continue
-			// revive_token — вкладка "Убитые" трекера (см. combatPayload:
-			// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
-			// тот умеет только create_scene-подобные мутации сцены, а тут
-			// нужно ещё очистить Loot/XP и т.п. специфичную для смерти логику.
-			case "revive_token":
-				r.handleReviveKilledToken(im.msg.TokenID)
-				continue
-			// clear_killed_tokens — кнопка "Очистить убитых", см.
-			// handleClearKilledTokens. Без TokenID: чистит весь список разом.
-			case "clear_killed_tokens":
-				r.handleClearKilledTokens()
-				continue
-
-			// ---- хаб лута ДМ (см. domain.LootHub) — своя ветка мутаций, тем
-			// же принципом, что и трекер инициативы: живёт вне r.scene,
-			// рассылается отдельным broadcastHub.
-			case "hub_add_item":
-				r.handleHubAddItem(im.msg)
-				continue
-			case "hub_remove_item":
-				r.handleHubRemoveItem(im.msg.EntryID)
-				continue
-			case "hub_set_quantity":
-				if im.msg.Quantity != nil {
-					r.handleHubSetQuantity(im.msg.EntryID, *im.msg.Quantity)
-				}
-				continue
-			case "hub_take_item":
-				r.handleHubTakeItem(im.from, im.msg)
-				continue
-
-			// ---- лут убитого монстра прямо с токена (см. Token.Loot) ----
-			case "loot_take_item":
-				r.handleLootTakeItem(im.from, im.msg)
-				continue
-
-			// ---- наложенные состояния (см. domain.AppliedStatus,
-			// room_statuses.go) — своя ветка мутаций, потому что цель команды
-			// может лежать и в сцене (Token.Statuses), и в трекере
-			// (Combatant.Statuses): куда именно писать и что рассылать,
-			// решает resolveStatusTarget/commitStatuses, а не общий
-			// applyMutation+broadcastAll внизу.
-			case "apply_status":
-				r.handleApplyStatus(im.msg)
-				continue
-			case "remove_status":
-				r.handleRemoveStatus(im.msg)
-				continue
-			case "set_status_level":
-				r.handleSetStatusLevel(im.msg)
-				continue
-			case "set_status_rounds":
-				r.handleSetStatusRounds(im.msg)
-				continue
-			case "clear_statuses":
-				r.handleClearStatuses(im.msg)
-				continue
-			}
-			r.applyMutation(im.msg)
-			r.broadcastAll()
-			r.broadcastSceneList()
-			// ДМ поставил токен на портал — тот же вопрос, что и у игрока.
-			if im.msg.Type == "move_token" && im.msg.Token != nil {
-				if tok, ok := r.scene.Tokens[im.msg.Token.ID]; ok {
-					r.noticeTeleport("ДМ", tok)
-				}
-			}
+			r.handleInbound(im)
 
 		case req := <-r.importScenes:
 			req.reply <- r.addScenes(req.scenes)
@@ -762,6 +486,17 @@ func (r *Room) run() {
 
 		case reply := <-r.listScenes:
 			reply <- r.sceneCards()
+
+		case req := <-r.ownsMonster:
+			owns := false
+			for _, s := range r.scenes {
+				for _, t := range s.Tokens {
+					if t.OwnerID == req.playerID && t.MonsterID == req.monsterID {
+						owns = true
+					}
+				}
+			}
+			req.reply <- owns
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
@@ -791,6 +526,358 @@ func (r *Room) run() {
 			r.flushIfDirty()
 			close(done)
 			return
+		}
+	}
+}
+
+// handleInbound — одно сообщение клиента. На время обработки r.scene — сцена
+// отправителя (у ДМ это может быть открытая только у него, см. viewing), по
+// выходу — снова активная, чтобы запросы из HTTP работали с ней.
+func (r *Room) handleInbound(im inboundMsg) {
+	r.scene = r.sceneOf(im.from)
+	defer func() { r.scene = r.scenes[r.currentSceneID] }()
+	if !r.authorize(im.from, im.msg.Type) {
+		return // роли/сообщению не положено — молча игнорируем
+	}
+	if im.from.Role() == domain.RolePlayer && !r.playerMayTouch(im.from, im.msg) {
+		return // чужой токен — молча игнорируем, как и чужой ход
+	}
+	switch im.msg.Type {
+	case "update_own_token":
+		r.applyOwnTokenUpdate(im.msg)
+		return
+	case "remove_own_token":
+		if t, ok := r.scene.Tokens[im.msg.ID]; ok && t.CharacterID == "" {
+			delete(r.scene.Tokens, im.msg.ID)
+			r.markDirty(r.scene.ID)
+			r.broadcastAll()
+		}
+		return
+	case "animate_attack":
+		r.relayFx(im.msg) // не трогает state, просто ретранслируем всем
+		return
+	case "roll_dice":
+		r.handleRollDice(im.from, im.msg) // эфемерно, не трогает state
+		return
+	case "show_journal":
+		r.relayJournalShow(im.from, im.msg) // эфемерно, как fx: state не трогает
+		return
+	case "chat_send":
+		r.handleChatSend(im.from, im.msg) // см. room_chat.go
+		return
+	case "chat_clear":
+		r.handleChatClear()
+		return
+	case "show_image":
+		// «Показать игрокам» из раздела «Показ» — картинка поверх
+		// всего на экранах игроков и трансляции. Эфемерно, как cue:
+		// в state сцены не пишется (см. showcasePayload).
+		if im.msg.ImageURL == "" {
+			r.showcase = nil
+		} else {
+			r.showcase = &domain.ShowcaseState{URL: im.msg.ImageURL}
+		}
+		r.broadcastShowcase()
+		return
+	case "hide_image":
+		r.showcase = nil
+		r.broadcastShowcase()
+		return
+	case "move_own_token":
+		r.applyOwnTokenMove(im.from, im.msg) // сам шлёт broadcastAll при успехе
+		return
+	case "toggle_door":
+		// Своя ветка, а не applyMutation — единственная мутация стен,
+		// доступная игроку (см. authorize), поэтому нужна ролевая
+		// проверка внутри (секретная/запертая дверь — только ДМ), а
+		// не просто "разрешено/нет" целиком по типу сообщения.
+		r.handleToggleDoor(im.from, im.msg)
+		return
+	// Пометки — своя ветка, а не applyMutation: нужен отправитель
+	// (сервер сам проставляет автора и не даёт игроку тронуть чужое,
+	// см. room_drawings.go).
+	case "add_drawing":
+		r.handleAddDrawing(im.from, im.msg)
+		return
+	case "remove_drawing":
+		r.handleRemoveDrawing(im.from, im.msg)
+		return
+	case "clear_drawings":
+		r.handleClearDrawings()
+		return
+	case "set_door_lock":
+		// ДМ-only (authorize не пускает игрока), но своя ветка —
+		// нужно перевести Locked в конкретное DoorState, а не просто
+		// присвоить поле как applyMutation делает для прочих стен.
+		r.handleSetDoorLock(im.msg)
+		return
+	case "view_scene":
+		r.handleViewScene(im.from, im.msg.SceneID)
+		return
+	case "summon_list":
+		r.handleSummonList(im.from)
+		return
+	case "summon_request":
+		r.handleSummonRequest(im.from, im.msg)
+		return
+	case "summon_resolve":
+		r.handleSummonResolve(im.msg)
+		return
+	case "set_summon_all":
+		if im.msg.SummonAll != nil {
+			r.combat.SummonAll = *im.msg.SummonAll
+			r.markCombatDirty()
+			r.broadcastCombat()
+		}
+		return
+	case "teleport_tokens":
+		// Своя ветка: нужен отправитель — внутри здания ДМ переезжает
+		// взглядом на этаж назначения (см. room_teleports.go).
+		r.handleTeleportTokens(im.from, im.msg)
+		r.broadcastAll()
+		r.broadcastSceneList()
+		return
+	case "get_scene":
+		// точечный запрос: DM открыл "Настроить сцену" для НЕактивной
+		// сцены через шестерёнку в списке — её данных (фон/размер/сетка)
+		// у клиента ещё нет, snapshot несёт только активную сцену.
+		// Ответ уходит только запросившему, состояние комнаты не трогаем.
+		if s, ok := r.scenes[im.msg.SceneID]; ok {
+			im.from.Send(map[string]any{"type": "scene_detail", "scene": s})
+		}
+		return
+	case "play_cue":
+		if im.msg.Cue != nil {
+			r.cue = &domain.CueState{
+				URL: im.msg.Cue.URL, Name: im.msg.Cue.Name,
+				Volume: im.msg.Cue.Volume, Loop: im.msg.Cue.Loop,
+				StartedAtMs: time.Now().UnixMilli(),
+			}
+			r.broadcastCue()
+		}
+		return
+	case "stop_cue":
+		r.cue = nil
+		r.broadcastCue()
+		return
+	case "play_sfx":
+		// эфемерно, как animate_attack
+		if im.msg.Sfx != nil {
+			r.broadcastSfx(im.msg.Sfx.URL, im.msg.Sfx.Name, im.msg.Sfx.Volume)
+		}
+		return
+	case "stop_sfx":
+		r.broadcastSfxStop()
+		return
+	case "set_door_sound":
+		// не applyMutation: нужна проверка, что стена — дверь
+		if w, ok := r.scene.Walls[im.msg.ID]; ok && w.Door != "" {
+			w.DoorSound = strings.TrimSpace(im.msg.DoorSound)
+			r.markDirty(r.scene.ID)
+			r.broadcastAll()
+		}
+		return
+	case "set_cue_volume":
+		// живая правка громкости уже играющего трека — НЕ трогает
+		// StartedAtMs, иначе у всех перематывало бы трек на каждый
+		// сдвиг слайдера.
+		if r.cue != nil && im.msg.Cue != nil {
+			r.cue.Volume = im.msg.Cue.Volume
+			r.broadcastCue()
+		}
+		return
+	case "set_cue_loop":
+		// живое переключение "зациклен" у уже играющего трека (см.
+		// dm.js: loopBtn/openTrackModal) — тем же приёмом, что и
+		// set_cue_volume выше. Без этого доигравший до конца трек
+		// останавливался бы/уходил на следующий по СТАРОМУ флагу —
+		// клиент применяет audioEl.loop только из broadcastCue, а
+		// изменение только в БД никак не долетало бы до уже играющего
+		// <audio>.
+		if r.cue != nil && im.msg.Cue != nil {
+			r.cue.Loop = im.msg.Cue.Loop
+			r.broadcastCue()
+		}
+		return
+	case "pause_cue":
+		// StartedAtMs больше не годится для формулы currentTime = now -
+		// StartedAtMs (время идёт, а трек стоит) — замораживаем позицию
+		// в PositionMs, её же на резюме превратим обратно в StartedAtMs.
+		if r.cue != nil && !r.cue.Paused {
+			r.cue.PositionMs = time.Now().UnixMilli() - r.cue.StartedAtMs
+			r.cue.Paused = true
+			r.broadcastCue()
+		}
+		return
+	case "resume_cue":
+		if r.cue != nil && r.cue.Paused {
+			r.cue.StartedAtMs = time.Now().UnixMilli() - r.cue.PositionMs
+			r.cue.Paused = false
+			r.broadcastCue()
+		}
+		return
+	case "seek_cue":
+		// Перемотка — как play_cue, но без пересоздания CueState: имя/
+		// громкость/луп остаются теми же, меняется только позиция. На
+		// паузе сикаем "на месте" (PositionMs), на воспроизведении —
+		// сдвигаем виртуальный старт (StartedAtMs), тем же приёмом, что
+		// resume_cue выше.
+		if r.cue != nil && im.msg.Cue != nil {
+			pos := im.msg.Cue.PositionMs
+			if pos < 0 {
+				pos = 0
+			}
+			if r.cue.Paused {
+				r.cue.PositionMs = pos
+			} else {
+				r.cue.StartedAtMs = time.Now().UnixMilli() - pos
+			}
+			r.broadcastCue()
+		}
+		return
+
+	// ---- трекер инициативы (см. domain.CombatState/Combatant) —
+	// своя ветка мутаций, а не applyMutation: он живёт вне r.scene и
+	// рассылается отдельным broadcastCombat, а не broadcastAll.
+	case "add_combatant":
+		r.handleAddCombatant(im.msg)
+		return
+	case "remove_combatant":
+		r.handleRemoveCombatant(im.msg.CombatantID)
+		return
+	case "set_combatant_initiative":
+		if im.msg.Initiative != nil {
+			r.handleSetCombatantInitiative(im.msg.CombatantID, *im.msg.Initiative)
+		}
+		return
+	case "set_combatant_ac":
+		if im.msg.AC != nil {
+			r.handleSetCombatantAC(im.msg.CombatantID, *im.msg.AC)
+		}
+		return
+	case "set_combatant_hp":
+		r.handleSetCombatantHP(im.msg.CombatantID, im.msg.HPCurrent, im.msg.HPMax, im.msg.HPTemp, im.msg.HPDelta)
+		return
+	case "set_combatant_death_save":
+		if im.msg.DeathSaveValue != nil {
+			r.handleSetCombatantDeathSave(im.msg.CombatantID, im.msg.DeathSaveKind, *im.msg.DeathSaveValue)
+		}
+		return
+	case "set_show_hp":
+		if im.msg.ShowHP != nil {
+			r.handleSetShowHP(*im.msg.ShowHP)
+		}
+		return
+	case "place_combatant_token":
+		r.handlePlaceCombatantToken(im.msg.CombatantID, im.msg.TokenX, im.msg.TokenY)
+		return
+	case "start_combat":
+		r.handleStartCombat()
+		return
+	case "end_combat":
+		r.handleEndCombat()
+		return
+	case "next_turn":
+		r.handleTurnStep(1)
+		return
+	case "prev_turn":
+		r.handleTurnStep(-1)
+		return
+	case "set_looting_enabled":
+		if im.msg.LootingEnabled != nil {
+			r.handleSetLootingEnabled(*im.msg.LootingEnabled)
+		}
+		return
+	case "set_highlight_active_token":
+		if im.msg.HighlightActiveToken != nil {
+			r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
+		}
+		return
+	case "set_show_builtin_cards":
+		if im.msg.ShowBuiltinCards != nil {
+			r.handleSetShowBuiltinCards(*im.msg.ShowBuiltinCards)
+		}
+		return
+	case "set_hide_light_markers":
+		if im.msg.HideLightMarkers != nil {
+			r.handleSetHideLightMarkers(*im.msg.HideLightMarkers)
+		}
+		return
+	case "set_player_drawing_enabled":
+		if im.msg.PlayerDrawingEnabled != nil {
+			r.handleSetPlayerDrawingEnabled(*im.msg.PlayerDrawingEnabled)
+		}
+		return
+	case "set_hide_player_drawings":
+		if im.msg.HidePlayerDrawings != nil {
+			r.handleSetHidePlayerDrawings(*im.msg.HidePlayerDrawings)
+		}
+		return
+	// revive_token — вкладка "Убитые" трекера (см. combatPayload:
+	// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
+	// тот умеет только create_scene-подобные мутации сцены, а тут
+	// нужно ещё очистить Loot/XP и т.п. специфичную для смерти логику.
+	case "revive_token":
+		r.handleReviveKilledToken(im.msg.TokenID)
+		return
+	// clear_killed_tokens — кнопка "Очистить убитых", см.
+	// handleClearKilledTokens. Без TokenID: чистит весь список разом.
+	case "clear_killed_tokens":
+		r.handleClearKilledTokens()
+		return
+
+	// ---- хаб лута ДМ (см. domain.LootHub) — своя ветка мутаций, тем
+	// же принципом, что и трекер инициативы: живёт вне r.scene,
+	// рассылается отдельным broadcastHub.
+	case "hub_add_item":
+		r.handleHubAddItem(im.msg)
+		return
+	case "hub_remove_item":
+		r.handleHubRemoveItem(im.msg.EntryID)
+		return
+	case "hub_set_quantity":
+		if im.msg.Quantity != nil {
+			r.handleHubSetQuantity(im.msg.EntryID, *im.msg.Quantity)
+		}
+		return
+	case "hub_take_item":
+		r.handleHubTakeItem(im.from, im.msg)
+		return
+
+	// ---- лут убитого монстра прямо с токена (см. Token.Loot) ----
+	case "loot_take_item":
+		r.handleLootTakeItem(im.from, im.msg)
+		return
+
+	// ---- наложенные состояния (см. domain.AppliedStatus,
+	// room_statuses.go) — своя ветка мутаций, потому что цель команды
+	// может лежать и в сцене (Token.Statuses), и в трекере
+	// (Combatant.Statuses): куда именно писать и что рассылать,
+	// решает resolveStatusTarget/commitStatuses, а не общий
+	// applyMutation+broadcastAll внизу.
+	case "apply_status":
+		r.handleApplyStatus(im.msg)
+		return
+	case "remove_status":
+		r.handleRemoveStatus(im.msg)
+		return
+	case "set_status_level":
+		r.handleSetStatusLevel(im.msg)
+		return
+	case "set_status_rounds":
+		r.handleSetStatusRounds(im.msg)
+		return
+	case "clear_statuses":
+		r.handleClearStatuses(im.msg)
+		return
+	}
+	r.applyMutation(im.msg)
+	r.broadcastAll()
+	r.broadcastSceneList()
+	// ДМ поставил токен на портал — тот же вопрос, что и у игрока.
+	if im.msg.Type == "move_token" && im.msg.Token != nil {
+		if tok, ok := r.scene.Tokens[im.msg.Token.ID]; ok {
+			r.noticeTeleport("ДМ", tok)
 		}
 	}
 }
@@ -863,12 +950,106 @@ func (r *Room) Shutdown() {
 	<-done
 }
 
+// sceneOf — сцена, которую видит клиент: открытая им у себя (viewing), если
+// такая ещё есть, иначе активная. Этаж своего токена (см. floorOfPlayer)
+// игроку прописывается в viewing в момент переноса токена и при входе, а не
+// вычисляется здесь: «Показать игрокам» должно переключать всех без
+// исключений, иначе ДМ жмёт кнопку, а у игрока ничего не меняется.
+func (r *Room) sceneOf(c RoomClient) *domain.SceneState {
+	if id := r.viewing[c]; id != "" {
+		if s, ok := r.scenes[id]; ok {
+			return s
+		}
+	}
+	return r.scenes[r.currentSceneID]
+}
+
+// followOwnFloor — сокеты игрока переезжают взглядом на сцену, куда уехал
+// его токен (телепорт, «На этаж…»): партия разошлась по этажам — каждый
+// видит свой. Активная сцена — просто снять свой выбор.
+func (r *Room) followOwnFloor(playerID string, target *domain.SceneState) {
+	if playerID == "" || target == nil {
+		return
+	}
+	for c := range r.clients {
+		if c.Role() != domain.RolePlayer || c.PlayerID() != playerID {
+			continue
+		}
+		if target.ID == r.currentSceneID {
+			delete(r.viewing, c)
+		} else {
+			r.setViewing(c, target.ID)
+		}
+	}
+}
+
+func (r *Room) setViewing(c RoomClient, id string) {
+	if r.viewing == nil {
+		r.viewing = make(map[RoomClient]string)
+	}
+	r.viewing[c] = id
+}
+
+// floorOfPlayer — этаж здания active, на котором стоит токен игрока, если
+// это не сама active; вне здания — nil. Нужен при входе игрока: партию
+// разнесло по этажам, пока его не было.
+func (r *Room) floorOfPlayer(active *domain.SceneState, playerID string) *domain.SceneState {
+	if active == nil || active.Building == "" || playerID == "" {
+		return nil
+	}
+	if ownsTokenOn(active, playerID) {
+		return nil
+	}
+	for _, id := range r.sceneOrder {
+		s := r.scenes[id]
+		if s != active && s.SameBuilding(active) && ownsTokenOn(s, playerID) {
+			return s
+		}
+	}
+	return nil
+}
+
+func ownsTokenOn(s *domain.SceneState, playerID string) bool {
+	for _, t := range s.Tokens {
+		if t.OwnerID == playerID {
+			return true
+		}
+	}
+	return false
+}
+
+// ambientOf — трек сцены, а внутри здания у сцены без своего трека — трек
+// нулевого (или самого нижнего) этажа: по башне ходят под одну музыку.
+func (r *Room) ambientOf(s *domain.SceneState) (string, float64) {
+	if s == nil {
+		return "", 0
+	}
+	if s.AmbientURL != "" || s.Building == "" {
+		return s.AmbientURL, s.AmbientVolume
+	}
+	var ground *domain.SceneState
+	for _, id := range r.sceneOrder {
+		o := r.scenes[id]
+		if !o.SameBuilding(s) || o.AmbientURL == "" {
+			continue
+		}
+		if ground == nil || o.Floor == 0 || (ground.Floor != 0 && o.Floor < ground.Floor) {
+			ground = o
+		}
+	}
+	if ground == nil {
+		return "", 0
+	}
+	return ground.AmbientURL, ground.AmbientVolume
+}
+
 // sceneFor — ключевое место фильтрации: каждый клиент получает свою версию
-// сцены в зависимости от того, DM он или зритель.
+// СВОЕЙ сцены (см. sceneOf) в зависимости от того, DM он или зритель.
 func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
+	sc := r.sceneOf(c)
 	tokens := make(map[string]*domain.Token)
 	isDM := c.Role() == domain.RoleDM
-	for id, t := range r.scene.Tokens {
+	for id, t := range sc.Tokens {
 		switch {
 		case isDM:
 			tokens[id] = t
@@ -887,27 +1068,29 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 	// broadcastSceneList для списка сцен.
 	noteMarkers := map[string]*domain.NoteMarker{}
 	if isDM {
-		noteMarkers = r.scene.NoteMarkers
+		noteMarkers = sc.NoteMarkers
 	}
 	return &domain.PublicScene{
-		ID:            r.scene.ID,
-		Name:          r.scene.Name,
-		MapURL:        r.scene.MapURL,
-		Width:         r.scene.Width,
-		Height:        r.scene.Height,
-		FogOfWar:      r.scene.FogOfWar,
-		Grid:          r.scene.Grid,
-		AmbientURL:    r.scene.AmbientURL,
-		AmbientVolume: r.scene.AmbientVolume,
-		DoorSoundURL:  r.scene.DoorSoundURL,
-		GlobalLight:   r.scene.GlobalLight,
+		ID:            sc.ID,
+		Name:          sc.Name,
+		MapURL:        sc.MapURL,
+		Width:         sc.Width,
+		Height:        sc.Height,
+		FogOfWar:      sc.FogOfWar,
+		Grid:          sc.Grid,
+		AmbientURL:    sc.AmbientURL,
+		AmbientVolume: sc.AmbientVolume,
+		DoorSoundURL:  sc.DoorSoundURL,
+		GlobalLight:   sc.GlobalLight,
+		PlayerAccess:  sc.PlayerAccess,
+		ViewZone:      sc.ViewZone,
 		Tokens:        tokens,
 		NoteMarkers:   noteMarkers,
-		Walls:         r.scene.Walls,
-		FogAreas:      r.scene.FogAreas,
-		Buildings:     r.scene.Buildings,
-		Drawings:      r.scene.Drawings,
-		Teleports:     r.scene.Teleports,
+		Walls:         sc.Walls,
+		FogAreas:      sc.FogAreas,
+		Buildings:     sc.Buildings,
+		Drawings:      sc.Drawings,
+		Teleports:     sc.Teleports,
 	}
 }
 
@@ -919,9 +1102,15 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 // нормально, на секунды-десятки секунд) слышали бы разные моменты одного и
 // того же трека, хотя оба честно считают offset от одного и того же
 // startedAtMs.
+//
+// ambientUrl/ambientVolume — верхним уровнем, от АКТИВНОЙ сцены, а не от той,
+// что в scene: ДМ, открывший у себя следующую карту, должен слышать ту же
+// музыку, что и стол, а не музыку карты, в которую подглядывает.
 func (r *Room) snapshotPayload(c RoomClient) map[string]any {
+	ambientURL, ambientVolume := r.ambientOf(r.scenes[r.currentSceneID])
 	return map[string]any{
 		"type": "snapshot", "scene": r.sceneFor(c),
+		"ambientUrl": ambientURL, "ambientVolume": ambientVolume,
 		"ambientStartedAt": r.ambientStartedAtMs, "mapStartedAt": r.mapStartedAtMs,
 		"serverNow": time.Now().UnixMilli(),
 	}
@@ -993,35 +1182,53 @@ func (r *Room) showcasePayload() map[string]any {
 	return map[string]any{"type": "showcase", "showcase": r.showcase}
 }
 
-// broadcastSceneList шлёт только DM-клиентам список всех сцен комнаты (для
-// переключателя сцен) — зрителям он не нужен, они и так видят ровно одну
-// активную сцену через broadcastAll. ViewerCount у сцены ненулевой только
-// для текущей активной.
+// broadcastSceneList — список сцен для переключателя. ДМ получает все с
+// флагом доступа; игрок — только те, что ему открыли (SceneState.PlayerAccess),
+// плюс активную; трансляции список не нужен. ViewerCount — сколько не-DM
+// клиентов смотрит сцену сейчас (см. sceneOf); viewSceneId — что открыто у
+// ЭТОГО клиента, поэтому payload собирается на каждого.
 func (r *Room) broadcastSceneList() {
-	viewerCount := 0
+	viewers := map[string]int{}
 	for c := range r.clients {
 		if c.Role() != domain.RoleDM {
-			viewerCount++
+			viewers[r.sceneOf(c).ID]++
 		}
 	}
-	entries := make([]domain.SceneListEntry, 0, len(r.sceneOrder))
+	all := make([]domain.SceneListEntry, 0, len(r.sceneOrder))
+	forPlayers := make([]domain.SceneListEntry, 0, len(r.sceneOrder))
 	for _, id := range r.sceneOrder {
 		s, ok := r.scenes[id]
 		if !ok {
 			continue
 		}
-		vc := 0
-		if id == r.currentSceneID {
-			vc = viewerCount
+		e := domain.SceneListEntry{ID: s.ID, Name: s.Name, ViewerCount: viewers[id], PlayerAccess: s.PlayerAccess, Building: s.Building, Floor: s.Floor}
+		all = append(all, e)
+		if r.playerMayView(id) {
+			forPlayers = append(forPlayers, e)
 		}
-		entries = append(entries, domain.SceneListEntry{ID: s.ID, Name: s.Name, ViewerCount: vc})
 	}
-	payload := map[string]any{"type": "scene_list", "scenes": entries, "currentSceneId": r.currentSceneID}
 	for c := range r.clients {
-		if c.Role() == domain.RoleDM {
-			c.Send(payload)
+		var entries []domain.SceneListEntry
+		switch c.Role() {
+		case domain.RoleDM:
+			entries = all
+		case domain.RolePlayer:
+			entries = forPlayers
+		default:
+			continue
 		}
+		c.Send(map[string]any{"type": "scene_list", "scenes": entries, "currentSceneId": r.currentSceneID, "viewSceneId": r.sceneOf(c).ID})
 	}
+}
+
+// playerMayView — игроку можно открыть сцену самому: активная либо с
+// доступом (см. SceneState.PlayerAccess).
+func (r *Room) playerMayView(id string) bool {
+	if id == r.currentSceneID {
+		return true
+	}
+	s, ok := r.scenes[id]
+	return ok && s.PlayerAccess
 }
 
 // broadcastPlayerList шлёт ДМ и игрокам список сейчас подключённых игроков
@@ -1064,6 +1271,17 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 		return msgType == "move_own_token" || msgType == "roll_dice" ||
 			msgType == "hub_take_item" || msgType == "loot_take_item" ||
 			msgType == "toggle_door" || msgType == "chat_send" ||
+			// Открыть у себя разрешённую сцену — право на конкретную сцену
+			// проверяет handleViewScene.
+			msgType == "view_scene" ||
+			// Призыв существ (room_summon.go): список разрешённых и запрос.
+			msgType == "summon_list" || msgType == "summon_request" ||
+			// Свои токены (ПКМ у игрока): форма/зрение/свет, метки состояний,
+			// убрать призванного. Что токен именно свой, проверяет
+			// handleInbound (ownsToken) — тут только тип сообщения.
+			msgType == "update_own_token" || msgType == "remove_own_token" ||
+			msgType == "apply_status" || msgType == "remove_status" ||
+			msgType == "set_status_level" || msgType == "set_status_rounds" || msgType == "clear_statuses" ||
 			// Пометки на карте — единственная правка САМОЙ сцены, доступная
 			// игроку. Тумблер стола (CombatState.PlayerDrawingEnabled) и
 			// владение конкретным элементом проверяются отдельно, уже внутри
@@ -1073,6 +1291,48 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 	default: // RoleTV
 		return false
 	}
+}
+
+// playerMayTouch — команды игрока, адресованные токену, проходят только для
+// своего токена на своей сцене (Token.OwnerID == PlayerID): метки состояний,
+// правка/удаление. Команды без токена (бойца трекера и прочие) — как есть.
+func (r *Room) playerMayTouch(c RoomClient, msg domain.ClientMsg) bool {
+	switch msg.Type {
+	case "apply_status", "remove_status", "set_status_level", "set_status_rounds", "clear_statuses":
+		if msg.CombatantID != "" {
+			return false // карточка трекера — только ДМ
+		}
+		return r.ownsToken(c, msg.TokenID)
+	case "update_own_token":
+		return msg.Token != nil && r.ownsToken(c, msg.Token.ID)
+	case "remove_own_token":
+		return r.ownsToken(c, msg.ID)
+	}
+	return true
+}
+
+func (r *Room) ownsToken(c RoomClient, id string) bool {
+	t, ok := r.scene.Tokens[id]
+	return ok && t.OwnerID != "" && t.OwnerID == c.PlayerID()
+}
+
+// applyOwnTokenUpdate — игрок правит свой токен: форма, зрение, свет.
+// Остальные поля (позиция, скрытость, владелец, замок, картинка) — только
+// ДМ через move_token; их из msg.Token не берём.
+func (r *Room) applyOwnTokenUpdate(msg domain.ClientMsg) {
+	t := r.scene.Tokens[msg.Token.ID]
+	if t.Locked {
+		return
+	}
+	if msg.Token.Shape == "square" {
+		t.Shape = "square"
+	} else {
+		t.Shape = ""
+	}
+	t.Vision = msg.Token.Vision
+	t.Light = msg.Token.Light
+	r.markDirty(r.scene.ID)
+	r.broadcastAll()
 }
 
 // applyOwnTokenMove — двигает только X/Y токена, и только если он
@@ -1093,9 +1353,10 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	if !r.turnAllowsTokenMove(existing.ID) {
 		return // бой идёт, но сейчас не его ход — двигаться нельзя, см. turnAllowsTokenMove
 	}
-	existing.X = msg.Token.X
-	existing.Y = msg.Token.Y
-	r.markDirty(r.currentSceneID)
+	// За зону показа (SceneState.ViewZone) игрок не выходит: клиент и сам
+	// не даст утащить, но верить ему нельзя.
+	existing.X, existing.Y = r.scene.ViewZone.Clamp(msg.Token.X, msg.Token.Y)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 	r.noticeTeleport(c.PlayerName(), existing)
 }
@@ -1120,7 +1381,7 @@ func (r *Room) handleToggleDoor(from RoomClient, msg domain.ClientMsg) {
 	} else {
 		w.DoorState = "open"
 	}
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 	// звук с сервера: дверь открывает и игрок, а слышать должны все
 	if url := w.DoorSound; url != "" {
@@ -1147,7 +1408,7 @@ func (r *Room) handleSetDoorLock(msg domain.ClientMsg) {
 	} else {
 		w.DoorState = "closed"
 	}
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 }
 
@@ -1347,11 +1608,37 @@ func (r *Room) switchScene(id string) {
 	if !ok {
 		return
 	}
+	prevURL, _ := r.ambientOf(r.scenes[r.currentSceneID])
 	r.currentSceneID = id
 	r.scene = s
-	r.dirty = true                                // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
-	r.ambientStartedAtMs = time.Now().UnixMilli() // новая активная сцена — амбиент (если есть) стартует заново у всех
-	r.mapStartedAtMs = time.Now().UnixMilli()     // и видео-фон (если есть) — аналогично
+	clear(r.viewing) // «показать игрокам» — все на неё, и ДМ, что открывал другую, тоже
+	r.dirty = true   // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
+	// Новая активная сцена — амбиент стартует заново у всех; кроме перехода
+	// по этажам под один трек (см. ambientOf) — музыку не дёргаем.
+	if nextURL, _ := r.ambientOf(s); nextURL != prevURL {
+		r.ambientStartedAtMs = time.Now().UnixMilli()
+	}
+	r.mapStartedAtMs = time.Now().UnixMilli() // видео-фон (если есть) — заново
+}
+
+// handleViewScene — открыть сцену только у себя (см. viewing): игроки и
+// трансляция остаются на активной. Своя ветка, а не applyMutation: нужен
+// отправитель. Активная — это «вернуться к столу», запись снимается.
+func (r *Room) handleViewScene(c RoomClient, id string) {
+	if _, ok := r.scenes[id]; !ok {
+		return
+	}
+	if c.Role() != domain.RoleDM && !r.playerMayView(id) {
+		return
+	}
+	if id == r.currentSceneID {
+		delete(r.viewing, c)
+	} else {
+		r.setViewing(c, id)
+	}
+	r.scene = r.sceneOf(c)
+	c.Send(r.snapshotPayload(c))
+	r.broadcastSceneList() // счётчики зрителей и viewSceneId
 }
 
 // ListScenes — см. RoomService. ctx — чтобы не залипнуть на остановленной
@@ -1368,6 +1655,27 @@ func (r *Room) ListScenes(ctx context.Context) ([]domain.SceneCard, error) {
 		return cards, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+type ownsMonsterReq struct {
+	playerID, monsterID string
+	reply               chan bool
+}
+
+// PlayerOwnsMonster — см. RoomService; ctx — как у ListScenes.
+func (r *Room) PlayerOwnsMonster(ctx context.Context, playerID, monsterID string) (bool, error) {
+	req := ownsMonsterReq{playerID: playerID, monsterID: monsterID, reply: make(chan bool, 1)}
+	select {
+	case r.ownsMonster <- req:
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+	select {
+	case owns := <-req.reply:
+		return owns, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
 	}
 }
 
@@ -1994,7 +2302,7 @@ func (r *Room) handlePlaceCombatantToken(id string, x, y float64) {
 	}
 	cmb.Statuses = nil
 	cmb.TokenID = tokenID
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.markCombatDirty()
 	r.broadcastAll()
 	r.broadcastCombat()
@@ -2174,6 +2482,7 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// domain.CombatState.HighlightActiveToken.
 		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
 		"showBuiltinCards":     r.combat.ShowBuiltinCards,
+		"summonAll":            r.combat.SummonAll,
 		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
 		// включено (прятать), см. domain.CombatState.HideLightMarkers.
 		"hideLightMarkers": r.combat.HideLightMarkers == nil || *r.combat.HideLightMarkers,
@@ -2431,7 +2740,7 @@ func (r *Room) handleLootTakeItem(c RoomClient, msg domain.ClientMsg) {
 	} else {
 		e.Quantity -= take
 	}
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 	r.broadcastCharacterInventory(ch.ID, ch.AccountID)
 }
@@ -2493,46 +2802,43 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 				r.dropDuplicateCharacterTokens(msg.Token.CharacterID, msg.Token.ID)
 			}
 			r.scene.Tokens[msg.Token.ID] = msg.Token
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "remove_token":
 		delete(r.scene.Tokens, msg.ID)
 		delete(r.teleportArmed, msg.ID)
-		r.markDirty(r.currentSceneID)
+		r.markDirty(r.scene.ID)
 
 	case "add_teleport", "move_teleport":
 		r.handleTeleportUpsert(msg.Teleport)
 	case "remove_teleport":
 		r.handleTeleportRemove(msg.ID)
-	case "teleport_tokens":
-		r.handleTeleportTokens(msg)
-
 	case "reveal_token":
 		if t, ok := r.scene.Tokens[msg.ID]; ok {
 			t.Hidden = false
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "move_note_marker", "add_note_marker":
 		if msg.NoteMarker != nil {
 			r.scene.NoteMarkers[msg.NoteMarker.ID] = msg.NoteMarker
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "remove_note_marker":
 		delete(r.scene.NoteMarkers, msg.ID)
-		r.markDirty(r.currentSceneID)
+		r.markDirty(r.scene.ID)
 
 	case "add_wall":
 		if msg.Wall != nil {
 			r.scene.Walls[msg.Wall.ID] = msg.Wall
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "remove_wall":
 		delete(r.scene.Walls, msg.ID)
-		r.markDirty(r.currentSceneID)
+		r.markDirty(r.scene.ID)
 
 	// set_wall_door/set_wall_window — классификация уже существующей стены
 	// (ДМ-only, см. authorize: оба типа не в списке RolePlayer). Открыть/
@@ -2554,7 +2860,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 				} else {
 					w.DoorState = "" // вернули обычной стеной — состояние больше не осмысленно
 				}
-				r.markDirty(r.currentSceneID)
+				r.markDirty(r.scene.ID)
 			}
 		}
 
@@ -2572,7 +2878,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 				w.Door = ""
 				w.DoorState = ""
 			}
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "move_wall_point":
@@ -2590,7 +2896,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 				w.X2, w.Y2 = ref.X, ref.Y
 			}
 		}
-		r.markDirty(r.currentSceneID)
+		r.markDirty(r.scene.ID)
 
 	case "split_wall":
 		// Вставка точки в середину стены (см. web/src/vtt/interaction.js:
@@ -2601,7 +2907,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 			delete(r.scene.Walls, msg.ID)
 			r.scene.Walls[msg.Wall.ID] = msg.Wall
 			r.scene.Walls[msg.Wall2.ID] = msg.Wall2
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "remove_wall_point":
@@ -2611,19 +2917,19 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		for _, id := range msg.WallIDs {
 			delete(r.scene.Walls, id)
 		}
-		r.markDirty(r.currentSceneID)
+		r.markDirty(r.scene.ID)
 
 	case "add_fog_area":
 		// Апсерт по id — тем же сообщением зона и создаётся, и правится
 		// (контур, имя, показ игрокам, свет, замок).
 		if msg.FogArea != nil && msg.FogArea.Normalize() {
 			r.scene.FogAreas[msg.FogArea.ID] = msg.FogArea
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "remove_fog_area":
 		delete(r.scene.FogAreas, msg.ID)
-		r.markDirty(r.currentSceneID)
+		r.markDirty(r.scene.ID)
 
 	case "add_building":
 		// Контур приходит уже замкнутым по построению клиента (см.
@@ -2632,18 +2938,18 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		// слепо: < 3 точек не образуют контур ни при каком порядке обхода.
 		if msg.Building != nil && len(msg.Building.Points) >= 3 {
 			r.scene.Buildings[msg.Building.ID] = msg.Building
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		}
 
 	case "remove_building":
 		delete(r.scene.Buildings, msg.ID)
-		r.markDirty(r.currentSceneID)
+		r.markDirty(r.scene.ID)
 
 	case "set_global_light":
 		switch msg.GlobalLight {
 		case "", "dim", "bright":
 			r.scene.GlobalLight = msg.GlobalLight
-			r.markDirty(r.currentSceneID)
+			r.markDirty(r.scene.ID)
 		} // любое другое значение — игнорируем, а не падаем на мусоре от клиента
 
 	case "create_scene":
@@ -2677,6 +2983,11 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		delete(r.scenes, msg.SceneID)
 		r.sceneOrder = removeString(r.sceneOrder, msg.SceneID)
 		delete(r.dirtyScenes, msg.SceneID)
+		for c, id := range r.viewing {
+			if id == msg.SceneID {
+				delete(r.viewing, c) // смотревшие удалённую — на активную
+			}
+		}
 		if err := r.store.DeleteScene(context.Background(), msg.SceneID); err != nil {
 			slog.Error("Не удалось удалить файл сцены", "scene_id", msg.SceneID, "err", err)
 		}
@@ -2697,6 +3008,68 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 
 	case "switch_scene":
 		r.switchScene(msg.SceneID)
+
+	case "set_view_zone":
+		s, ok := r.scenes[msg.SceneID]
+		if !ok {
+			return
+		}
+		s.ViewZone = msg.ViewZone.Normalize(s.Width, s.Height)
+		r.markDirty(s.ID)
+
+	case "set_scene_building":
+		s, ok := r.scenes[msg.SceneID]
+		if !ok {
+			return
+		}
+		s.Building = strings.TrimSpace(msg.BuildingName)
+		if msg.Floor != nil {
+			s.Floor = *msg.Floor
+		}
+		if s.Building == "" {
+			s.Floor = 0
+		}
+		r.markDirty(s.ID)
+
+	case "rename_building":
+		// Здание — просто одинаковое имя у сцен; переименовать — пройтись
+		// по всем. SceneName — новое имя, BuildingName — старое.
+		to := strings.TrimSpace(msg.SceneName)
+		if msg.BuildingName == "" || to == "" {
+			return
+		}
+		for _, s := range r.scenes {
+			if s.Building == msg.BuildingName {
+				s.Building = to
+				r.markDirty(s.ID)
+			}
+		}
+
+	case "move_tokens_to_scene":
+		target, ok := r.scenes[msg.SceneID]
+		if !ok || target == r.scene {
+			return
+		}
+		r.moveTokens(r.scene, target, msg.TokenIDs, func(tok *domain.Token, _ int) (float64, float64) {
+			return math.Max(0, math.Min(tok.X, target.Width)), math.Max(0, math.Min(tok.Y, target.Height))
+		})
+
+	case "set_scene_access":
+		s, ok := r.scenes[msg.SceneID]
+		if !ok || msg.PlayerAccess == nil {
+			return
+		}
+		s.PlayerAccess = *msg.PlayerAccess
+		r.markDirty(s.ID)
+		// Доступ сняли — игроки, стоявшие на ней сами, возвращаются на
+		// активную (broadcastAll после applyMutation дошлёт им снапшот).
+		if !s.PlayerAccess {
+			for c := range r.viewing {
+				if c.Role() == domain.RolePlayer && r.viewing[c] == s.ID {
+					delete(r.viewing, c)
+				}
+			}
+		}
 
 	case "update_scene":
 		s, ok := r.scenes[msg.SceneID]

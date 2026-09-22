@@ -250,6 +250,7 @@ function renderEditView(root) {
         labeled("Модуль Foundry", textInput(() => monster.foundryModuleId, (v) => { monster.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.monsters" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
       ]),
       tagsField(() => hero.setPills(heroPills())),
+      summonableField(),
     ],
   });
 
@@ -537,6 +538,19 @@ function invSection(readOnly) {
   return block;
 }
 
+// summonableField — «Можно призывать» (см. domain.Monster.Summonable):
+// игрок увидит существо в панели «Призыв» и сможет попросить его на карту.
+function summonableField() {
+  const cb = h("input", { type: "checkbox", class: "switch" });
+  cb.checked = !!monster.summonable;
+  cb.addEventListener("change", () => {
+    monster.summonable = cb.checked;
+    scheduleSave();
+  });
+  const label = h("label", {}, [cb, " Можно призывать — игрок может попросить это существо на карту (фамильяр, зверь для призыва); ДМ подтверждает каждый раз. Не нужно, если в настройках стола включено «любых существ библиотеки»"]);
+  return h("div", { class: "checkbox-row" }, [label]);
+}
+
 function tagsField(onChange) {
   const list = h("div", { class: "card-chips" });
   function renderTags() {
@@ -724,10 +738,13 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
-  if (!me || !isGM(me.role)) {
+  if (!me) {
     location.href = "/";
     return;
   }
+  // Игрок открывает карточку своего призванного существа (см. api/http:
+  // handleMonsterGet) — только чтение: правка, удаление и клон спрятаны.
+  const readOnlyViewer = !isGM(me.role);
   monsterId = currentId();
   if (!monsterId) {
     document.getElementById("loadingHint").textContent = "Не указан id монстра (?id=...).";
@@ -741,7 +758,11 @@ function currentId() {
   }
 
   document.getElementById("monsterTitle").textContent = monster.name || "Без имени";
-  if (monster.system) {
+  if (readOnlyViewer) {
+    editMode = false;
+    editToggleBtn.style.display = "none";
+    deleteBtn.style.display = "none";
+  } else if (monster.system) {
     // Каталог "из коробки" — только просмотр, ✎ прячем совсем (сервер всё
     // равно откажет 403), вместо неё бейдж + "Клонировать" (см. cloneBtn выше).
     editMode = false;

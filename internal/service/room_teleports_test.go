@@ -64,9 +64,9 @@ func TestTeleportNoticesDMMove(t *testing.T) {
 }
 
 func TestTeleportTokensMovesAndSwitches(t *testing.T) {
-	r, _ := teleportRoom()
+	r, dm := teleportRoom()
 	r.scenes["scene-2"].Tokens["tok-old"] = &domain.Token{ID: "tok-old", CharacterID: "char-1"}
-	r.applyMutation(domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p", "tok-none"}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p", "tok-none"}}})
 
 	if r.currentSceneID != "scene-2" {
 		t.Fatalf("стол не переключился: %q", r.currentSceneID)
@@ -91,9 +91,9 @@ func TestTeleportTokensMovesAndSwitches(t *testing.T) {
 }
 
 func TestTeleportTokensIgnoresBrokenTarget(t *testing.T) {
-	r, _ := teleportRoom()
+	r, dm := teleportRoom()
 	r.scene.Teleports["tp-1"].TargetSceneID = "scene-gone"
-	r.applyMutation(domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p"}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p"}}})
 	if r.currentSceneID != "scene-1" || r.scene.Tokens["tok-p"] == nil {
 		t.Error("портал в удалённую сцену не должен ничего делать")
 	}
@@ -123,8 +123,8 @@ func TestLocalTeleportAsksDMWithTargetPortal(t *testing.T) {
 }
 
 func TestLocalTeleportMovesWithinScene(t *testing.T) {
-	r, _ := localTeleportRoom()
-	r.applyMutation(domain.ClientMsg{Type: "teleport_tokens", ID: "tp-a", TokenIDs: []string{"tok-p", "tok-none"}})
+	r, dm := localTeleportRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", ID: "tp-a", TokenIDs: []string{"tok-p", "tok-none"}}})
 	if r.currentSceneID != "scene-1" {
 		t.Fatalf("стол переключился: %q", r.currentSceneID)
 	}
@@ -150,5 +150,49 @@ func TestRemoveTeleportUnlinksPair(t *testing.T) {
 	r.noticeTeleport("ДМ", &domain.Token{ID: "tok-p", X: 300, Y: 300})
 	if len(dm.got) != 0 {
 		t.Errorf("портал без цели не должен спрашивать ДМ: %+v", dm.got)
+	}
+}
+
+// TestTeleportToPairedPortalOnOtherScene — портал с указанным парным на
+// сцене назначения высаживает именно у него, а не у первого обратного:
+// между этажами бывает две лестницы.
+func TestTeleportToPairedPortalOnOtherScene(t *testing.T) {
+	r, dm := teleportRoom()
+	up := r.scenes["scene-2"]
+	// Два обратных портала на сцене назначения: «первый попавшийся» —
+	// лотерея, поэтому портал указывает нужный явно.
+	up.Teleports["tp-far"] = &domain.Teleport{ID: "tp-far", X: 900, Y: 900, TargetSceneID: "scene-1"}
+	src := r.scene.Teleports["tp-1"]
+	src.TargetTeleportID = "tp-far"
+	if src.Local() {
+		t.Fatal("портал с targetSceneId не локальный")
+	}
+
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p"}}})
+	tok := up.Tokens["tok-p"]
+	if tok == nil {
+		t.Fatal("токен не приехал")
+	}
+	// Клетка правее указанного портала (радиус 24 + полклетки 24).
+	if tok.X != 948 || tok.Y != 900 {
+		t.Errorf("приземлился в (%v, %v), ожидался выход у tp-far", tok.X, tok.Y)
+	}
+}
+
+// TestTeleportRemoveClearsPairOnOtherScenes — удалили портал: ссылка на него
+// с другой сцены снимается, сам переход остаётся.
+func TestTeleportRemoveClearsPairOnOtherScenes(t *testing.T) {
+	r, _ := teleportRoom()
+	back := r.scenes["scene-2"].Teleports["tp-back"]
+	back.TargetTeleportID = "tp-1"
+	r.handleTeleportRemove("tp-1")
+	if back.TargetTeleportID != "" {
+		t.Errorf("ссылка на удалённый портал осталась: %q", back.TargetTeleportID)
+	}
+	if back.TargetSceneID != "scene-1" {
+		t.Errorf("сцена назначения не должна сбрасываться: %q", back.TargetSceneID)
+	}
+	if !r.dirtyScenes["scene-2"] {
+		t.Error("чужая сцена не помечена грязной")
 	}
 }

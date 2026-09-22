@@ -59,6 +59,23 @@ type ClientMsg struct {
 	AmbientVolume float64 `json:"ambientVolume,omitempty"` // только для "update_scene"
 	DoorSoundURL  string  `json:"doorSoundUrl,omitempty"`  // только для "update_scene"
 
+	// PlayerAccess — только для "set_scene_access" (см.
+	// SceneState.PlayerAccess); SceneID — какой сцене.
+	PlayerAccess *bool `json:"playerAccess,omitempty"`
+	// ViewZone — только для "set_view_zone" (см. SceneState.ViewZone);
+	// nil/null — вся карта. SceneID — какой сцене.
+	ViewZone *ViewZone `json:"viewZone,omitempty"`
+	// BuildingName/Floor — только для "set_scene_building" (см.
+	// SceneState.Building; Building выше занято контуром здания на карте):
+	// пустое имя — вывести сцену из здания. Floor — указатель, чтобы «0»
+	// отличался от «не прислали».
+	BuildingName string `json:"buildingName,omitempty"`
+	Floor        *int   `json:"floor,omitempty"`
+	// "move_tokens_to_scene" — TokenIDs (объявлен у телепортов выше) со
+	// сцены отправителя на SceneID: ПКМ «Переместить на этаж…». Токены
+	// встают на те же координаты (этажи одного здания обычно совпадают
+	// планом), вжатые в карту и зону показа.
+
 	// GlobalLight — только для "set_global_light": "" | "dim" | "bright" (см.
 	// SceneState.GlobalLight). Отдельное сообщение, а не поле "update_scene" —
 	// это одна кнопка тулбара, а не часть модалки "Настроить сцену".
@@ -165,6 +182,19 @@ type ClientMsg struct {
 	// переключатель стола (раздел "Настройки"), подсвечивать ли на карте
 	// токен бойца, чей сейчас ход (см. domain.CombatState.HighlightActiveToken).
 	HighlightActiveToken *bool `json:"highlightActiveToken,omitempty"`
+
+	// "update_own_token" — игрок правит СВОЙ токен (Token.OwnerID == он):
+	// Token несёт новые Shape/Vision/Light, остальное сервер игнорирует
+	// (см. service.Room.applyOwnTokenUpdate). "remove_own_token" — ID:
+	// убрать свой призванный токен (без CharacterID).
+
+	// ---- призыв существ игроком (см. service.Room.handleSummonRequest) ----
+	// "summon_request": MonsterID + Count — сколько просит игрок.
+	// "summon_resolve": RequestID + Count — сколько ДМ разрешил, 0 — отказ.
+	// "set_summon_all": SummonAll (см. CombatState.SummonAll).
+	RequestID string `json:"requestId,omitempty"`
+	Count     int    `json:"count,omitempty"`
+	SummonAll *bool  `json:"summonAll,omitempty"`
 
 	// ShowBuiltinCards — только для "set_show_builtin_cards": общий тумблер
 	// стола (раздел "Настройки"), показывать ли вшитый каталог "из коробки" в

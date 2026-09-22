@@ -157,6 +157,12 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 		scenes[sc.ID] = sc
 		diskOrder = []string{sc.ID}
 		meta = roomMeta{CurrentSceneID: sc.ID, SceneOrder: diskOrder}
+		// Сразу на диск: комната сохраняет только тронутые сцены, и нетронутая
+		// сцена по умолчанию пропадала бы после первого же перезапуска, как
+		// только рядом появлялась вторая.
+		if err := s.SaveScene(ctx, sc.ID, sc); err != nil {
+			return nil, err
+		}
 	}
 
 	order := dedupeOrder(meta.SceneOrder, scenes, diskOrder)

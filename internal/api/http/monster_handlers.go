@@ -53,13 +53,29 @@ func (a *API) handleMonsterCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, m)
 }
 
+// handleMonsterGet — карточка существа. ДМ — любая; игроку — только та, чей
+// токен у него есть на карте (призванный фамильяр, см.
+// RoomService.PlayerOwnsMonster): id монстров видны в снапшоте у всех
+// токенов, и без этой проверки игрок читал бы статблоки врагов.
 func (a *API) handleMonsterGet(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdminAccount(w, r); !ok {
+	acc, ok := a.requireAccount(w, r)
+	if !ok {
 		return
 	}
 	world, ok := a.requireWorld(w)
 	if !ok {
 		return
+	}
+	if !acc.IsGM() {
+		owns, err := world.Room.PlayerOwnsMonster(r.Context(), acc.ID, r.PathValue("id"))
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "ошибка сервера")
+			return
+		}
+		if !owns {
+			writeErr(w, http.StatusForbidden, "только для ДМ")
+			return
+		}
 	}
 	m, err := world.Bestiary.Get(r.Context(), r.PathValue("id"))
 	if err != nil {

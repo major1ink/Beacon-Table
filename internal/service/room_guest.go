@@ -102,7 +102,7 @@ func (r *Room) spawnPlayerToken(req spawnTokenReq) bool {
 		t.Light = &domain.TokenLight{Enabled: true, Bright: guestTorchBright, Dim: guestTorchDim}
 	}
 	r.scene.Tokens[t.ID] = t
-	r.markDirty(r.currentSceneID)
+	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 	return true
 }
@@ -140,13 +140,16 @@ func (r *Room) guestSpawnPoint(cell float64) (float64, float64) {
 			if x < cell/2 || y < cell/2 || x > r.scene.Width-cell/2 || y > r.scene.Height-cell/2 {
 				continue // за краем карты
 			}
+			if zx, zy := r.scene.ViewZone.Clamp(x, y); zx != x || zy != y {
+				continue // за зоной показа — игрок себя там не увидит
+			}
 			if r.spotTaken(x, y, cell) {
 				continue
 			}
 			return x, y
 		}
 	}
-	return ax, ay // карта плотно забита — пусть встанет на якорь, разойдутся руками
+	return r.scene.ViewZone.Clamp(ax, ay) // карта плотно забита — пусть встанет на якорь, разойдутся руками
 }
 
 // ringOffsets — восемь направлений вокруг якоря, по часовой стрелке от

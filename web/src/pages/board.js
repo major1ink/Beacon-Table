@@ -433,15 +433,12 @@ function sceneName(id) {
   return "";
 }
 
-// goToScene — переключить стол на сцену. Делает стол (pages/dm.js слушает
-// beacon:switchSceneId); у себя отмечаем сразу, не дожидаясь ответа.
+// goToScene — открыть сцену у ДМ. Делает стол (pages/dm.js слушает
+// beacon:switchSceneId → view_scene): игроки остаются на своей, поэтому
+// метка «на столе сейчас» (current — активная для стола) не трогается.
 function goToScene(id) {
   if (!gm || !hasHost) return;
   askHost({ type: "beacon:switchSceneId", id });
-  if (scenes) {
-    for (const s of scenes) s.current = s.id === id;
-    editor?.repaint();
-  }
 }
 
 const canTeleport = () => gm && hasHost;
