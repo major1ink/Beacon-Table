@@ -1057,32 +1057,34 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-DgkqxOji.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-CRH5FZYK.js">
+  <script type="module" crossorigin src="/assets/dm-CRSihiS9.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-BxzLwzaO.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-1TVglnLx.js">
+  <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-_htDaseS.js">
   <link rel="modulepreload" crossorigin href="/assets/drag-DVDIF09E.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-Ddd-fsD6.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-C0ex6G2V.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-Du82dp5L.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-B40gTefv.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-B8arRCWu.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-b6WHThjo.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-nJwW0eni.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-IOJJcHzd.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-Dsm4OnWD.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-YtrVu-vY.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/markdown-CVX7_5YD.js">
-  <link rel="modulepreload" crossorigin href="/assets/card-shell-Q1bgf4Mt.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-BWbiOW2P.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
-  <link rel="modulepreload" crossorigin href="/assets/stat-editor-DK-JoKDF.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-CCbzfvuV.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-BBn2T52y.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-Bq4pzRKJ.js">
+  <link rel="modulepreload" crossorigin href="/assets/stat-editor-n_c2DOvE.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-DPmLTZ3v.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DrDaiPGQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-R453jilG.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-aLsBkwFu.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-QHyegvJE.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-CfSpnEwL.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-DQOHlEZO.js">
-  <link rel="modulepreload" crossorigin href="/assets/roles-3liVsLzH.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-8NoUEh8v.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-p4R6TxD1.js">
+  <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-QSukLzIu.js">
   <link rel="stylesheet" crossorigin href="/assets/icons-YC0bg39S.css">
 </head>
 <body>
@@ -1417,6 +1419,12 @@
               <div class="field-block">
                 <div class="checkbox-row"><label><input type="checkbox" class="switch" id="hideLightMarkersToggle" /> Скрывать лампочки света вне режима «Освещение»</label></div>
                 <p class="hint">Иконки-лампочки на карте ДМ видны, только когда открыт раздел «Освещение». Само освещение работает всегда.</p>
+              </div>
+              <!-- Режим обучения — тур по столу (см. web/src/tutorial.js).
+                   Включение начинает тур заново с первого шага. -->
+              <div class="field-block" id="tutorialField">
+                <div class="checkbox-row"><label><input type="checkbox" class="switch" id="tutorialToggle" /> Режим обучения</label></div>
+                <p class="hint">Пошаговый тур по столу — сцены и карты, импорт модулей и персонажей, инициатива, доски и журнал — и разовые подсказки к жестам после него. Пройденный тур режим не выключает; включение заново запускает тур с начала.</p>
               </div>
             </div>
           </div>

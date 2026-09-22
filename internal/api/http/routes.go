@@ -19,6 +19,9 @@ import (
 type API struct {
 	Auth      service.AuthService
 	Broadcast service.BroadcastService
+	// Tutorial — состояние режима обучения ведущего (см. tutorial_handlers.go).
+	// nil — ручки отвечают 503 (тесты).
+	Tutorial  service.TutorialService
 	Companies *app.CompanyManager
 	// SecureCookies — сервер стоит за HTTPS-прокси (--behind-proxy), значит
 	// cookie можно и нужно помечать Secure: браузер перестанет отправлять их
@@ -99,6 +102,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/settings", a.handleSettingsList)
 	mux.HandleFunc("PUT /api/settings", a.handleSettingsSave)
+	// Режим обучения ведущего — см. tutorial_handlers.go.
+	mux.HandleFunc("GET /api/tutorial", a.handleTutorialGet)
+	mux.HandleFunc("PUT /api/tutorial", a.handleTutorialSet)
 
 	// Трансляция: ссылку выдаёт и перевыпускает ДМ, проверку доступа дёргает
 	// сама страница трансляции — ей аккаунт не нужен (см. broadcast_handlers.go).

@@ -119,6 +119,18 @@ export async function saveServerSettings(values) {
   return apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(values) });
 }
 
+// ---- режим обучения (только ДМ) ----
+// fetchTutorial — {state: ""|"on"|"done"|"off"}: пусто — ведущего ещё не
+// спрашивали, "on" — показать тур, "done" — тур пройден, режим включён ради
+// разовых подсказок (см. internal/domain/tutorial.go, web/src/tutorial.js).
+export async function fetchTutorial() {
+  return apiFetch("/api/tutorial");
+}
+
+export async function saveTutorial(state) {
+  return apiFetch("/api/tutorial", { method: "PUT", body: JSON.stringify({ state }) });
+}
+
 // shutdownServer — выключить сервер (только ДМ). Единственный способ
 // закончить по-человечески для того, кто запустил программу двойным кликом:
 // консоли, где нажать Ctrl+C, у него нет (см. internal/api/http:

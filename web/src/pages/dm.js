@@ -63,6 +63,8 @@ import {
   checkFoundryModuleUpdates,
   deleteFoundryModule,
   shutdownServer,
+  fetchTutorial,
+  saveTutorial,
 } from "../api.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
@@ -72,6 +74,8 @@ import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabel } from "../roles.js";
 import { installErrorCapture, openBugReport } from "../bug-report.js";
+import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutorial.js";
+import { dmTourSteps } from "../tutorial-dm.js";
 
 // Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
 // сессии, а не с момента нажатия кнопки.
@@ -200,6 +204,9 @@ let isDemoGuest = false;
   // видят игроки, плюс кнопка «✕» (шлёт hide_image всем, см.
   // web/src/showcase-overlay.js). Раздел рейла «Показ» — ниже по файлу.
   initShowcaseOverlay({ role: "dm", send: (m) => vtt.send(m) });
+  // Тур — последним: его шаги ходят по кнопкам рейла и колонки, а те
+  // собраны только к этому моменту (см. initTutorial в разделе настроек).
+  initTutorial();
 })();
 document.addEventListener("vtt:authFailed", () => {
   document.getElementById("authFailedOverlay").classList.add("open");
@@ -250,6 +257,9 @@ function hideOwnerOnlyUI() {
     document.querySelector(`.set-tabs [data-settab="${tab}"]`)?.remove();
     document.querySelector(`[data-settab-panel="${tab}"]`)?.remove();
   }
+  // Режим обучения хранится на сервере за requireOwner — гостю тумблер
+  // ответил бы 403.
+  document.getElementById("tutorialField")?.remove();
 }
 
 // worldsBtn — уйти со стола в список миров. Явно гасим мир (stopActiveWorld):
@@ -1214,7 +1224,7 @@ noteMarkerResizeBtn.onclick = () => {
   if (!menuNoteMarkerId) return;
   document.dispatchEvent(new CustomEvent("vtt:armMapObjectResize", { detail: { kind: "noteMarker", id: menuNoteMarkerId } }));
   closeNoteMarkerMenu();
-  showAlert("Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер значка" });
+  showTutorialHint("resize-noteMarker", "Теперь потяни от значка на карте — дальше от него он растёт, ближе — уменьшается.", "Размер значка");
 };
 
 noteMarkerDeleteBtn.onclick = () => {
@@ -1385,7 +1395,7 @@ teleportResizeBtn.onclick = () => {
   if (!menuTeleportId) return;
   document.dispatchEvent(new CustomEvent("vtt:armMapObjectResize", { detail: { kind: "teleport", id: menuTeleportId } }));
   closeTeleportMenu();
-  showAlert("Теперь потяни от центра портала на карте — дальше от него он растёт, ближе — уменьшается.", { title: "Размер портала" });
+  showTutorialHint("resize-teleport", "Теперь потяни от центра портала на карте — дальше от него он растёт, ближе — уменьшается.", "Размер портала");
 };
 
 teleportDeleteBtn.onclick = () => {
@@ -2246,7 +2256,10 @@ async function loadSettingsTab(tab) {
       await renderFoundryModules();
       break;
     default:
-      break; // «Стол» — тумблеры, они приходят со снапшотом сцены
+      // «Стол» — тумблеры приходят со снапшотом сцены; свой запрос только у
+      // режима обучения (см. renderTutorialToggle ниже).
+      if (!isDemoGuest) await renderTutorialToggle();
+      break;
   }
 }
 
@@ -2272,6 +2285,85 @@ function switchSettingsTab(tab) {
 settingsTabButtons.forEach((btn) => {
   btn.onclick = () => switchSettingsTab(btn.dataset.settab);
 });
+
+// ---- режим обучения (раздел «Настройки → Стол») ----
+// Тур по столу для нового ведущего (см. web/src/tutorial.js, шаги — в
+// tutorial-dm.js) плюс разовые подсказки к жестам (showTutorialHint).
+// Состояние лежит на сервере (см. api.js: fetchTutorial): "on" — тур ещё
+// не пройден, "done" — пройден, режим включён ради подсказок, "off" —
+// выключен. Вопрос «показать?» задаёт экран миров при первом входе; здесь
+// тумблер: выключить или пройти тур заново. Пройденный тур режим НЕ
+// выключает — подсказки нужны как раз после него. Прогресс (номер шага) —
+// в localStorage под ключом TUTORIAL_KEY.
+const TUTORIAL_KEY = "dm";
+const tutorialToggle = document.getElementById("tutorialToggle");
+// tutorialOn — включён ли режим ("on" или "done"); синхронно с тумблером,
+// но нужно и там, где тумблера нет под рукой (см. showTutorialHint).
+let tutorialOn = false;
+
+function applyTutorialState(state) {
+  tutorialOn = state === "on" || state === "done";
+  tutorialToggle.checked = tutorialOn;
+}
+
+// showTutorialHint — разовая подсказка о жесте («теперь потяни за значок»)
+// после пункта меню. Только пока обучение включено и только в первый раз:
+// без обучения ведущий жест знает, а на повторе окно приходилось закрывать
+// перед каждым изменением размера (см. tutorial.js: tourHintOnce).
+function showTutorialHint(key, text, title) {
+  if (!tutorialOn || !tourHintOnce(key)) return;
+  showAlert(text, { title });
+}
+
+function runDmTour() {
+  startTour(dmTourSteps(), {
+    key: TUTORIAL_KEY,
+    onFinish: () => setTutorialState("done"),
+    onSkip: () => setTutorialState("done"),
+  });
+}
+
+async function setTutorialState(state) {
+  applyTutorialState(state);
+  try {
+    await saveTutorial(state);
+  } catch (err) {
+    console.error("режим обучения: не удалось сохранить состояние:", err);
+  }
+}
+
+async function renderTutorialToggle() {
+  try {
+    const { state } = await fetchTutorial();
+    applyTutorialState(state);
+  } catch (err) {
+    console.error("режим обучения: не удалось прочитать состояние:", err);
+  }
+}
+
+tutorialToggle.onchange = async () => {
+  const on = tutorialToggle.checked;
+  await setTutorialState(on ? "on" : "off");
+  if (on) {
+    clearTourProgress(TUTORIAL_KEY);
+    runDmTour();
+  } else {
+    stopTour();
+  }
+};
+
+// initTutorial — зовётся из boot() после того, как собраны и рейл, и правая
+// колонка: шаги тура открывают панели кликами по их кнопкам.
+async function initTutorial() {
+  if (isDemoGuest) return;
+  try {
+    const { state } = await fetchTutorial();
+    applyTutorialState(state);
+    if (state === "on") runDmTour();
+  } catch (err) {
+    console.error("режим обучения: не удалось прочитать состояние:", err);
+  }
+}
 
 // ---- настройки сервера (раздел "Настройки") ----
 // Те же значения, что лежат в beacon.conf, но с подписями и проверкой (см.
@@ -4073,7 +4165,9 @@ window.addEventListener("message", async (e) => {
         detail: { noteId: e.data.id, label: e.data.title, library: "journal" },
       })
     );
-    showAlert("Теперь кликни на карте, куда поставить свиток.", { title: "Значок журнала" });
+    // Окно журнала само пишет «кликни на карте» в своей строке статуса —
+    // модалка нужна только тому, кто делает это впервые.
+    showTutorialHint("place-journalMarker", "Теперь кликни на карте, куда поставить свиток.", "Значок журнала");
   } else if (e.data.type === "beacon:switchScene") {
     // Ссылка на сцену внутри текста заметки/журнала (см. catalog-links.js,
     // internal/foundry/links.go). Имя ищем в списке сцен стола без учёта

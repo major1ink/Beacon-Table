@@ -197,6 +197,7 @@ func main() {
 	mux.Handle("/", static)
 
 	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version, cfg.BehindProxy, db)
+	api.Tutorial = service.NewTutorialService(stateRepo)
 	// Форма настроек в разделе «Настройки» у ДМ: пишет в тот же beacon.conf
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota)
