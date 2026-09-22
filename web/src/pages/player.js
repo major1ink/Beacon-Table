@@ -21,6 +21,7 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { mountScenePicker } from "../scene-picker.js";
+import { mountSummonPanel } from "../summon-panel.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createDrawOptions } from "../draw-options.js";
@@ -243,6 +244,11 @@ const PLAYER_DRAW_HELP = {
   // scene-picker.js); панель сама прячется, пока выбирать не из чего.
   const scenesPanel = vtt.sideMenu.addIcon(icon("map", { size: 16 }), "Карты", { width: 250, tip: PANEL_HELP.scenes });
   mountScenePicker(scenesPanel, { send: vtt.send });
+
+  // Призыв — попросить существо на карту (см. summon-panel.js); панель
+  // прячется, пока ДМ ничего не разрешил.
+  const summonPanel = vtt.sideMenu.addIcon(icon("creature", { size: 16 }), "Призыв", { width: 260, tip: PANEL_HELP.summon });
+  mountSummonPanel(summonPanel, { send: vtt.send });
 
   // Справочник — как у ДМ (pages/dm.js: там же про sticky).
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });

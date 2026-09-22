@@ -4580,6 +4580,53 @@ showBuiltinCardsToggle.onchange = () => {
   vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
 };
 
+// summonBuiltinToggle — тот же приём (см. domain.CombatState.SummonBuiltin):
+// игрокам открывается весь встроенный каталог для призыва; свои карточки —
+// флагом «Можно призывать» на карточке (pages/bestiary.js).
+const summonBuiltinToggle = document.getElementById("summonBuiltinToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  summonBuiltinToggle.checked = !!e.detail.summonBuiltin;
+});
+summonBuiltinToggle.onchange = () => {
+  vtt.send({ type: "set_summon_builtin", summonBuiltin: summonBuiltinToggle.checked });
+};
+
+// Игрок просит существо на карту (см. room_summon.go) — как телепорт:
+// попап с количеством, «Пустить» / «Отказать». Несколько запросов — по
+// очереди, каждый своим окном.
+document.addEventListener("vtt:summonRequest", async (e) => {
+  const d = e.detail;
+  let countInput = null;
+  const count = await openModal({
+    title: "Призыв",
+    okLabel: "Пустить",
+    cancelLabel: "Отказать",
+    buildBody: (body, submit) => {
+      const l = document.createElement("p");
+      l.className = "bt-modal-text";
+      l.textContent = `${d.playerName || "Игрок"} просит призвать: «${d.monsterName}» × ${d.count}. Токены встанут рядом с его фишкой, водить их будет он.`;
+      body.appendChild(l);
+      countInput = document.createElement("input");
+      countInput.type = "number";
+      countInput.className = "bt-modal-input";
+      countInput.min = "1";
+      countInput.max = "8";
+      countInput.value = String(d.count || 1);
+      countInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          submit();
+        }
+      });
+      body.appendChild(countInput);
+      return countInput;
+    },
+    onOk: () => Math.max(1, Math.min(8, parseInt(countInput.value, 10) || 1)),
+    onCancel: () => 0,
+  });
+  vtt.send({ type: "summon_resolve", requestId: d.requestId, count: count || 0 });
+});
+
 // playerDrawingToggle / hidePlayerDrawingsToggle — тот же приём: общие
 // тумблеры стола, значение приходит внутри "combat_state" (см.
 // domain.CombatState.PlayerDrawingEnabled / HidePlayerDrawings,

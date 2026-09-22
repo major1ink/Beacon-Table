@@ -128,6 +128,10 @@ type CombatState struct {
 	// HidePlayerDrawings — не показывать чужие пометки на карте: ДМ убирает
 	// с экрана всё, что нарисовали игроки, не стирая это (см. Drawing.AuthorID).
 	HidePlayerDrawings bool `json:"hidePlayerDrawings,omitempty"`
+	// SummonBuiltin — игроки могут призывать существ встроенного каталога
+	// (System:true; свой флаг у таких карточек не хранится, см.
+	// Monster.Summonable). Выключено по умолчанию.
+	SummonBuiltin bool `json:"summonBuiltin,omitempty"`
 }
 
 // NewCombatState — пустой трекер "из коробки" (первый запуск/нет

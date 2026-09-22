@@ -161,6 +161,12 @@ export function createNet(ctx, audio) {
       // Игрок встал на портал (см. service/room_teleports.go) — решает ДМ
       // (pages/dm.js).
       document.dispatchEvent(new CustomEvent("vtt:teleportRequest", { detail: data }));
+    } else if (data.type === "summon_list" || data.type === "summon_status" || data.type === "summon_request") {
+      // Призыв существ игроком (см. internal/service/room_summon.go):
+      // список разрешённых и статус — игроку (summon-panel.js), запрос —
+      // ДМ (pages/dm.js). Состояние мира не трогают, токены приедут снапшотом.
+      const name = { summon_list: "vtt:summonList", summon_status: "vtt:summonStatus", summon_request: "vtt:summonRequest" }[data.type];
+      document.dispatchEvent(new CustomEvent(name, { detail: data }));
     } else if (data.type === "table_notice") {
       // Текст сервера для всех за столом (см. Room.Announce) — сейчас
       // только предупреждение демо о скором сбросе. connection-banner.js

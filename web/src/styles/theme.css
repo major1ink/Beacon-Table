@@ -371,6 +371,29 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .scene-picker-back:hover { background: var(--surface-hover); }
 .scene-picker-back[hidden] { display: none; }
 
+/* ---- .summon-panel — панель «Призыв» игрока (см. web/src/summon-panel.js),
+   строки — те же, что у «Карт» ---- */
+.summon-search { width: 100%; margin-bottom: 6px; }
+.summon-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.summon-panel .summon-row { width: 100%; gap: 8px; padding: 6px 10px 6px 8px; font-size: 13px; background: transparent; color: var(--text); text-align: left; border: 1px solid transparent; cursor: pointer; }
+.summon-panel .summon-row:hover { background: var(--surface); }
+.summon-panel .summon-row.active { background: var(--accent-bg); }
+.summon-panel .summon-row.active .scene-name { font-weight: 600; }
+.summon-panel .scene-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.summon-art { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; }
+.summon-form { display: flex; gap: 6px; margin-top: 6px; }
+.summon-form input { width: 56px; flex: 0 0 auto; }
+.summon-ask {
+  flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 10px; border-radius: 12px; border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 13px; cursor: pointer;
+}
+.summon-ask:hover:not(:disabled) { background: var(--accent-hover); }
+.summon-ask:disabled { opacity: 0.5; cursor: default; }
+.summon-status { margin: 6px 2px 0; font-size: 12px; color: var(--text-dim); }
+.summon-status.ok { color: var(--green-bright); }
+.summon-status.error { color: var(--danger, #e5484d); }
+.summon-status[hidden] { display: none; }
+
 /* ---- .compendium-* — дерево навигации панели "Компендиум" (см.
    web/src/compendium-menu.js), монтируется в панель side-menu.js.addIcon.
    Два уровня одинаковой формы: корень (Beacon Table/Пользовательские) и

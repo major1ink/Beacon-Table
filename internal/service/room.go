@@ -164,6 +164,9 @@ type Room struct {
 	// teleportArmed — id токена → id портала, на котором он стоит и о котором
 	// ДМ уже спросили (см. room_teleports.go: noticeTeleport).
 	teleportArmed map[string]string
+	// summons — запросы игроков на призыв существ, ждущие решения ДМ (см.
+	// room_summon.go). Эфемерны: перезапуск сервера их забывает.
+	summons map[string]*summonRequest
 	// journalChanged — «журнал изменился» из HTTP-хендлера (см.
 	// NotifyJournalChanged): свой канал по той же причине, что и
 	// importScenes — это не команда клиента и роль по ней не проверяется.
@@ -578,6 +581,22 @@ func (r *Room) handleInbound(im inboundMsg) {
 		return
 	case "view_scene":
 		r.handleViewScene(im.from, im.msg.SceneID)
+		return
+	case "summon_list":
+		r.handleSummonList(im.from)
+		return
+	case "summon_request":
+		r.handleSummonRequest(im.from, im.msg)
+		return
+	case "summon_resolve":
+		r.handleSummonResolve(im.msg)
+		return
+	case "set_summon_builtin":
+		if im.msg.SummonBuiltin != nil {
+			r.combat.SummonBuiltin = *im.msg.SummonBuiltin
+			r.markCombatDirty()
+			r.broadcastCombat()
+		}
 		return
 	case "teleport_tokens":
 		// Своя ветка: нужен отправитель — внутри здания ДМ переезжает
@@ -1223,6 +1242,8 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 			// Открыть у себя разрешённую сцену — право на конкретную сцену
 			// проверяет handleViewScene.
 			msgType == "view_scene" ||
+			// Призыв существ (room_summon.go): список разрешённых и запрос.
+			msgType == "summon_list" || msgType == "summon_request" ||
 			// Пометки на карте — единственная правка САМОЙ сцены, доступная
 			// игроку. Тумблер стола (CombatState.PlayerDrawingEnabled) и
 			// владение конкретным элементом проверяются отдельно, уже внутри
@@ -2360,6 +2381,7 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// domain.CombatState.HighlightActiveToken.
 		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
 		"showBuiltinCards":     r.combat.ShowBuiltinCards,
+		"summonBuiltin":        r.combat.SummonBuiltin,
 		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
 		// включено (прятать), см. domain.CombatState.HideLightMarkers.
 		"hideLightMarkers": r.combat.HideLightMarkers == nil || *r.combat.HideLightMarkers,

@@ -250,6 +250,7 @@ function renderEditView(root) {
         labeled("Модуль Foundry", textInput(() => monster.foundryModuleId, (v) => { monster.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.monsters" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
       ]),
       tagsField(() => hero.setPills(heroPills())),
+      summonableField(),
     ],
   });
 
@@ -535,6 +536,19 @@ function invSection(readOnly) {
     });
   }
   return block;
+}
+
+// summonableField — «Можно призывать» (см. domain.Monster.Summonable):
+// игрок увидит существо в панели «Призыв» и сможет попросить его на карту.
+function summonableField() {
+  const cb = h("input", { type: "checkbox", class: "switch" });
+  cb.checked = !!monster.summonable;
+  cb.addEventListener("change", () => {
+    monster.summonable = cb.checked;
+    scheduleSave();
+  });
+  const label = h("label", {}, [cb, " Можно призывать — игрок может попросить это существо на карту (фамильяр, зверь для призыва); ДМ подтверждает каждый раз"]);
+  return h("div", { class: "checkbox-row" }, [label]);
 }
 
 function tagsField(onChange) {
