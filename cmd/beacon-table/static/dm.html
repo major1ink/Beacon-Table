@@ -556,6 +556,16 @@
        мелкий шрифт и тесные поля. */
     .set-tabs button { background: transparent; color: var(--text-dim); font-size: 11px; padding: 6px 4px; flex: 1 1 0; min-width: 0; white-space: nowrap; }
     .set-tabs button.active { background: var(--accent-bg); color: var(--text); }
+    /* Ждущий экран — точка на «Трансляции», продолжение точки с «⋯» и «Настроек». */
+    .set-tabs button { position: relative; }
+    .set-tabs button.has-badge::after {
+      content: ""; position: absolute; right: 1px; top: 2px; width: 6px; height: 6px; border-radius: 50%; background: #e74c3c;
+    }
+    #broadcastRequestsCount {
+      display: none; margin-left: 6px; background: #e74c3c; color: #fff; border-radius: 999px;
+      font-size: 10px; line-height: 1; padding: 3px 6px; vertical-align: middle; font-variant-numeric: tabular-nums;
+    }
+    #broadcastRequestsCount.show { display: inline-block; }
     .set-tab-panel { display: none; }
     .set-tab-panel.active { display: block; }
     #shutdownBtn { background: var(--danger); color: #fff; }
@@ -1057,7 +1067,7 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-DFAsWA1V.js"></script>
+  <script type="module" crossorigin src="/assets/dm-CzJ7rfn2.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/icons-PCqdvGdP.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
@@ -1442,7 +1452,7 @@
             </div>
             <div class="section-divider"></div>
             <div class="field-block">
-              <span class="field-label">Экраны, ожидающие подтверждения</span>
+              <span class="field-label">Экраны, ожидающие подтверждения<span id="broadcastRequestsCount"></span></span>
               <div id="broadcastRequests"></div>
               <p class="hint">Если ссылку вбить некуда (телевизор, приставка) — откройте на нём просто <b>/broadcast.html</b>: экран покажет код и появится здесь. Сверьте код с тем, что горит на экране, и нажмите «Пустить».</p>
             </div>
