@@ -49,8 +49,14 @@ func TestSummonListRespectsFlags(t *testing.T) {
 	yes := true
 	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_summon_all", SummonAll: &yes}})
 	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "summon_list"}})
+	if got := pl.last("summon_list")["monsters"].([]summonable); len(got) != 2 {
+		t.Errorf("с тумблером, но без встроенных карточек ожидались сова и дракон: %+v", got)
+	}
+	// Встроенный каталог — только когда он включён и у ДМ.
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_show_builtin_cards", ShowBuiltinCards: &yes}})
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "summon_list"}})
 	if got := pl.last("summon_list")["monsters"].([]summonable); len(got) != 3 {
-		t.Errorf("с тумблером ожидалась вся библиотека: %+v", got)
+		t.Errorf("со встроенными карточками ожидалась вся библиотека: %+v", got)
 	}
 }
 
