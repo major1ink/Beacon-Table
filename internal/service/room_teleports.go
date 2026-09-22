@@ -147,7 +147,8 @@ func (r *Room) handleTeleportTokens(from RoomClient, msg domain.ClientMsg) {
 // moveTokens — общий перенос токенов между сценами: телепорт и «Переместить
 // на этаж…». place даёт координаты i-го перенесённого; они вжимаются в
 // зону показа сцены назначения. Один персонаж — один токен, как и у
-// постановки токена гостю. Возвращает, сколько реально переехало.
+// постановки токена гостю. Владелец токена переезжает взглядом следом (см.
+// followOwnFloor). Возвращает, сколько реально переехало.
 func (r *Room) moveTokens(from, target *domain.SceneState, ids []string, place func(tok *domain.Token, i int) (float64, float64)) int {
 	moved := 0
 	for _, id := range ids {
@@ -167,6 +168,7 @@ func (r *Room) moveTokens(from, target *domain.SceneState, ids []string, place f
 		x, y := place(tok, moved)
 		tok.X, tok.Y = target.ViewZone.Clamp(x, y)
 		target.Tokens[id] = tok
+		r.followOwnFloor(tok.OwnerID, target)
 		moved++
 	}
 	if moved > 0 {

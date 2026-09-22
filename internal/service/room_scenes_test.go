@@ -348,3 +348,23 @@ func TestRenameBuildingTouchesAllFloors(t *testing.T) {
 		t.Errorf("вывод из здания: %+v", s)
 	}
 }
+
+// TestShowToPlayersOverridesOwnFloor — «Показать игрокам» сильнее этажа
+// своего токена: у игрока токен на земле, ДМ показал подвал — игрок видит
+// подвал. А вошедший заново игрок с токеном на другом этаже — свой этаж.
+func TestShowToPlayersOverridesOwnFloor(t *testing.T) {
+	r, dm, pl, _ := floorsRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "switch_scene", SceneID: "scene-2"}})
+	if got := snapshotSceneID(pl.last("snapshot")); got != "scene-2" {
+		t.Fatalf("после «Показать игрокам» игрок видит %q", got)
+	}
+	// Тот же игрок вошёл вторым окном — токен на земле, стол в подвале.
+	pl2 := &sceneClient{role: domain.RolePlayer, playerID: "acc-1"}
+	r.clients[pl2] = true
+	if floor := r.floorOfPlayer(r.scenes[r.currentSceneID], pl2.PlayerID()); floor != nil {
+		r.setViewing(pl2, floor.ID)
+	}
+	if got := r.sceneFor(pl2).ID; got != "scene-1" {
+		t.Errorf("вошедший игрок должен увидеть этаж своего токена, а видит %q", got)
+	}
+}

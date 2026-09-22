@@ -435,6 +435,13 @@ func (r *Room) run() {
 		select {
 		case c := <-r.join:
 			r.clients[c] = true
+			// Игрок вошёл, а его токен на другом этаже здания — показать
+			// этот этаж (см. followOwnFloor); дальше — только явные команды.
+			if c.Role() == domain.RolePlayer {
+				if floor := r.floorOfPlayer(r.scenes[r.currentSceneID], c.PlayerID()); floor != nil {
+					r.setViewing(c, floor.ID)
+				}
+			}
 			c.Send(r.snapshotPayload(c))
 			c.Send(r.cuePayload())      // канал ДМ — что уже играет, если играет
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
@@ -893,26 +900,48 @@ func (r *Room) Shutdown() {
 }
 
 // sceneOf — сцена, которую видит клиент: открытая им у себя (viewing), если
-// такая ещё есть; у игрока без своего выбора — этаж здания активной сцены,
-// где стоит его токен (см. floorOfPlayer); иначе активная.
+// такая ещё есть, иначе активная. Этаж своего токена (см. floorOfPlayer)
+// игроку прописывается в viewing в момент переноса токена и при входе, а не
+// вычисляется здесь: «Показать игрокам» должно переключать всех без
+// исключений, иначе ДМ жмёт кнопку, а у игрока ничего не меняется.
 func (r *Room) sceneOf(c RoomClient) *domain.SceneState {
 	if id := r.viewing[c]; id != "" {
 		if s, ok := r.scenes[id]; ok {
 			return s
 		}
 	}
-	active := r.scenes[r.currentSceneID]
-	if c.Role() == domain.RolePlayer {
-		if floor := r.floorOfPlayer(active, c.PlayerID()); floor != nil {
-			return floor
+	return r.scenes[r.currentSceneID]
+}
+
+// followOwnFloor — сокеты игрока переезжают взглядом на сцену, куда уехал
+// его токен (телепорт, «На этаж…»): партия разошлась по этажам — каждый
+// видит свой. Активная сцена — просто снять свой выбор.
+func (r *Room) followOwnFloor(playerID string, target *domain.SceneState) {
+	if playerID == "" || target == nil {
+		return
+	}
+	for c := range r.clients {
+		if c.Role() != domain.RolePlayer || c.PlayerID() != playerID {
+			continue
+		}
+		if target.ID == r.currentSceneID {
+			delete(r.viewing, c)
+		} else {
+			r.setViewing(c, target.ID)
 		}
 	}
-	return active
+}
+
+func (r *Room) setViewing(c RoomClient, id string) {
+	if r.viewing == nil {
+		r.viewing = make(map[RoomClient]string)
+	}
+	r.viewing[c] = id
 }
 
 // floorOfPlayer — этаж здания active, на котором стоит токен игрока, если
-// это не сама active: партия разошлась по этажам — каждый видит свой. Токен
-// на активной сцене имеет приоритет; вне здания — nil.
+// это не сама active; вне здания — nil. Нужен при входе игрока: партию
+// разнесло по этажам, пока его не было.
 func (r *Room) floorOfPlayer(active *domain.SceneState, playerID string) *domain.SceneState {
 	if active == nil || active.Building == "" || playerID == "" {
 		return nil
@@ -1504,10 +1533,7 @@ func (r *Room) handleViewScene(c RoomClient, id string) {
 	if id == r.currentSceneID {
 		delete(r.viewing, c)
 	} else {
-		if r.viewing == nil {
-			r.viewing = make(map[RoomClient]string)
-		}
-		r.viewing[c] = id
+		r.setViewing(c, id)
 	}
 	r.scene = r.sceneOf(c)
 	c.Send(r.snapshotPayload(c))
