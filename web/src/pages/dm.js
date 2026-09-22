@@ -5393,10 +5393,14 @@ function adjacentFloor(dir) {
   const i = floors.findIndex((s) => s.id === cur.id);
   return floors[i - dir] || null; // dir=1 — выше (раньше в списке)
 }
+const floorLabel = document.getElementById("floorLabel");
 function renderFloorSwitch() {
   const cur = sceneList.find((s) => s.id === viewSceneId);
   floorSwitch.hidden = !cur || !cur.building || floorsOf(cur.building).length < 2;
   if (floorSwitch.hidden) return;
+  // «Башня · этаж 0» — на карте без подписи не понять, на каком ты этаже.
+  floorLabel.textContent = (cur.building === cur.name ? "" : cur.building + " · ") + `этаж ${cur.floor || 0}`;
+  floorLabel.title = "Здание и этаж открытой сцены";
   floorUpBtn.disabled = !adjacentFloor(1);
   floorDownBtn.disabled = !adjacentFloor(-1);
 }

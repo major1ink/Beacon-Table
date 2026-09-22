@@ -254,7 +254,8 @@
     }
     #sceneShowBtn:hover { background: var(--accent-hover); }
     /* Этажи здания (SceneState.Building): ▲▼ рядом с именем открытой сцены. */
-    #floorSwitch { display: inline-flex; gap: 2px; flex: 0 0 auto; }
+    #floorSwitch { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+    #floorLabel { font-size: 11px; color: var(--text-dim); margin-right: 4px; white-space: nowrap; }
     #floorSwitch[hidden] { display: none; }
     #floorSwitch button {
       width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; font-size: 9px; line-height: 1;
@@ -1108,7 +1109,7 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-CBXugdTB.js"></script>
+  <script type="module" crossorigin src="/assets/dm-dJ0xNVLb.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/icons-CYBJOLER.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
@@ -1633,7 +1634,7 @@
       <canvas id="scene"></canvas>
       <div id="statusBar">
         <span id="sceneSwitchName">Сцена</span>
-        <span id="floorSwitch" hidden><button id="floorUpBtn" type="button" title="Этаж выше">▲</button><button id="floorDownBtn" type="button" title="Этаж ниже">▼</button></span>
+        <span id="floorSwitch" hidden><span id="floorLabel"></span><button id="floorUpBtn" type="button" title="Этаж выше">▲</button><button id="floorDownBtn" type="button" title="Этаж ниже">▼</button></span>
         <button id="sceneShowBtn" type="button" hidden title="Игроки и трансляция сейчас на другой сцене — переключить их сюда"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4l13 8-13 8z"/></svg> Показать игрокам</button>
         <span class="status-sep">·</span>
         <span id="playersHint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg><span id="playersCount"><span class="status-label">игроков онлайн: </span>0</span><span id="playersOnline"></span></span>
