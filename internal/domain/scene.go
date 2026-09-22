@@ -457,25 +457,36 @@ type NoteMarker struct {
 	FoundryFolder string `json:"foundryFolder,omitempty"`
 }
 
-// Teleport — портал на карте: ведёт на сцену TargetSceneID либо к порталу
-// TargetTeleportID той же сцены (см. service/room_teleports.go). Label —
-// подпись, Size — диаметр в мировых px (0 — клетка сетки).
+// Teleport — портал на карте (см. service/room_teleports.go). Куда ведёт —
+// по трём полям:
+//
+//   - TargetSceneID — на другую сцену: соседний этаж того же здания, этаж
+//     другого здания, просто связанная сцена. Приземление — у портала
+//     TargetTeleportID, если он указан, иначе у обратного портала той же
+//     сцены, иначе в центре карты;
+//   - TargetTeleportID без TargetSceneID — портал ТОЙ ЖЕ сцены (Local):
+//     токены встают рядом с ним, стол не переключается;
+//   - оба вместе — конкретный портал на другой сцене. Нужно там, где между
+//     двумя сценами не один переход: две лестницы между этажами иначе
+//     высаживали бы в одно и то же место (обратный портал ищется по сцене,
+//     а их два).
+//
+// Label — подпись, Size — диаметр в мировых px (0 — клетка сетки).
 type Teleport struct {
-	ID            string  `json:"id"`
-	X             float64 `json:"x"`
-	Y             float64 `json:"y"`
-	Size          float64 `json:"size,omitempty"`
-	Label         string  `json:"label"`
-	TargetSceneID string  `json:"targetSceneId"`
-	// TargetTeleportID — портал той же сцены; TargetSceneID тогда пуст.
-	TargetTeleportID string `json:"targetTeleportId,omitempty"`
+	ID               string  `json:"id"`
+	X                float64 `json:"x"`
+	Y                float64 `json:"y"`
+	Size             float64 `json:"size,omitempty"`
+	Label            string  `json:"label"`
+	TargetSceneID    string  `json:"targetSceneId"`
+	TargetTeleportID string  `json:"targetTeleportId,omitempty"`
 	// Locked — см. Token.Locked.
 	Locked bool `json:"locked,omitempty"`
 }
 
-// Local — портал ведёт к другому порталу той же сцены.
+// Local — портал ведёт к другому порталу ТОЙ ЖЕ сцены.
 func (t *Teleport) Local() bool {
-	return t.TargetTeleportID != ""
+	return t.TargetTeleportID != "" && t.TargetSceneID == ""
 }
 
 // Radius — половина Size, либо половина клетки сетки cell.

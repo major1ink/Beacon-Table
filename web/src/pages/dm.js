@@ -1245,8 +1245,10 @@ noteMarkerDeleteBtn.onclick = () => {
 };
 
 // ================= порталы (инструмент «Телепорт», ПКМ по порталу) =================
-// Портал ведёт на сцену, связанную с текущей на доске (sceneLinksOf), либо к
-// порталу этой же карты (targetTeleportId); перенос делает сервер.
+// Портал ведёт на соседний этаж своего здания, на сцену, связанную с текущей
+// стрелкой на доске (sceneLinksOf), на этаж такого связанного здания либо к
+// порталу этой же карты (targetTeleportId без targetSceneId). Перенос делает
+// сервер (см. internal/service/room_teleports.go).
 const teleportMenu = document.getElementById("teleportMenu");
 const teleportMenuLockBtn = document.getElementById("teleportMenuLockBtn");
 const teleportMenuLockLabel = document.getElementById("teleportMenuLockLabel");
@@ -1304,30 +1306,121 @@ async function linkedScenesOf(sceneId) {
     .filter((r) => r.scene);
 }
 
+// sameBuildingAs — сцена назначения на этаже того же здания, что открытая:
+// тогда стол при переносе остаётся на месте (см. handleTeleportTokens).
+function sameBuildingAs(sceneId) {
+  const from = sceneList.find((s) => s.id === viewSceneId);
+  const to = sceneList.find((s) => s.id === sceneId);
+  return !!(from && to && from.building && from.building === to.building);
+}
+
 // teleportName — подпись портала в списках, как на карте; без подписи — координаты.
 function teleportName(t) {
   if (!t.label) return `портал (${Math.round(t.x)}; ${Math.round(t.y)})`;
-  return t.targetSceneId && !t.targetTeleportId ? "→ " + t.label : t.label;
+  return t.targetSceneId ? "→ " + t.label : t.label;
 }
 
-// pickTeleportTarget — выбор цели портала: связанная сцена либо портал этой
-// карты. Возвращает {label, targetSceneId, targetTeleportId} или null; self —
-// id правимого портала, исключается из списка.
+// teleportTargetScenes — куда портал со сцены fromId вообще может вести:
+// этажи её здания (лестница между этажами — самый частый портал, доска для
+// неё не нужна), сцены, связанные стрелками на досках, и этажи их зданий
+// (переход в другое здание — на любой его этаж). Общая точка для выбора цели
+// и для проверки «портал ещё рабочий» (teleportStillLinked).
+async function teleportTargetScenes(fromId) {
+  const from = sceneList.find((s) => s.id === fromId);
+  const out = new Map();
+  const add = (scene, group, text) => {
+    if (scene && scene.id !== fromId && !out.has(scene.id)) out.set(scene.id, { scene, group, text });
+  };
+  const floors = (building) => {
+    for (const f of floorsOf(building)) add(f, "Этажи · " + building, (f.floor || 0) + " · " + f.name);
+  };
+  if (from && from.building) floors(from.building);
+  for (const { scene, boards } of await linkedScenesOf(fromId)) {
+    add(scene, "Связанные сцены", scene.name + " · " + boards.join(", "));
+    if (scene.building) floors(scene.building);
+  }
+  return [...out.values()];
+}
+
+// sceneDetail — данные неактивной сцены по запросу (get_scene → scene_detail,
+// см. internal/service/room.go): снапшот несёт только открытую. Ответа может
+// и не быть (сцену удалили) — не ждём вечно.
+function sceneDetail(sceneId) {
+  return new Promise((resolve) => {
+    const done = (v) => {
+      clearTimeout(timer);
+      document.removeEventListener("vtt:sceneDetail", onDetail);
+      resolve(v);
+    };
+    const onDetail = (e) => {
+      if (e.detail && e.detail.id === sceneId) done(e.detail);
+    };
+    const timer = setTimeout(() => done(null), 3000);
+    document.addEventListener("vtt:sceneDetail", onDetail);
+    vtt.send({ type: "get_scene", sceneId });
+  });
+}
+
+// pickTeleportExit — на какой именно портал сцены назначения высаживать.
+// Спрашиваем, только когда переходов там несколько (две лестницы между
+// этажами): иначе сервер сам найдёт обратный портал (см. landing).
+async function pickTeleportExit(target, current) {
+  const detail = await sceneDetail(target.targetSceneId);
+  const portals = Object.values((detail && detail.teleports) || {});
+  if (portals.length < 2) return target;
+  const options = [
+    { key: "", text: "Автоматически — к обратному порталу" },
+    ...portals.map((t) => ({ key: t.id, text: teleportName(t) })),
+  ];
+  let select;
+  const chosen = await openModal({
+    title: "Где выйти",
+    okLabel: "Готово",
+    buildBody: (body) => {
+      const l = document.createElement("p");
+      l.className = "bt-modal-text";
+      l.textContent = `На сцене «${target.label}» несколько порталов — рядом с каким появятся токены?`;
+      body.appendChild(l);
+      select = document.createElement("select");
+      select.className = "bt-modal-input";
+      for (const o of options) {
+        const opt = document.createElement("option");
+        opt.value = o.key;
+        opt.textContent = o.text;
+        select.appendChild(opt);
+      }
+      if (current && current.targetSceneId === target.targetSceneId && options.some((o) => o.key === current.targetTeleportId)) {
+        select.value = current.targetTeleportId || "";
+      }
+      body.appendChild(select);
+      return select;
+    },
+    onOk: () => ({ id: select.value }),
+    onCancel: () => null,
+  });
+  if (!chosen) return null;
+  return { ...target, targetTeleportId: chosen.id };
+}
+
+// pickTeleportTarget — выбор цели портала: сцена (см. teleportTargetScenes)
+// либо портал этой же карты. Возвращает {label, targetSceneId,
+// targetTeleportId} или null; self — id правимого портала, исключается из
+// списка.
 async function pickTeleportTarget(current, self) {
-  const linked = await linkedScenesOf(viewSceneId);
+  const scenes = await teleportTargetScenes(viewSceneId);
   const local = Object.values(vtt.getScene().teleports || {}).filter((t) => t.id !== self);
-  if (!linked.length && !local.length) {
+  if (!scenes.length && !local.length) {
     showAlert(
-      "Порталу некуда вести: на карте нет других порталов, а сцена ни с чем не связана. Поставь пару порталов (Ctrl + перетягивание в инструменте «Телепорт») или свяжи сцену стрелкой с другой на доске.",
+      "Порталу некуда вести: на карте нет других порталов, в здании нет других этажей, и стрелкой на доске сцена ни с чем не связана. Поставь пару порталов (Ctrl + перетягивание в инструменте «Телепорт»), задай сценам общее здание с разными этажами в их настройках или свяжи сцену стрелкой с другой на доске.",
       { title: "Телепорт" }
     );
     return null;
   }
   const targets = [
-    ...linked.map(({ scene, boards }) => ({
+    ...scenes.map(({ scene, group, text }) => ({
       key: "scene:" + scene.id,
-      group: "Сцены",
-      text: scene.name + " · " + boards.join(", "),
+      group,
+      text,
       value: { label: scene.name, targetSceneId: scene.id, targetTeleportId: "" },
     })),
     ...local.map((t) => ({
@@ -1364,7 +1457,7 @@ async function pickTeleportTarget(current, self) {
     },
     onOk: () => targets.find((t) => t.key === select.value)?.value || null,
     onCancel: () => null,
-  });
+  }).then((picked) => (picked && picked.targetSceneId ? pickTeleportExit(picked, current) : picked));
 }
 
 function newTeleportId() {
@@ -1415,23 +1508,23 @@ teleportDeleteBtn.onclick = () => {
   closeTeleportMenu();
 };
 
-// teleportStillLinked — портал на месте и его цель (парный портал или связанная сцена) ещё есть.
+// teleportStillLinked — портал на месте и его цель (парный портал этой карты
+// либо доступная сцена, см. teleportTargetScenes) ещё есть.
 async function teleportStillLinked(teleportId) {
   const t = vtt.getScene().teleports?.[teleportId];
   if (!t) {
     showAlert("Портала на карте уже нет.", { title: "Телепорт" });
     return null;
   }
-  if (t.targetTeleportId) {
+  if (!t.targetSceneId) {
     if (!vtt.getScene().teleports?.[t.targetTeleportId]) {
       showAlert("Парного портала на карте уже нет — портал не работает.", { title: "Телепорт" });
       return null;
     }
     return t;
   }
-  const linked = await linkedScenesOf(viewSceneId);
-  if (!linked.some((l) => l.scene.id === t.targetSceneId)) {
-    showAlert(`Сцена «${t.label}» больше не связана с текущей на доске — портал не работает.`, { title: "Телепорт" });
+  if (!(await teleportTargetScenes(viewSceneId)).some((r) => r.scene.id === t.targetSceneId)) {
+    showAlert(`Сцена «${t.label}» больше не доступна отсюда: ни этаж этого здания, ни связанная стрелкой на доске — портал не работает.`, { title: "Телепорт" });
     return null;
   }
   return t;
@@ -1450,9 +1543,9 @@ teleportMoveAllBtn.onclick = async () => {
     return;
   }
   const ok = await showConfirm(
-    t.targetTeleportId
+    !t.targetSceneId
       ? `Переместить ${tokens.length} перс. к парному порталу «${teleportName(t)}»?`
-      : `Переместить ${tokens.length} перс. на сцену «${t.label}»? Стол переключится туда же.`,
+      : `Переместить ${tokens.length} перс. на сцену «${t.label}»?` + (sameBuildingAs(t.targetSceneId) ? " Это этаж того же здания — стол останется на месте." : " Стол переключится туда же."),
     { title: "Телепорт", okLabel: "Переместить" }
   );
   if (!ok) return;
@@ -1467,7 +1560,7 @@ document.addEventListener("vtt:teleportRequest", async (e) => {
   const ok = await showConfirm(
     d.targetTeleportId
       ? `${who} встал на портал «${d.targetLabel || "портал"}». Переместить к парному порталу?`
-      : `${who} встал на портал в сцену «${d.targetSceneName}». Переместить? Стол переключится туда же.`,
+      : `${who} встал на портал в сцену «${d.targetSceneName}». Переместить?` + (d.sameBuilding ? " Это этаж того же здания — стол останется на месте." : " Стол переключится туда же."),
     { title: "Телепорт", okLabel: "Переместить", cancelLabel: "Не пускать" }
   );
   if (!ok) return;
@@ -1476,8 +1569,8 @@ document.addEventListener("vtt:teleportRequest", async (e) => {
   // сервер, здесь только связь сцен на доске.
   if (d.sceneId === viewSceneId) {
     if (!(await teleportStillLinked(d.teleportId))) return;
-  } else if (d.targetSceneId && !(await linkedScenesOf(d.sceneId)).some((l) => l.scene.id === d.targetSceneId)) {
-    showAlert(`Сцена «${d.targetSceneName}» больше не связана с той, где стоит портал — портал не работает.`, { title: "Телепорт" });
+  } else if (d.targetSceneId && !(await teleportTargetScenes(d.sceneId)).some((r) => r.scene.id === d.targetSceneId)) {
+    showAlert(`Сцена «${d.targetSceneName}» больше не доступна с той, где стоит портал — портал не работает.`, { title: "Телепорт" });
     return;
   }
   vtt.send({ type: "teleport_tokens", sceneId: d.sceneId, id: d.teleportId, tokenIds: [d.tokenId] });
