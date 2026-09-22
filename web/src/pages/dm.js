@@ -123,8 +123,17 @@ let isDemoGuest = false;
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
   initDiceRoller(diceControls, (msg) => vtt.send(msg));
-  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate", corner: "top-right" });
+  // Чат стола — вторая вкладка того же окна (см. chat.js): ДМ пишет всем
+  // или одному игроку, адресаты — из «кто онлайн» (vtt:playerList).
+  const rollLog = createRollLog(document.getElementById("diceLog"), {
+    layout: "plate",
+    corner: "top-right",
+    chat: { role: "dm", send: (m) => vtt.send(m) },
+  });
   document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
+  document.addEventListener("vtt:chatHistory", (e) => rollLog.chat.setHistory(e.detail));
+  document.addEventListener("vtt:chatMessage", (e) => rollLog.chat.push(e.detail));
+  document.addEventListener("vtt:playerList", (e) => rollLog.chat.setParticipants(e.detail || []));
   // Справочник — та же боковая колонка, следующая иконка после кубов (см.
   // compendium-menu.js: дерево категорий, само содержимое — отдельные
   // плавающие окна web/catalog.html). sticky — не закрывается кликом мимо

@@ -27,6 +27,7 @@ type Store struct {
 	roomMetaFile  string
 	combatFile    string // трекер инициативы, отдельный файл — не привязан к конкретной сцене (см. domain.CombatState)
 	hubFile       string // хаб лута ДМ, отдельный файл — тот же принцип, что combatFile (см. domain.LootHub)
+	chatFile      string // история чата стола, отдельный файл — тот же принцип (см. domain.ChatLog)
 	legacyFile    string // формат до перехода на файл-на-карту — только для миграции
 	migrationsDir string // сюда складываются файлы, отработавшие своё при миграциях формата
 }
@@ -39,6 +40,7 @@ func NewStore(dataDir string) *Store {
 		roomMetaFile:  filepath.Join(dataDir, "room.json"),
 		combatFile:    filepath.Join(dataDir, "combat.json"),
 		hubFile:       filepath.Join(dataDir, "hub.json"),
+		chatFile:      filepath.Join(dataDir, "chat.json"),
 		legacyFile:    filepath.Join(dataDir, "scene.json"),
 		migrationsDir: filepath.Join(dataDir, "migrations"),
 	}
@@ -186,7 +188,7 @@ func (s *Store) Load(ctx context.Context) (*domain.RoomSnapshot, error) {
 	}
 
 	slog.Info("Состояние загружено", "scenes", len(scenes), "current_scene_id", currentID)
-	return &domain.RoomSnapshot{CurrentSceneID: currentID, SceneOrder: order, Scenes: scenes, Combat: s.loadCombat(), Hub: s.loadHub()}, nil
+	return &domain.RoomSnapshot{CurrentSceneID: currentID, SceneOrder: order, Scenes: scenes, Combat: s.loadCombat(), Hub: s.loadHub(), Chat: s.loadChat()}, nil
 }
 
 // loadCombat читает трекер инициативы (см. domain.CombatState) из его
@@ -258,6 +260,40 @@ func (s *Store) SaveHub(ctx context.Context, hub *domain.LootHub) error {
 		return err
 	}
 	return os.Rename(tmp, s.hubFile)
+}
+
+// loadChat читает историю чата (см. domain.ChatLog) из её отдельного файла
+// — тот же принцип, что loadCombat/loadHub: нет файла или битый JSON —
+// начинаем с пустой истории.
+func (s *Store) loadChat() *domain.ChatLog {
+	chat := domain.NewChatLog()
+	data, err := os.ReadFile(s.chatFile)
+	if err != nil {
+		return chat
+	}
+	if err := json.Unmarshal(data, chat); err != nil {
+		slog.Warn("История чата повреждена, начинаю с пустой", "err", err)
+		return domain.NewChatLog()
+	}
+	if chat.Messages == nil {
+		chat.Messages = []*domain.ChatMessage{}
+	}
+	return chat
+}
+
+func (s *Store) SaveChat(ctx context.Context, chat *domain.ChatLog) error {
+	if err := os.MkdirAll(s.dataDir, 0o750); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(chat, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := s.chatFile + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.chatFile)
 }
 
 // dedupeOrder фильтрует сохранённый порядок сцен до тех, что реально

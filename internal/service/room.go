@@ -204,6 +204,11 @@ type Room struct {
 	hub      *domain.LootHub
 	hubDirty bool
 
+	// chat — история чата стола (см. domain.ChatLog, room_chat.go), не
+	// привязана к сцене, живёт всё время стола, тем же принципом, что hub.
+	chat      *domain.ChatLog
+	chatDirty bool
+
 	// ambientStartedAtMs — момент, с которого отсчитывается позиция амбиента
 	// АКТИВНОЙ сцены (см. SceneState.AmbientURL и CueState.StartedAtMs — тот
 	// же принцип синхронизации по времени, не по стриму позиции). Обновляется
@@ -242,6 +247,10 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 	if hub == nil {
 		hub = domain.NewLootHub()
 	}
+	chat := rs.Chat
+	if chat == nil {
+		chat = domain.NewChatLog()
+	}
 	r := &Room{
 		store:          sceneRepo,
 		dice:           dice,
@@ -272,6 +281,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
 		hub:                   hub,
+		chat:                  chat,
 	}
 	r.scene = r.scenes[r.currentSceneID]
 	r.ambientStartedAtMs = time.Now().UnixMilli() // амбиент активной сцены (если есть) стартует заново при запуске сервера
@@ -418,6 +428,7 @@ func (r *Room) run() {
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
 			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
 			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
+			r.sendChatHistory(c)        // чат стола — только то, что этому клиенту положено видеть
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
 
@@ -440,6 +451,12 @@ func (r *Room) run() {
 				continue
 			case "show_journal":
 				r.relayJournalShow(im.from, im.msg) // эфемерно, как fx: state не трогает
+				continue
+			case "chat_send":
+				r.handleChatSend(im.from, im.msg) // см. room_chat.go
+				continue
+			case "chat_clear":
+				r.handleChatClear()
 				continue
 			case "show_image":
 				// «Показать игрокам» из раздела «Показ» — картинка поверх
@@ -829,7 +846,14 @@ func (r *Room) flushIfDirty() {
 			r.hubDirty = false
 		}
 	}
-	if len(r.dirtyScenes) == 0 && !r.combatDirty && !r.hubDirty {
+	if r.chatDirty {
+		if err := r.store.SaveChat(ctx, r.chat); err != nil {
+			slog.Warn("Не удалось сохранить историю чата, попробую ещё раз позже", "err", err)
+		} else {
+			r.chatDirty = false
+		}
+	}
+	if len(r.dirtyScenes) == 0 && !r.combatDirty && !r.hubDirty && !r.chatDirty {
 		r.dirty = false
 	}
 }
@@ -1004,8 +1028,9 @@ func (r *Room) broadcastSceneList() {
 	}
 }
 
-// broadcastPlayerList шлёт ДМ-клиентам список сейчас подключённых игроков
-// (id+имя) — используется в UI назначения владельца токена.
+// broadcastPlayerList шлёт ДМ и игрокам список сейчас подключённых игроков
+// (id+имя) — у ДМ это UI назначения владельца токена, у всех — адресаты
+// личных сообщений чата.
 func (r *Room) broadcastPlayerList() {
 	type playerInfo struct {
 		ID   string `json:"id"`
@@ -1018,8 +1043,10 @@ func (r *Room) broadcastPlayerList() {
 		}
 	}
 	payload := map[string]any{"type": "player_list", "players": players}
+	// Игрокам тоже: из этого списка они выбирают адресата личного
+	// сообщения в чате (см. room_chat.go). Трансляции список не нужен.
 	for c := range r.clients {
-		if c.Role() == domain.RoleDM {
+		if c.Role() != domain.RoleTV {
 			c.Send(payload)
 		}
 	}
@@ -1041,7 +1068,7 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 	case domain.RolePlayer:
 		return msgType == "move_own_token" || msgType == "roll_dice" ||
 			msgType == "hub_take_item" || msgType == "loot_take_item" ||
-			msgType == "toggle_door" ||
+			msgType == "toggle_door" || msgType == "chat_send" ||
 			// Пометки на карте — единственная правка САМОЙ сцены, доступная
 			// игроку. Тумблер стола (CombatState.PlayerDrawingEnabled) и
 			// владение конкретным элементом проверяются отдельно, уже внутри

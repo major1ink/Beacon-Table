@@ -195,6 +195,9 @@ type SceneRepository interface {
 	// SaveHub персистит хаб лута ДМ (domain.LootHub) — тем же принципом, что
 	// и SaveCombat: свой файл, не привязан к сцене/бою.
 	SaveHub(ctx context.Context, hub *domain.LootHub) error
+	// SaveChat персистит историю чата стола (domain.ChatLog) — тем же
+	// принципом, что SaveCombat/SaveHub: свой файл, не привязан к сцене.
+	SaveChat(ctx context.Context, chat *domain.ChatLog) error
 }
 
 // JournalRepository — журнал стола, файл-на-запись (см.

@@ -11,11 +11,14 @@
 // («рецепт» — что кидали), ниже раскладка блоками (значение каждой кости +
 // модификатор-чип + итог). Поведение — в стиле Roll20: новые карточки снизу,
 // тело всегда проскроллено вниз. На столе (plate) лог — плавающее окно:
-// таскается, тянется, сворачивается, закрывается до кнопки «Чат».
+// таскается, тянется, сворачивается, закрывается до кнопки «Чат». Там же,
+// второй вкладкой, живёт чат стола (см. chat.js, opts.chat) — сообщения и
+// броски соседствуют, как в Foundry/Roll20, а не плодят второе окно.
 
 import { rollGroups } from "./dice.js";
 import { icon } from "./icons.js";
 import { attachDrag } from "./drag.js";
+import { createChatPane } from "./chat.js";
 
 // createRollLog(container, opts) → { push, clear, el }
 //   container — элемент-хост; модуль строит внутри .roll-log-body и вешает
@@ -27,9 +30,13 @@ import { attachDrag } from "./drag.js";
 //     впервые появляется окно ("bottom-left" | "top-right").
 //   opts.storageKey — только для plate: ключ localStorage для положения,
 //     размера и состояния окна (по умолчанию — по пути страницы).
-export function createRollLog(container, { layout = "strip", max = 30, corner = "bottom-left", storageKey } = {}) {
+//   opts.chat — только для plate: { role, selfId, send } — добавить вкладку
+//     «Чат» (см. chat.js). Без него окно — только лог бросков.
+// Возвращаемый chat (если включён) — { setHistory, push, setParticipants }
+// из chat.js, хозяин страницы кормит его событиями vtt:chat*.
+export function createRollLog(container, { layout = "strip", max = 30, corner = "bottom-left", storageKey, chat } = {}) {
   container.classList.add("roll-log", `roll-log--${layout}`);
-  if (layout === "plate") return createPlate(container, { max, corner, storageKey });
+  if (layout === "plate") return createPlate(container, { max, corner, storageKey, chat });
 
   // Пока броска не было — лога не видно (лента не ест высоту панели).
   // Первый push его показывает.
@@ -63,15 +70,21 @@ const MIN_W = 200;
 const MIN_H = 140;
 const EDGE = 10;
 
-function createPlate(container, { max, corner, storageKey }) {
+function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
   container.classList.add(corner === "top-right" ? "roll-log--tr" : "roll-log--bl");
   const key = storageKey || "beacon:rollLog:" + location.pathname;
 
   // shown — в режиме open окно не лезет на карту, пока броска не было и
   // пользователь сам не нажал «Чат».
-  const state = Object.assign({ x: null, y: null, w: 264, h: 240, mode: "open" }, load(key));
+  // tab — какая вкладка открыта ("rolls" | "chat"); без чата всегда rolls.
+  // С чатом окно по умолчанию просторнее: лента плюс поле ввода в 264×240
+  // не помещаются. Сохранённый размер, как и раньше, важнее.
+  const state = Object.assign({ x: null, y: null, w: chatOpts ? 320 : 264, h: chatOpts ? 360 : 240, mode: "open", tab: "rolls" }, load(key));
+  if (!chatOpts) state.tab = "rolls";
   let shown = false;
-  let unread = 0;
+  // Непрочитанные — по вкладкам: бросок, пришедший, пока открыт чат, светится
+  // на вкладке «Броски», и наоборот; на кнопке и в шапке — сумма.
+  const unread = { rolls: 0, chat: 0 };
 
   const fab = document.createElement("button");
   fab.type = "button";
@@ -90,6 +103,35 @@ function createPlate(container, { max, corner, storageKey }) {
   const title = document.createElement("span");
   title.className = "roll-log-title";
   title.textContent = "Броски";
+  // С чатом заголовок — вкладки, каждая со своим счётчиком.
+  const tabs = {};
+  const tabBadges = {};
+  if (chatOpts) {
+    title.classList.add("roll-log-tabs");
+    title.textContent = "";
+    for (const [id, label] of [
+      ["chat", "Чат"],
+      ["rolls", "Броски"],
+    ]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "roll-log-tab";
+      b.textContent = label;
+      const badge = document.createElement("span");
+      badge.className = "roll-log-badge";
+      b.appendChild(badge);
+      b.onclick = () => {
+        state.tab = id;
+        if (state.mode === "collapsed") state.mode = "open";
+        save();
+        render();
+        scrollActive(true);
+      };
+      tabs[id] = b;
+      tabBadges[id] = badge;
+      title.appendChild(b);
+    }
+  }
   const headBadge = document.createElement("span");
   headBadge.className = "roll-log-badge";
   const collapseBtn = document.createElement("button");
@@ -112,7 +154,32 @@ function createPlate(container, { max, corner, storageKey }) {
   grip.className = "roll-log-resize";
   grip.title = "Потяни, чтобы изменить размер";
 
-  win.append(head, body, empty, grip);
+  // chatPane — вторая вкладка; своя высота/прокрутка, показывается вместо
+  // body/empty (см. render).
+  // Телефон: окно с чатом раскрывается во весь экран, как лист персонажа
+  // (см. sheet-dock.js) — плашка 264×240 с клавиатурой поверх не чат. Для
+  // этого окно на время переезжает в body: хост живёт внутри обёртки канваса
+  // с собственным stacking context, и никакой z-index не поднял бы его над
+  // колонкой иконок и рейлом. Брейкпоинт общий, см. theme.css.
+  const fullMedia = chatOpts && typeof matchMedia === "function" ? matchMedia("(max-width: 860px), (max-height: 500px)") : null;
+  let chat = null;
+  const chatHost = document.createElement("div");
+  if (chatOpts) {
+    chat = createChatPane(chatHost, {
+      ...chatOpts,
+      onMessage: (m, own) => {
+        // Своё сообщение непрочитанным не считаем — но окно поднимаем, как и
+        // на бросок: написал — увидел.
+        if (!own && !(isVisible() && state.tab === "chat")) unread.chat += 1;
+        else if (own && state.tab !== "chat") state.tab = "chat";
+        if (own) shown = true;
+        else if (state.mode === "open") shown = true;
+        render();
+      },
+    });
+  }
+
+  win.append(head, body, empty, chatHost, grip);
   container.append(fab, win);
 
   function save() {
@@ -145,6 +212,15 @@ function createPlate(container, { max, corner, storageKey }) {
     win.style.top = Math.max(0, Math.min(state.y, H - h)) + "px";
   }
 
+  function isVisible() {
+    return state.mode === "open" && shown;
+  }
+
+  function setBadge(b, n) {
+    b.textContent = n > 99 ? "99+" : String(n);
+    b.hidden = n === 0;
+  }
+
   function render() {
     const closed = state.mode === "closed";
     const collapsed = state.mode === "collapsed";
@@ -152,15 +228,32 @@ function createPlate(container, { max, corner, storageKey }) {
     win.hidden = !visible;
     fab.hidden = visible;
     win.classList.toggle("collapsed", collapsed);
-    empty.hidden = body.children.length > 0;
+    const chatTab = !!chat && state.tab === "chat";
+    body.hidden = chatTab;
+    empty.hidden = chatTab || body.children.length > 0;
+    chatHost.hidden = !chatTab;
+    for (const id in tabs) tabs[id].classList.toggle("active", state.tab === id);
     collapseBtn.title = collapsed ? "Развернуть" : "Свернуть до шапки";
     collapseBtn.innerHTML = icon(collapsed ? "chevron-down" : "minus", { size: 13 });
-    if (visible && !collapsed) unread = 0;
-    for (const b of [fabBadge, headBadge]) {
-      b.textContent = unread > 99 ? "99+" : String(unread);
-      b.hidden = unread === 0;
-    }
+    const full = !!fullMedia && fullMedia.matches && visible && !collapsed;
+    win.classList.toggle("roll-log-win--full", full);
+    if (full && win.parentElement !== document.body) document.body.appendChild(win);
+    else if (!full && win.parentElement !== container) container.appendChild(win);
+    if (visible && !collapsed) unread[state.tab] = 0;
+    for (const id in tabBadges) setBadge(tabBadges[id], unread[id]);
+    const total = unread.rolls + unread.chat;
+    setBadge(fabBadge, total);
+    // В шапке сумма нужна только свёрнутому окну — развёрнутое показывает
+    // счётчики на самих вкладках.
+    setBadge(headBadge, collapsed || !chat ? total : 0);
     if (visible) place();
+  }
+
+  // focus — курсор в поле чата: только по клику на вкладку (на телефоне
+  // кнопка «Чат» не должна сразу выкатывать клавиатуру).
+  function scrollActive(focus = false) {
+    body.scrollTop = body.scrollHeight;
+    if (focus && chat && state.tab === "chat") chat.focus();
   }
 
   fab.onclick = () => {
@@ -168,7 +261,7 @@ function createPlate(container, { max, corner, storageKey }) {
     shown = true;
     save();
     render();
-    body.scrollTop = body.scrollHeight;
+    scrollActive();
   };
   closeBtn.onclick = () => {
     state.mode = "closed";
@@ -189,6 +282,7 @@ function createPlate(container, { max, corner, storageKey }) {
       start = { x: state.x, y: state.y };
     },
     onMove: (dx, dy) => {
+      if (win.classList.contains("roll-log-win--full")) return; // во весь экран таскать нечего
       const { W, H } = hostSize();
       state.x = Math.max(0, Math.min(start.x + dx, W - win.offsetWidth));
       state.y = Math.max(0, Math.min(start.y + dy, H - win.offsetHeight));
@@ -214,12 +308,15 @@ function createPlate(container, { max, corner, storageKey }) {
 
   // Канвас сжался (панели, поворот телефона) — окно не должно остаться за краем.
   if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => !win.hidden && place()).observe(container);
+  // Повернули телефон / сузили окно браузера — окно переезжает между
+  // плашкой и полным экраном.
+  if (fullMedia && fullMedia.addEventListener) fullMedia.addEventListener("change", () => render());
 
   function push(data) {
     body.appendChild(renderCard(data));
     while (body.children.length > max) body.removeChild(body.firstChild);
-    if (state.mode === "closed" || state.mode === "collapsed") unread += 1;
-    else shown = true;
+    if (!(isVisible() && state.tab === "rolls")) unread.rolls += 1;
+    if (state.mode === "open") shown = true;
     render();
     // Roll20-поведение: свежий бросок всегда виден, старые уезжают вверх.
     body.scrollTop = body.scrollHeight;
@@ -227,12 +324,12 @@ function createPlate(container, { max, corner, storageKey }) {
 
   function clear() {
     body.replaceChildren();
-    unread = 0;
+    unread.rolls = 0;
     render();
   }
 
   render();
-  return { push, clear, el: container };
+  return { push, clear, el: container, chat };
 }
 
 function load(key) {
@@ -242,6 +339,7 @@ function load(key) {
     const out = {};
     for (const k of ["x", "y", "w", "h"]) if (Number.isFinite(v[k])) out[k] = v[k];
     if (["open", "collapsed", "closed"].includes(v.mode)) out.mode = v.mode;
+    if (["rolls", "chat"].includes(v.tab)) out.tab = v.tab;
     return out;
   } catch {
     return {};

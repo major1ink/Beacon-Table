@@ -221,6 +221,10 @@ func (m *CompanyManager) ExportWorld(ctx context.Context, companyID, beaconVersi
 					if !includeAccounts {
 						text = scrubOwners(text, "combatants")
 					}
+				case sub == "scenes" && strings.HasSuffix(slashRel, "/chat.json"):
+					if !includeAccounts {
+						text = scrubChat(text)
+					}
 				case sub == "scenes" && strings.Contains(slashRel, "/scenes/"):
 					if !includeAccounts {
 						text = scrubOwners(text, "tokens")
@@ -963,6 +967,39 @@ func scrubOwners(jsonText, key string) string {
 	if !changed {
 		return jsonText
 	}
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return jsonText
+	}
+	return string(out)
+}
+
+// scrubChat оставляет в истории чата (chat.json, см. domain.ChatLog) только
+// общие сообщения и без fromId: личные — разговор конкретных людей, которых
+// в новом мире нет, и в чужой архив им уезжать незачем. При непарсе
+// возвращает исходный текст, как scrubOwners.
+func scrubChat(jsonText string) string {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(jsonText), &m); err != nil {
+		return jsonText
+	}
+	list, ok := m["messages"].([]any)
+	if !ok {
+		return jsonText
+	}
+	kept := make([]any, 0, len(list))
+	for _, v := range list {
+		o, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		if to, _ := o["to"].(string); to != "" {
+			continue
+		}
+		delete(o, "fromId")
+		kept = append(kept, o)
+	}
+	m["messages"] = kept
 	out, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return jsonText
