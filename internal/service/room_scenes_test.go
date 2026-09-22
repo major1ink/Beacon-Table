@@ -190,3 +190,44 @@ func TestDeleteViewedSceneFallsBackToActive(t *testing.T) {
 		t.Errorf("ДМ видит %q после удаления", got)
 	}
 }
+
+// TestPlayerWalksOnlyAllowedScenes — игрок открывает сцену сам только с
+// доступом; его список — доступные плюс активная.
+func TestPlayerWalksOnlyAllowedScenes(t *testing.T) {
+	r, dm, pl, _ := viewRoom()
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "view_scene", SceneID: "scene-2"}})
+	if got := r.sceneFor(pl).ID; got != "scene-1" {
+		t.Fatalf("игрок открыл закрытую сцену %q", got)
+	}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "chat_send", Text: "привет"}}) // любое сообщение — scene_list не шлётся
+	r.broadcastSceneList()
+	if entries := pl.last("scene_list")["scenes"].([]domain.SceneListEntry); len(entries) != 1 || entries[0].ID != "scene-1" {
+		t.Errorf("список игрока до доступа: %+v", entries)
+	}
+
+	yes := true
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_scene_access", SceneID: "scene-2", PlayerAccess: &yes}})
+	if entries := pl.last("scene_list")["scenes"].([]domain.SceneListEntry); len(entries) != 2 || !entries[1].PlayerAccess {
+		t.Errorf("список игрока после доступа: %+v", entries)
+	}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "view_scene", SceneID: "scene-2"}})
+	if got := snapshotSceneID(pl.last("snapshot")); got != "scene-2" {
+		t.Errorf("игрок видит %q, ожидалась scene-2", got)
+	}
+	if r.currentSceneID != "scene-1" {
+		t.Error("выбор игрока не должен менять активную сцену")
+	}
+	// Свой токен игрок двигает там, где стоит сам.
+	r.scenes["scene-2"].Tokens["me"] = &domain.Token{ID: "me", OwnerID: "acc-1"}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "move_own_token", Token: &domain.Token{ID: "me", X: 96, Y: 48}}})
+	if tok := r.scenes["scene-2"].Tokens["me"]; tok.X != 96 {
+		t.Errorf("токен не сдвинулся на открытой игроком сцене: %+v", tok)
+	}
+
+	// Доступ сняли — игрок возвращается на активную.
+	no := false
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_scene_access", SceneID: "scene-2", PlayerAccess: &no}})
+	if got := snapshotSceneID(pl.last("snapshot")); got != "scene-1" {
+		t.Errorf("после снятия доступа игрок видит %q", got)
+	}
+}

@@ -935,6 +935,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 		AmbientVolume: sc.AmbientVolume,
 		DoorSoundURL:  sc.DoorSoundURL,
 		GlobalLight:   sc.GlobalLight,
+		PlayerAccess:  sc.PlayerAccess,
 		Tokens:        tokens,
 		NoteMarkers:   noteMarkers,
 		Walls:         sc.Walls,
@@ -1033,11 +1034,11 @@ func (r *Room) showcasePayload() map[string]any {
 	return map[string]any{"type": "showcase", "showcase": r.showcase}
 }
 
-// broadcastSceneList шлёт только DM-клиентам список всех сцен комнаты (для
-// переключателя сцен) — зрителям он не нужен, они видят ровно одну сцену
-// через broadcastAll. ViewerCount — сколько не-DM клиентов смотрит сцену
-// сейчас (см. sceneOf); viewSceneId — что открыто у ЭТОГО ДМ, поэтому
-// payload собирается на каждого.
+// broadcastSceneList — список сцен для переключателя. ДМ получает все с
+// флагом доступа; игрок — только те, что ему открыли (SceneState.PlayerAccess),
+// плюс активную; трансляции список не нужен. ViewerCount — сколько не-DM
+// клиентов смотрит сцену сейчас (см. sceneOf); viewSceneId — что открыто у
+// ЭТОГО клиента, поэтому payload собирается на каждого.
 func (r *Room) broadcastSceneList() {
 	viewers := map[string]int{}
 	for c := range r.clients {
@@ -1045,19 +1046,41 @@ func (r *Room) broadcastSceneList() {
 			viewers[r.sceneOf(c).ID]++
 		}
 	}
-	entries := make([]domain.SceneListEntry, 0, len(r.sceneOrder))
+	all := make([]domain.SceneListEntry, 0, len(r.sceneOrder))
+	forPlayers := make([]domain.SceneListEntry, 0, len(r.sceneOrder))
 	for _, id := range r.sceneOrder {
 		s, ok := r.scenes[id]
 		if !ok {
 			continue
 		}
-		entries = append(entries, domain.SceneListEntry{ID: s.ID, Name: s.Name, ViewerCount: viewers[id]})
-	}
-	for c := range r.clients {
-		if c.Role() == domain.RoleDM {
-			c.Send(map[string]any{"type": "scene_list", "scenes": entries, "currentSceneId": r.currentSceneID, "viewSceneId": r.sceneOf(c).ID})
+		e := domain.SceneListEntry{ID: s.ID, Name: s.Name, ViewerCount: viewers[id], PlayerAccess: s.PlayerAccess}
+		all = append(all, e)
+		if r.playerMayView(id) {
+			forPlayers = append(forPlayers, e)
 		}
 	}
+	for c := range r.clients {
+		var entries []domain.SceneListEntry
+		switch c.Role() {
+		case domain.RoleDM:
+			entries = all
+		case domain.RolePlayer:
+			entries = forPlayers
+		default:
+			continue
+		}
+		c.Send(map[string]any{"type": "scene_list", "scenes": entries, "currentSceneId": r.currentSceneID, "viewSceneId": r.sceneOf(c).ID})
+	}
+}
+
+// playerMayView — игроку можно открыть сцену самому: активная либо с
+// доступом (см. SceneState.PlayerAccess).
+func (r *Room) playerMayView(id string) bool {
+	if id == r.currentSceneID {
+		return true
+	}
+	s, ok := r.scenes[id]
+	return ok && s.PlayerAccess
 }
 
 // broadcastPlayerList шлёт ДМ и игрокам список сейчас подключённых игроков
@@ -1100,6 +1123,9 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 		return msgType == "move_own_token" || msgType == "roll_dice" ||
 			msgType == "hub_take_item" || msgType == "loot_take_item" ||
 			msgType == "toggle_door" || msgType == "chat_send" ||
+			// Открыть у себя разрешённую сцену — право на конкретную сцену
+			// проверяет handleViewScene.
+			msgType == "view_scene" ||
 			// Пометки на карте — единственная правка САМОЙ сцены, доступная
 			// игроку. Тумблер стола (CombatState.PlayerDrawingEnabled) и
 			// владение конкретным элементом проверяются отдельно, уже внутри
@@ -1396,6 +1422,9 @@ func (r *Room) switchScene(id string) {
 // отправитель. Активная — это «вернуться к столу», запись снимается.
 func (r *Room) handleViewScene(c RoomClient, id string) {
 	if _, ok := r.scenes[id]; !ok {
+		return
+	}
+	if c.Role() != domain.RoleDM && !r.playerMayView(id) {
 		return
 	}
 	if id == r.currentSceneID {
@@ -2759,6 +2788,23 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 
 	case "switch_scene":
 		r.switchScene(msg.SceneID)
+
+	case "set_scene_access":
+		s, ok := r.scenes[msg.SceneID]
+		if !ok || msg.PlayerAccess == nil {
+			return
+		}
+		s.PlayerAccess = *msg.PlayerAccess
+		r.markDirty(s.ID)
+		// Доступ сняли — игроки, стоявшие на ней сами, возвращаются на
+		// активную (broadcastAll после applyMutation дошлёт им снапшот).
+		if !s.PlayerAccess {
+			for c := range r.viewing {
+				if c.Role() == domain.RolePlayer && r.viewing[c] == s.ID {
+					delete(r.viewing, c)
+				}
+			}
+		}
 
 	case "update_scene":
 		s, ok := r.scenes[msg.SceneID]

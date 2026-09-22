@@ -5392,6 +5392,18 @@ function renderSceneDropdown() {
       if (s.id === settingsSceneId) closeSceneSettings();
       else openSceneSettings(s.id, "basic");
     };
+    // Доступ игрокам (см. domain.SceneState.PlayerAccess) — тумблер прямо в
+    // строке, тот же флаг продублирован чекбоксом в настройках сцены.
+    const access = document.createElement("button");
+    access.type = "button";
+    access.className = "scene-gear scene-gear--access icon-btn" + (s.playerAccess ? " on" : "");
+    access.innerHTML = icon("users", { size: 13 });
+    access.title = s.playerAccess ? "Игроки могут открывать сцену сами — закрыть" : "Открыть сцену игрокам: попадёт в их список «Карты»";
+    access.setAttribute("aria-pressed", String(!!s.playerAccess));
+    access.onclick = (ev) => {
+      ev.stopPropagation();
+      vtt.send({ type: "set_scene_access", sceneId: s.id, playerAccess: !s.playerAccess });
+    };
     const del = document.createElement("button");
     del.className = "scene-gear icon-btn";
     del.innerHTML = icon("trash", { size: 13 });
@@ -5403,7 +5415,7 @@ function renderSceneDropdown() {
       vtt.send({ type: "delete_scene", sceneId: s.id });
     };
     pick.append(nameSpan, viewers);
-    row.append(pick, live, gear, del);
+    row.append(pick, live, access, gear, del);
     sceneDropdown.appendChild(row);
     if (s.id === settingsSceneId) row.after(sceneSettingsDrawer);
   }
@@ -5429,6 +5441,10 @@ document.addEventListener("vtt:sceneList", (e) => {
   const viewed = sceneList.find((s) => s.id === viewSceneId);
   sceneSwitchName.textContent = viewed ? viewed.name : "Сцена";
   sceneShowBtn.hidden = viewSceneId === activeSceneId;
+  // Доступ переключили из строки списка (или из другой вкладки) — чекбокс в
+  // открытом подменю не должен отставать.
+  const editing = settingsSceneId && sceneList.find((s) => s.id === settingsSceneId);
+  if (editing) fPlayerAccess.checked = !!editing.playerAccess;
   renderSceneDropdown();
   if (openPanelSection === "scene") renderTeleport();
 });
@@ -5496,6 +5512,11 @@ const fName = document.getElementById("fName");
 const fWidth = document.getElementById("fWidth");
 const fHeight = document.getElementById("fHeight");
 const fFogOfWar = document.getElementById("fFogOfWar");
+const fPlayerAccess = document.getElementById("fPlayerAccess");
+// Свой тумблер, а не поле «Сохранить»: то же, что значок в строке списка.
+fPlayerAccess.onchange = () => {
+  if (settingsSceneId) vtt.send({ type: "set_scene_access", sceneId: settingsSceneId, playerAccess: fPlayerAccess.checked });
+};
 const fMapUrl = document.getElementById("fMapUrl");
 const bgPreview = document.getElementById("bgPreview");
 const fGridSize = document.getElementById("fGridSize");
@@ -5552,6 +5573,7 @@ function fillSceneSettingsFrom(s) {
   fWidth.value = s.width || 1280;
   fHeight.value = s.height || 720;
   fFogOfWar.checked = s.fogOfWar !== false;
+  fPlayerAccess.checked = !!s.playerAccess;
   fMapUrl.value = s.mapUrl || "";
   updateBgPreview();
   fAmbientUrl.value = s.ambientUrl || "";

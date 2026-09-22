@@ -59,6 +59,10 @@ type ClientMsg struct {
 	AmbientVolume float64 `json:"ambientVolume,omitempty"` // только для "update_scene"
 	DoorSoundURL  string  `json:"doorSoundUrl,omitempty"`  // только для "update_scene"
 
+	// PlayerAccess — только для "set_scene_access" (см.
+	// SceneState.PlayerAccess); SceneID — какой сцене.
+	PlayerAccess *bool `json:"playerAccess,omitempty"`
+
 	// GlobalLight — только для "set_global_light": "" | "dim" | "bright" (см.
 	// SceneState.GlobalLight). Отдельное сообщение, а не поле "update_scene" —
 	// это одна кнопка тулбара, а не часть модалки "Настроить сцену".

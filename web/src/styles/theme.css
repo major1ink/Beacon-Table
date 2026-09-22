@@ -353,6 +353,24 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .loot-modal-take:hover { background: var(--green-hover); }
 .loot-modal-take:disabled { opacity: 0.6; cursor: default; }
 
+/* ---- .scene-picker — панель «Карты» игрока (см. web/src/scene-picker.js),
+   строки — те же .scene-row/.row-card, что в переключателе сцен ДМ ---- */
+.scene-picker-list { display: flex; flex-direction: column; gap: 4px; }
+.scene-picker .scene-row {
+  width: 100%; gap: 8px; padding: 8px 10px 8px 12px; font-size: 13px;
+  background: transparent; color: var(--text); text-align: left; border: 1px solid transparent; cursor: pointer;
+}
+.scene-picker .scene-row:hover { background: var(--surface); }
+.scene-picker .scene-row.active { background: var(--accent-bg); }
+.scene-picker .scene-row.active .scene-name { font-weight: 600; }
+.scene-picker .scene-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene-picker-back {
+  margin-top: 4px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+}
+.scene-picker-back:hover { background: var(--surface-hover); }
+.scene-picker-back[hidden] { display: none; }
+
 /* ---- .compendium-* — дерево навигации панели "Компендиум" (см.
    web/src/compendium-menu.js), монтируется в панель side-menu.js.addIcon.
    Два уровня одинаковой формы: корень (Beacon Table/Пользовательские) и

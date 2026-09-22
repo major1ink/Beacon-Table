@@ -474,14 +474,19 @@ type SceneState struct {
 	// вся карта минимум тускло освещена, "bright" — вся карта ярко освещена
 	// (эквивалент выключенного тумана войны по свету, но не по обзору
 	// токена — см. web/src/vtt/layers/vision-fog.js).
-	GlobalLight string                 `json:"globalLight,omitempty"`
-	Tokens      map[string]*Token      `json:"tokens"`
-	NoteMarkers map[string]*NoteMarker `json:"noteMarkers"`
-	Walls       map[string]*Wall       `json:"walls"`
-	FogAreas    map[string]*FogArea    `json:"fogAreas"`
-	Buildings   map[string]*Building   `json:"buildings"`
-	Drawings    map[string]*Drawing    `json:"drawings"`
-	Teleports   map[string]*Teleport   `json:"teleports"`
+	GlobalLight string `json:"globalLight,omitempty"`
+	// PlayerAccess — игроки могут открывать сцену сами (см.
+	// service.Room.handleViewScene): она попадает в их список «Карты» и
+	// по ней можно ходить, не дожидаясь, пока ДМ её покажет. Активная сцена
+	// доступна всегда, флаг про остальные.
+	PlayerAccess bool                   `json:"playerAccess,omitempty"`
+	Tokens       map[string]*Token      `json:"tokens"`
+	NoteMarkers  map[string]*NoteMarker `json:"noteMarkers"`
+	Walls        map[string]*Wall       `json:"walls"`
+	FogAreas     map[string]*FogArea    `json:"fogAreas"`
+	Buildings    map[string]*Building   `json:"buildings"`
+	Drawings     map[string]*Drawing    `json:"drawings"`
+	Teleports    map[string]*Teleport   `json:"teleports"`
 }
 
 // NewScene создаёт пустую сцену с разумными дефолтами "из коробки".
@@ -579,6 +584,7 @@ type PublicScene struct {
 	AmbientVolume float64                `json:"ambientVolume,omitempty"`
 	DoorSoundURL  string                 `json:"doorSoundUrl,omitempty"`
 	GlobalLight   string                 `json:"globalLight,omitempty"`
+	PlayerAccess  bool                   `json:"playerAccess,omitempty"`
 	Tokens        map[string]*Token      `json:"tokens"`
 	NoteMarkers   map[string]*NoteMarker `json:"noteMarkers"`
 	Walls         map[string]*Wall       `json:"walls"`
@@ -596,6 +602,9 @@ type SceneListEntry struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	ViewerCount int    `json:"viewerCount"`
+	// PlayerAccess — см. SceneState.PlayerAccess. Игроку список приходит
+	// уже отфильтрованным (доступные плюс активная), ДМ видит флаг у всех.
+	PlayerAccess bool `json:"playerAccess,omitempty"`
 }
 
 // SceneCard — сцена для карточки на доске (GET /api/scenes).
