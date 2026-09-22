@@ -11,9 +11,8 @@
 // («рецепт» — что кидали), ниже раскладка блоками (значение каждой кости +
 // модификатор-чип + итог). Поведение — в стиле Roll20: новые карточки снизу,
 // тело всегда проскроллено вниз. На столе (plate) лог — плавающее окно:
-// таскается, тянется, сворачивается, закрывается до кнопки «Чат». Там же,
-// второй вкладкой, живёт чат стола (см. chat.js, opts.chat) — сообщения и
-// броски соседствуют, как в Foundry/Roll20, а не плодят второе окно.
+// таскается, тянется, сворачивается, закрывается до кнопки «Чат». Второй
+// вкладкой там же живёт чат стола (chat.js, opts.chat).
 
 import { rollGroups } from "./dice.js";
 import { icon } from "./icons.js";
@@ -30,10 +29,8 @@ import { createChatPane } from "./chat.js";
 //     впервые появляется окно ("bottom-left" | "top-right").
 //   opts.storageKey — только для plate: ключ localStorage для положения,
 //     размера и состояния окна (по умолчанию — по пути страницы).
-//   opts.chat — только для plate: { role, selfId, send } — добавить вкладку
-//     «Чат» (см. chat.js). Без него окно — только лог бросков.
-// Возвращаемый chat (если включён) — { setHistory, push, setParticipants }
-// из chat.js, хозяин страницы кормит его событиями vtt:chat*.
+//   opts.chat — только для plate: { role, selfId, send } — вкладка «Чат»
+//     (chat.js); в результате возвращается как chat.
 export function createRollLog(container, { layout = "strip", max = 30, corner = "bottom-left", storageKey, chat } = {}) {
   container.classList.add("roll-log", `roll-log--${layout}`);
   if (layout === "plate") return createPlate(container, { max, corner, storageKey, chat });
@@ -76,14 +73,11 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
 
   // shown — в режиме open окно не лезет на карту, пока броска не было и
   // пользователь сам не нажал «Чат».
-  // tab — какая вкладка открыта ("rolls" | "chat"); без чата всегда rolls.
-  // С чатом окно по умолчанию просторнее: лента плюс поле ввода в 264×240
-  // не помещаются. Сохранённый размер, как и раньше, важнее.
+  // С чатом окно по умолчанию просторнее: лента и поле ввода в 264×240 не влезают.
   const state = Object.assign({ x: null, y: null, w: chatOpts ? 320 : 264, h: chatOpts ? 360 : 240, mode: "open", tab: "rolls" }, load(key));
   if (!chatOpts) state.tab = "rolls";
   let shown = false;
-  // Непрочитанные — по вкладкам: бросок, пришедший, пока открыт чат, светится
-  // на вкладке «Броски», и наоборот; на кнопке и в шапке — сумма.
+  // Непрочитанные — по вкладкам, на кнопке и в шапке сумма.
   const unread = { rolls: 0, chat: 0 };
 
   const fab = document.createElement("button");
@@ -103,7 +97,7 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
   const title = document.createElement("span");
   title.className = "roll-log-title";
   title.textContent = "Броски";
-  // С чатом заголовок — вкладки, каждая со своим счётчиком.
+  // С чатом вместо заголовка — вкладки со счётчиками.
   const tabs = {};
   const tabBadges = {};
   if (chatOpts) {
@@ -154,13 +148,9 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
   grip.className = "roll-log-resize";
   grip.title = "Потяни, чтобы изменить размер";
 
-  // chatPane — вторая вкладка; своя высота/прокрутка, показывается вместо
-  // body/empty (см. render).
-  // Телефон: окно с чатом раскрывается во весь экран, как лист персонажа
-  // (см. sheet-dock.js) — плашка 264×240 с клавиатурой поверх не чат. Для
-  // этого окно на время переезжает в body: хост живёт внутри обёртки канваса
-  // с собственным stacking context, и никакой z-index не поднял бы его над
-  // колонкой иконок и рейлом. Брейкпоинт общий, см. theme.css.
+  // Телефон: окно с чатом — во весь экран, как лист персонажа. На это время
+  // оно переезжает в body: у обёртки канваса свой stacking context, z-index
+  // над колонкой иконок не поднять. Брейкпоинт общий с theme.css.
   const fullMedia = chatOpts && typeof matchMedia === "function" ? matchMedia("(max-width: 860px), (max-height: 500px)") : null;
   let chat = null;
   const chatHost = document.createElement("div");
@@ -168,8 +158,7 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
     chat = createChatPane(chatHost, {
       ...chatOpts,
       onMessage: (m, own) => {
-        // Своё сообщение непрочитанным не считаем — но окно поднимаем, как и
-        // на бросок: написал — увидел.
+        // Своё непрочитанным не считаем, но окно поднимаем, как на бросок.
         if (!own && !(isVisible() && state.tab === "chat")) unread.chat += 1;
         else if (own && state.tab !== "chat") state.tab = "chat";
         if (own) shown = true;
@@ -243,14 +232,15 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
     for (const id in tabBadges) setBadge(tabBadges[id], unread[id]);
     const total = unread.rolls + unread.chat;
     setBadge(fabBadge, total);
-    // В шапке сумма нужна только свёрнутому окну — развёрнутое показывает
-    // счётчики на самих вкладках.
+    // Точка на кнопке: число там общее с бросками и не говорит, что кто-то написал.
+    fab.classList.toggle("has-unread", unread.chat > 0);
+    if (chat) chat.setViewing(visible && !collapsed && state.tab === "chat");
+    // В шапке сумма только у свёрнутого окна: у развёрнутого счётчики на вкладках.
     setBadge(headBadge, collapsed || !chat ? total : 0);
     if (visible) place();
   }
 
-  // focus — курсор в поле чата: только по клику на вкладку (на телефоне
-  // кнопка «Чат» не должна сразу выкатывать клавиатуру).
+  // focus только по клику на вкладку: кнопка «Чат» на телефоне не должна сразу выкатывать клавиатуру.
   function scrollActive(focus = false) {
     body.scrollTop = body.scrollHeight;
     if (focus && chat && state.tab === "chat") chat.focus();
@@ -308,8 +298,7 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
 
   // Канвас сжался (панели, поворот телефона) — окно не должно остаться за краем.
   if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => !win.hidden && place()).observe(container);
-  // Повернули телефон / сузили окно браузера — окно переезжает между
-  // плашкой и полным экраном.
+  // Поворот телефона / ресайз — окно переезжает между плашкой и полным экраном.
   if (fullMedia && fullMedia.addEventListener) fullMedia.addEventListener("change", () => render());
 
   function push(data) {

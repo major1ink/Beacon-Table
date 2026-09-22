@@ -180,8 +180,7 @@ const PLAYER_DRAW_HELP = {
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
   initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg));
-  // Чат стола — вторая вкладка того же окна (см. chat.js): всем, ведущему
-  // или другому игроку лично; адресаты — из player_list (vtt:playerList).
+  // Чат стола — вторая вкладка того же окна (chat.js); адресаты — из vtt:playerList.
   const rollLog = createRollLog(document.getElementById("diceLog"), {
     layout: "plate",
     corner: "bottom-left",

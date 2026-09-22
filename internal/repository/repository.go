@@ -197,14 +197,13 @@ type SceneRepository interface {
 	SaveHub(ctx context.Context, hub *domain.LootHub) error
 }
 
-// ChatRepository — история чата стола (domain.ChatMessage), company-scoped,
-// как PlaylistRepository. Сколько хранить, решает service.Room (см.
-// ChatHistoryLimit): репозиторий только пишет, читает и режет хвост.
+// ChatRepository — история чата (domain.ChatMessage), company-scoped. Сколько
+// хранить, решает service.Room.
 type ChatRepository interface {
 	// List — вся история в порядке отправки.
 	List(ctx context.Context) ([]*domain.ChatMessage, error)
 	Add(ctx context.Context, m *domain.ChatMessage) error
-	// Trim оставляет keep самых свежих сообщений, остальные удаляет.
+	// Trim оставляет keep самых свежих.
 	Trim(ctx context.Context, keep int) error
 	Clear(ctx context.Context) error
 }

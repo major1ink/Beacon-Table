@@ -204,9 +204,8 @@ type Room struct {
 	hub      *domain.LootHub
 	hubDirty bool
 
-	// chatLog — история чата стола в памяти (см. room_chat.go): то, что
-	// клиенты получают при входе. chatRepo — её копия в базе, если
-	// chatLimit разрешает хранить (nil — не хранить вообще, только тесты).
+	// chatLog — история чата в памяти (room_chat.go); chatRepo — копия в базе
+	// по chatLimit (nil — только в тестах).
 	chatLog   []*domain.ChatMessage
 	chatRepo  repository.ChatRepository
 	chatLimit *ChatHistoryLimit
@@ -432,7 +431,7 @@ func (r *Room) run() {
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
 			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
 			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
-			r.sendChatHistory(c)        // чат стола — только то, что этому клиенту положено видеть
+			r.sendChatHistory(c)        // чат стола, только видимое этому клиенту
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
 
@@ -1040,8 +1039,7 @@ func (r *Room) broadcastPlayerList() {
 		}
 	}
 	payload := map[string]any{"type": "player_list", "players": players}
-	// Игрокам тоже: из этого списка они выбирают адресата личного
-	// сообщения в чате (см. room_chat.go). Трансляции список не нужен.
+	// Игрокам тоже — адресаты личных сообщений чата.
 	for c := range r.clients {
 		if c.Role() != domain.RoleTV {
 			c.Send(payload)

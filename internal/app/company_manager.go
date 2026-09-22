@@ -95,9 +95,7 @@ type CompanyManager struct {
 	// пределы не заданы.
 	quota *quota.Tracker
 
-	// chatHistory — сколько сообщений чата хранить между перезапусками (см.
-	// service.ChatHistoryLimit); общий на все миры, меняется из настроек на
-	// лету — поэтому один объект, который получает каждый новый Room.
+	// chatHistory — лимит истории чата, общий на все миры, меняется из настроек на лету.
 	chatHistory *service.ChatHistoryLimit
 
 	current *ActiveWorld
@@ -118,8 +116,7 @@ func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accou
 	}
 }
 
-// ChatHistory — ручка лимита истории чата: композиционный корень выставляет
-// значение из настроек и меняет его на лету (см. cmd/beacon-table/settings.go).
+// ChatHistory — ручка лимита истории чата для настроек (cmd/beacon-table/settings.go).
 func (m *CompanyManager) ChatHistory() *service.ChatHistoryLimit { return m.chatHistory }
 
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу

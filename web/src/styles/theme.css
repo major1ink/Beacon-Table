@@ -515,8 +515,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .roll-log--plate { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .roll-log--plate > * { pointer-events: auto; }
 .roll-log--plate [hidden] { display: none !important; }
-/* Окно на телефоне живёт в body (см. .roll-log-win--full) — правило выше до
-   него не дотягивается, а display у тела/бейджа перебил бы hidden. */
+/* На телефоне окно живёт в body (.roll-log-win--full) — правило выше до него не дотягивается. */
 .roll-log-win [hidden] { display: none !important; }
 
 .roll-log-fab {
@@ -529,6 +528,21 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 }
 .roll-log-fab:hover { background: var(--surface-hover); }
 .roll-log-fab svg { display: block; }
+/* Непрочитанный чат — точка на кнопке (roll-log.js: has-unread): число там
+   общее с бросками. */
+.roll-log-fab.has-unread { border-color: var(--accent); }
+.roll-log-fab.has-unread::before {
+  content: ""; position: absolute; left: 18px; top: 6px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--glass-bg);
+  animation: chat-unread-pulse 1.6s ease-in-out infinite;
+}
+@keyframes chat-unread-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .roll-log-fab.has-unread::before { animation: none; }
+}
 .roll-log--bl .roll-log-fab { left: 10px; bottom: 10px; }
 .roll-log--tr .roll-log-fab { right: 10px; top: 10px; }
 
@@ -545,10 +559,8 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
   border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
-/* Телефон: окно с чатом — во весь экран, как лист персонажа (см.
-   sheet-dock.js); класс и переезд окна в body ставит roll-log.js по
-   matchMedia. Тянуть и таскать нечего. !important — размер/положение ставит
-   инлайном place(). */
+/* Телефон: окно с чатом во весь экран, как лист персонажа; класс ставит
+   roll-log.js по matchMedia. !important — размер/положение ставит инлайном place(). */
 .roll-log-win--full {
   position: fixed; inset: 0; z-index: 300;
   width: auto !important; height: auto !important; left: 0 !important; top: 0 !important;
@@ -564,9 +576,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 }
 .roll-log-win.collapsed .roll-log-head { border-bottom: none; }
 .roll-log-title { flex: 1 1 auto; font-size: 12px; font-weight: 600; color: var(--text); }
-/* Вкладки «Чат | Броски» вместо заголовка, когда в окне есть чат (см.
-   roll-log.js: opts.chat). Счётчик на самой вкладке — что накопилось,
-   пока смотрели другую. */
+/* Вкладки «Чат | Броски» вместо заголовка, когда в окне есть чат (roll-log.js: opts.chat). */
 .roll-log-tabs { display: flex; gap: 2px; }
 .roll-log-tab {
   display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; cursor: pointer;
@@ -594,9 +604,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
   border-top: 1px solid var(--border); background: var(--panel-bg);
 }
 
-/* ---- .chat-pane — чат стола, вторая вкладка окна лога (см. web/src/chat.js).
-   Лента сверху, поле ввода прибито к низу; личные сообщения — с акцентной
-   кромкой и меткой «лично», свои — чуть темнее. ---- */
+/* ---- .chat-pane — чат стола, вкладка окна лога (web/src/chat.js). ---- */
 .chat-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .roll-log-win.collapsed .chat-pane { display: none; }
 .chat-body {
@@ -609,6 +617,13 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
   background: var(--surface); border: 1px solid var(--border);
 }
 .chat-msg.is-own { background: var(--surface-hover); }
+/* Пришло, пока ленту не смотрели (chat.js: setViewing). */
+.chat-msg.is-new { background: var(--accent-bg); border-color: var(--accent); }
+.chat-divider {
+  display: flex; align-items: center; gap: 8px; margin: 2px 0;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent);
+}
+.chat-divider::before, .chat-divider::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--accent); opacity: .5; }
 .chat-msg.is-private { border-left: 3px solid var(--accent); }
 .chat-msg-head { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; font-size: 11px; }
 .chat-msg-who {

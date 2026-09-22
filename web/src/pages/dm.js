@@ -123,8 +123,7 @@ let isDemoGuest = false;
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
   initDiceRoller(diceControls, (msg) => vtt.send(msg));
-  // Чат стола — вторая вкладка того же окна (см. chat.js): ДМ пишет всем
-  // или одному игроку, адресаты — из «кто онлайн» (vtt:playerList).
+  // Чат стола — вторая вкладка того же окна (chat.js); адресаты — из vtt:playerList.
   const rollLog = createRollLog(document.getElementById("diceLog"), {
     layout: "plate",
     corner: "top-right",

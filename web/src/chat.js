@@ -1,13 +1,7 @@
-// chat.js — чат за столом: вкладка в окне лога бросков (см. roll-log.js,
-// opts.chat). Ведущий пишет всем или одному игроку, игрок — всем, ведущему
-// или другому игроку. Сами сообщения решает сервер (internal/service/
-// room_chat.go): отправителя он проставляет по сокету, личное доставляет
-// только двоим — сюда чужое просто не приходит, прятать нечего.
-//
-// Данные: "chat_history" при входе (vtt:chatHistory) и "chat_message" по
-// одному (vtt:chatMessage) — domain.ChatMessage: { id, at, fromRole, fromId?,
-// fromName, to?, toName?, text }. Адресаты — из "player_list"
-// (vtt:playerList): тот же список, что у ДМ в «кто онлайн».
+// chat.js — чат за столом, вкладка окна лога бросков (roll-log.js, opts.chat).
+// Права и адресность решает сервер (room_chat.go): чужое личное сюда не
+// приходит. Данные — vtt:chatHistory / vtt:chatMessage (domain.ChatMessage),
+// адресаты — vtt:playerList.
 
 import { icon } from "./icons.js";
 import { showConfirm } from "./modal.js";
@@ -16,11 +10,9 @@ import { showConfirm } from "./modal.js";
 const ROLE_DM = 1;
 export const CHAT_TO_DM = "dm";
 
-// createChatPane(host, opts) → { el, setHistory, push, setParticipants, focus }
-//   opts.role — "dm" | "player"; opts.selfId — id аккаунта игрока (у ДМ не нужен).
-//   opts.send(msg) — отправка ClientMsg в комнату.
-//   opts.onMessage(m, own) — вызывается на каждое входящее (для счётчика
-//     непрочитанных у хозяина окна).
+// createChatPane(host, { role, selfId, send, onMessage }) → { el, setHistory,
+// push, setParticipants, setViewing, focus }. onMessage(m, own) — для счётчика
+// непрочитанных у хозяина; setViewing(bool) — видна ли лента (подсветка новых).
 export function createChatPane(host, { role, selfId, send, onMessage = () => {} }) {
   const isDM = role === "dm";
   host.classList.add("chat-pane");
@@ -43,8 +35,7 @@ export function createChatPane(host, { role, selfId, send, onMessage = () => {} 
   to.title = "Адресат: всем за столом или лично";
   toRow.append(toLabel, to);
   if (isDM) {
-    // Очистка истории — только у ведущего (сервер игрока не пустит, см.
-    // Room.authorize): «между кампаниями», не «мне надоело».
+    // Очистка — только у ведущего (Room.authorize).
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "icon-btn chat-clear";
@@ -74,8 +65,7 @@ export function createChatPane(host, { role, selfId, send, onMessage = () => {} 
 
   host.append(body, empty, compose);
 
-  // participants — подключённые игроки (player_list). Выбранный адресат
-  // переживает перерисовку списка; ушёл со стола — возвращаемся к «Всем».
+  // Адресат переживает перерисовку списка; ушёл со стола — снова «Всем».
   let participants = [];
   function renderTo() {
     const prev = to.value;
@@ -117,8 +107,7 @@ export function createChatPane(host, { role, selfId, send, onMessage = () => {} 
     who.type = "button";
     who.className = "chat-msg-who";
     who.textContent = own ? "Вы" : m.fromName;
-    // Клик по имени — ответить лично тому, кто написал (ведущему или игроку).
-    // Своё имя и адресат, которого уже нет за столом, ничего не делают.
+    // Клик по имени — ответить лично; ушедшему со стола ответить нельзя.
     if (!own) {
       const target = m.fromRole === ROLE_DM ? CHAT_TO_DM : m.fromId;
       who.title = "Ответить лично";
@@ -164,16 +153,53 @@ export function createChatPane(host, { role, selfId, send, onMessage = () => {} 
   }
 
   function setHistory(list) {
+    clearNew();
     body.replaceChildren(...(list || []).map(renderMsg));
     syncEmpty();
     scrollDown();
   }
 
+  // Чужое, пришедшее пока ленту не видно, — .is-new и черта «Новые» перед
+  // первым; своё не считается: написал — видел.
+  let viewing = false;
+  let divider = null;
+  let seenTimer = null;
+  const NEW_SEEN_MS = 4000;
+
+  function clearNew() {
+    clearTimeout(seenTimer);
+    seenTimer = null;
+    if (divider) divider.remove();
+    divider = null;
+    for (const el of body.querySelectorAll(".chat-msg.is-new")) el.classList.remove("is-new");
+  }
+
+  // Подсветка гаснет через несколько секунд просмотра; ушли раньше — останется.
+  function setViewing(v) {
+    viewing = v;
+    if (v && divider && !seenTimer) seenTimer = setTimeout(clearNew, NEW_SEEN_MS);
+    if (!v && seenTimer) {
+      clearTimeout(seenTimer);
+      seenTimer = null;
+    }
+  }
+
   function push(m) {
-    body.appendChild(renderMsg(m));
+    const el = renderMsg(m);
+    const own = isOwn(m);
+    if (!own && !viewing) {
+      if (!divider) {
+        divider = document.createElement("div");
+        divider.className = "chat-divider";
+        divider.textContent = "Новые";
+        body.appendChild(divider);
+      }
+      el.classList.add("is-new");
+    }
+    body.appendChild(el);
     syncEmpty();
     scrollDown();
-    onMessage(m, isOwn(m));
+    onMessage(m, own);
   }
 
   function setParticipants(list) {
@@ -199,12 +225,12 @@ export function createChatPane(host, { role, selfId, send, onMessage = () => {} 
       submit();
     }
   });
-  // Поле растёт под текст до нескольких строк, дальше — прокрутка внутри.
+  // Поле растёт под текст, дальше прокрутка внутри.
   input.addEventListener("input", () => {
     input.style.height = "";
     input.style.height = Math.min(input.scrollHeight, 120) + "px";
   });
 
   syncEmpty();
-  return { el: host, setHistory, push, setParticipants, focus: () => input.focus() };
+  return { el: host, setHistory, push, setParticipants, setViewing, focus: () => input.focus() };
 }

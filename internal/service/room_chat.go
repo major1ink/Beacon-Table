@@ -1,20 +1,8 @@
-// room_chat.go — чат за столом (domain.ChatMessage): ведущий пишет всем или
-// одному игроку, игроки — всем, ведущему или друг другу. Отдельный файл по
-// той же причине, что room_drawings.go: механика самодостаточная, завязана
-// только на r.chatLog и список клиентов.
-//
-// Всё, что здесь происходит, выполняется в горутине Room.run().
-//
-// Личное сообщение доставляется только отправителю и адресату — остальные
-// его не получают вовсе, а не «получают и прячут»: пересылать то, чего
-// клиент видеть не должен, нельзя (см. domain.ChatMessage.VisibleTo). ДМ —
-// роль, а не аккаунт: у него может быть несколько сокетов, и все они и
-// пишут, и читают как один «ведущий».
-//
-// История живёт в памяти (r.chatLog) и, если ChatHistoryLimit больше нуля,
-// дублируется в базу (r.chatRepo) — синхронно, прямо из актора: одна
-// вставка на сообщение, сравнимо с самой рассылкой. В экспорт мира не
-// входит: переписка за столом — не контент мира.
+// room_chat.go — чат за столом (domain.ChatMessage). Выполняется в горутине
+// Room.run(). Личное уходит только отправителю и адресату — не «всем и
+// спрятать» (см. ChatMessage.VisibleTo). ДМ — роль, не аккаунт: все его
+// сокеты — один «ведущий». История в памяти (r.chatLog), при лимите > 0
+// дублируется в базу синхронно из актора. В экспорт мира не входит.
 package service
 
 import (
@@ -28,22 +16,17 @@ import (
 	"beacon-table/internal/repository"
 )
 
-// maxChatTextLen — предел текста одного сообщения: текст со стороны
-// недоверенного клиента, как Label у "roll_dice".
+// maxChatTextLen — текст со стороны недоверенного клиента, как Label у "roll_dice".
 const maxChatTextLen = 2000
 
-// DefaultChatHistory — сколько сообщений хранить, если настройка не задана
-// (см. cmd/beacon-table: BEACON_CHAT_HISTORY).
+// DefaultChatHistory — сколько хранить, если BEACON_CHAT_HISTORY не задан.
 const DefaultChatHistory = 500
 
-// chatSessionCap — потолок истории В ПАМЯТИ, когда хранить на диске
-// запрещено (лимит 0): чат живёт до перезапуска, но не растёт бесконечно.
+// chatSessionCap — потолок в памяти при лимите 0, чтобы история не росла бесконечно.
 const chatSessionCap = 500
 
-// ChatHistoryLimit — сколько сообщений чата хранить между перезапусками.
-// 0 — не хранить: история только в памяти, пока запущен сервер. Меняется на
-// лету из формы настроек (см. cmd/beacon-table/settings.go), поэтому
-// atomic, а не поле Config.
+// ChatHistoryLimit — сколько сообщений хранить между перезапусками; 0 — только
+// в памяти. Atomic: меняется на лету из формы настроек.
 type ChatHistoryLimit struct{ n atomic.Int64 }
 
 func NewChatHistoryLimit(n int) *ChatHistoryLimit {
@@ -66,8 +49,7 @@ func (l *ChatHistoryLimit) Get() int {
 	return int(l.n.Load())
 }
 
-// loadChatLog поднимает историю из базы при старте комнаты. Лимит 0 —
-// в базе ничего не держим: то, что осталось от прежней настройки, стираем.
+// loadChatLog поднимает историю при старте; при лимите 0 стирает остатки прежней настройки.
 func loadChatLog(repo repository.ChatRepository, limit *ChatHistoryLimit) ([]*domain.ChatMessage, error) {
 	if repo == nil {
 		return []*domain.ChatMessage{}, nil
@@ -82,7 +64,6 @@ func loadChatLog(repo repository.ChatRepository, limit *ChatHistoryLimit) ([]*do
 	return repo.List(ctx)
 }
 
-// chatCap — сколько сообщений держим в памяти сейчас.
 func (r *Room) chatCap() int {
 	if n := r.chatLimit.Get(); n > 0 {
 		return n
@@ -90,8 +71,7 @@ func (r *Room) chatCap() int {
 	return chatSessionCap
 }
 
-// handleChatSend — "chat_send": проверяет текст и адресата, проставляет
-// отправителя по сокету и доставляет тем, кому положено.
+// handleChatSend — "chat_send": отправителя ставит сервер по сокету.
 func (r *Room) handleChatSend(from RoomClient, msg domain.ClientMsg) {
 	text := strings.TrimSpace(clampRunes(msg.Text, maxChatTextLen))
 	if text == "" {
@@ -112,7 +92,7 @@ func (r *Room) handleChatSend(from RoomClient, msg domain.ClientMsg) {
 	if msg.To != "" {
 		toName, ok := r.chatRecipient(from, msg.To)
 		if !ok {
-			return // адресата за столом нет (или пишут сами себе) — молча игнорируем
+			return // адресата нет за столом или пишут себе
 		}
 		m.To, m.ToName = msg.To, toName
 	}
@@ -130,9 +110,7 @@ func (r *Room) handleChatSend(from RoomClient, msg domain.ClientMsg) {
 	}
 }
 
-// persistChat пишет сообщение в базу и режет хвост под лимит. Лимит 0 —
-// наоборот, чистит то, что могло остаться от прежней настройки (один раз:
-// дальше база и так пуста, но DELETE по пустой таблице дёшев).
+// persistChat пишет в базу и режет хвост; при лимите 0 чистит остатки прежней настройки.
 func (r *Room) persistChat(m *domain.ChatMessage) {
 	if r.chatRepo == nil {
 		return
@@ -154,9 +132,8 @@ func (r *Room) persistChat(m *domain.ChatMessage) {
 	}
 }
 
-// chatRecipient резолвит адресата личного сообщения по сейчас подключённым
-// клиентам: имя берём у сокета, а не у клиента-отправителя (он мог бы
-// подписать кого угодно). ДМ не пишет лично сам себе, игрок — тоже.
+// chatRecipient — адресат среди подключённых; имя берём у его сокета, не у
+// отправителя. Себе лично не пишут.
 func (r *Room) chatRecipient(from RoomClient, to string) (string, bool) {
 	if to == domain.ChatToDM {
 		if from.Role() == domain.RoleDM {
@@ -180,9 +157,7 @@ func (r *Room) chatRecipient(from RoomClient, to string) (string, bool) {
 	return "", false
 }
 
-// handleChatClear — "chat_clear" (только ДМ, см. authorize): стирает
-// историю у всех. Клиенты получают пустую историю тем же сообщением, что
-// и при входе.
+// handleChatClear — "chat_clear" (только ДМ): всем уходит пустая история.
 func (r *Room) handleChatClear() {
 	r.chatLog = []*domain.ChatMessage{}
 	if r.chatRepo != nil {
@@ -195,8 +170,7 @@ func (r *Room) handleChatClear() {
 	}
 }
 
-// sendChatHistory шлёт клиенту историю чата — только те сообщения, что
-// ему положено видеть. Трансляции не шлём ничего: у неё чата нет.
+// sendChatHistory — только видимое этому клиенту; трансляции ничего.
 func (r *Room) sendChatHistory(c RoomClient) {
 	if c.Role() == domain.RoleTV {
 		return

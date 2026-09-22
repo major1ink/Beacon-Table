@@ -114,10 +114,7 @@ func migrateV2(tx *sql.Tx) error {
 	return addColumnIfMissing(tx, "playlists", "kind", `TEXT NOT NULL DEFAULT ''`)
 }
 
-// migrateV3 — chat_messages (см. domain.ChatMessage, sqlite/chat.go).
-// company_id денормализован на строку, как у pregen_characters: стор
-// company-scoped, JOIN не нужен. Индекс по (company_id, at) — история
-// читается и режется по времени.
+// migrateV3 — chat_messages (sqlite/chat.go); company_id на строке, как у pregen_characters.
 func migrateV3(tx *sql.Tx) error {
 	for _, stmt := range []string{
 		`CREATE TABLE IF NOT EXISTS chat_messages (

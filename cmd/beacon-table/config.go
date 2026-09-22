@@ -101,10 +101,7 @@ type Config struct {
 	UploadsQuota      int64
 	UploadsWorldQuota int64
 
-	// ---- чат за столом ----
-	// ChatHistory — сколько сообщений чата хранить между перезапусками
-	// (см. service.ChatHistoryLimit). 0 — не хранить: история живёт, пока
-	// запущен сервер.
+	// ChatHistory — сколько сообщений чата хранить между перезапусками; 0 — не хранить.
 	ChatHistory int
 
 	// ---- публичное демо ----

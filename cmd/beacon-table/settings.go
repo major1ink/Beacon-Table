@@ -192,8 +192,7 @@ type settingsStore struct {
 	args     []string
 	logLevel *slog.LevelVar
 	quota    *quota.Tracker
-	// chatHistory — лимит истории чата (см. service.ChatHistoryLimit),
-	// общий с CompanyManager: меняется на лету.
+	// chatHistory — лимит истории чата, общий с CompanyManager.
 	chatHistory *service.ChatHistoryLimit
 }
 

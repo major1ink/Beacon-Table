@@ -7,9 +7,7 @@ import (
 	"beacon-table/internal/domain"
 )
 
-// ChatStore реализует repository.ChatRepository, привязанный к одному миру
-// — тем же принципом, что и FoundryModuleStore: пересобирается на каждый
-// service.CompanyManager.Launch.
+// ChatStore реализует repository.ChatRepository для одного мира, как FoundryModuleStore.
 type ChatStore struct {
 	db        *sql.DB
 	companyID string
@@ -19,8 +17,7 @@ func NewChatStore(db *sql.DB, companyID string) *ChatStore {
 	return &ChatStore{db: db, companyID: companyID}
 }
 
-// List implements repository.ChatRepository. Порядок — по времени, при
-// равном времени по id, чтобы история не плавала между перезапусками.
+// List — по времени, при равном по id: порядок не плавает между перезапусками.
 func (s *ChatStore) List(ctx context.Context) ([]*domain.ChatMessage, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, at, from_role, from_id, from_name, to_id, to_name, text FROM chat_messages
@@ -41,7 +38,6 @@ func (s *ChatStore) List(ctx context.Context) ([]*domain.ChatMessage, error) {
 	return out, rows.Err()
 }
 
-// Add implements repository.ChatRepository.
 func (s *ChatStore) Add(ctx context.Context, m *domain.ChatMessage) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO chat_messages (id, company_id, at, from_role, from_id, from_name, to_id, to_name, text)
@@ -50,7 +46,6 @@ func (s *ChatStore) Add(ctx context.Context, m *domain.ChatMessage) error {
 	return err
 }
 
-// Trim implements repository.ChatRepository.
 func (s *ChatStore) Trim(ctx context.Context, keep int) error {
 	if keep < 0 {
 		keep = 0
@@ -63,7 +58,6 @@ func (s *ChatStore) Trim(ctx context.Context, keep int) error {
 	return err
 }
 
-// Clear implements repository.ChatRepository.
 func (s *ChatStore) Clear(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM chat_messages WHERE company_id = ?`, s.companyID)
 	return err
