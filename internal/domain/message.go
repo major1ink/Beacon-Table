@@ -191,10 +191,10 @@ type ClientMsg struct {
 	// ---- призыв существ игроком (см. service.Room.handleSummonRequest) ----
 	// "summon_request": MonsterID + Count — сколько просит игрок.
 	// "summon_resolve": RequestID + Count — сколько ДМ разрешил, 0 — отказ.
-	// "set_summon_builtin": SummonBuiltin (см. CombatState.SummonBuiltin).
-	RequestID     string `json:"requestId,omitempty"`
-	Count         int    `json:"count,omitempty"`
-	SummonBuiltin *bool  `json:"summonBuiltin,omitempty"`
+	// "set_summon_all": SummonAll (см. CombatState.SummonAll).
+	RequestID string `json:"requestId,omitempty"`
+	Count     int    `json:"count,omitempty"`
+	SummonAll *bool  `json:"summonAll,omitempty"`
 
 	// ShowBuiltinCards — только для "set_show_builtin_cards": общий тумблер
 	// стола (раздел "Настройки"), показывать ли вшитый каталог "из коробки" в

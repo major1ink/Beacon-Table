@@ -4580,15 +4580,15 @@ showBuiltinCardsToggle.onchange = () => {
   vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
 };
 
-// summonBuiltinToggle — тот же приём (см. domain.CombatState.SummonBuiltin):
-// игрокам открывается весь встроенный каталог для призыва; свои карточки —
-// флагом «Можно призывать» на карточке (pages/bestiary.js).
-const summonBuiltinToggle = document.getElementById("summonBuiltinToggle");
+// summonAllToggle — тот же приём (см. domain.CombatState.SummonAll):
+// игрокам открывается вся библиотека для призыва; точечно — флагом «Можно
+// призывать» на карточке (pages/bestiary.js).
+const summonAllToggle = document.getElementById("summonAllToggle");
 document.addEventListener("vtt:combatState", (e) => {
-  summonBuiltinToggle.checked = !!e.detail.summonBuiltin;
+  summonAllToggle.checked = !!e.detail.summonAll;
 });
-summonBuiltinToggle.onchange = () => {
-  vtt.send({ type: "set_summon_builtin", summonBuiltin: summonBuiltinToggle.checked });
+summonAllToggle.onchange = () => {
+  vtt.send({ type: "set_summon_all", summonAll: summonAllToggle.checked });
 };
 
 // Игрок просит существо на карту (см. room_summon.go) — как телепорт:

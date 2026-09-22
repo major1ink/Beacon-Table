@@ -10,8 +10,8 @@ import (
 
 // ---- призыв существ игроком ----
 //
-// Игрок выбирает существо из разрешённых (Monster.Summonable либо весь
-// встроенный каталог при CombatState.SummonBuiltin) и просит его на карту;
+// Игрок выбирает существо из разрешённых (Monster.Summonable либо вся
+// библиотека при CombatState.SummonAll) и просит его на карту;
 // ДМ видит запрос, правит количество и подтверждает или отклоняет — тем же
 // потоком, что телепорт (teleport_request → решение ДМ). Токены встают
 // рядом с фишкой игрока на его сцене (см. sceneOf), владелец — игрок:
@@ -61,10 +61,7 @@ func (r *Room) summonableMonsters() []summonable {
 }
 
 func (r *Room) canSummon(m *domain.Monster) bool {
-	if m.System {
-		return r.combat.SummonBuiltin
-	}
-	return m.Summonable
+	return r.combat.SummonAll || m.Summonable
 }
 
 // handleSummonList — «что можно призвать»: ответ только запросившему.

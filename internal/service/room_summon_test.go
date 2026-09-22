@@ -38,8 +38,8 @@ func summonRoom() (*Room, *sceneClient, *sceneClient) {
 
 func statusOf(c *sceneClient) map[string]any { return c.last("summon_status") }
 
-// TestSummonListRespectsFlags — игроку видны только разрешённые: свой флаг
-// у карточки, встроенный каталог — общий тумблер стола.
+// TestSummonListRespectsFlags — игроку видны только разрешённые: флаг у
+// карточки, либо вся библиотека по тумблеру стола.
 func TestSummonListRespectsFlags(t *testing.T) {
 	r, dm, pl := summonRoom()
 	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "summon_list"}})
@@ -47,10 +47,10 @@ func TestSummonListRespectsFlags(t *testing.T) {
 		t.Fatalf("список без тумблера: %+v", got)
 	}
 	yes := true
-	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_summon_builtin", SummonBuiltin: &yes}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_summon_all", SummonAll: &yes}})
 	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "summon_list"}})
-	if got := pl.last("summon_list")["monsters"].([]summonable); len(got) != 2 {
-		t.Errorf("с тумблером ожидались сова и волк: %+v", got)
+	if got := pl.last("summon_list")["monsters"].([]summonable); len(got) != 3 {
+		t.Errorf("с тумблером ожидалась вся библиотека: %+v", got)
 	}
 }
 

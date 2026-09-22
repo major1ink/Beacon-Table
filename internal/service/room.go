@@ -623,9 +623,9 @@ func (r *Room) handleInbound(im inboundMsg) {
 	case "summon_resolve":
 		r.handleSummonResolve(im.msg)
 		return
-	case "set_summon_builtin":
-		if im.msg.SummonBuiltin != nil {
-			r.combat.SummonBuiltin = *im.msg.SummonBuiltin
+	case "set_summon_all":
+		if im.msg.SummonAll != nil {
+			r.combat.SummonAll = *im.msg.SummonAll
 			r.markCombatDirty()
 			r.broadcastCombat()
 		}
@@ -2482,7 +2482,7 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// domain.CombatState.HighlightActiveToken.
 		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
 		"showBuiltinCards":     r.combat.ShowBuiltinCards,
-		"summonBuiltin":        r.combat.SummonBuiltin,
+		"summonAll":            r.combat.SummonAll,
 		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
 		// включено (прятать), см. domain.CombatState.HideLightMarkers.
 		"hideLightMarkers": r.combat.HideLightMarkers == nil || *r.combat.HideLightMarkers,

@@ -1,7 +1,7 @@
 import { icon } from "./icons.js";
 
 // Панель «Призыв» игрока: существа, которые ДМ разрешил призывать
-// (Monster.Summonable, плюс встроенный каталог при CombatState.SummonBuiltin),
+// (Monster.Summonable, либо вся библиотека при CombatState.SummonAll),
 // количество и кнопка. Запрос уходит ДМ (см. internal/service/room_summon.go),
 // ответ приходит summon_status: «ждём», «пустили N», «отказ: причина».
 // Список просим у сервера при открытии панели и перечитываем, когда
@@ -119,17 +119,17 @@ export function mountSummonPanel(panelEl, { send }) {
   });
   // Список — с сервера: по первому combat_state (он приходит при входе, к
   // этому моменту сокет точно открыт) и когда поменялись библиотека (флаг на
-  // карточке) или тумблер «встроенный каталог». Остальные combat_state —
+  // карточке) или тумблер «вся библиотека». Остальные combat_state —
   // ходы боя — список не трогают.
   const refresh = () => send({ type: "summon_list" });
   document.addEventListener("vtt:libraryChanged", (e) => {
     if (!e.detail || e.detail.kind === "compendium") refresh();
   });
-  let builtin = null;
+  let all = null;
   document.addEventListener("vtt:combatState", (e) => {
-    const next = !!(e.detail && e.detail.summonBuiltin);
-    if (next === builtin) return;
-    builtin = next;
+    const next = !!(e.detail && e.detail.summonAll);
+    if (next === all) return;
+    all = next;
     refresh();
   });
   render();
