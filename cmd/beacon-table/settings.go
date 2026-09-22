@@ -11,6 +11,7 @@ import (
 
 	apihttp "beacon-table/internal/api/http"
 	"beacon-table/internal/quota"
+	"beacon-table/internal/service"
 )
 
 // settingsFile — путь к beacon.conf, который сейчас в ходу (пусто, если
@@ -117,6 +118,8 @@ func currentValue(cfg Config, key string) string {
 		return quota.FormatCompact(cfg.UploadsQuota)
 	case envUploadsWorldQuota:
 		return quota.FormatCompact(cfg.UploadsWorldQuota)
+	case envChatHistory:
+		return strconv.Itoa(cfg.ChatHistory)
 	default:
 		return ""
 	}
@@ -141,6 +144,11 @@ func validateSetting(key, value string) error {
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 1 {
 			return fmt.Errorf("ожидалось целое число не меньше 1")
+		}
+	case envChatHistory:
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return fmt.Errorf("ожидалось целое число не меньше 0")
 		}
 	case envLogLevel:
 		if !validLogLevel(strings.ToLower(value)) {
@@ -184,10 +192,12 @@ type settingsStore struct {
 	args     []string
 	logLevel *slog.LevelVar
 	quota    *quota.Tracker
+	// chatHistory — лимит истории чата, общий с CompanyManager.
+	chatHistory *service.ChatHistoryLimit
 }
 
-func newSettingsStore(cfg Config, args []string, logLevel *slog.LevelVar, q *quota.Tracker) *settingsStore {
-	return &settingsStore{cfg: cfg, args: args, logLevel: logLevel, quota: q}
+func newSettingsStore(cfg Config, args []string, logLevel *slog.LevelVar, q *quota.Tracker, chatHistory *service.ChatHistoryLimit) *settingsStore {
+	return &settingsStore{cfg: cfg, args: args, logLevel: logLevel, quota: q, chatHistory: chatHistory}
 }
 
 // List implements apihttp.SettingsStore.
@@ -250,6 +260,10 @@ func (s *settingsStore) apply(cfg Config, changed map[string]string) []string {
 			}
 		case envUploadsQuota, envUploadsWorldQuota:
 			s.quota.SetLimits(cfg.UploadsQuota, cfg.UploadsWorldQuota)
+		case envChatHistory:
+			if s.chatHistory != nil {
+				s.chatHistory.Set(cfg.ChatHistory)
+			}
 		default:
 			needRestart = append(needRestart, key)
 		}

@@ -163,6 +163,7 @@ func main() {
 	}
 
 	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy, uploadQuota)
+	companies.ChatHistory().Set(cfg.ChatHistory)
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
 	broadcastSvc := service.NewBroadcastService(stateRepo)
@@ -200,7 +201,7 @@ func main() {
 	api.Tutorial = service.NewTutorialService(stateRepo)
 	// Форма настроек в разделе «Настройки» у ДМ: пишет в тот же beacon.conf
 	// и применяет на лету то, что можно (см. settings.go).
-	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota)
+	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota, companies.ChatHistory())
 	api.DemoMode = cfg.DemoMode
 	// Временный пароль ДМ: кладём его туда, где человек найдёт его без
 	// консоли — в файл рядом с настройками и в подсказку на странице входа,

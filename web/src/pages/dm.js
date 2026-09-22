@@ -123,8 +123,16 @@ let isDemoGuest = false;
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
   initDiceRoller(diceControls, (msg) => vtt.send(msg));
-  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate", corner: "top-right" });
+  // Чат стола — вторая вкладка того же окна (chat.js); адресаты — из vtt:playerList.
+  const rollLog = createRollLog(document.getElementById("diceLog"), {
+    layout: "plate",
+    corner: "top-right",
+    chat: { role: "dm", send: (m) => vtt.send(m) },
+  });
   document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
+  document.addEventListener("vtt:chatHistory", (e) => rollLog.chat.setHistory(e.detail));
+  document.addEventListener("vtt:chatMessage", (e) => rollLog.chat.push(e.detail));
+  document.addEventListener("vtt:playerList", (e) => rollLog.chat.setParticipants(e.detail || []));
   // Справочник — та же боковая колонка, следующая иконка после кубов (см.
   // compendium-menu.js: дерево категорий, само содержимое — отдельные
   // плавающие окна web/catalog.html). sticky — не закрывается кликом мимо
@@ -2610,6 +2618,8 @@ broadcastCopyBtn.onclick = async () => {
 // internal/service/broadcast_requests.go). ДМ сверяет код с тем, что горит на
 // экране, и пускает.
 const broadcastRequestsBox = document.getElementById("broadcastRequests");
+const broadcastRequestsCount = document.getElementById("broadcastRequestsCount");
+const castTabBtn = document.querySelector('.set-tabs [data-settab="cast"]');
 const settingsRailBtn = document.getElementById("settingsBtn");
 
 // BROADCAST_REQUESTS_POLL_MS — опрос идёт всё время, пока открыт стол: ДМ
@@ -2691,6 +2701,10 @@ async function renderBroadcastRequests() {
   // открывая раздел; ДМ во время игры смотрит на карту, а не в настройки.
   settingsRailBtn.classList.toggle("has-badge", requests.length > 0);
   railMoreBadge.set("broadcast", requests.length > 0);
+  // Точка ведёт до конца: «⋯» → «Настройки» → вкладка → счётчик у списка.
+  castTabBtn?.classList.toggle("has-badge", requests.length > 0);
+  broadcastRequestsCount.textContent = requests.length;
+  broadcastRequestsCount.classList.toggle("show", requests.length > 0);
   // Раздел закрыт — перерисовывать нечего, но точку выше обновить надо было.
   if (!broadcastRequestsBox.offsetParent) return;
   drawBroadcastRequests(requests);

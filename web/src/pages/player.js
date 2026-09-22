@@ -180,8 +180,16 @@ const PLAYER_DRAW_HELP = {
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
   initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg));
-  const rollLog = createRollLog(document.getElementById("diceLog"), { layout: "plate", corner: "bottom-left" });
+  // Чат стола — вторая вкладка того же окна (chat.js); адресаты — из vtt:playerList.
+  const rollLog = createRollLog(document.getElementById("diceLog"), {
+    layout: "plate",
+    corner: "bottom-left",
+    chat: { role: "player", selfId: me.id, send: (m) => vtt.send(m) },
+  });
   document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
+  document.addEventListener("vtt:chatHistory", (e) => rollLog.chat.setHistory(e.detail));
+  document.addEventListener("vtt:chatMessage", (e) => rollLog.chat.push(e.detail));
+  document.addEventListener("vtt:playerList", (e) => rollLog.chat.setParticipants(e.detail || []));
   renderCharDock();
 
   vtt = await initVTT({ canvasId: "scene", role: "player", playerId: me.id });

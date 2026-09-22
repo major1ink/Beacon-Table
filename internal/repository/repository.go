@@ -197,6 +197,17 @@ type SceneRepository interface {
 	SaveHub(ctx context.Context, hub *domain.LootHub) error
 }
 
+// ChatRepository — история чата (domain.ChatMessage), company-scoped. Сколько
+// хранить, решает service.Room.
+type ChatRepository interface {
+	// List — вся история в порядке отправки.
+	List(ctx context.Context) ([]*domain.ChatMessage, error)
+	Add(ctx context.Context, m *domain.ChatMessage) error
+	// Trim оставляет keep самых свежих.
+	Trim(ctx context.Context, keep int) error
+	Clear(ctx context.Context) error
+}
+
 // JournalRepository — журнал стола, файл-на-запись (см.
 // internal/repository/journalfile) — .md на диске с шапкой: автор и раздача
 // прав (domain.JournalEntry). Права репозиторий только ХРАНИТ — решает по ним

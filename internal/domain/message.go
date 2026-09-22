@@ -84,6 +84,11 @@ type ClientMsg struct {
 	// Label её не подменяет.
 	Label string `json:"label,omitempty"`
 
+	// Text/To — только для "chat_send" (см. ChatMessage): адресат пуст (всем),
+	// ChatToDM либо id игрока. Отправителя ставит сервер.
+	Text string `json:"text,omitempty"`
+	To   string `json:"to,omitempty"`
+
 	Cue *CueState `json:"cue,omitempty"`
 	// Sfx — только для "play_sfx" (см. SfxEvent).
 	Sfx *SfxEvent `json:"sfx,omitempty"`

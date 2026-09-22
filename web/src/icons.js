@@ -92,6 +92,7 @@ const PATHS = {
   redo: '<polyline points="16 6 21 11 16 16"/><path d="M21 11H10a5 5 0 000 10h3"/>',
   // "megaphone" — врезка «зачитать вслух» игрокам.
   megaphone: '<path d="M4 10v4a1 1 0 001 1h2l7 4V5L7 9H5a1 1 0 00-1 1z"/><path d="M17 9a4 4 0 010 6"/><path d="M8 15l1 5h2.5l-.8-5"/>',
+  send: '<path d="M21 3L10.5 13.5"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/>',
   // "brackets" — [[вики-ссылка]] на другую запись.
   brackets: '<path d="M9 4H6v16h3"/><path d="M15 4h3v16h-3"/><line x1="10" y1="12" x2="14" y2="12"/>',
   "check-square": '<rect x="4" y="4" width="16" height="16" rx="3"/><polyline points="8 12 11 15 16 9"/>',

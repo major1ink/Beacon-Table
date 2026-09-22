@@ -204,6 +204,12 @@ type Room struct {
 	hub      *domain.LootHub
 	hubDirty bool
 
+	// chatLog — история чата в памяти (room_chat.go); chatRepo — копия в базе
+	// по chatLimit (nil — только в тестах).
+	chatLog   []*domain.ChatMessage
+	chatRepo  repository.ChatRepository
+	chatLimit *ChatHistoryLimit
+
 	// ambientStartedAtMs — момент, с которого отсчитывается позиция амбиента
 	// АКТИВНОЙ сцены (см. SceneState.AmbientURL и CueState.StartedAtMs — тот
 	// же принцип синхронизации по времени, не по стриму позиции). Обновляется
@@ -229,8 +235,12 @@ type Room struct {
 // conditionRepo — см. Room.characters/Room.monsters/Room.items/
 // Room.conditions, только для чтения (кроме точечных мутаций инвентаря
 // персонажа при луте, см. handleHubTakeItem/handleLootTakeItem).
-func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository) (*Room, error) {
+func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit) (*Room, error) {
 	rs, err := sceneRepo.Load(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	chatLog, err := loadChatLog(chatRepo, chatLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -272,6 +282,9 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
 		hub:                   hub,
+		chatLog:               chatLog,
+		chatRepo:              chatRepo,
+		chatLimit:             chatLimit,
 	}
 	r.scene = r.scenes[r.currentSceneID]
 	r.ambientStartedAtMs = time.Now().UnixMilli() // амбиент активной сцены (если есть) стартует заново при запуске сервера
@@ -418,6 +431,7 @@ func (r *Room) run() {
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
 			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
 			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
+			r.sendChatHistory(c)        // чат стола, только видимое этому клиенту
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
 
@@ -440,6 +454,12 @@ func (r *Room) run() {
 				continue
 			case "show_journal":
 				r.relayJournalShow(im.from, im.msg) // эфемерно, как fx: state не трогает
+				continue
+			case "chat_send":
+				r.handleChatSend(im.from, im.msg) // см. room_chat.go
+				continue
+			case "chat_clear":
+				r.handleChatClear()
 				continue
 			case "show_image":
 				// «Показать игрокам» из раздела «Показ» — картинка поверх
@@ -1004,8 +1024,9 @@ func (r *Room) broadcastSceneList() {
 	}
 }
 
-// broadcastPlayerList шлёт ДМ-клиентам список сейчас подключённых игроков
-// (id+имя) — используется в UI назначения владельца токена.
+// broadcastPlayerList шлёт ДМ и игрокам список сейчас подключённых игроков
+// (id+имя) — у ДМ это UI назначения владельца токена, у всех — адресаты
+// личных сообщений чата.
 func (r *Room) broadcastPlayerList() {
 	type playerInfo struct {
 		ID   string `json:"id"`
@@ -1018,8 +1039,9 @@ func (r *Room) broadcastPlayerList() {
 		}
 	}
 	payload := map[string]any{"type": "player_list", "players": players}
+	// Игрокам тоже — адресаты личных сообщений чата.
 	for c := range r.clients {
-		if c.Role() == domain.RoleDM {
+		if c.Role() != domain.RoleTV {
 			c.Send(payload)
 		}
 	}
@@ -1041,7 +1063,7 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 	case domain.RolePlayer:
 		return msgType == "move_own_token" || msgType == "roll_dice" ||
 			msgType == "hub_take_item" || msgType == "loot_take_item" ||
-			msgType == "toggle_door" ||
+			msgType == "toggle_door" || msgType == "chat_send" ||
 			// Пометки на карте — единственная правка САМОЙ сцены, доступная
 			// игроку. Тумблер стола (CombatState.PlayerDrawingEnabled) и
 			// владение конкретным элементом проверяются отдельно, уже внутри

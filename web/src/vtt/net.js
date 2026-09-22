@@ -96,6 +96,11 @@ export function createNet(ctx, audio) {
       document.dispatchEvent(new CustomEvent("vtt:showcase", { detail: data.showcase || null }));
     } else if (data.type === "roll_result") {
       document.dispatchEvent(new CustomEvent("vtt:rollResult", { detail: data }));
+    } else if (data.type === "chat_history" || data.type === "chat_message") {
+      // Чат стола (room_chat.go): история при входе, дальше по одному; сервер
+      // шлёт только положенное этому клиенту, трансляции — ничего.
+      const name = data.type === "chat_history" ? "vtt:chatHistory" : "vtt:chatMessage";
+      document.dispatchEvent(new CustomEvent(name, { detail: data.type === "chat_history" ? data.messages || [] : data.message }));
     } else if (data.type === "audio_cue") {
       if (typeof data.serverNow === "number") ctx.clockOffsetMs = data.serverNow - Date.now();
       audio.applyCue(data.cue);

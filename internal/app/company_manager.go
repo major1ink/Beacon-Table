@@ -95,6 +95,9 @@ type CompanyManager struct {
 	// пределы не заданы.
 	quota *quota.Tracker
 
+	// chatHistory — лимит истории чата, общий на все миры, меняется из настроек на лету.
+	chatHistory *service.ChatHistoryLimit
+
 	current *ActiveWorld
 }
 
@@ -109,8 +112,12 @@ func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accou
 		dataRoot: dataRoot, uploadsRoot: uploadsRoot, uploadsURL: uploadsURL,
 		allowPrivateFoundryNet: allowPrivateFoundryNet,
 		quota:                  uploadQuota,
+		chatHistory:            service.NewChatHistoryLimit(service.DefaultChatHistory),
 	}
 }
+
+// ChatHistory — ручка лимита истории чата для настроек (cmd/beacon-table/settings.go).
+func (m *CompanyManager) ChatHistory() *service.ChatHistoryLimit { return m.chatHistory }
 
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу
 // ассетов этого мира, и импорту мира из архива.
@@ -252,6 +259,7 @@ func (m *CompanyManager) purgeCompanyData(ctx context.Context, id string) error 
 		`DELETE FROM playlist_tracks WHERE playlist_id IN (SELECT id FROM playlists WHERE company_id = ?)`,
 		`DELETE FROM playlists WHERE company_id = ?`,
 		`DELETE FROM foundry_modules WHERE company_id = ?`,
+		`DELETE FROM chat_messages WHERE company_id = ?`,
 	} {
 		if _, err := m.db.ExecContext(ctx, stmt, id); err != nil {
 			return err
@@ -356,8 +364,9 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	pregenRepo := sqlite.NewPregenStore(m.db, company.ID)
 	playlistRepo := sqlite.NewPlaylistStore(m.db, company.ID)
 	foundryModuleRepo := sqlite.NewFoundryModuleStore(m.db, company.ID)
+	chatRepo := sqlite.NewChatStore(m.db, company.ID)
 
-	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo)
+	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory)
 	if err != nil {
 		return err
 	}
