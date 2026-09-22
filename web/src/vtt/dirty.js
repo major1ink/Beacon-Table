@@ -23,6 +23,7 @@ export function createDirtyFlags() {
     grid: true,
     background: true,
     worldSize: true, // размеры сцены сменились — камеру надо пересчитать заново
+    viewZone: true, // зона показа (layers/view-zone.js): рамка у ДМ, маска у остальных
   };
 }
 
@@ -87,6 +88,16 @@ export function diffAndMarkDirty(dirty, prevScene, nextScene) {
     dirty.manualFog = true;
     dirty.drawings = true;
     dirty.background = true;
+  }
+  // Зона показа — вход и для камеры (viewBounds), и для слоя рамки/маски.
+  if (!prevScene || prevScene.viewZone !== nextScene.viewZone) {
+    dirty.viewZone = true;
+    dirty.worldSize = true;
+  }
+  // viewBounds есть только у игрока/трансляции (net.js): ДМ поменял зону —
+  // их вид заново вписывается в неё, у самого ДМ камера на месте.
+  if (prevScene && prevScene.viewBounds !== nextScene.viewBounds) {
+    dirty.resetCamera = true;
   }
   // Смена сцены целиком: пан/зум от предыдущей карты к новой отношения не
   // имеют — центр старого мира может вообще лежать за пределами нового.

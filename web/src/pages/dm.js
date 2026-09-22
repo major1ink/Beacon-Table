@@ -718,6 +718,7 @@ rulerBtn.onclick = () => toggleTool("ruler");
 teleportBtn.onclick = () => toggleTool("teleport");
 
 const gridEditDone = document.getElementById("gridEditDone");
+const viewZoneHint = document.getElementById("viewZoneHint");
 document.addEventListener("vtt:toolChanged", (e) => {
   wallBtn.classList.toggle("active", e.detail === "wall");
   buildingBtn.classList.toggle("active", e.detail === "building");
@@ -725,6 +726,7 @@ document.addEventListener("vtt:toolChanged", (e) => {
   rulerBtn.classList.toggle("active", e.detail === "ruler");
   teleportBtn.classList.toggle("active", e.detail === "teleport");
   gridEditDone.classList.toggle("open", e.detail === "grid-edit");
+  viewZoneHint.classList.toggle("open", e.detail === "view-zone");
 });
 
 // Всплывающие подсказки инструментов — вместо абзацев, которые раньше
@@ -5513,6 +5515,29 @@ const fWidth = document.getElementById("fWidth");
 const fHeight = document.getElementById("fHeight");
 const fFogOfWar = document.getElementById("fFogOfWar");
 const fPlayerAccess = document.getElementById("fPlayerAccess");
+// ---- зона для игроков (см. domain.SceneState.ViewZone, layers/view-zone.js) ----
+// Выделяется инструментом «view-zone» прямо на карте — как редактор сетки,
+// только на просматриваемой сцене; «Вся карта» — снять.
+const viewZoneSummary = document.getElementById("viewZoneSummary");
+const viewZonePickBtn = document.getElementById("viewZonePickBtn");
+const viewZoneClearBtn = document.getElementById("viewZoneClearBtn");
+function fillViewZone(s) {
+  const z = s.viewZone;
+  viewZoneSummary.textContent = z ? `${Math.round(z.w)}×${Math.round(z.h)} от (${Math.round(z.x)}, ${Math.round(z.y)})` : "Вся карта";
+  viewZoneClearBtn.disabled = !z;
+}
+viewZonePickBtn.onclick = () => {
+  closeSidePanel();
+  document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "view-zone" }));
+};
+viewZoneClearBtn.onclick = () => {
+  if (settingsSceneId) vtt.send({ type: "set_view_zone", sceneId: settingsSceneId });
+};
+// Протянули зону — вернуться в настройки той же сцены, вкладка «Фон».
+document.addEventListener("vtt:viewZoneDone", () => {
+  showSidePanelSection("scene");
+  openSceneSettings(viewSceneId, "bg");
+});
 // Свой тумблер, а не поле «Сохранить»: то же, что значок в строке списка.
 fPlayerAccess.onchange = () => {
   if (settingsSceneId) vtt.send({ type: "set_scene_access", sceneId: settingsSceneId, playerAccess: fPlayerAccess.checked });
@@ -5574,6 +5599,7 @@ function fillSceneSettingsFrom(s) {
   fHeight.value = s.height || 720;
   fFogOfWar.checked = s.fogOfWar !== false;
   fPlayerAccess.checked = !!s.playerAccess;
+  fillViewZone(s);
   fMapUrl.value = s.mapUrl || "";
   updateBgPreview();
   fAmbientUrl.value = s.ambientUrl || "";
@@ -5623,7 +5649,9 @@ function openSceneSettings(sceneId, tab) {
   }
   // Редактор сетки рисует поверх карты — только для сцены, что на ней.
   gridEditorBtn.disabled = sceneId !== viewSceneId;
-  gridEditorBtn.title = gridEditorBtn.disabled ? "Редактор сетки работает только на активной сцене — сначала переключись на неё" : "Редактировать сетку прямо на карте";
+  gridEditorBtn.title = gridEditorBtn.disabled ? "Редактор сетки работает только на открытой сцене — сначала открой её" : "Редактировать сетку прямо на карте";
+  viewZonePickBtn.disabled = sceneId !== viewSceneId;
+  viewZonePickBtn.title = viewZonePickBtn.disabled ? "Выделять можно только на открытой сцене — сначала открой её" : "Протянуть прямоугольник по карте";
   sceneSettingsDrawer.hidden = false;
   renderSceneDropdown(); // подсветить строку и подставить подменю под неё
   sceneSettingsDrawer.scrollIntoView({ block: "nearest" });

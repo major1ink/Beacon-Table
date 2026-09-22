@@ -231,3 +231,37 @@ func TestPlayerWalksOnlyAllowedScenes(t *testing.T) {
 		t.Errorf("после снятия доступа игрок видит %q", got)
 	}
 }
+
+// TestViewZoneClampsPlayerAndNormalizes — зона показа приводится к карте,
+// «вся карта» схлопывается в nil, а токен игрока за зону не выходит.
+func TestViewZoneClampsPlayerAndNormalizes(t *testing.T) {
+	r, dm, pl, _ := viewRoom()
+	r.scenes["scene-1"].Tokens["me"] = &domain.Token{ID: "me", OwnerID: "acc-1", X: 100, Y: 100}
+
+	// Перевёрнутый прямоугольник, вылезающий за карту — нормализуется.
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_view_zone", SceneID: "scene-1", ViewZone: &domain.ViewZone{X: 500, Y: 400, W: -400, H: -1000}}})
+	z := r.scenes["scene-1"].ViewZone
+	if z == nil || z.X != 100 || z.Y != 0 || z.W != 400 || z.H != 400 {
+		t.Fatalf("зона после нормализации: %+v", z)
+	}
+	if got := r.sceneFor(pl).ViewZone; got == nil || got.W != 400 {
+		t.Errorf("зона не дошла до игрока: %+v", got)
+	}
+
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "move_own_token", Token: &domain.Token{ID: "me", X: 900, Y: 50}}})
+	if tok := r.scenes["scene-1"].Tokens["me"]; tok.X != 500 || tok.Y != 50 {
+		t.Errorf("ход игрока не вжат в зону: %+v", tok)
+	}
+
+	// Вся карта — nil.
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_view_zone", SceneID: "scene-1", ViewZone: &domain.ViewZone{X: 0, Y: 0, W: 1280, H: 720}}})
+	if r.scenes["scene-1"].ViewZone != nil {
+		t.Error("зона во всю карту должна схлопнуться в nil")
+	}
+	// Снять явно.
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_view_zone", SceneID: "scene-1", ViewZone: &domain.ViewZone{X: 0, Y: 0, W: 300, H: 300}}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_view_zone", SceneID: "scene-1"}})
+	if r.scenes["scene-1"].ViewZone != nil {
+		t.Error("set_view_zone без зоны должен снимать её")
+	}
+}

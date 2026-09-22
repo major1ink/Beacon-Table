@@ -1,5 +1,7 @@
 package domain
 
+import "math"
+
 // Token — фигурка на карте. Image — необязательная ссылка на загруженную
 // картинку; если пусто — рисуем цветной кружок с подписью. Hidden — токен
 // существует в состоянии, но НЕ уходит игрокам, пока DM не снимет флаг
@@ -255,6 +257,40 @@ type Wall struct {
 	DoorSound    string  `json:"doorSound,omitempty"`
 }
 
+// ViewZone — см. SceneState.ViewZone: левый верхний угол и размер в
+// координатах карты.
+type ViewZone struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
+// Normalize приводит зону к границам карты w×h; пустая или вырожденная
+// (меньше клетки) — nil, то есть «вся карта».
+func (z *ViewZone) Normalize(w, h float64) *ViewZone {
+	if z == nil {
+		return nil
+	}
+	x0, y0 := math.Max(0, math.Min(z.X, z.X+z.W)), math.Max(0, math.Min(z.Y, z.Y+z.H))
+	x1, y1 := math.Min(w, math.Max(z.X, z.X+z.W)), math.Min(h, math.Max(z.Y, z.Y+z.H))
+	if x1-x0 < 8 || y1-y0 < 8 {
+		return nil
+	}
+	if x0 == 0 && y0 == 0 && x1 == w && y1 == h {
+		return nil
+	}
+	return &ViewZone{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
+}
+
+// Clamp вжимает точку в зону; nil — точка как есть.
+func (z *ViewZone) Clamp(x, y float64) (float64, float64) {
+	if z == nil {
+		return x, y
+	}
+	return math.Max(z.X, math.Min(x, z.X+z.W)), math.Max(z.Y, math.Min(y, z.Y+z.H))
+}
+
 // Point — вершина многоугольника FogArea.
 type Point struct {
 	X float64 `json:"x"`
@@ -479,14 +515,19 @@ type SceneState struct {
 	// service.Room.handleViewScene): она попадает в их список «Карты» и
 	// по ней можно ходить, не дожидаясь, пока ДМ её покажет. Активная сцена
 	// доступна всегда, флаг про остальные.
-	PlayerAccess bool                   `json:"playerAccess,omitempty"`
-	Tokens       map[string]*Token      `json:"tokens"`
-	NoteMarkers  map[string]*NoteMarker `json:"noteMarkers"`
-	Walls        map[string]*Wall       `json:"walls"`
-	FogAreas     map[string]*FogArea    `json:"fogAreas"`
-	Buildings    map[string]*Building   `json:"buildings"`
-	Drawings     map[string]*Drawing    `json:"drawings"`
-	Teleports    map[string]*Teleport   `json:"teleports"`
+	PlayerAccess bool `json:"playerAccess,omitempty"`
+	// ViewZone — прямоугольник карты, который видят игроки и трансляция:
+	// камера у них не выходит за него, всё снаружи отрезано, токен игрока
+	// за край не двигается (см. service.Room.applyOwnTokenMove). nil — вся
+	// карта. ДМ видит карту целиком, зона у него нарисована рамкой.
+	ViewZone    *ViewZone              `json:"viewZone,omitempty"`
+	Tokens      map[string]*Token      `json:"tokens"`
+	NoteMarkers map[string]*NoteMarker `json:"noteMarkers"`
+	Walls       map[string]*Wall       `json:"walls"`
+	FogAreas    map[string]*FogArea    `json:"fogAreas"`
+	Buildings   map[string]*Building   `json:"buildings"`
+	Drawings    map[string]*Drawing    `json:"drawings"`
+	Teleports   map[string]*Teleport   `json:"teleports"`
 }
 
 // NewScene создаёт пустую сцену с разумными дефолтами "из коробки".
@@ -558,6 +599,12 @@ func (s *SceneState) RescaleGeometry(oldW, oldH float64) {
 		}
 		d.Width *= scaleX
 	}
+	if z := s.ViewZone; z != nil {
+		z.X *= scaleX
+		z.Y *= scaleY
+		z.W *= scaleX
+		z.H *= scaleY
+	}
 	// Token.Light.Bright/Dim НЕ масштабируем: они хранятся в единицах линейки
 	// сцены (см. TokenLight), не в пикселях, — как и Grid.UnitsPerCell чуть
 	// ниже, они resolution-independent сами по себе. Пиксельный радиус для
@@ -585,6 +632,7 @@ type PublicScene struct {
 	DoorSoundURL  string                 `json:"doorSoundUrl,omitempty"`
 	GlobalLight   string                 `json:"globalLight,omitempty"`
 	PlayerAccess  bool                   `json:"playerAccess,omitempty"`
+	ViewZone      *ViewZone              `json:"viewZone,omitempty"`
 	Tokens        map[string]*Token      `json:"tokens"`
 	NoteMarkers   map[string]*NoteMarker `json:"noteMarkers"`
 	Walls         map[string]*Wall       `json:"walls"`

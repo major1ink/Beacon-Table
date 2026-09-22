@@ -62,6 +62,9 @@ type ClientMsg struct {
 	// PlayerAccess — только для "set_scene_access" (см.
 	// SceneState.PlayerAccess); SceneID — какой сцене.
 	PlayerAccess *bool `json:"playerAccess,omitempty"`
+	// ViewZone — только для "set_view_zone" (см. SceneState.ViewZone);
+	// nil/null — вся карта. SceneID — какой сцене.
+	ViewZone *ViewZone `json:"viewZone,omitempty"`
 
 	// GlobalLight — только для "set_global_light": "" | "dim" | "bright" (см.
 	// SceneState.GlobalLight). Отдельное сообщение, а не поле "update_scene" —

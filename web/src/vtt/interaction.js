@@ -775,7 +775,7 @@ export function createInteraction(ctx) {
 
   if (ctx.isDM) {
     // Единый активный инструмент вместо трёх независимых булевых флагов.
-    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'draw' | 'grid-edit' | 'ruler' | 'teleport'
+    let tool = "select"; // 'select' | 'wall' | 'building' | 'fog' | 'draw' | 'grid-edit' | 'ruler' | 'teleport' | 'view-zone'
     // ctx.tool — зеркало локальной `tool` наружу: layers/walls.js,
     // layers/manual-fog.js и layers/buildings.js читают его, чтобы решить,
     // рисовать ли кружки-ручки на вершинах (см. setTool ниже — точки
@@ -823,6 +823,28 @@ export function createInteraction(ctx) {
     // как панель пометок — "vtt:drawSettings").
     let fogChain = null;
     let fogDragFrom = null;
+    // viewZoneFrom — mousedown инструмента «view-zone» (зона показа игрокам,
+    // см. layers/view-zone.js): прямоугольник одним драгом, углы липнут к
+    // линиям сетки. Черновик — в ctx.viewZoneDraft, рисует слой.
+    let viewZoneFrom = null;
+    function zoneCorner(x, y) {
+      const grid = ctx.scene.grid;
+      if (!grid || !grid.size || grid.size <= 0) return { x, y };
+      return {
+        x: grid.offsetX + Math.round((x - grid.offsetX) / grid.size) * grid.size,
+        y: grid.offsetY + Math.round((y - grid.offsetY) / grid.size) * grid.size,
+      };
+    }
+    function zoneRectFrom(from, to) {
+      return { x: Math.min(from.x, to.x), y: Math.min(from.y, to.y), w: Math.abs(to.x - from.x), h: Math.abs(to.y - from.y) };
+    }
+    function clearViewZoneDraft() {
+      viewZoneFrom = null;
+      if (ctx.viewZoneDraft) {
+        ctx.viewZoneDraft = null;
+        ctx.dirty.viewZone = true;
+      }
+    }
     let fogShape = "poly";
     document.addEventListener("vtt:fogSettings", (e) => {
       fogShape = (e.detail && e.detail.shape) || "poly";
@@ -924,6 +946,7 @@ export function createInteraction(ctx) {
       buildingChain = null;
       fogChain = null;
       fogDragFrom = null;
+      clearViewZoneDraft();
       cancelDraw();
       setSelectedDrawing(null);
       gridDragStart = null;
@@ -972,6 +995,7 @@ export function createInteraction(ctx) {
       buildingChain = null;
       fogChain = null;
       fogDragFrom = null;
+      clearViewZoneDraft();
       gridDragStart = null;
       marquee = null;
       rulerFrom = null;
@@ -1231,6 +1255,10 @@ export function createInteraction(ctx) {
         if (vertex && !isLocked(ctx.scene.buildings[vertex.buildingId])) draggingBuildingPoint = vertex;
         return;
       }
+      if (tool === "view-zone") {
+        viewZoneFrom = zoneCorner(x, y);
+        return;
+      }
       if (tool === "fog") {
         if (fogChain) {
           // Цепочка многоугольника уже идёт — точки добавляются по mouseup
@@ -1452,6 +1480,12 @@ export function createInteraction(ctx) {
       }
       if (tool === "fog" && fogDragFrom) {
         paintFogPreview(fogDragPoints(fogDragFrom, fogSnappedPoint(x, y)), true, null);
+        return;
+      }
+      if (tool === "view-zone" && viewZoneFrom) {
+        ctx.viewZoneDraft = zoneRectFrom(viewZoneFrom, zoneCorner(x, y));
+        ctx.dirty.viewZone = true;
+        ctx.render();
         return;
       }
 
@@ -1784,6 +1818,19 @@ export function createInteraction(ctx) {
         preview.clear();
         return;
       }
+      if (tool === "view-zone" && viewZoneFrom) {
+        const up = mousePos(e);
+        const rect = zoneRectFrom(viewZoneFrom, zoneCorner(up.x, up.y));
+        clearViewZoneDraft();
+        // Щелчок без протяжки — не зона: сервер бы и сам отбросил
+        // вырожденную (см. domain.ViewZone.Normalize), но и слать незачем.
+        if (rect.w >= 8 && rect.h >= 8) {
+          ctx.send({ type: "set_view_zone", sceneId: ctx.scene.id, viewZone: rect });
+        }
+        setTool("select");
+        document.dispatchEvent(new CustomEvent("vtt:viewZoneDone"));
+        return;
+      }
       // Многоугольник — как здание: клик за кликом, коммит одним сообщением
       // по замыканию на стартовую точку (см. fogCloseTarget) или по
       // двойному клику (dblclick ниже). Первый клик — только при зажатом
@@ -1890,6 +1937,11 @@ export function createInteraction(ctx) {
         fogChain = null;
         fogDragFrom = null;
         preview.clear();
+        aborted = true;
+      }
+      if (tool === "view-zone" && viewZoneFrom) {
+        clearViewZoneDraft();
+        ctx.render();
         aborted = true;
       }
       if (tool === "ruler" && rulerFrom) {

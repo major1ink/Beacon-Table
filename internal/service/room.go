@@ -936,6 +936,7 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 		DoorSoundURL:  sc.DoorSoundURL,
 		GlobalLight:   sc.GlobalLight,
 		PlayerAccess:  sc.PlayerAccess,
+		ViewZone:      sc.ViewZone,
 		Tokens:        tokens,
 		NoteMarkers:   noteMarkers,
 		Walls:         sc.Walls,
@@ -1155,8 +1156,9 @@ func (r *Room) applyOwnTokenMove(c RoomClient, msg domain.ClientMsg) {
 	if !r.turnAllowsTokenMove(existing.ID) {
 		return // бой идёт, но сейчас не его ход — двигаться нельзя, см. turnAllowsTokenMove
 	}
-	existing.X = msg.Token.X
-	existing.Y = msg.Token.Y
+	// За зону показа (SceneState.ViewZone) игрок не выходит: клиент и сам
+	// не даст утащить, но верить ему нельзя.
+	existing.X, existing.Y = r.scene.ViewZone.Clamp(msg.Token.X, msg.Token.Y)
 	r.markDirty(r.scene.ID)
 	r.broadcastAll()
 	r.noticeTeleport(c.PlayerName(), existing)
@@ -2788,6 +2790,14 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 
 	case "switch_scene":
 		r.switchScene(msg.SceneID)
+
+	case "set_view_zone":
+		s, ok := r.scenes[msg.SceneID]
+		if !ok {
+			return
+		}
+		s.ViewZone = msg.ViewZone.Normalize(s.Width, s.Height)
+		r.markDirty(s.ID)
 
 	case "set_scene_access":
 		s, ok := r.scenes[msg.SceneID]

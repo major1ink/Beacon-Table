@@ -183,5 +183,8 @@ function initZoomHud() {
   };
   document.addEventListener("fullscreenchange", () => {
     fullscreenBtn.classList.toggle("active", !!document.fullscreenElement);
+    // Развернули на весь экран — зона показа (или вся карта) заново
+    // вписывается в окно целиком, а не остаётся с прежним паном/зумом.
+    document.dispatchEvent(new CustomEvent("vtt:resetView"));
   });
 }

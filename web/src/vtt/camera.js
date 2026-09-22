@@ -22,14 +22,27 @@ export function worldSize(scene) {
   return { w: (scene && scene.width) || DEFAULT_WORLD_W, h: (scene && scene.height) || DEFAULT_WORLD_H };
 }
 
-export function createCamera(scene) {
+// viewBounds — что камера считает «всей картой»: у ДМ это холст целиком, у
+// игрока и трансляции — зона показа (domain.SceneState.ViewZone), если ДМ
+// её задал. Слои рисуют по worldSize как раньше — зона режет их маской
+// (см. layers/view-zone.js), а камера вписывает и не выпускает за неё.
+// scene.viewBounds проставляет net.js по роли, чтобы чистые функции здесь
+// не знали про роли вовсе.
+export function viewBounds(scene) {
+  const b = scene && scene.viewBounds;
+  if (b && b.w > 0 && b.h > 0) return b;
   const ws = worldSize(scene);
-  return { zoom: 1, x: ws.w / 2, y: ws.h / 2 };
+  return { x: 0, y: 0, w: ws.w, h: ws.h };
+}
+
+export function createCamera(scene) {
+  const b = viewBounds(scene);
+  return { zoom: 1, x: b.x + b.w / 2, y: b.y + b.h / 2 };
 }
 
 export function getTransform(screenW, screenH, scene, camera) {
-  const ws = worldSize(scene);
-  const baseScale = Math.min(screenW / ws.w, screenH / ws.h) || 1;
+  const b = viewBounds(scene);
+  const baseScale = Math.min(screenW / b.w, screenH / b.h) || 1;
   const scale = baseScale * camera.zoom;
   return {
     scale,
@@ -73,8 +86,21 @@ export function zoomAt(camera, sx, sy, factor, screenW, screenH, scene) {
 }
 
 export function resetCamera(camera, scene) {
-  const ws = worldSize(scene);
+  const b = viewBounds(scene);
   camera.zoom = 1;
-  camera.x = ws.w / 2;
-  camera.y = ws.h / 2;
+  camera.x = b.x + b.w / 2;
+  camera.y = b.y + b.h / 2;
+}
+
+// clampCamera — не выпускать вид за зону показа (только когда она задана:
+// без зоны ДМ и игрок панорамируют свободно, как раньше). Если экран шире
+// зоны по оси — центр по этой оси, иначе край вида не дальше края зоны.
+export function clampCamera(camera, screenW, screenH, scene) {
+  const b = scene && scene.viewBounds;
+  if (!b || !(b.w > 0) || !(b.h > 0)) return;
+  const { scale } = getTransform(screenW, screenH, scene, camera);
+  const halfW = screenW / scale / 2;
+  const halfH = screenH / scale / 2;
+  camera.x = halfW * 2 >= b.w ? b.x + b.w / 2 : Math.max(b.x + halfW, Math.min(camera.x, b.x + b.w - halfW));
+  camera.y = halfH * 2 >= b.h ? b.y + b.h / 2 : Math.max(b.y + halfH, Math.min(camera.y, b.y + b.h - halfH));
 }

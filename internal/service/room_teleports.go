@@ -143,8 +143,7 @@ func (r *Room) handleTeleportTokens(msg domain.ClientMsg) {
 				}
 			}
 		}
-		tok.X = at.x + float64(moved%4)*cell
-		tok.Y = at.y + float64(moved/4)*cell
+		tok.X, tok.Y = target.ViewZone.Clamp(at.x+float64(moved%4)*cell, at.y+float64(moved/4)*cell)
 		target.Tokens[id] = tok
 		moved++
 	}

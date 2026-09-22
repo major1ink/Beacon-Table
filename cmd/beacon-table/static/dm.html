@@ -633,6 +633,15 @@
       box-shadow: var(--shadow-float); font-size: 13px; align-items: center; gap: 7px;
     }
     #gridEditDone.open { display: flex; }
+    /* Плашка инструмента «зона для игроков» — та же, что у редактора сетки. */
+    #viewZoneHint {
+      display: none; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      z-index: 15; background: var(--accent); color: #fff; padding: 10px 18px; border-radius: var(--radius-pill);
+      box-shadow: var(--shadow-float); font-size: 13px; align-items: center; gap: 7px;
+    }
+    #viewZoneHint.open { display: flex; }
+    .view-zone-actions { display: flex; gap: 6px; }
+    .view-zone-actions .tool-btn { width: auto; flex: 1 1 0; }
 
     /* ---- раздел "Аккаунты" (в панели) ---- */
     .account-row { padding: 10px; border-radius: 12px; background: var(--surface); margin-bottom: 6px; font-size: 12px; }
@@ -1084,7 +1093,7 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BMaxjsTR.js"></script>
+  <script type="module" crossorigin src="/assets/dm-Bvpv7QH9.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/icons-CYBJOLER.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
@@ -1094,7 +1103,7 @@
   <link rel="modulepreload" crossorigin href="/assets/combatant-card-CosvOH1r.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-Bsd-tOyf.js">
+  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-D1w3N1DO.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-CjVUb3Fq.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-links-CVsNIVkx.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
@@ -1106,7 +1115,7 @@
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-BSRVhu9g.js">
   <link rel="modulepreload" crossorigin href="/assets/combat-panel-DQ5DSTBl.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-kZcDa_zZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-Bj7Ti488.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
   <link rel="modulepreload" crossorigin href="/assets/fullscreen-qxdhoL2b.js">
   <link rel="modulepreload" crossorigin href="/assets/item-picker-AjQgHFIW.js">
@@ -1206,6 +1215,13 @@
               <div id="assetTableWrap" class="asset-list"></div>
               <div class="field"><label>Загрузить новую</label><input type="file" id="bgUpload" accept="image/*,video/mp4,video/webm" /></div>
               <div class="hint">Поддерживаются mp4/webm — анимированный фон карты, зациклен, звук из видео включается по клику «Включить звук» вместе с амбиентом.</div>
+              <div class="modal-section-title">Зона для игроков</div>
+              <div id="viewZoneSummary" class="hint">Вся карта</div>
+              <div class="view-zone-actions">
+                <button id="viewZonePickBtn" class="tool-btn" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect x="4" y="5" width="16" height="14" rx="1"/></svg> Выделить на карте</button>
+                <button id="viewZoneClearBtn" class="tool-btn" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/></svg> Вся карта</button>
+              </div>
+              <div class="hint">Игроки и трансляция видят только эту область: камера за неё не выходит, токены игроков — тоже. По умолчанию — вся картинка фона.</div>
             </div>
 
             <div class="modal-tab-panel" data-panel="audio">
@@ -1737,6 +1753,7 @@
     <div>Сессия истекла или недействительна. Сейчас перекинем на вход…</div>
   </div>
 
+  <div id="viewZoneHint">Протяни прямоугольник по карте — это увидят игроки. Esc — отмена</div>
   <button id="gridEditDone"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg> Готово — красный квадрат тащит сетку, его край меняет размер клетки</button>
 
 </body>

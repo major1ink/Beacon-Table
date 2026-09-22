@@ -69,6 +69,9 @@ export function createNet(ctx, audio) {
       if (!nextScene.drawings) nextScene.drawings = {};
       if (!nextScene.teleports) nextScene.teleports = {};
       if (!nextScene.grid) nextScene.grid = { size: 0, offsetX: 0, offsetY: 0 };
+      // Зона показа ограничивает камеру только у игрока и трансляции; ДМ
+      // видит карту целиком, у него зона — рамка (см. camera.js: viewBounds).
+      if (!ctx.isDM && nextScene.viewZone) nextScene.viewBounds = nextScene.viewZone;
       diffAndMarkDirty(ctx.dirty, ctx.scene, nextScene);
       ctx.scene = nextScene;
       ctx.mapStartedAt = data.mapStartedAt;

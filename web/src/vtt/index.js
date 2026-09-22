@@ -1,6 +1,6 @@
 import { Application, Container } from "pixi.js";
 import { createDirtyFlags } from "./dirty.js";
-import { createCamera, applyCameraTransform, resetCamera, worldSize, canvasPos, screenToWorld } from "./camera.js";
+import { createCamera, applyCameraTransform, resetCamera, clampCamera, worldSize, canvasPos, screenToWorld } from "./camera.js";
 import { createAudio } from "./audio.js";
 import { createSideMenu } from "./side-menu.js";
 import { createCombatBar } from "./combat-bar.js";
@@ -19,6 +19,7 @@ import { createBuildingsLayer } from "./layers/buildings.js";
 import { createManualFogLayer } from "./layers/manual-fog.js";
 import { createDrawingsLayer } from "./layers/drawings.js";
 import { createFxLayer } from "./layers/fx.js";
+import { createViewZoneLayer } from "./layers/view-zone.js";
 import { installVideoUploaderFix } from "./gl-video-uploader.js";
 
 // initVTT — единая точка входа движка для DM/TV/Player страниц. Публичный
@@ -86,7 +87,13 @@ export async function initVTT({ canvasId, role, playerId }) {
     lightEditActive: false,
   };
 
-  ctx.applyCameraTransform = () => applyCameraTransform(world, app.screen.width, app.screen.height, ctx.scene, ctx.camera);
+  // Единственная точка применения камеры — здесь же и клэмп по зоне показа
+  // (см. camera.js: clampCamera): пан, зум, пинч, фокус на объекте и сброс
+  // вида идут через неё, отдельно ограничивать каждый жест не нужно.
+  ctx.applyCameraTransform = () => {
+    clampCamera(ctx.camera, app.screen.width, app.screen.height, ctx.scene);
+    return applyCameraTransform(world, app.screen.width, app.screen.height, ctx.scene, ctx.camera);
+  };
 
   // Pixi снимает размер обёртки РОВНО ОДИН РАЗ — в сеттере resizeTo внутри
   // app.init() — и дальше пересчитывает его только по window.resize (см.
@@ -148,6 +155,9 @@ export async function initVTT({ canvasId, role, playerId }) {
   // сейчас, — стрелка «обходим слева» бесполезна, если её съедает туман.
   const drawings = createDrawingsLayer(ctx);
   const fx = createFxLayer(ctx);
+  // viewZone — у ДМ рамка зоны показа поверх всего, у игрока и трансляции
+  // — маска мира (см. layers/view-zone.js).
+  const viewZone = createViewZoneLayer(ctx);
   world.addChild(
     background.container,
     grid.container,
@@ -161,11 +171,12 @@ export async function initVTT({ canvasId, role, playerId }) {
     buildings.container,
     manualFog.container,
     drawings.container,
-    fx.container
+    fx.container,
+    viewZone.container
   );
   ctx.spawnFx = fx.spawnFx;
 
-  const layers = [background, grid, teleports, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, drawings, fx];
+  const layers = [background, grid, teleports, tokens, noteMarkers, walls, doors, windows, visionFog, buildings, manualFog, drawings, fx, viewZone];
 
   // render — вызывается на каждый WS-снапшот и на каждое локальное
   // взаимодействие (драг токена/камера/инструменты ДМ), НЕ на каждый кадр
@@ -189,6 +200,7 @@ export async function initVTT({ canvasId, role, playerId }) {
     ctx.dirty.drawings = false;
     ctx.dirty.grid = false;
     ctx.dirty.background = false;
+    ctx.dirty.viewZone = false;
   };
 
   const net = createNet(ctx, audio);
