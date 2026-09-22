@@ -2288,15 +2288,23 @@ settingsTabButtons.forEach((btn) => {
 
 // ---- режим обучения (раздел «Настройки → Стол») ----
 // Тур по столу для нового ведущего (см. web/src/tutorial.js, шаги — в
-// tutorial-dm.js). Включён ли — лежит на сервере (см. api.js:
-// fetchTutorial): вопрос «показать?» задаёт экран миров при первом входе,
-// а здесь тумблер, которым тур выключают или проходят заново. Прогресс
-// (номер шага) — в localStorage под ключом TUTORIAL_KEY.
+// tutorial-dm.js) плюс разовые подсказки к жестам (showTutorialHint).
+// Состояние лежит на сервере (см. api.js: fetchTutorial): "on" — тур ещё
+// не пройден, "done" — пройден, режим включён ради подсказок, "off" —
+// выключен. Вопрос «показать?» задаёт экран миров при первом входе; здесь
+// тумблер: выключить или пройти тур заново. Пройденный тур режим НЕ
+// выключает — подсказки нужны как раз после него. Прогресс (номер шага) —
+// в localStorage под ключом TUTORIAL_KEY.
 const TUTORIAL_KEY = "dm";
 const tutorialToggle = document.getElementById("tutorialToggle");
-// tutorialOn — включено ли обучение сейчас; синхронно с тумблером, но
-// нужно и там, где тумблера нет под рукой (см. showTutorialHint).
+// tutorialOn — включён ли режим ("on" или "done"); синхронно с тумблером,
+// но нужно и там, где тумблера нет под рукой (см. showTutorialHint).
 let tutorialOn = false;
+
+function applyTutorialState(state) {
+  tutorialOn = state === "on" || state === "done";
+  tutorialToggle.checked = tutorialOn;
+}
 
 // showTutorialHint — разовая подсказка о жесте («теперь потяни за значок»)
 // после пункта меню. Только пока обучение включено и только в первый раз:
@@ -2310,14 +2318,13 @@ function showTutorialHint(key, text, title) {
 function runDmTour() {
   startTour(dmTourSteps(), {
     key: TUTORIAL_KEY,
-    onFinish: () => setTutorialState("off"),
-    onSkip: () => setTutorialState("off"),
+    onFinish: () => setTutorialState("done"),
+    onSkip: () => setTutorialState("done"),
   });
 }
 
 async function setTutorialState(state) {
-  tutorialOn = state === "on";
-  tutorialToggle.checked = tutorialOn;
+  applyTutorialState(state);
   try {
     await saveTutorial(state);
   } catch (err) {
@@ -2328,8 +2335,7 @@ async function setTutorialState(state) {
 async function renderTutorialToggle() {
   try {
     const { state } = await fetchTutorial();
-    tutorialOn = state === "on";
-    tutorialToggle.checked = tutorialOn;
+    applyTutorialState(state);
   } catch (err) {
     console.error("режим обучения: не удалось прочитать состояние:", err);
   }
@@ -2352,9 +2358,8 @@ async function initTutorial() {
   if (isDemoGuest) return;
   try {
     const { state } = await fetchTutorial();
-    tutorialOn = state === "on";
-    tutorialToggle.checked = tutorialOn;
-    if (tutorialOn) runDmTour();
+    applyTutorialState(state);
+    if (state === "on") runDmTour();
   } catch (err) {
     console.error("режим обучения: не удалось прочитать состояние:", err);
   }

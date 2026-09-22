@@ -2,16 +2,28 @@ package domain
 
 // Состояния режима обучения (см. service.TutorialService). Одно на сервер,
 // а не на аккаунт: обучение — для ведущего, а ДМ на установке один.
+//
+// Режим — это тур по столу плюс разовые подсказки к жестам («теперь потяни
+// за значок»). Пройденный тур режим не выключает: подсказки нужны как раз
+// после него, когда человек впервые делает то, о чём тур только рассказал.
+// Выключает режим только сам ведущий, тумблером в настройках.
 const (
 	// TutorialUnset — ведущего ещё не спрашивали, нужно ли обучение:
 	// экран миров задаст вопрос при первом входе.
 	TutorialUnset = ""
-	TutorialOn    = "on"
-	TutorialOff   = "off"
+	// TutorialOn — включено, тур ещё не пройден: стол показывает его.
+	TutorialOn = "on"
+	// TutorialDone — включено, тур пройден (или пропущен): только подсказки.
+	TutorialDone = "done"
+	TutorialOff  = "off"
 )
 
 // ValidTutorialState — значение пришло из формы, а не из кода: незнакомую
 // строку в хранилище не пускаем.
 func ValidTutorialState(s string) bool {
-	return s == TutorialUnset || s == TutorialOn || s == TutorialOff
+	switch s {
+	case TutorialUnset, TutorialOn, TutorialDone, TutorialOff:
+		return true
+	}
+	return false
 }

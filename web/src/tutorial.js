@@ -184,7 +184,8 @@ export function clearTourProgress(key) {
 //   key       — под каким именем хранить прогресс (свой у каждой страницы);
 //               без ключа тур каждый раз идёт с первого шага.
 //   onFinish  — дошли до конца («Готово»).
-//   onSkip    — «Пропустить обучение».
+//   onSkip    — «Пропустить тур». Именно тур, не режим: подсказки к жестам
+//               остаются, выключает их только тумблер в настройках.
 // Возвращает {next, prev, stop, index}. Повторный запуск на той же странице
 // сначала останавливает прежний тур.
 let active = null;
@@ -293,7 +294,7 @@ export function startTour(steps, { key, onFinish, onSkip } = {}) {
     const skipBtn = document.createElement("button");
     skipBtn.type = "button";
     skipBtn.className = "bt-tour-skip";
-    skipBtn.textContent = "Пропустить обучение";
+    skipBtn.textContent = "Пропустить тур";
     skipBtn.onclick = skip;
     const prevBtn = document.createElement("button");
     prevBtn.type = "button";

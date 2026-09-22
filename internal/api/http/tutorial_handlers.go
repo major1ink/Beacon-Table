@@ -8,7 +8,8 @@ import (
 	"beacon-table/internal/domain"
 )
 
-// handleTutorialGet — GET /api/tutorial (только ДМ): {"state": ""|"on"|"off"}.
+// handleTutorialGet — GET /api/tutorial (только ДМ): {"state":
+// ""|"on"|"done"|"off"} (см. domain.Tutorial*).
 // Пусто — ведущего ещё не спрашивали, и экран миров задаст вопрос сам
 // (см. web/src/pages/worlds.js).
 func (a *API) handleTutorialGet(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +28,8 @@ func (a *API) handleTutorialGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"state": state})
 }
 
-// handleTutorialSet — PUT /api/tutorial (только ДМ): {"state": "on"|"off"}.
+// handleTutorialSet — PUT /api/tutorial (только ДМ): {"state":
+// "on"|"done"|"off"}.
 func (a *API) handleTutorialSet(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireOwner(w, r); !ok {
 		return

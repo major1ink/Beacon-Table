@@ -120,8 +120,9 @@ export async function saveServerSettings(values) {
 }
 
 // ---- режим обучения (только ДМ) ----
-// fetchTutorial — {state: ""|"on"|"off"}: пусто — ведущего ещё не спрашивали
-// (см. internal/api/http/tutorial_handlers.go, web/src/tutorial.js).
+// fetchTutorial — {state: ""|"on"|"done"|"off"}: пусто — ведущего ещё не
+// спрашивали, "on" — показать тур, "done" — тур пройден, режим включён ради
+// разовых подсказок (см. internal/domain/tutorial.go, web/src/tutorial.js).
 export async function fetchTutorial() {
   return apiFetch("/api/tutorial");
 }

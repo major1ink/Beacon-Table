@@ -46,4 +46,9 @@ func TestTutorialRejectsUnknownState(t *testing.T) {
 	if !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("SetState(maybe): ожидалась ErrValidation, получено %v", err)
 	}
+	// Пройденный тур — законное состояние: режим остаётся включённым ради
+	// подсказок, пока ведущий не выключит его сам.
+	if err := svc.SetState(ctx, domain.TutorialDone); err != nil {
+		t.Fatalf("SetState(done): %v", err)
+	}
 }

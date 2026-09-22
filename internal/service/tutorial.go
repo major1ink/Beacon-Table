@@ -17,6 +17,8 @@ const tutorialStateKey = "tutorial"
 // запущенному миру не привязан.
 type TutorialService interface {
 	// State — одно из domain.Tutorial*; пусто, пока ведущего не спросили.
+	// Стол читает его на каждом заходе: "on" — показать тур, "done" —
+	// только подсказки, "off" — ничего.
 	State(ctx context.Context) (string, error)
 	SetState(ctx context.Context, state string) error
 }

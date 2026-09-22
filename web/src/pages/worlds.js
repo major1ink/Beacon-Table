@@ -331,5 +331,7 @@ async function initTutorial() {
     return;
   }
   if (state !== "on") return;
-  startTour(worldsTourSteps(), { onSkip: () => saveTutorial("off").catch(() => {}) });
+  // Пропуск здесь — пропуск всего тура, включая стол; режим (подсказки к
+  // жестам) остаётся, см. pages/dm.js.
+  startTour(worldsTourSteps(), { onSkip: () => saveTutorial("done").catch(() => {}) });
 }
