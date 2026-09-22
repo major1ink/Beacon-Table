@@ -65,6 +65,16 @@ type ClientMsg struct {
 	// ViewZone — только для "set_view_zone" (см. SceneState.ViewZone);
 	// nil/null — вся карта. SceneID — какой сцене.
 	ViewZone *ViewZone `json:"viewZone,omitempty"`
+	// BuildingName/Floor — только для "set_scene_building" (см.
+	// SceneState.Building; Building выше занято контуром здания на карте):
+	// пустое имя — вывести сцену из здания. Floor — указатель, чтобы «0»
+	// отличался от «не прислали».
+	BuildingName string `json:"buildingName,omitempty"`
+	Floor        *int   `json:"floor,omitempty"`
+	// "move_tokens_to_scene" — TokenIDs (объявлен у телепортов выше) со
+	// сцены отправителя на SceneID: ПКМ «Переместить на этаж…». Токены
+	// встают на те же координаты (этажи одного здания обычно совпадают
+	// планом), вжатые в карту и зону показа.
 
 	// GlobalLight — только для "set_global_light": "" | "dim" | "bright" (см.
 	// SceneState.GlobalLight). Отдельное сообщение, а не поле "update_scene" —

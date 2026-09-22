@@ -62,7 +62,10 @@ export function mountScenePicker(panelEl, { send }) {
       };
       list.appendChild(row);
     }
-    back.hidden = !activeId || viewId === activeId;
+    // «Вернуться» — только если ушёл сам: этаж здания, где стоит твой токен
+    // (см. sceneOf в internal/service/room.go), в списке не значится, и
+    // возвращаться с него некуда — стол и так показывает твой этаж.
+    back.hidden = !activeId || viewId === activeId || !scenes.some((s) => s.id === viewId);
     // Одна сцена и она активная — выбирать нечего.
     panelEl.host.style.display = scenes.length > 1 ? "" : "none";
   }

@@ -979,3 +979,78 @@ func TestMapPlaylist(t *testing.T) {
 		t.Fatalf("soundboard Foundry (mode -1) не распознан: %+v", sb)
 	}
 }
+
+// TestMapScenesLevels — сцена с этажами модуля Levels раскладывается в
+// здание: земля берёт фон сцены, верх — свою плитку (и холст по ней), стены,
+// свет и токены разбираются по высотам.
+func TestMapScenesLevels(t *testing.T) {
+	_, assets := testModule(t)
+	doc := Doc{
+		"name":       "Башня",
+		"width":      1000,
+		"height":     800,
+		"grid":       map[string]any{"type": 1, "size": 100},
+		"flags":      map[string]any{"levels": map[string]any{"sceneLevels": []any{[]any{"10", "20", "Второй"}, []any{"0", "10", ""}}}},
+		"background": map[string]any{"src": "/uploads/maps/ground.webp"},
+		"tiles": []any{
+			map[string]any{"x": 100, "y": 50, "width": 600, "height": 400, "texture": map[string]any{"src": "/uploads/maps/floor2.webp"}, "flags": map[string]any{"levels": map[string]any{"rangeBottom": 10, "rangeTop": 20}}},
+			map[string]any{"x": 0, "y": 0, "width": 50, "height": 50, "texture": map[string]any{"src": "maps/deco.webp"}},
+		},
+		"walls": []any{
+			map[string]any{"c": []any{300, 200, 400, 200}}, // без высоты — на всех этажах
+			map[string]any{"c": []any{300, 300, 400, 300}, "flags": map[string]any{"wall-height": map[string]any{"bottom": 10, "top": 20}}},
+			map[string]any{"c": []any{300, 400, 400, 400}, "flags": map[string]any{"wall-height": map[string]any{"bottom": 0, "top": 10}}},
+		},
+		"lights": []any{
+			map[string]any{"x": 200, "y": 200, "config": map[string]any{"bright": 10, "dim": 20}, "flags": map[string]any{"levels": map[string]any{"rangeBottom": 10, "rangeTop": 20}}},
+		},
+		"tokens": []any{
+			map[string]any{"x": 300, "y": 300, "width": 1, "height": 1, "name": "Страж", "elevation": 0},
+			map[string]any{"x": 500, "y": 500, "width": 1, "height": 1, "name": "Маг", "elevation": 12},
+		},
+	}
+
+	scenes := MapScenes(context.Background(), doc, assets, nil)
+	if len(scenes) != 2 {
+		t.Fatalf("ожидалось два этажа, получено %d", len(scenes))
+	}
+	ground, upper := scenes[0], scenes[1]
+	if ground.Building != "Башня" || upper.Building != "Башня" || ground.Floor != 0 || upper.Floor != 1 {
+		t.Errorf("здание/этажи: %q/%d, %q/%d", ground.Building, ground.Floor, upper.Building, upper.Floor)
+	}
+	if ground.Name != "Башня — Этаж 0" || upper.Name != "Башня — Второй" {
+		t.Errorf("имена этажей: %q, %q", ground.Name, upper.Name)
+	}
+	if ground.Width != 1000 || ground.MapURL == "" {
+		t.Errorf("земля должна взять фон сцены целиком: %vx%v %q", ground.Width, ground.Height, ground.MapURL)
+	}
+	if upper.Width != 600 || upper.Height != 400 || upper.MapURL == "" || upper.MapURL == ground.MapURL {
+		t.Errorf("верх должен взять плитку: %vx%v %q", upper.Width, upper.Height, upper.MapURL)
+	}
+	if len(ground.Walls) != 2 || len(upper.Walls) != 2 {
+		t.Errorf("стены по этажам: земля %d, верх %d (ожидалось 2 и 2)", len(ground.Walls), len(upper.Walls))
+	}
+	// Стена верхнего этажа сдвинута к углу плитки (100, 50).
+	for _, w := range upper.Walls {
+		if w.X1 == 200 && w.Y1 == 250 {
+			goto shifted
+		}
+	}
+	t.Error("стены верхнего этажа не сдвинуты к углу плитки")
+shifted:
+	countTokens := func(s *domain.SceneState, light bool) int {
+		n := 0
+		for _, tok := range s.Tokens {
+			if tok.LightOnly == light {
+				n++
+			}
+		}
+		return n
+	}
+	if countTokens(ground, false) != 1 || countTokens(upper, false) != 1 {
+		t.Errorf("токены по высоте: земля %d, верх %d", countTokens(ground, false), countTokens(upper, false))
+	}
+	if countTokens(ground, true) != 0 || countTokens(upper, true) != 1 {
+		t.Errorf("свет по высоте: земля %d, верх %d", countTokens(ground, true), countTokens(upper, true))
+	}
+}

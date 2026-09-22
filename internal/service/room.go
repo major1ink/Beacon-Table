@@ -572,6 +572,13 @@ func (r *Room) handleInbound(im inboundMsg) {
 	case "view_scene":
 		r.handleViewScene(im.from, im.msg.SceneID)
 		return
+	case "teleport_tokens":
+		// Своя ветка: нужен отправитель — внутри здания ДМ переезжает
+		// взглядом на этаж назначения (см. room_teleports.go).
+		r.handleTeleportTokens(im.from, im.msg)
+		r.broadcastAll()
+		r.broadcastSceneList()
+		return
 	case "get_scene":
 		// точечный запрос: DM открыл "Настроить сцену" для НЕактивной
 		// сцены через шестерёнку в списке — её данных (фон/размер/сетка)
@@ -886,14 +893,74 @@ func (r *Room) Shutdown() {
 }
 
 // sceneOf — сцена, которую видит клиент: открытая им у себя (viewing), если
-// такая ещё есть, иначе активная.
+// такая ещё есть; у игрока без своего выбора — этаж здания активной сцены,
+// где стоит его токен (см. floorOfPlayer); иначе активная.
 func (r *Room) sceneOf(c RoomClient) *domain.SceneState {
 	if id := r.viewing[c]; id != "" {
 		if s, ok := r.scenes[id]; ok {
 			return s
 		}
 	}
-	return r.scenes[r.currentSceneID]
+	active := r.scenes[r.currentSceneID]
+	if c.Role() == domain.RolePlayer {
+		if floor := r.floorOfPlayer(active, c.PlayerID()); floor != nil {
+			return floor
+		}
+	}
+	return active
+}
+
+// floorOfPlayer — этаж здания active, на котором стоит токен игрока, если
+// это не сама active: партия разошлась по этажам — каждый видит свой. Токен
+// на активной сцене имеет приоритет; вне здания — nil.
+func (r *Room) floorOfPlayer(active *domain.SceneState, playerID string) *domain.SceneState {
+	if active == nil || active.Building == "" || playerID == "" {
+		return nil
+	}
+	if ownsTokenOn(active, playerID) {
+		return nil
+	}
+	for _, id := range r.sceneOrder {
+		s := r.scenes[id]
+		if s != active && s.SameBuilding(active) && ownsTokenOn(s, playerID) {
+			return s
+		}
+	}
+	return nil
+}
+
+func ownsTokenOn(s *domain.SceneState, playerID string) bool {
+	for _, t := range s.Tokens {
+		if t.OwnerID == playerID {
+			return true
+		}
+	}
+	return false
+}
+
+// ambientOf — трек сцены, а внутри здания у сцены без своего трека — трек
+// нулевого (или самого нижнего) этажа: по башне ходят под одну музыку.
+func (r *Room) ambientOf(s *domain.SceneState) (string, float64) {
+	if s == nil {
+		return "", 0
+	}
+	if s.AmbientURL != "" || s.Building == "" {
+		return s.AmbientURL, s.AmbientVolume
+	}
+	var ground *domain.SceneState
+	for _, id := range r.sceneOrder {
+		o := r.scenes[id]
+		if !o.SameBuilding(s) || o.AmbientURL == "" {
+			continue
+		}
+		if ground == nil || o.Floor == 0 || (ground.Floor != 0 && o.Floor < ground.Floor) {
+			ground = o
+		}
+	}
+	if ground == nil {
+		return "", 0
+	}
+	return ground.AmbientURL, ground.AmbientVolume
 }
 
 // sceneFor — ключевое место фильтрации: каждый клиент получает свою версию
@@ -960,10 +1027,10 @@ func (r *Room) sceneFor(c RoomClient) *domain.PublicScene {
 // что в scene: ДМ, открывший у себя следующую карту, должен слышать ту же
 // музыку, что и стол, а не музыку карты, в которую подглядывает.
 func (r *Room) snapshotPayload(c RoomClient) map[string]any {
-	active := r.scenes[r.currentSceneID]
+	ambientURL, ambientVolume := r.ambientOf(r.scenes[r.currentSceneID])
 	return map[string]any{
 		"type": "snapshot", "scene": r.sceneFor(c),
-		"ambientUrl": active.AmbientURL, "ambientVolume": active.AmbientVolume,
+		"ambientUrl": ambientURL, "ambientVolume": ambientVolume,
 		"ambientStartedAt": r.ambientStartedAtMs, "mapStartedAt": r.mapStartedAtMs,
 		"serverNow": time.Now().UnixMilli(),
 	}
@@ -1054,7 +1121,7 @@ func (r *Room) broadcastSceneList() {
 		if !ok {
 			continue
 		}
-		e := domain.SceneListEntry{ID: s.ID, Name: s.Name, ViewerCount: viewers[id], PlayerAccess: s.PlayerAccess}
+		e := domain.SceneListEntry{ID: s.ID, Name: s.Name, ViewerCount: viewers[id], PlayerAccess: s.PlayerAccess, Building: s.Building, Floor: s.Floor}
 		all = append(all, e)
 		if r.playerMayView(id) {
 			forPlayers = append(forPlayers, e)
@@ -1411,12 +1478,17 @@ func (r *Room) switchScene(id string) {
 	if !ok {
 		return
 	}
+	prevURL, _ := r.ambientOf(r.scenes[r.currentSceneID])
 	r.currentSceneID = id
 	r.scene = s
-	clear(r.viewing)                              // «показать игрокам» — все на неё, и ДМ, что открывал другую, тоже
-	r.dirty = true                                // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
-	r.ambientStartedAtMs = time.Now().UnixMilli() // новая активная сцена — амбиент (если есть) стартует заново у всех
-	r.mapStartedAtMs = time.Now().UnixMilli()     // и видео-фон (если есть) — аналогично
+	clear(r.viewing) // «показать игрокам» — все на неё, и ДМ, что открывал другую, тоже
+	r.dirty = true   // метаданные (currentSceneId) поменялись, даже если сама сцена — нет
+	// Новая активная сцена — амбиент стартует заново у всех; кроме перехода
+	// по этажам под один трек (см. ambientOf) — музыку не дёргаем.
+	if nextURL, _ := r.ambientOf(s); nextURL != prevURL {
+		r.ambientStartedAtMs = time.Now().UnixMilli()
+	}
+	r.mapStartedAtMs = time.Now().UnixMilli() // видео-фон (если есть) — заново
 }
 
 // handleViewScene — открыть сцену только у себя (см. viewing): игроки и
@@ -2593,9 +2665,6 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		r.handleTeleportUpsert(msg.Teleport)
 	case "remove_teleport":
 		r.handleTeleportRemove(msg.ID)
-	case "teleport_tokens":
-		r.handleTeleportTokens(msg)
-
 	case "reveal_token":
 		if t, ok := r.scene.Tokens[msg.ID]; ok {
 			t.Hidden = false
@@ -2798,6 +2867,43 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 		}
 		s.ViewZone = msg.ViewZone.Normalize(s.Width, s.Height)
 		r.markDirty(s.ID)
+
+	case "set_scene_building":
+		s, ok := r.scenes[msg.SceneID]
+		if !ok {
+			return
+		}
+		s.Building = strings.TrimSpace(msg.BuildingName)
+		if msg.Floor != nil {
+			s.Floor = *msg.Floor
+		}
+		if s.Building == "" {
+			s.Floor = 0
+		}
+		r.markDirty(s.ID)
+
+	case "rename_building":
+		// Здание — просто одинаковое имя у сцен; переименовать — пройтись
+		// по всем. SceneName — новое имя, BuildingName — старое.
+		to := strings.TrimSpace(msg.SceneName)
+		if msg.BuildingName == "" || to == "" {
+			return
+		}
+		for _, s := range r.scenes {
+			if s.Building == msg.BuildingName {
+				s.Building = to
+				r.markDirty(s.ID)
+			}
+		}
+
+	case "move_tokens_to_scene":
+		target, ok := r.scenes[msg.SceneID]
+		if !ok || target == r.scene {
+			return
+		}
+		r.moveTokens(r.scene, target, msg.TokenIDs, func(tok *domain.Token, _ int) (float64, float64) {
+			return math.Max(0, math.Min(tok.X, target.Width)), math.Max(0, math.Min(tok.Y, target.Height))
+		})
 
 	case "set_scene_access":
 		s, ok := r.scenes[msg.SceneID]

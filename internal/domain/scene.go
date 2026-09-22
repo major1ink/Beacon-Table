@@ -520,7 +520,16 @@ type SceneState struct {
 	// камера у них не выходит за него, всё снаружи отрезано, токен игрока
 	// за край не двигается (см. service.Room.applyOwnTokenMove). nil — вся
 	// карта. ДМ видит карту целиком, зона у него нарисована рамкой.
-	ViewZone    *ViewZone              `json:"viewZone,omitempty"`
+	ViewZone *ViewZone `json:"viewZone,omitempty"`
+	// Building/Floor — этажи: сцены с одним непустым Building — одно здание
+	// (башня, подземелье), Floor — порядок этажа (0 — земля, ниже —
+	// отрицательные). Сцена при этом остаётся сценой со своими стенами,
+	// светом и туманом: «уровень» — группировка, не новая сущность. Что даёт
+	// здание: переключатель этажей у ДМ, игрок видит этаж, где стоит его
+	// токен (service.Room.sceneOf), общий амбиент (AmbientOf) и перенос
+	// токенов между этажами без смены активной сцены.
+	Building    string                 `json:"building,omitempty"`
+	Floor       int                    `json:"floor,omitempty"`
 	Tokens      map[string]*Token      `json:"tokens"`
 	NoteMarkers map[string]*NoteMarker `json:"noteMarkers"`
 	Walls       map[string]*Wall       `json:"walls"`
@@ -633,6 +642,8 @@ type PublicScene struct {
 	GlobalLight   string                 `json:"globalLight,omitempty"`
 	PlayerAccess  bool                   `json:"playerAccess,omitempty"`
 	ViewZone      *ViewZone              `json:"viewZone,omitempty"`
+	Building      string                 `json:"building,omitempty"`
+	Floor         int                    `json:"floor,omitempty"`
 	Tokens        map[string]*Token      `json:"tokens"`
 	NoteMarkers   map[string]*NoteMarker `json:"noteMarkers"`
 	Walls         map[string]*Wall       `json:"walls"`
@@ -653,6 +664,15 @@ type SceneListEntry struct {
 	// PlayerAccess — см. SceneState.PlayerAccess. Игроку список приходит
 	// уже отфильтрованным (доступные плюс активная), ДМ видит флаг у всех.
 	PlayerAccess bool `json:"playerAccess,omitempty"`
+	// Building/Floor — см. SceneState.Building: переключатель группирует
+	// этажи одного здания.
+	Building string `json:"building,omitempty"`
+	Floor    int    `json:"floor,omitempty"`
+}
+
+// SameBuilding — обе сцены в одном здании (см. SceneState.Building).
+func (s *SceneState) SameBuilding(o *SceneState) bool {
+	return s != nil && o != nil && s.Building != "" && s.Building == o.Building
 }
 
 // SceneCard — сцена для карточки на доске (GET /api/scenes).

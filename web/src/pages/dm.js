@@ -809,6 +809,7 @@ const tokenMenuLightDimField = document.getElementById("tokenMenuLightDimField")
 const tokenMenuLightToggleBtn = document.getElementById("tokenMenuLightToggleBtn");
 const tokenMenuStatusBtn = document.getElementById("tokenMenuStatusBtn");
 const tokenMenuCopyBtn = document.getElementById("tokenMenuCopyBtn");
+const tokenMenuFloorBtn = document.getElementById("tokenMenuFloorBtn");
 const tokenMenuLockBtn = document.getElementById("tokenMenuLockBtn");
 const tokenMenuLockLabel = document.getElementById("tokenMenuLockLabel");
 const tokenMenuDelete = document.getElementById("tokenMenuDelete");
@@ -1603,6 +1604,9 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   // (см. room.go: dropDuplicateCharacterTokens) — паста с тем же
   // characterId тихо снесла бы оригинал, а не завела вторую фигурку.
   tokenMenuCopyBtn.style.display = !menuIsMulti && (menuIsLightOnly || !menuCharacterId) ? "flex" : "none";
+  // «На этаж…» — только если открытая сцена в здании с другими этажами;
+  // работает и для пачки: партия поднимается по лестнице вместе.
+  tokenMenuFloorBtn.style.display = !menuIsLightOnly && otherFloors().length ? "flex" : "none";
 
   // Замок — универсальный для всех объектов карты (см. map-objects.js):
   // здесь он на токене, тем же событием vtt:setMapObjectLocked его получат
@@ -1692,6 +1696,7 @@ function applyTokenMenuLockState() {
     tokenMenuLightDirectionField,
     tokenMenuLightToggleBtn,
     tokenMenuCopyBtn,
+    tokenMenuFloorBtn,
     tokenMenuDelete,
   ];
   for (const el of editable) el.classList.toggle("locked-disabled", menuTokenLocked);
@@ -1792,6 +1797,48 @@ function sendTokenOwner(id, charId) {
 
 tokenMenuOwner.onchange = () => {
   if (menuTokenId) sendTokenOwner(menuTokenId, tokenMenuOwner.value);
+};
+
+// otherFloors — этажи здания открытой сцены, кроме неё самой, сверху вниз.
+function otherFloors() {
+  const cur = sceneList.find((s) => s.id === viewSceneId);
+  if (!cur || !cur.building) return [];
+  return floorsOf(cur.building).filter((s) => s.id !== cur.id);
+}
+
+tokenMenuFloorBtn.onclick = async () => {
+  const ids = menuTokenIds.slice();
+  const floors = otherFloors();
+  closeTokenMenu();
+  if (!ids.length || !floors.length) return;
+  let select = null;
+  const ok = await openModal({
+    title: "На этаж",
+    okLabel: "Переместить",
+    cancelLabel: "Отмена",
+    buildBody: (body) => {
+      const l = document.createElement("p");
+      l.className = "bt-modal-text";
+      l.textContent = ids.length > 1 ? `Куда перенести ${ids.length} токена?` : "Куда перенести токен?";
+      body.appendChild(l);
+      select = document.createElement("select");
+      select.className = "bt-modal-input";
+      for (const f of floors) {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = `${f.floor || 0} · ${f.name}`;
+        select.appendChild(opt);
+      }
+      body.appendChild(select);
+      const h = document.createElement("p");
+      h.className = "bt-modal-text dim";
+      h.textContent = "Токены встанут на те же координаты этажом выше или ниже; их владельцы увидят новый этаж сами.";
+      body.appendChild(h);
+    },
+    onOk: () => select.value,
+    onCancel: () => null,
+  });
+  if (ok) vtt.send({ type: "move_tokens_to_scene", sceneId: ok, tokenIds: ids });
 };
 
 tokenMenuCopyBtn.onclick = () => {
@@ -5334,15 +5381,79 @@ function openSceneHere(id) {
 }
 sceneShowBtn.onclick = () => showSceneToPlayers(viewSceneId);
 
+// ▲▼ у имени сцены — этажи здания открытой сцены (см. floorsOf): открыть у
+// себя соседний этаж; показать игрокам — как любую сцену, кнопкой ▶.
+const floorSwitch = document.getElementById("floorSwitch");
+const floorUpBtn = document.getElementById("floorUpBtn");
+const floorDownBtn = document.getElementById("floorDownBtn");
+function adjacentFloor(dir) {
+  const cur = sceneList.find((s) => s.id === viewSceneId);
+  if (!cur || !cur.building) return null;
+  const floors = floorsOf(cur.building); // сверху вниз
+  const i = floors.findIndex((s) => s.id === cur.id);
+  return floors[i - dir] || null; // dir=1 — выше (раньше в списке)
+}
+function renderFloorSwitch() {
+  const cur = sceneList.find((s) => s.id === viewSceneId);
+  floorSwitch.hidden = !cur || !cur.building || floorsOf(cur.building).length < 2;
+  if (floorSwitch.hidden) return;
+  floorUpBtn.disabled = !adjacentFloor(1);
+  floorDownBtn.disabled = !adjacentFloor(-1);
+}
+floorUpBtn.onclick = () => {
+  const s = adjacentFloor(1);
+  if (s) openSceneHere(s.id);
+};
+floorDownBtn.onclick = () => {
+  const s = adjacentFloor(-1);
+  if (s) openSceneHere(s.id);
+};
+
+// floorsOf — этажи здания сверху вниз (как стоит башня); одиночные сцены —
+// сами по себе. Порядок зданий — по первому их этажу в списке.
+function floorsOf(building) {
+  return sceneList.filter((s) => s.building === building).sort((a, b) => (b.floor || 0) - (a.floor || 0));
+}
+function sceneGroups() {
+  const groups = [];
+  const seen = new Set();
+  for (const s of sceneList) {
+    if (!s.building) {
+      groups.push({ scenes: [s] });
+    } else if (!seen.has(s.building)) {
+      seen.add(s.building);
+      groups.push({ building: s.building, scenes: floorsOf(s.building) });
+    }
+  }
+  return groups;
+}
+
 function renderSceneDropdown() {
   // Подменю настроек — один узел, который живёт под строкой своей сцены;
   // перед перестройкой списка убираем его в парковку, иначе innerHTML
   // унесёт его вместе со строками.
   parkSceneSettingsDrawer();
   sceneDropdown.innerHTML = "";
-  for (const s of sceneList) {
+  for (const group of sceneGroups()) {
+    if (group.building) {
+      const head = document.createElement("div");
+      head.className = "scene-building";
+      head.innerHTML = icon("building", { size: 12 });
+      head.append(" " + group.building);
+      head.title = "Здание: этажи переключаются ▲▼ у имени сцены";
+      sceneDropdown.appendChild(head);
+    }
+    for (const s of group.scenes) renderSceneRow(s, !!group.building);
+  }
+  // Сцену, которую правили, удалили (в этом или другом окне) — подменю
+  // закрываем, а не оставляем висеть в парковке с чужими полями.
+  if (settingsSceneId && !sceneList.some((x) => x.id === settingsSceneId)) closeSceneSettings();
+}
+
+function renderSceneRow(s, inBuilding) {
+  {
     const row = document.createElement("div");
-    row.className = "scene-row row-card" + (s.id === viewSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
+    row.className = "scene-row row-card" + (inBuilding ? " scene-row--floor" : "") + (s.id === viewSceneId ? " active" : "") + (s.id === settingsSceneId ? " editing" : "");
     // Открыть у себя — <button> на всю строку, ▶/шестерёнка/корзина —
     // отдельные кнопки рядом: вложенные интерактивы недопустимы.
     const pick = document.createElement("button");
@@ -5356,6 +5467,13 @@ function renderSceneDropdown() {
       openSceneHere(s.id);
       closeSidePanel();
     };
+    if (inBuilding) {
+      const fl = document.createElement("span");
+      fl.className = "scene-floor";
+      fl.textContent = String(s.floor || 0);
+      fl.title = "Этаж";
+      pick.appendChild(fl);
+    }
     const viewers = document.createElement("span");
     viewers.className = "scene-viewers pill-badge";
     viewers.innerHTML = icon("user", { size: 11 });
@@ -5421,9 +5539,6 @@ function renderSceneDropdown() {
     sceneDropdown.appendChild(row);
     if (s.id === settingsSceneId) row.after(sceneSettingsDrawer);
   }
-  // Сцену, которую правили, удалили (в этом или другом окне) — подменю
-  // закрываем, а не оставляем висеть в парковке с чужими полями.
-  if (settingsSceneId && !sceneList.some((x) => x.id === settingsSceneId)) closeSceneSettings();
 }
 
 // "+ Сцена" теперь статична в шапке панели (dm.html), а не пересоздаётся
@@ -5443,6 +5558,13 @@ document.addEventListener("vtt:sceneList", (e) => {
   const viewed = sceneList.find((s) => s.id === viewSceneId);
   sceneSwitchName.textContent = viewed ? viewed.name : "Сцена";
   sceneShowBtn.hidden = viewSceneId === activeSceneId;
+  renderFloorSwitch();
+  buildingNames.innerHTML = "";
+  for (const name of new Set(sceneList.map((s) => s.building).filter(Boolean))) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    buildingNames.appendChild(opt);
+  }
   // Доступ переключили из строки списка (или из другой вкладки) — чекбокс в
   // открытом подменю не должен отставать.
   const editing = settingsSceneId && sceneList.find((s) => s.id === settingsSceneId);
@@ -5511,6 +5633,9 @@ const bgTab = document.querySelector('.modal-tabs button[data-tab="bg"]');
 const audioTab = document.querySelector('.modal-tabs button[data-tab="audio"]');
 
 const fName = document.getElementById("fName");
+const fBuilding = document.getElementById("fBuilding");
+const fFloor = document.getElementById("fFloor");
+const buildingNames = document.getElementById("buildingNames");
 const fWidth = document.getElementById("fWidth");
 const fHeight = document.getElementById("fHeight");
 const fFogOfWar = document.getElementById("fFogOfWar");
@@ -5595,6 +5720,8 @@ tabButtons.forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
 
 function fillSceneSettingsFrom(s) {
   fName.value = s.name || "";
+  fBuilding.value = s.building || "";
+  fFloor.value = s.floor || 0;
   fWidth.value = s.width || 1280;
   fHeight.value = s.height || 720;
   fFogOfWar.checked = s.fogOfWar !== false;
@@ -5883,6 +6010,14 @@ document.getElementById("sceneDeleteBtn").onclick = async () => {
 };
 
 document.getElementById("modalSaveBtn").onclick = () => {
+  // Здание/этаж — своим сообщением (см. set_scene_building в room.go):
+  // «Сохранить» шлёт его вместе с остальными полями сцены.
+  const editing = sceneList.find((x) => x.id === settingsSceneId);
+  const building = fBuilding.value.trim();
+  const floor = parseInt(fFloor.value, 10) || 0;
+  if (editing && (building !== (editing.building || "") || floor !== (editing.floor || 0))) {
+    vtt.send({ type: "set_scene_building", sceneId: settingsSceneId, buildingName: building, floor });
+  }
   vtt.send({
     type: "update_scene",
     sceneId: settingsSceneId,

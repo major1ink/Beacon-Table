@@ -64,9 +64,9 @@ func TestTeleportNoticesDMMove(t *testing.T) {
 }
 
 func TestTeleportTokensMovesAndSwitches(t *testing.T) {
-	r, _ := teleportRoom()
+	r, dm := teleportRoom()
 	r.scenes["scene-2"].Tokens["tok-old"] = &domain.Token{ID: "tok-old", CharacterID: "char-1"}
-	r.applyMutation(domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p", "tok-none"}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p", "tok-none"}}})
 
 	if r.currentSceneID != "scene-2" {
 		t.Fatalf("стол не переключился: %q", r.currentSceneID)
@@ -91,9 +91,9 @@ func TestTeleportTokensMovesAndSwitches(t *testing.T) {
 }
 
 func TestTeleportTokensIgnoresBrokenTarget(t *testing.T) {
-	r, _ := teleportRoom()
+	r, dm := teleportRoom()
 	r.scene.Teleports["tp-1"].TargetSceneID = "scene-gone"
-	r.applyMutation(domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p"}})
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", ID: "tp-1", TokenIDs: []string{"tok-p"}}})
 	if r.currentSceneID != "scene-1" || r.scene.Tokens["tok-p"] == nil {
 		t.Error("портал в удалённую сцену не должен ничего делать")
 	}
@@ -123,8 +123,8 @@ func TestLocalTeleportAsksDMWithTargetPortal(t *testing.T) {
 }
 
 func TestLocalTeleportMovesWithinScene(t *testing.T) {
-	r, _ := localTeleportRoom()
-	r.applyMutation(domain.ClientMsg{Type: "teleport_tokens", ID: "tp-a", TokenIDs: []string{"tok-p", "tok-none"}})
+	r, dm := localTeleportRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", ID: "tp-a", TokenIDs: []string{"tok-p", "tok-none"}}})
 	if r.currentSceneID != "scene-1" {
 		t.Fatalf("стол переключился: %q", r.currentSceneID)
 	}

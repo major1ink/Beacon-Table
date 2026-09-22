@@ -265,3 +265,86 @@ func TestViewZoneClampsPlayerAndNormalizes(t *testing.T) {
 		t.Error("set_view_zone без зоны должен снимать её")
 	}
 }
+
+// floorsRoom — башня из двух этажей (scene-1 земля, scene-2 верх), активна
+// земля; у игрока токен на земле.
+func floorsRoom() (*Room, *sceneClient, *sceneClient, *sceneClient) {
+	r, dm, pl, tv := viewRoom()
+	r.scenes["scene-1"].Building, r.scenes["scene-1"].Floor = "Башня", 0
+	r.scenes["scene-2"].Building, r.scenes["scene-2"].Floor = "Башня", 1
+	r.scenes["scene-2"].AmbientURL = "" // наследует трек земли
+	r.scenes["scene-1"].Tokens["me"] = &domain.Token{ID: "me", OwnerID: "acc-1", X: 200, Y: 200}
+	return r, dm, pl, tv
+}
+
+// TestFloorsPlayerFollowsOwnToken — ДМ перенёс токен игрока на верхний
+// этаж: игрок видит верх, стол и трансляция остаются на земле, музыка не
+// перезапускается, ДМ переехал взглядом сам.
+func TestFloorsPlayerFollowsOwnToken(t *testing.T) {
+	r, dm, pl, tv := floorsRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "move_tokens_to_scene", SceneID: "scene-2", TokenIDs: []string{"me"}}})
+
+	if tok := r.scenes["scene-2"].Tokens["me"]; tok == nil || tok.X != 200 {
+		t.Fatalf("токен не переехал на этаж с теми же координатами: %+v", tok)
+	}
+	if got := snapshotSceneID(pl.last("snapshot")); got != "scene-2" {
+		t.Errorf("игрок видит %q, ожидался этаж своего токена", got)
+	}
+	if got := snapshotSceneID(tv.last("snapshot")); got != "scene-1" || r.currentSceneID != "scene-1" {
+		t.Errorf("трансляция/активная ушли с земли: %q / %q", got, r.currentSceneID)
+	}
+	if snap := pl.last("snapshot"); snap["ambientUrl"] != "/uploads/tavern.mp3" {
+		t.Errorf("амбиент верхнего этажа должен наследоваться от земли: %v", snap["ambientUrl"])
+	}
+	// Игрок сам двигает токен на своём этаже.
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "move_own_token", Token: &domain.Token{ID: "me", X: 300, Y: 300}}})
+	if tok := r.scenes["scene-2"].Tokens["me"]; tok.X != 300 {
+		t.Errorf("ход на своём этаже не прошёл: %+v", tok)
+	}
+	// «Показать игрокам» верхний этаж — трек тот же, старт не дёргаем.
+	before := r.ambientStartedAtMs
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "switch_scene", SceneID: "scene-2"}})
+	if r.ambientStartedAtMs != before {
+		t.Error("переход по этажам под один трек не должен перезапускать амбиент")
+	}
+}
+
+// TestFloorsTeleportStaysInBuilding — телепорт между этажами одного здания
+// не переключает стол: владелец видит этаж по токену, ДМ открыл этаж у себя.
+func TestFloorsTeleportStaysInBuilding(t *testing.T) {
+	r, dm, pl, _ := floorsRoom()
+	r.store = noopSceneStore{}
+	r.scenes["scene-1"].Teleports["up"] = &domain.Teleport{ID: "up", X: 500, Y: 500, TargetSceneID: "scene-2"}
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "teleport_tokens", SceneID: "scene-1", ID: "up", TokenIDs: []string{"me"}}})
+	if r.currentSceneID != "scene-1" {
+		t.Fatalf("стол переключился на %q", r.currentSceneID)
+	}
+	if got := snapshotSceneID(pl.last("snapshot")); got != "scene-2" {
+		t.Errorf("игрок видит %q", got)
+	}
+	if got := snapshotSceneID(dm.last("snapshot")); got != "scene-2" {
+		t.Errorf("ДМ видит %q", got)
+	}
+	// Вернулся в список ДМ: этажи с именем здания.
+	entries := dm.last("scene_list")["scenes"].([]domain.SceneListEntry)
+	if entries[1].Building != "Башня" || entries[1].Floor != 1 {
+		t.Errorf("scene_list без этажей: %+v", entries)
+	}
+}
+
+// TestRenameBuildingTouchesAllFloors — здание — общее имя: переименование
+// проходит по всем этажам.
+func TestRenameBuildingTouchesAllFloors(t *testing.T) {
+	r, dm, _, _ := floorsRoom()
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "rename_building", BuildingName: "Башня", SceneName: "Маяк"}})
+	for _, id := range []string{"scene-1", "scene-2"} {
+		if r.scenes[id].Building != "Маяк" {
+			t.Errorf("%s: здание %q", id, r.scenes[id].Building)
+		}
+	}
+	floor := 3
+	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_scene_building", SceneID: "scene-2", BuildingName: "", Floor: &floor}})
+	if s := r.scenes["scene-2"]; s.Building != "" || s.Floor != 0 {
+		t.Errorf("вывод из здания: %+v", s)
+	}
+}
