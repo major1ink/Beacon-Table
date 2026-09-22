@@ -80,6 +80,10 @@ type RoomService interface {
 	// ListScenes — все сцены комнаты в порядке переключателя ДМ: карточки
 	// сцен на доске (см. web/src/pages/board.js).
 	ListScenes(ctx context.Context) ([]domain.SceneCard, error)
+	// PlayerOwnsMonster — у игрока есть свой токен этого существа (призванный
+	// фамильяр): тогда ему можно прочитать карточку бестиария, которая в
+	// остальном только для ДМ (см. api/http: handleMonsterGet).
+	PlayerOwnsMonster(ctx context.Context, playerID, monsterID string) (bool, error)
 }
 
 type inboundMsg struct {
@@ -161,6 +165,9 @@ type Room struct {
 	// listScenes — «дай список сцен» из HTTP-хендлера (см. ListScenes):
 	// свой канал по той же причине, что и spawnToken выше.
 	listScenes chan chan []domain.SceneCard
+	// ownsMonster — «есть ли у игрока токен этого существа» из HTTP-хендлера
+	// (см. PlayerOwnsMonster) — тот же приём.
+	ownsMonster chan ownsMonsterReq
 	// teleportArmed — id токена → id портала, на котором он стоит и о котором
 	// ДМ уже спросили (см. room_teleports.go: noticeTeleport).
 	teleportArmed map[string]string
@@ -284,6 +291,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		spawnToken:     make(chan spawnTokenReq),
 		dropTokens:     make(chan dropTokensReq),
 		listScenes:     make(chan chan []domain.SceneCard),
+		ownsMonster:    make(chan ownsMonsterReq),
 		journalChanged: make(chan string, 32),
 
 		characterSheetChanged: make(chan string, 32),
@@ -479,6 +487,17 @@ func (r *Room) run() {
 		case reply := <-r.listScenes:
 			reply <- r.sceneCards()
 
+		case req := <-r.ownsMonster:
+			owns := false
+			for _, s := range r.scenes {
+				for _, t := range s.Tokens {
+					if t.OwnerID == req.playerID && t.MonsterID == req.monsterID {
+						owns = true
+					}
+				}
+			}
+			req.reply <- owns
+
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
 
@@ -520,7 +539,20 @@ func (r *Room) handleInbound(im inboundMsg) {
 	if !r.authorize(im.from, im.msg.Type) {
 		return // роли/сообщению не положено — молча игнорируем
 	}
+	if im.from.Role() == domain.RolePlayer && !r.playerMayTouch(im.from, im.msg) {
+		return // чужой токен — молча игнорируем, как и чужой ход
+	}
 	switch im.msg.Type {
+	case "update_own_token":
+		r.applyOwnTokenUpdate(im.msg)
+		return
+	case "remove_own_token":
+		if t, ok := r.scene.Tokens[im.msg.ID]; ok && t.CharacterID == "" {
+			delete(r.scene.Tokens, im.msg.ID)
+			r.markDirty(r.scene.ID)
+			r.broadcastAll()
+		}
+		return
 	case "animate_attack":
 		r.relayFx(im.msg) // не трогает state, просто ретранслируем всем
 		return
@@ -1244,6 +1276,12 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 			msgType == "view_scene" ||
 			// Призыв существ (room_summon.go): список разрешённых и запрос.
 			msgType == "summon_list" || msgType == "summon_request" ||
+			// Свои токены (ПКМ у игрока): форма/зрение/свет, метки состояний,
+			// убрать призванного. Что токен именно свой, проверяет
+			// handleInbound (ownsToken) — тут только тип сообщения.
+			msgType == "update_own_token" || msgType == "remove_own_token" ||
+			msgType == "apply_status" || msgType == "remove_status" ||
+			msgType == "set_status_level" || msgType == "set_status_rounds" || msgType == "clear_statuses" ||
 			// Пометки на карте — единственная правка САМОЙ сцены, доступная
 			// игроку. Тумблер стола (CombatState.PlayerDrawingEnabled) и
 			// владение конкретным элементом проверяются отдельно, уже внутри
@@ -1253,6 +1291,48 @@ func (r *Room) authorize(c RoomClient, msgType string) bool {
 	default: // RoleTV
 		return false
 	}
+}
+
+// playerMayTouch — команды игрока, адресованные токену, проходят только для
+// своего токена на своей сцене (Token.OwnerID == PlayerID): метки состояний,
+// правка/удаление. Команды без токена (бойца трекера и прочие) — как есть.
+func (r *Room) playerMayTouch(c RoomClient, msg domain.ClientMsg) bool {
+	switch msg.Type {
+	case "apply_status", "remove_status", "set_status_level", "set_status_rounds", "clear_statuses":
+		if msg.CombatantID != "" {
+			return false // карточка трекера — только ДМ
+		}
+		return r.ownsToken(c, msg.TokenID)
+	case "update_own_token":
+		return msg.Token != nil && r.ownsToken(c, msg.Token.ID)
+	case "remove_own_token":
+		return r.ownsToken(c, msg.ID)
+	}
+	return true
+}
+
+func (r *Room) ownsToken(c RoomClient, id string) bool {
+	t, ok := r.scene.Tokens[id]
+	return ok && t.OwnerID != "" && t.OwnerID == c.PlayerID()
+}
+
+// applyOwnTokenUpdate — игрок правит свой токен: форма, зрение, свет.
+// Остальные поля (позиция, скрытость, владелец, замок, картинка) — только
+// ДМ через move_token; их из msg.Token не берём.
+func (r *Room) applyOwnTokenUpdate(msg domain.ClientMsg) {
+	t := r.scene.Tokens[msg.Token.ID]
+	if t.Locked {
+		return
+	}
+	if msg.Token.Shape == "square" {
+		t.Shape = "square"
+	} else {
+		t.Shape = ""
+	}
+	t.Vision = msg.Token.Vision
+	t.Light = msg.Token.Light
+	r.markDirty(r.scene.ID)
+	r.broadcastAll()
 }
 
 // applyOwnTokenMove — двигает только X/Y токена, и только если он
@@ -1575,6 +1655,27 @@ func (r *Room) ListScenes(ctx context.Context) ([]domain.SceneCard, error) {
 		return cards, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+type ownsMonsterReq struct {
+	playerID, monsterID string
+	reply               chan bool
+}
+
+// PlayerOwnsMonster — см. RoomService; ctx — как у ListScenes.
+func (r *Room) PlayerOwnsMonster(ctx context.Context, playerID, monsterID string) (bool, error) {
+	req := ownsMonsterReq{playerID: playerID, monsterID: monsterID, reply: make(chan bool, 1)}
+	select {
+	case r.ownsMonster <- req:
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+	select {
+	case owns := <-req.reply:
+		return owns, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
 	}
 }
 

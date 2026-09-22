@@ -2612,10 +2612,8 @@ export function createInteraction(ctx) {
     // ПКМ на мёртвом токене (кости, см. domain.Token.Dead) с непустым Loot,
     // пока ДМ включил CombatState.LootingEnabled (ctx.combat, обновляется
     // net.js на каждый "combat_state") — открыть модалку лута (см.
-    // pages/player.js: "vtt:tokenLootRequest"). У игрока в остальном нет
-    // контекстного меню токенов (см. ветку ctx.isDM выше) — это
-    // единственный ПКМ-сценарий на карте для роли player, поэтому просто
-    // ничего не делаем на любом другом ПКМ, вместо полноценного меню.
+    // pages/player.js: "vtt:tokenLootRequest"). ПКМ по СВОЕМУ токену —
+    // меню игрока (player-token-menu.js); прочие ПКМ ничего не делают.
     canvas.addEventListener("contextmenu", (e) => {
       const { x, y } = mousePos(e);
       if (drawActive) {
@@ -2633,12 +2631,21 @@ export function createInteraction(ctx) {
       const hitId = tokenAt(x, y, ctx.scene.tokens, {
         filter: (t) => t.dead && Array.isArray(t.loot) && t.loot.length > 0,
       });
-      if (!hitId) return;
-      const t = ctx.scene.tokens[hitId];
-      const loot = t.loot;
-      if (!(ctx.combat && ctx.combat.lootingEnabled)) return;
+      if (hitId) {
+        const t = ctx.scene.tokens[hitId];
+        const loot = t.loot;
+        if (!(ctx.combat && ctx.combat.lootingEnabled)) return;
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent("vtt:tokenLootRequest", { detail: { tokenId: hitId, loot, name: t.label } }));
+        return;
+      }
+      // Свой токен — меню как у ДМ, урезанное (см. player-token-menu.js).
+      const ownId = tokenAt(x, y, ctx.scene.tokens, { filter: (t) => !t.lightOnly && t.ownerId === ctx.playerId });
+      if (!ownId) return;
       e.preventDefault();
-      document.dispatchEvent(new CustomEvent("vtt:tokenLootRequest", { detail: { tokenId: hitId, loot, name: t.label } }));
+      document.dispatchEvent(
+        new CustomEvent("vtt:tokenContextMenu", { detail: { id: ownId, token: ctx.scene.tokens[ownId], ids: [ownId], pageX: e.clientX, pageY: e.clientY } })
+      );
     });
   }
 }

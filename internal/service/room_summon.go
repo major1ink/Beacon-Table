@@ -17,8 +17,9 @@ import (
 // рядом с фишкой игрока на его сцене (см. sceneOf), владелец — игрок:
 // фамильяра он водит сам. Статблок — по MonsterID, как у любого монстра.
 
-// maxSummonCount — потолок на один запрос: «Призыв животных» даёт восемь.
-const maxSummonCount = 8
+// maxSummonCount — потолок на один запрос, защита от опечатки вроде «150»:
+// решает всё равно ДМ.
+const maxSummonCount = 20
 
 // summonRequest — запрос игрока, пока ДМ не решил.
 type summonRequest struct {

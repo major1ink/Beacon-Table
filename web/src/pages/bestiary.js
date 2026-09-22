@@ -738,10 +738,13 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
-  if (!me || !isGM(me.role)) {
+  if (!me) {
     location.href = "/";
     return;
   }
+  // Игрок открывает карточку своего призванного существа (см. api/http:
+  // handleMonsterGet) — только чтение: правка, удаление и клон спрятаны.
+  const readOnlyViewer = !isGM(me.role);
   monsterId = currentId();
   if (!monsterId) {
     document.getElementById("loadingHint").textContent = "Не указан id монстра (?id=...).";
@@ -755,7 +758,11 @@ function currentId() {
   }
 
   document.getElementById("monsterTitle").textContent = monster.name || "Без имени";
-  if (monster.system) {
+  if (readOnlyViewer) {
+    editMode = false;
+    editToggleBtn.style.display = "none";
+    deleteBtn.style.display = "none";
+  } else if (monster.system) {
     // Каталог "из коробки" — только просмотр, ✎ прячем совсем (сервер всё
     // равно откажет 403), вместо неё бейдж + "Клонировать" (см. cloneBtn выше).
     editMode = false;

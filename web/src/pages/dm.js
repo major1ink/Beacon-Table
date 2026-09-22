@@ -4610,7 +4610,7 @@ document.addEventListener("vtt:summonRequest", async (e) => {
       countInput.type = "number";
       countInput.className = "bt-modal-input";
       countInput.min = "1";
-      countInput.max = "8";
+      countInput.max = "20";
       countInput.value = String(d.count || 1);
       countInput.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter") {
@@ -4621,7 +4621,7 @@ document.addEventListener("vtt:summonRequest", async (e) => {
       body.appendChild(countInput);
       return countInput;
     },
-    onOk: () => Math.max(1, Math.min(8, parseInt(countInput.value, 10) || 1)),
+    onOk: () => Math.max(1, Math.min(20, parseInt(countInput.value, 10) || 1)),
     onCancel: () => 0,
   });
   vtt.send({ type: "summon_resolve", requestId: d.requestId, count: count || 0 });

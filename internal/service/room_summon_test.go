@@ -118,3 +118,46 @@ func TestSummonRejections(t *testing.T) {
 		t.Errorf("без ДМ нужен отказ: %+v", st)
 	}
 }
+
+// TestPlayerEditsOnlyOwnToken — форма/зрение/свет, метки и удаление —
+// только на своём токене; чужой не трогается, фишку персонажа не убрать.
+func TestPlayerEditsOnlyOwnToken(t *testing.T) {
+	r, _, pl := summonRoom()
+	sc := r.scenes["scene-1"]
+	sc.Tokens["me"].MonsterID = "owl"
+	sc.Tokens["pc"] = &domain.Token{ID: "pc", OwnerID: "acc-1", CharacterID: "char-1"}
+	sc.Tokens["foe"] = &domain.Token{ID: "foe", Label: "Гоблин"}
+
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "update_own_token", Token: &domain.Token{ID: "me", Shape: "square", Vision: &domain.TokenVision{Mode: "dark", Range: 60}, Light: &domain.TokenLight{Enabled: true, Bright: 20, Dim: 40}, Hidden: true, X: 999}}})
+	me := sc.Tokens["me"]
+	if me.Shape != "square" || me.Vision == nil || me.Vision.Range != 60 || me.Light == nil || !me.Light.Enabled {
+		t.Errorf("правка своего токена не прошла: %+v", me)
+	}
+	if me.Hidden || me.X == 999 {
+		t.Errorf("игрок не должен менять скрытость и позицию через update_own_token: %+v", me)
+	}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "update_own_token", Token: &domain.Token{ID: "foe", Shape: "square"}}})
+	if sc.Tokens["foe"].Shape != "" {
+		t.Error("чужой токен изменён")
+	}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "apply_status", TokenID: "foe", StatusSlug: "prone"}})
+	if len(sc.Tokens["foe"].Statuses) != 0 {
+		t.Error("метка легла на чужой токен")
+	}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "apply_status", TokenID: "me", StatusSlug: "prone"}})
+	if len(sc.Tokens["me"].Statuses) != 1 {
+		t.Error("метка на свой токен не легла")
+	}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "remove_own_token", ID: "pc"}})
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "remove_own_token", ID: "foe"}})
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "remove_own_token", ID: "me"}})
+	if _, ok := sc.Tokens["pc"]; !ok {
+		t.Error("фишку персонажа игрок убирать не должен")
+	}
+	if _, ok := sc.Tokens["foe"]; !ok {
+		t.Error("чужой токен убран")
+	}
+	if _, ok := sc.Tokens["me"]; ok {
+		t.Error("свой призванный токен не убран")
+	}
+}

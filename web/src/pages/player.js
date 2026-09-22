@@ -22,6 +22,7 @@ import { showLootTakeModal } from "../loot-take-modal.js";
 import { mountCompendiumMenu } from "../compendium-menu.js";
 import { mountScenePicker } from "../scene-picker.js";
 import { mountSummonPanel } from "../summon-panel.js";
+import { mountPlayerTokenMenu } from "../player-token-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createDrawOptions } from "../draw-options.js";
@@ -249,6 +250,9 @@ const PLAYER_DRAW_HELP = {
   // прячется, пока ДМ ничего не разрешил.
   const summonPanel = vtt.sideMenu.addIcon(icon("creature", { size: 16 }), "Призыв", { width: 260, tip: PANEL_HELP.summon });
   mountSummonPanel(summonPanel, { send: vtt.send });
+
+  // ПКМ по своему токену — лист/статблок, состояния, форма, зрение, свет.
+  mountPlayerTokenMenu({ send: vtt.send, getScene: vtt.getScene, playerId: me.id, openCharacterSheet });
 
   // Справочник — как у ДМ (pages/dm.js: там же про sticky).
   const compendiumPanel = vtt.sideMenu.addIcon(icon("book-open", { size: 16 }), "Справочник", { width: 320, sticky: true, mobileFull: true, tip: PANEL_HELP.compendium });

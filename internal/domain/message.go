@@ -183,6 +183,11 @@ type ClientMsg struct {
 	// токен бойца, чей сейчас ход (см. domain.CombatState.HighlightActiveToken).
 	HighlightActiveToken *bool `json:"highlightActiveToken,omitempty"`
 
+	// "update_own_token" — игрок правит СВОЙ токен (Token.OwnerID == он):
+	// Token несёт новые Shape/Vision/Light, остальное сервер игнорирует
+	// (см. service.Room.applyOwnTokenUpdate). "remove_own_token" — ID:
+	// убрать свой призванный токен (без CharacterID).
+
 	// ---- призыв существ игроком (см. service.Room.handleSummonRequest) ----
 	// "summon_request": MonsterID + Count — сколько просит игрок.
 	// "summon_resolve": RequestID + Count — сколько ДМ разрешил, 0 — отказ.

@@ -34,7 +34,7 @@ export function mountSummonPanel(panelEl, { send }) {
   const countInput = document.createElement("input");
   countInput.type = "number";
   countInput.min = "1";
-  countInput.max = "8";
+  countInput.max = "20";
   countInput.value = "1";
   countInput.title = "Сколько";
   const askBtn = document.createElement("button");
@@ -98,7 +98,7 @@ export function mountSummonPanel(panelEl, { send }) {
 
   askBtn.onclick = () => {
     if (!selectedId) return;
-    const count = Math.max(1, Math.min(8, parseInt(countInput.value, 10) || 1));
+    const count = Math.max(1, Math.min(20, parseInt(countInput.value, 10) || 1));
     pending = true;
     setStatus("Ждём решения ДМ…", "");
     send({ type: "summon_request", monsterId: selectedId, count });
