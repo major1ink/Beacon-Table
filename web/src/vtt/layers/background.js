@@ -124,6 +124,10 @@ export function createBackgroundLayer(ctx) {
         }
         if (mapVideo !== v || !currentSprite) return; // фон успели сменить, пока ждали кадр
         currentSprite.texture = texture;
+        // Подсказка загрузчику (gl-video-uploader.js: stageStep): экранных
+        // пикселей на пиксель кадра при текущем зуме.
+        const sprite = currentSprite;
+        texture.source.stageScale = () => Math.abs(sprite.scale.x * ctx.world.scale.x) * (window.devicePixelRatio || 1);
         resizeSprite();
       });
 

@@ -55,8 +55,11 @@ const glUploadVideoResourceSafe = {
       return;
     }
 
-    const width = source.pixelWidth;
-    const height = source.pixelHeight;
+    // Текстура может быть меньше кадра: UV у Pixi в долях, спрайт этого не
+    // заметит (см. stageStep).
+    const step = stageStep(source);
+    const width = Math.max(1, Math.round(source.pixelWidth * step));
+    const height = Math.max(1, Math.round(source.pixelHeight * step));
 
     if (glTexture.width !== width || glTexture.height !== height) {
       gl.texImage2D(target, 0, glTexture.internalFormat, width, height, 0, glTexture.format, glTexture.type, null);
@@ -71,6 +74,26 @@ const glUploadVideoResourceSafe = {
     gl.texSubImage2D(target, 0, 0, 0, glTexture.format, glTexture.type, stagedFrame(source.resource, width, height));
   },
 };
+
+// stageStep — во сколько раз ужать кадр перед заливкой. 4K-карта целиком на
+// экране 1440 px использует треть разрешения, а заливалась полностью:
+// ~100 МБ видеопамяти на кадр, и два окна (ДМ и трансляция на одной
+// машине) упирали GT 1030 в 15 FPS. stageScale — сколько экранных пикселей
+// приходится на пиксель кадра, его вешает слой, который знает камеру.
+// Уменьшаем с запасом, чтобы не прыгать туда-обратно на границе шага.
+const STEPS = [1, 0.5, 0.25];
+
+function stageStep(source) {
+  const need = typeof source.stageScale === "function" ? source.stageScale() : 1;
+  let step = source.stagedStep || 1;
+  if (need > step) step = STEPS.slice().reverse().find((s) => s >= need) || 1;
+  else {
+    const smaller = STEPS.find((s) => s < step && need <= s * 0.9);
+    if (smaller) step = smaller;
+  }
+  source.stagedStep = step;
+  return step;
+}
 
 // Заливка прямо из <video> в Chromium на Linux без аппаратного декодера идёт
 // через CPU: 4K-кадр — 90 мс на GT 1030, видео-карта роняла стол до 24 FPS.
