@@ -22,15 +22,21 @@ import (
 // набор полей другие.
 type boardClient struct {
 	conn    *websocket.Conn
-	out     chan any
+	out     chan []byte
 	id      string
 	name    string
 	canEdit bool
 }
 
+// Сериализуем в горутине вызывающего по той же причине, что и Client.Send.
 func (c *boardClient) Send(v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		slog.Warn("Не удалось сериализовать сообщение доски", "err", err)
+		return
+	}
 	select {
-	case c.out <- v:
+	case c.out <- b:
 	default:
 		// Не успевает читать — теряем кадр, но хаб не держим.
 	}
@@ -87,7 +93,7 @@ func serveBoardWs(gw *Gateway, hub *service.BoardHub, boardID string, w http.Res
 	}
 	defer gw.untrack(conn)
 
-	c := &boardClient{conn: conn, out: make(chan any, 32), id: accountID, name: accountName, canEdit: canEdit}
+	c := &boardClient{conn: conn, out: make(chan []byte, 32), id: accountID, name: accountName, canEdit: canEdit}
 	session, err := hub.Open(r.Context(), boardID, c)
 	if err != nil {
 		conn.Close()
@@ -107,16 +113,12 @@ func boardWriteLoop(c *boardClient) {
 	}()
 	for {
 		select {
-		case v, ok := <-c.out:
+		case b, ok := <-c.out:
 			if !ok {
 				_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 				_ = c.conn.WriteMessage(websocket.CloseMessage,
 					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 				return
-			}
-			b, err := json.Marshal(v)
-			if err != nil {
-				continue
 			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {

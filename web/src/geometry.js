@@ -15,9 +15,14 @@ export function raySegmentT(ox, oy, dx, dy, ax, ay, bx, by) {
   const acx = ax - ox, acy = ay - oy;
   const t = (ex * acy - ey * acx) / det;
   const u = (dx * acy - dy * acx) / det;
-  if (t < 0 || u < 0 || u > 1) return null;
+  // Допуск на u: луч в общую вершину двух стен из-за погрешности промахивался
+  // мимо обеих (u = 1 + 1e-12 у одной, −1e-12 у другой) и уходил иглой света
+  // через угол на весь радиус. 1e-9 длины стены — миллионные доли пикселя.
+  if (t < 0 || u < -U_EPS || u > 1 + U_EPS) return null;
   return t;
 }
+
+const U_EPS = 1e-9;
 
 // wallsInRange — стены, до которых от точки (ox,oy) не дальше radius. Стена
 // дальше радиуса не может заслонить НИЧЕГО внутри круга — луч всё равно
@@ -182,30 +187,43 @@ export function wallVertices(walls) {
 // поэтому не мешает точному редактированию через wallVertices/snapToWallVertex
 // выше. eps подобран заметно меньше типичного дверного проёма, чтобы не
 // заваривать его тоже.
+//
+// Концы сливаются в СЕРЕДИНУ группы, а не в первую попавшуюся точку: иначе
+// угол уезжал на всю ширину щели (до eps), соседняя стена поворачивалась, и
+// токен у самой стены оказывался по ту сторону. Группы собираются тем же
+// правилом, что и раньше (первая точка группы — затравка), так что точно
+// сходящиеся стены не меняются ни на бит.
 export function weldWalls(wallList, eps = 12) {
   const cellSize = eps * 2;
   const buckets = new Map();
-  function weld(x, y) {
+  function group(x, y) {
     const cx = Math.floor(x / cellSize), cy = Math.floor(y / cellSize);
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         const bucket = buckets.get((cx + dx) + "," + (cy + dy));
         if (!bucket) continue;
-        for (const p of bucket) {
-          if (Math.hypot(p.x - x, p.y - y) < eps) return p;
+        for (const g of bucket) {
+          if (Math.hypot(g.x - x, g.y - y) < eps) {
+            g.sx += x;
+            g.sy += y;
+            g.n++;
+            return g;
+          }
         }
       }
     }
-    const p = { x, y };
+    const g = { x, y, sx: x, sy: y, n: 1 };
     const key = cx + "," + cy;
     if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(p);
-    return p;
+    buckets.get(key).push(g);
+    return g;
   }
-  return wallList.map((w) => {
-    const a = weld(w.x1, w.y1);
-    const b = weld(w.x2, w.y2);
-    return { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+  const ends = wallList.map((w) => [group(w.x1, w.y1), group(w.x2, w.y2)]);
+  const at = (g) => (g.n === 1 ? [g.x, g.y] : [g.sx / g.n, g.sy / g.n]);
+  return ends.map(([a, b]) => {
+    const [x1, y1] = at(a);
+    const [x2, y2] = at(b);
+    return { x1, y1, x2, y2 };
   });
 }
 

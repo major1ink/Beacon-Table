@@ -2,6 +2,7 @@ import { Assets, Container, Sprite, Texture } from "pixi.js";
 import { isVideoUrl } from "../../geometry.js";
 import { worldSize } from "../camera.js";
 import { createVideoTexture } from "../video-texture.js";
+import { releaseVideoStage } from "../gl-video-uploader.js";
 
 // Фон карты (картинка или зацикленное mp4/webm) — самый частый источник
 // нагрузки в старом Canvas2D-движке: каждый кадр видео заново декодировался
@@ -17,6 +18,7 @@ export function createBackgroundLayer(ctx) {
 
   let currentSprite = null;
   let mapVideo = null;
+  let mapVideoTexture = null;
   let lastMapUrl = null;
   let lastMapStartedAt = null;
   let cancelFrameWait = null; // ожидание первого кадра текущего видео-фона
@@ -55,10 +57,18 @@ export function createBackgroundLayer(ctx) {
       clearInterval(frameWatchdog);
       frameWatchdog = null;
     }
+    // Текстура кадра держит GL-память и ссылку на <video>: без destroy каждая
+    // смена сцены оставляла по текстуре (до 33 МБ видеопамяти на 4K-карте).
+    if (mapVideoTexture) {
+      mapVideoTexture.destroy(true);
+      mapVideoTexture = null;
+    }
     if (!mapVideo) return;
     mapVideo.pause();
     mapVideo.removeAttribute("src");
     mapVideo.load();
+    ctx.unregisterUnlockable(mapVideo);
+    releaseVideoStage(mapVideo);
     mapVideo = null;
     ctx.mapVideoEl = null;
   }
@@ -122,8 +132,16 @@ export function createBackgroundLayer(ctx) {
           clearInterval(frameWatchdog);
           frameWatchdog = null;
         }
-        if (mapVideo !== v || !currentSprite) return; // фон успели сменить, пока ждали кадр
+        if (mapVideo !== v || !currentSprite) {
+          texture.destroy(true); // фон успели сменить, пока ждали кадр
+          return;
+        }
+        mapVideoTexture = texture;
         currentSprite.texture = texture;
+        // Подсказка загрузчику (gl-video-uploader.js: stageStep): экранных
+        // пикселей на пиксель кадра при текущем зуме.
+        const sprite = currentSprite;
+        texture.source.stageScale = () => Math.abs(sprite.scale.x * ctx.world.scale.x) * (window.devicePixelRatio || 1);
         resizeSprite();
       });
 

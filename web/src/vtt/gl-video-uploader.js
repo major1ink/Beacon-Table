@@ -55,8 +55,11 @@ const glUploadVideoResourceSafe = {
       return;
     }
 
-    const width = source.pixelWidth;
-    const height = source.pixelHeight;
+    // Текстура может быть меньше кадра: UV у Pixi в долях, спрайт этого не
+    // заметит (см. stageStep).
+    const step = stageStep(source);
+    const width = Math.max(1, Math.round(source.pixelWidth * step));
+    const height = Math.max(1, Math.round(source.pixelHeight * step));
 
     if (glTexture.width !== width || glTexture.height !== height) {
       gl.texImage2D(target, 0, glTexture.internalFormat, width, height, 0, glTexture.format, glTexture.type, null);
@@ -68,9 +71,62 @@ const glUploadVideoResourceSafe = {
     // кадров, и она одинаково валидна в WebGL1 и WebGL2. Если кадра сейчас нет,
     // Chromium снова молча ничего не сделает — но теперь это просто пустой
     // кадр, а не приговор текстуре.
-    gl.texSubImage2D(target, 0, 0, 0, glTexture.format, glTexture.type, source.resource);
+    gl.texSubImage2D(target, 0, 0, 0, glTexture.format, glTexture.type, stagedFrame(source.resource, width, height));
   },
 };
+
+// stageStep — во сколько раз ужать кадр перед заливкой. 4K-карта целиком на
+// экране 1440 px использует треть разрешения, а заливалась полностью:
+// ~100 МБ видеопамяти на кадр, и два окна (ДМ и трансляция на одной
+// машине) упирали GT 1030 в 15 FPS. stageScale — сколько экранных пикселей
+// приходится на пиксель кадра, его вешает слой, который знает камеру.
+// Уменьшаем с запасом, чтобы не прыгать туда-обратно на границе шага.
+const STEPS = [1, 0.5, 0.25];
+
+function stageStep(source) {
+  const need = typeof source.stageScale === "function" ? source.stageScale() : 1;
+  let step = source.stagedStep || 1;
+  if (need > step) step = STEPS.slice().reverse().find((s) => s >= need) || 1;
+  else {
+    const smaller = STEPS.find((s) => s < step && need <= s * 0.9);
+    if (smaller) step = smaller;
+  }
+  source.stagedStep = step;
+  return step;
+}
+
+// Заливка прямо из <video> в Chromium на Linux без аппаратного декодера идёт
+// через CPU: 4K-кадр — 90 мс на GT 1030, видео-карта роняла стол до 24 FPS.
+// Через ускоренный 2D-canvas тот же кадр — 1,4 мс, пиксели те же.
+const stages = new WeakMap();
+
+function stagedFrame(video, width, height) {
+  if (!(video instanceof HTMLVideoElement)) return video;
+  let canvas = stages.get(video);
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    stages.set(video, canvas);
+  }
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const c2d = canvas.getContext("2d");
+  c2d.clearRect(0, 0, width, height); // у webm-токенов с альфой кадры иначе накладываются
+  c2d.drawImage(video, 0, 0, width, height);
+  return canvas;
+}
+
+// releaseVideoStage — отпустить промежуточный canvas выброшенного видео
+// сразу: он держит видеопамять размером с кадр, а WeakMap отдаст его только
+// со сборкой мусора.
+export function releaseVideoStage(video) {
+  const canvas = stages.get(video);
+  if (!canvas) return;
+  canvas.width = 0;
+  canvas.height = 0;
+  stages.delete(video);
+}
 
 export function installVideoUploaderFix() {
   extensions.add(glUploadVideoResourceSafe);

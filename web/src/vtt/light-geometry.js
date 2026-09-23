@@ -129,6 +129,50 @@ export function intersectMulti(a, b) {
   return polygonClipping.intersection(a, b);
 }
 
+// intersectMultiSafe — intersectMulti с повтором на грубой сетке. Кольцо
+// затухания с дырами ∩ обзор изредка роняет polygon-clipping, и кольцо
+// пропадало целиком — полоса рисовалась ярче, чем должна. Повтор с точками,
+// прижатыми к сетке 0,5, 1, затем 4 px — тот же приём, что QUANTUM_LADDER у
+// всего расчёта, только для одной фигуры. Цена — нахлёст на соседнее кольцо
+// не шире половины шага, и только там, где кольца раньше не было вовсе.
+// Кидает, если не помог ни один шаг.
+const SAFE_STEPS = [0.5, 1, 4];
+
+export function intersectMultiSafe(a, b) {
+  try {
+    return intersectMulti(a, b);
+  } catch (err) {
+    for (const q of SAFE_STEPS) {
+      try {
+        return intersectMulti(snapMulti(a, q), snapMulti(b, q));
+      } catch {
+        /* следующий шаг сетки */
+      }
+    }
+    throw err;
+  }
+}
+
+function snapMulti(multi, q) {
+  const out = [];
+  for (const poly of multi) {
+    const rings = [];
+    for (const ring of poly) {
+      const r = [];
+      for (const [x, y] of ring) {
+        const sx = Math.round(x / q) * q;
+        const sy = Math.round(y / q) * q;
+        const prev = r[r.length - 1];
+        if (prev && prev[0] === sx && prev[1] === sy) continue;
+        r.push([sx, sy]);
+      }
+      if (r.length >= 4) rings.push(r);
+    }
+    if (rings.length) out.push(rings);
+  }
+  return out;
+}
+
 // differenceMulti/unionMulti — та же булева алгебра, что unionAll/
 // intersectMulti, но НАД УЖЕ ГОТОВЫМИ MultiPolygon (не сырыми точками
 // raycasting'а — на вход unionAll нужен именно точечный формат одного
@@ -148,6 +192,57 @@ export function unionMulti(a, b) {
   if (!a || !a.length) return b || EMPTY;
   if (!b || !b.length) return a;
   return polygonClipping.union(a, b);
+}
+
+// unionMany — объединение списка MultiPolygon одним проходом. Цепочка
+// unionMulti по тем же фигурам заново перемалывала растущий результат на
+// каждом шаге: на 37 источниках — 200 мс против единиц.
+export function unionMany(multis) {
+  const parts = multis.filter((m) => m && m.length);
+  if (parts.length === 0) return EMPTY;
+  if (parts.length === 1) return parts[0];
+  return polygonClipping.union(...parts);
+}
+
+// unionInto — base ∪ added, где base — уже готовое объединение (его
+// многоугольники не пересекаются). В библиотеку уходят только куски base,
+// чья рамка задевает рамку added: остальные слиться не могут и переходят
+// в ответ как есть. Шаг одного факела по карте с тремя десятками
+// источников — один маленький union вместо всего слоя.
+export function unionInto(base, added) {
+  const adds = added.filter((m) => m && m.length);
+  if (adds.length === 0) return base || EMPTY;
+  if (!base || !base.length) return unionMany(adds);
+  const box = newBox();
+  for (const m of adds) growBox(box, m);
+  const touched = [];
+  const kept = [];
+  for (const poly of base) {
+    if (boxesTouch(growBox(newBox(), [poly]), box)) touched.push(poly);
+    else kept.push(poly);
+  }
+  const merged = touched.length ? polygonClipping.union(touched, ...adds) : unionMany(adds);
+  return kept.length ? kept.concat(merged) : merged;
+}
+
+function newBox() {
+  return [Infinity, Infinity, -Infinity, -Infinity];
+}
+
+function boxesTouch(a, b) {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+}
+
+function growBox(box, multi) {
+  for (const poly of multi) {
+    for (const [x, y] of poly[0]) {
+      if (x < box[0]) box[0] = x;
+      if (y < box[1]) box[1] = y;
+      if (x > box[2]) box[2] = x;
+      if (y > box[3]) box[3] = y;
+    }
+  }
+  return box;
 }
 
 // worldRect — MultiPolygon на весь мир целиком (глобальный свет "на всю

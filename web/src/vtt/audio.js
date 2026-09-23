@@ -94,6 +94,11 @@ export function createAudio(ctx, sideMenu) {
       tryPlay(el);
     }
   };
+  // Видео выброшенного фона/токена — иначе массив держал бы все ролики сессии.
+  ctx.unregisterUnlockable = (el) => {
+    const i = unlockables.indexOf(el);
+    if (i >= 0) unlockables.splice(i, 1);
+  };
 
   // seekTo — общая механика: выставить currentTime (в секундах, с учётом
   // Loop по модулю длительности) и либо заиграть, либо оставить на паузе,

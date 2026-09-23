@@ -20,8 +20,8 @@
 // при любой расстановке токенов и источников света.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeVisionPlan, computeVisionPlanWithFallback, QUANTUM_LADDER, LIGHT_STEPS } from "../src/vtt/vision-plan.js";
-import { computeVisibilityPolygon, weldWalls, wallBlocksLight } from "../src/geometry.js";
+import { computeVisionPlan, computeVisionPlanWithFallback, computeLightLayer, QUANTUM_LADDER, LIGHT_STEPS } from "../src/vtt/vision-plan.js";
+import { computeVisibilityPolygon, weldWalls, wallBlocksLight, distToSegment } from "../src/geometry.js";
 import { unionAll, subtractNested, differenceMulti, quantizePoints, gridUnitsToWorld } from "../src/vtt/light-geometry.js";
 import { manorWalls, manorWorld, manorGrid } from "./fixtures/walls-manor.js";
 
@@ -433,6 +433,84 @@ test("memo не влияет на результат расчёта", () => {
   }
 });
 
+// assertSameShape — фигуры совпадают: площадь и принадлежность точек сетки.
+// Инкрементальное объединение слоя света отдаёт те же фигуры, но куски могут
+// идти в другом порядке, поэтому deepEqual не годится, а булева разность
+// сама спотыкается на этой карте.
+function insideMulti(multi, x, y) {
+  let inside = false;
+  for (const poly of multi) {
+    for (const ring of poly) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i];
+        const [xj, yj] = ring[j];
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+function assertSameShape(a, b, what) {
+  const da = multiArea(a);
+  const db = multiArea(b);
+  assert.ok(Math.abs(da - db) < 1, `${what}: площадь ${da.toFixed(1)} против ${db.toFixed(1)} px²`);
+  const N = 50;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const x = ((i + 0.5) / N) * manorWorld.w + 0.123;
+      const y = ((j + 0.5) / N) * manorWorld.h + 0.311;
+      assert.equal(insideMulti(a, x, y), insideMulti(b, x, y), `${what}: точка ${x.toFixed(0)},${y.toFixed(0)}`);
+    }
+  }
+}
+
+test("кэш полос по источникам и объединение с памятью совпадают с расчётом с нуля", () => {
+  // Шаг одного факела, шаг наблюдателя, дверь — ровно то, что делает стол
+  // между кадрами. Каждый раз сверяем с расчётом без memo.
+  const rnd = makeRandom(2024);
+  const lights = [];
+  for (let i = 0; i < 14; i++) {
+    const color = i % 3 === 0 ? "#ffb070" : "";
+    lights.push({ x: rnd() * manorWorld.w, y: rnd() * manorWorld.h, lightOnly: true, light: { enabled: true, bright: 10 + Math.floor(rnd() * 20), dim: 40, color } });
+  }
+  const walker = { x: 300, y: 800, light: { enabled: true, bright: 20, dim: 40, color: "#ff9d3c" } };
+  const watcher = { x: 900, y: 900 };
+  const doors = manorWalls.filter((w) => w.door).map((w) => w.id);
+  const memo = {};
+  const dmMemo = {};
+  let scene = makeScene([walker, watcher, ...lights], "");
+  const check = (step) => {
+    const got = computeVisionPlanWithFallback(scene, false, memo).plan;
+    const want = computeVisionPlanWithFallback(scene, false).plan;
+    assertSameShape(got.dimIslands.map((d) => d.poly), want.dimIslands.map((d) => d.poly), `${step}: освещённое`);
+    assert.equal(got.rings.length, want.rings.length, `${step}: число колец`);
+    got.rings.forEach((r, i) => assertSameShape(r.multi, want.rings[i].multi, `${step}: кольцо ${i}`));
+    assert.equal(got.tints.length, want.tints.length, `${step}: число цветов`);
+    got.tints.forEach((t, i) => assertSameShape(t.multi, want.tints.find((x) => x.color === t.color).multi, `${step}: цвет ${t.color}`));
+    const dm = computeVisionPlanWithFallback(scene, true, dmMemo).plan;
+    const dmWant = computeVisionPlanWithFallback(scene, true).plan;
+    dm.tints.forEach((t) => assertSameShape(t.multi, dmWant.tints.find((x) => x.color === t.color).multi, `${step}: цвет у ДМ`));
+  };
+  const move = (id, dx) => {
+    scene = { ...scene, tokens: { ...scene.tokens, [id]: { ...scene.tokens[id], x: scene.tokens[id].x + dx } } };
+  };
+  check("старт");
+  for (let i = 0; i < 5; i++) {
+    move("tok-0", 90);
+    check(`шаг факела ${i}`);
+  }
+  move("tok-1", 120);
+  check("шаг наблюдателя");
+  move("tok-5", -200);
+  check("сдвиг другого источника");
+  for (const id of doors.slice(0, 2)) {
+    scene = { ...scene, walls: { ...scene.walls, [id]: { ...scene.walls[id], doorState: "open" } } };
+    check(`дверь ${id}`);
+  }
+  move("tok-0", -300);
+  check("факел вернулся");
+});
+
 test("сдвиг источника света сбрасывает кэш слоя света", () => {
   // Самый опасный для кэша случай: наблюдатель стоит на месте, а двигается
   // ИСТОЧНИК. Если ключ (lightLayerKey) не учтёт его координаты, игрок будет
@@ -745,4 +823,93 @@ test("смена света зоны сбрасывает кэш плана", ()
   const second = computeVisionPlanWithFallback(lit, false, memo);
   assert.ok(!second.unchanged, "правка света зоны не заметилась планом");
   assert.ok(second.plan.dimIslands.length > 0);
+});
+
+test("свет у стены и в углу не уходит иглой сквозь стену", () => {
+  // Пойманы фаззером: источник вплотную к стене или в углу, лучи в вершину
+  // промахивались мимо обеих стен угла (погрешность u) и светили на весь
+  // радиус сквозь стену.
+  const cases = [
+    {
+      corners: [
+        [1073.711700906954, 1167.709740309734], [920.1508981312638, 1273.8528232108183],
+        [737.1479124636542, 1221.6696990281966], [662.5077246924351, 1061.703988767578],
+        [752.4359185916926, 901.8246387797329], [939.2147299544355, 937.2665363861319],
+        [1082.1959042311105, 1012.6717849704391],
+      ],
+      light: [840.5893867893915, 918.6445787845215],
+      dim: 85,
+    },
+    {
+      corners: [
+        [412.4983951648335, 1053.7624088028626], [386.23782246067094, 753.307990260879],
+        [805.0227001192043, 719.9269628403449], [831.2832728233668, 1066.1734178349634],
+      ],
+      light: [829.6866842494252, 1064.9688826858046],
+      dim: 173,
+    },
+  ];
+  for (const { corners, light: [lx, ly], dim } of cases) {
+    const walls = Object.fromEntries(
+      corners.map((p, i) => {
+        const q = corners[(i + 1) % corners.length];
+        return [`w${i}`, { id: `w${i}`, x1: p[0], y1: p[1], x2: q[0], y2: q[1] }];
+      }),
+    );
+    const light = { x: lx, y: ly, lightOnly: true, light: { enabled: true, bright: dim / 2, dim } };
+    const scene = { width: 2000, height: 2000, grid: { size: 50, unitsPerCell: 5 }, globalLight: "", walls, tokens: { t: light }, buildings: {} };
+    const { dimMulti } = computeLightLayer(scene, WORKING_QUANTUM, [light], 2000, 2000);
+    const wallList = Object.values(walls);
+    for (const poly of dimMulti) {
+      for (const [x, y] of poly[0]) {
+        let inside = false;
+        for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
+          const [xi, yi] = corners[i];
+          const [xj, yj] = corners[j];
+          if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+        }
+        const d = Math.min(...wallList.map((w) => distToSegment(x, y, w.x1, w.y1, w.x2, w.y2)));
+        assert.ok(inside || d < 1, `вершина света ${x.toFixed(1)},${y.toFixed(1)} в ${d.toFixed(0)} px за стеной`);
+      }
+    }
+  }
+});
+
+test("кольцо затухания не пропадает, когда пересечение с обзором роняет polygon-clipping", () => {
+  // Пойман сравнением: на этой расстановке «кольцо ∩ обзор» для уровня 0.25
+  // падало внутри библиотеки, и кольцо молча выбрасывалось — полоса
+  // рисовалась без поволоки. Теперь повтор на грубой сетке
+  // (intersectMultiSafe).
+  let s = 99;
+  const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  let scene = null;
+  for (let i = 0; i <= 33; i++) {
+    const tokens = {};
+    for (let k = 0; k < 2 + Math.floor(rnd() * 3); k++) tokens["o" + k] = { x: rnd() * manorWorld.w, y: rnd() * manorWorld.h, ownerId: "p" };
+    for (let k = 0; k < 3 + Math.floor(rnd() * 6); k++) {
+      tokens["l" + k] = {
+        x: rnd() * manorWorld.w,
+        y: rnd() * manorWorld.h,
+        lightOnly: true,
+        light: { enabled: true, bright: 5 + Math.floor(rnd() * 20), dim: 20 + Math.floor(rnd() * 40), color: rnd() < 0.3 ? "#ffaa55" : "" },
+      };
+    }
+    scene = { ...makeScene([], ""), tokens };
+  }
+  const { plan } = computeVisionPlanWithFallback(scene, false);
+  const ring = plan.rings.find((r) => r.level === 0.25);
+  assert.ok(ring && multiArea(ring.multi) > 100000, "кольцо 0.25 пропало");
+});
+
+test("сварка стен сводит близкие концы в середину, а точные стыки не трогает", () => {
+  const walls = weldWalls([
+    { x1: 0, y1: 0, x2: 100, y2: 0 },
+    { x1: 106, y1: 0, x2: 106, y2: 100 }, // щель 6 px — меньше порога
+    { x1: 106, y1: 100, x2: 0, y2: 100 }, // стык точный
+    { x1: 0, y1: 100, x2: 0, y2: 40 }, // проём 40 px — шире порога, не заваривается
+  ]);
+  assert.deepEqual([walls[0].x2, walls[0].y2], [103, 0], "конец не ушёл в середину щели");
+  assert.deepEqual([walls[1].x1, walls[1].y1], [103, 0]);
+  assert.deepEqual([walls[1].x2, walls[1].y2], [106, 100], "точный стык сдвинулся");
+  assert.deepEqual([walls[3].x2, walls[3].y2], [0, 40], "проём заварен");
 });
