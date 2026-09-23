@@ -35,6 +35,7 @@ import { showConfirm, showPrompt } from "../modal.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { asButton } from "../a11y.js";
+import { withRollMode } from "../roll-mode.js";
 
 const treeEl = document.getElementById("tree");
 const searchEl = document.getElementById("search");
@@ -1214,7 +1215,7 @@ function onJournalChanged(id) {
 function sendRoll(formula, label) {
   if (!rollWS) return;
   const title = current && current.title;
-  rollWS.send({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label });
+  rollWS.send(withRollMode({ type: "roll_dice", formula, label: title ? `${title} — ${label}` : label }));
 }
 
 // ---- «Упоминания» — записи, ссылающиеся на открытую ----

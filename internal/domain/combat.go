@@ -128,6 +128,10 @@ type CombatState struct {
 	// HidePlayerDrawings — не показывать чужие пометки на карте: ДМ убирает
 	// с экрана всё, что нарисовали игроки, не стирая это (см. Drawing.AuthorID).
 	HidePlayerDrawings bool `json:"hidePlayerDrawings,omitempty"`
+	// HideBroadcastDice — не слать броски на трансляцию.
+	HideBroadcastDice bool `json:"hideBroadcastDice,omitempty"`
+	// BroadcastDice3D — объёмные кубы на трансляции (своих настроек у неё нет).
+	BroadcastDice3D bool `json:"broadcastDice3d,omitempty"`
 	// SummonAll — игроки могут призывать любое существо библиотеки (свои
 	// карточки, импорт из Foundry, встроенный каталог) без флага на каждой;
 	// выключено — только карточки с Monster.Summonable. Выключено по

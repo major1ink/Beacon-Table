@@ -25,6 +25,7 @@ import { renderKvTable } from "../kv-table.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { ABILITIES, fmtMod, crColor, monsterGlyphName, renderAbilityTiles, renderMonsterPreview } from "../monster-block.js";
 import { cssUrl } from "../html.js";
+import { withRollMode } from "../roll-mode.js";
 
 // ==================== state ====================
 
@@ -647,7 +648,7 @@ function connectRollSocket() {
 function sendRoll(formula, label) {
   if (!rollWS) return;
   const fullLabel = monster && monster.name ? `${monster.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
-  rollWS.send({ type: "roll_dice", formula, label: fullLabel });
+  rollWS.send(withRollMode({ type: "roll_dice", formula, label: fullLabel }));
 }
 
 // ==================== boot ====================

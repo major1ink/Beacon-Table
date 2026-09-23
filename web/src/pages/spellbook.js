@@ -25,6 +25,7 @@ import { renderKvTable } from "../kv-table.js";
 import { renderSpellPreview } from "../spell-preview.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { SCHOOLS, schoolInfo } from "../spell-school.js";
+import { withRollMode } from "../roll-mode.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -483,7 +484,7 @@ function connectRollSocket() {
 function sendRoll(formula, label) {
   if (!rollWS) return;
   const fullLabel = spell && spell.name ? `${spell.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
-  rollWS.send({ type: "roll_dice", formula, label: fullLabel });
+  rollWS.send(withRollMode({ type: "roll_dice", formula, label: fullLabel }));
 }
 
 // ==================== boot ====================

@@ -9,7 +9,9 @@ import "net/http"
 // script-src без 'unsafe-inline' — inline-скриптов в страницах нет; style-src
 // с ним — стили модалок ставит JS (modal.js). https: у картинок и звука —
 // текст заметки может ссылаться наружу; blob: — доска и видеокарты сцены;
-// ws:/wss: — за прокси схема сокета отличается от страницы.
+// ws:/wss: — за прокси схема сокета отличается от страницы. data: в
+// connect-src — Pixi проверяет ImageBitmap fetch'ем data:-картинки, без него
+// карты декодируются в основном потоке.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"base-uri 'self'; " +
 	"object-src 'none'; " +
@@ -21,7 +23,7 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"media-src 'self' data: blob: https:; " +
 	"font-src 'self' data:; " +
 	"worker-src 'self' blob:; " +
-	"connect-src 'self' ws: wss:"
+	"connect-src 'self' data: ws: wss:"
 
 // SecurityHeaders — ставятся до вызова хендлера: после первого w.Write шапка
 // уже ушла в сеть.

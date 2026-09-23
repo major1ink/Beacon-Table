@@ -6,6 +6,8 @@ import { initVTT } from "../vtt/index.js";
 import { mapObjectsOf } from "../vtt/map-objects.js";
 import { initDiceRoller } from "../dice.js";
 import { createRollLog } from "../roll-log.js";
+import { createDiceFx, initDiceFxSelect } from "../dice-fx.js";
+import { initDiceSoundToggle } from "../dice-sound.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
 import { invalidateActionsPeek } from "../combat-actions-peek.js";
 import { initCombatPanel } from "../combat-panel.js";
@@ -125,14 +127,16 @@ let isDemoGuest = false;
   const diceControls = document.createElement("div");
   diceControls.className = "dice-controls-menu";
   dicePanel.appendChild(diceControls);
-  initDiceRoller(diceControls, (msg) => vtt.send(msg));
+  initDiceRoller(diceControls, (msg) => vtt.send(msg), { hiddenToggle: true });
   // Чат стола — вторая вкладка того же окна (chat.js); адресаты — из vtt:playerList.
   const rollLog = createRollLog(document.getElementById("diceLog"), {
     layout: "plate",
     corner: "top-right",
     chat: { role: "dm", send: (m) => vtt.send(m) },
   });
-  document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
+  // В лог — когда кубы встали.
+  const diceFx = createDiceFx(document.getElementById("canvasWrap"), { role: "dm" });
+  document.addEventListener("vtt:rollResult", (e) => diceFx.play(e.detail).then(() => rollLog.push(e.detail)));
   document.addEventListener("vtt:chatHistory", (e) => rollLog.chat.setHistory(e.detail));
   document.addEventListener("vtt:chatMessage", (e) => rollLog.chat.push(e.detail));
   document.addEventListener("vtt:playerList", (e) => rollLog.chat.setParticipants(e.detail || []));
@@ -4743,6 +4747,23 @@ document.addEventListener("vtt:combatState", (e) => {
 });
 playerDrawingToggle.onchange = () => {
   vtt.send({ type: "set_player_drawing_enabled", playerDrawingEnabled: playerDrawingToggle.checked });
+};
+
+const hideBroadcastDiceToggle = document.getElementById("broadcastDiceToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  hideBroadcastDiceToggle.checked = !e.detail.hideBroadcastDice;
+});
+hideBroadcastDiceToggle.onchange = () => {
+  vtt.send({ type: "set_hide_broadcast_dice", hideBroadcastDice: !hideBroadcastDiceToggle.checked });
+};
+initDiceFxSelect(document.getElementById("diceFxSelect"));
+initDiceSoundToggle(document.getElementById("diceSoundToggle"));
+const broadcastDice3dToggle = document.getElementById("broadcastDice3dToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  broadcastDice3dToggle.checked = !!e.detail.broadcastDice3d;
+});
+broadcastDice3dToggle.onchange = () => {
+  vtt.send({ type: "set_broadcast_dice_3d", broadcastDice3d: broadcastDice3dToggle.checked });
 };
 
 const hidePlayerDrawingsToggle = document.getElementById("hidePlayerDrawingsToggle");

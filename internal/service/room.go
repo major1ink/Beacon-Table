@@ -813,6 +813,20 @@ func (r *Room) handleInbound(im inboundMsg) {
 			r.handleSetHidePlayerDrawings(*im.msg.HidePlayerDrawings)
 		}
 		return
+	case "set_broadcast_dice_3d":
+		if im.msg.BroadcastDice3D != nil {
+			r.combat.BroadcastDice3D = *im.msg.BroadcastDice3D
+			r.markCombatDirty()
+			r.broadcastCombat()
+		}
+		return
+	case "set_hide_broadcast_dice":
+		if im.msg.HideBroadcastDice != nil {
+			r.combat.HideBroadcastDice = *im.msg.HideBroadcastDice
+			r.markCombatDirty()
+			r.broadcastCombat()
+		}
+		return
 	// revive_token — вкладка "Убитые" трекера (см. combatPayload:
 	// "killed", handleReviveKilledToken). Своя ветка, не applyMutation:
 	// тот умеет только create_scene-подобные мутации сцены, а тут
@@ -1420,7 +1434,8 @@ func (r *Room) handleRollDice(c RoomClient, msg domain.ClientMsg) {
 	if err != nil {
 		return // некорректная/вне-лимитов формула — просто игнорируем
 	}
-	r.relayRoll(r.rollerName(c, msg.CharacterID), msg.Formula, clampRunes(msg.Label, maxRollLabel), result)
+	hidden := msg.Hidden != nil && *msg.Hidden
+	r.relayRoll(c, r.rollerName(c, msg.CharacterID), msg.Formula, clampRunes(msg.Label, maxRollLabel), result, hidden)
 }
 
 // rollerName — кто указан бросающим в общем логе. Если бросок пришёл с
@@ -1449,7 +1464,14 @@ func (r *Room) rollerName(c RoomClient, characterID string) string {
 // клиент не раздул roll_result-payload, рассылаемый всем клиентам комнаты.
 const maxRollLabel = 80
 
-func (r *Room) relayRoll(name, formula, label string, result domain.RollResult) {
+// sameRoller — c это тот же игрок, что кинул (с листа бросок идёт с другого сокета).
+func sameRoller(from, c RoomClient) bool {
+	return from != nil && from.Role() == domain.RolePlayer && c.Role() == domain.RolePlayer && c.PlayerID() == from.PlayerID()
+}
+
+// relayRoll: from == nil — бросок сервера, без анимации кубов; hidden — только ДМ
+// и самому бросившему игроку.
+func (r *Room) relayRoll(from RoomClient, name, formula, label string, result domain.RollResult, hidden bool) {
 	payload := map[string]any{
 		"type":     "roll_result",
 		"name":     name,
@@ -1461,7 +1483,24 @@ func (r *Room) relayRoll(name, formula, label string, result domain.RollResult) 
 	if label != "" {
 		payload["label"] = label
 	}
+	if from != nil {
+		if from.Role() == domain.RoleDM {
+			payload["fromRole"] = "dm"
+		} else {
+			payload["fromRole"] = "player"
+			payload["fromId"] = from.PlayerID()
+		}
+	}
+	if hidden {
+		payload["hidden"] = true
+	}
 	for c := range r.clients {
+		switch {
+		case hidden && c.Role() != domain.RoleDM && !sameRoller(from, c):
+			continue
+		case c.Role() == domain.RoleTV && r.combat.HideBroadcastDice:
+			continue
+		}
 		c.Send(payload)
 	}
 }
@@ -1865,7 +1904,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	initiative := 0.0
 	if result, err := r.dice.Roll(formula); err == nil {
 		initiative = float64(result.Total)
-		r.relayRoll("ДМ", formula, "Инициатива: "+name, result)
+		r.relayRoll(nil, "ДМ", formula, "Инициатива: "+name, result, false)
 	}
 
 	id := "combatant-" + newID()
@@ -2490,6 +2529,8 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// и едут тем же каналом, что и остальные настройки.
 		"playerDrawingEnabled": r.combat.PlayerDrawingEnabled,
 		"hidePlayerDrawings":   r.combat.HidePlayerDrawings,
+		"hideBroadcastDice":    r.combat.HideBroadcastDice,
+		"broadcastDice3d":      r.combat.BroadcastDice3D,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()

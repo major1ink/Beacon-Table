@@ -41,6 +41,7 @@ import { createRollLog } from "../roll-log.js";
 import { isGM, isPlayer } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { cssUrl } from "../html.js";
+import { withRollMode } from "../roll-mode.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -2746,7 +2747,7 @@ function sendRoll(formula, label) {
   // раз бросок сделан именно с его листа. Так лог всегда называет того, кто
   // за столом реально кидал кубик — даже когда открыто несколько листов
   // подряд или ДМ бросает за чужого персонажа.
-  rollWS.send({ type: "roll_dice", formula, label, characterId: charId });
+  rollWS.send(withRollMode({ type: "roll_dice", formula, label, characterId: charId }));
 }
 
 // isEmbedded — лист открыт ВНУТРИ страницы стола: боковым доком

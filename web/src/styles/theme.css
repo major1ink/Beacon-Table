@@ -493,6 +493,8 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 }
 .dice-tray .dice-pool button:hover { background: var(--surface-hover); }
 .dice-tray .dice-pool [data-clear] { margin-left: auto; color: var(--text-dim); }
+.dice-tray .dice-pool [data-hidden] { display: inline-flex; align-items: center; padding: 4px 7px; color: var(--text-dim); }
+.dice-tray .dice-pool [data-hidden].has { background: var(--accent-bg); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
 .dice-tray .dice-mod-value {
   min-width: 30px; text-align: center; font-size: 12px; color: var(--text-dim);
   font-variant-numeric: tabular-nums;
@@ -720,6 +722,81 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .roll-op { color: var(--text-dim); }
 .roll-eq { margin-left: 2px; color: var(--text-dim); }
 .roll-eq b { color: var(--text); font-size: 13px; }
+.roll-card.is-hidden { border-style: dashed; }
+.roll-card-who svg { vertical-align: -2px; margin-right: 4px; opacity: 0.7; }
+
+/* ---- кубы поверх карты (dice-fx.js): ниже плашки лога, клики насквозь ---- */
+.dice-fx {
+  position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --dfx-size: 58px;
+}
+@media (max-width: 600px) { .dice-fx { --dfx-size: 42px; } }
+.dice-fx--tv { --dfx-size: clamp(72px, 9vmin, 132px); }
+.dfx-stage {
+  position: absolute; top: 58%; left: 16px; right: 16px; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  transition: opacity var(--dfx-out) ease, transform var(--dfx-out) ease;
+}
+.dfx-stage.is-out { opacity: 0; transform: translateY(-62%); }
+.dfx-who {
+  padding: 4px 12px; border-radius: var(--radius-pill);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
+  color: var(--text); font-weight: 600; font-size: calc(var(--dfx-size) * 0.24);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.dfx-who:empty { display: none; }
+.dfx-who svg { vertical-align: -2px; margin-right: 6px; opacity: 0.75; }
+.dfx-row { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: calc(var(--dfx-size) * 0.16); }
+.dfx-die {
+  width: var(--dfx-size); height: var(--dfx-size);
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
+  animation: dfx-throw 0.9s cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+.dfx-die svg { width: 100%; height: 100%; overflow: visible; }
+.dfx-body { fill: var(--accent); stroke: rgba(255, 255, 255, 0.55); stroke-width: 3; stroke-linejoin: round; }
+.dfx-facet { fill: none; stroke: rgba(255, 255, 255, 0.28); stroke-width: 2; stroke-linejoin: round; }
+.dfx-num {
+  fill: #fff; font-weight: 800; text-anchor: middle; dominant-baseline: middle;
+  font-family: inherit; font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: rgba(0, 0, 0, 0.35); stroke-width: 3;
+}
+.dfx-die.is-pct .dfx-body { fill: var(--blue); }
+.is-settled .dfx-die.is-crit .dfx-body { fill: var(--green); stroke: var(--green-bright); }
+.is-settled .dfx-die.is-fumble .dfx-body { fill: var(--danger-hover); stroke: #e07a7a; }
+.is-settled .dfx-die { animation: dfx-land 0.22s ease-out both; }
+.dfx-more, .dfx-mod, .dfx-total {
+  display: inline-flex; align-items: center; height: calc(var(--dfx-size) * 0.62);
+  padding: 0 calc(var(--dfx-size) * 0.2); border-radius: var(--radius-pill);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
+  color: var(--text); font-weight: 700; font-size: calc(var(--dfx-size) * 0.32); font-variant-numeric: tabular-nums;
+}
+.dfx-sum { display: flex; align-items: center; gap: calc(var(--dfx-size) * 0.1); opacity: 0; transform: scale(0.7); transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.is-settled .dfx-sum { opacity: 1; transform: none; }
+.dfx-total { font-size: calc(var(--dfx-size) * 0.42); border-color: var(--accent); }
+.dfx-mod { color: var(--text-dim); }
+@keyframes dfx-throw {
+  0% { opacity: 0; transform: translate(var(--dfx-x), 180px) rotate(var(--dfx-r)) scale(0.55); }
+  15% { opacity: 1; }
+  65% { transform: translate(calc(var(--dfx-x) * -0.08), -10px) rotate(calc(var(--dfx-r) * -0.03)) scale(1.04); }
+  100% { opacity: 1; transform: none; }
+}
+/* 3D (dice-3d.js): кубы катаются по холсту, подпись и итог — внизу. */
+.dfx-warn { color: #e0b070; }
+.dfx-box { position: absolute; inset: 4% 6%; transition: opacity var(--dfx-out, 450ms) ease; }
+.dfx-box[hidden] { display: none; }
+.dfx-box.is-out { opacity: 0; }
+/* Страницы красят любой canvas фоном карты — у кубов он должен быть прозрачным. */
+.dfx-box canvas { display: block; width: 100% !important; height: 100% !important; background: transparent !important; }
+.dfx-stage.dfx-3d { top: auto; bottom: 7%; transform: none; }
+.dfx-stage.dfx-3d.is-out { transform: translateY(8px); }
+@keyframes dfx-land { 0% { transform: scale(1.18); } 100% { transform: none; } }
+/* Упрощённый вид — без полёта. */
+.dfx-lite .dfx-die, .dfx-rush .dfx-die { animation: dfx-pop 0.25s ease-out both; }
+@keyframes dfx-pop { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .dfx-die, .is-settled .dfx-die { animation: none; }
+}
 
 /* ---- панель инструмента «Пометки» (см. web/src/draw-options.js) ----
    Общая и для рейл-панели ДМ, и для всплывашки в топбаре игрока: набор

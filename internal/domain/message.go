@@ -209,6 +209,10 @@ type ClientMsg struct {
 	// тумблер стола, прятать ли пометки игроков (см.
 	// domain.CombatState.HidePlayerDrawings).
 	HidePlayerDrawings *bool `json:"hidePlayerDrawings,omitempty"`
+	// HideBroadcastDice — только для "set_hide_broadcast_dice".
+	HideBroadcastDice *bool `json:"hideBroadcastDice,omitempty"`
+	// BroadcastDice3D — только для "set_broadcast_dice_3d".
+	BroadcastDice3D *bool `json:"broadcastDice3d,omitempty"`
 
 	// HideLightMarkers — только для "set_hide_light_markers": общий тумблер
 	// стола (раздел "Настройки"), прятать ли у ДМ лампочки токенов света вне
@@ -266,7 +270,8 @@ type ClientMsg struct {
 	// Condition.DefaultRounds из карточки».
 	Rounds *int `json:"rounds,omitempty"`
 	// Hidden — метка видна только ДМ (см. AppliedStatus.Hidden), только для
-	// "apply_status". nil — как в карточке (то есть видна всем).
+	// "apply_status". nil — как в карточке (то есть видна всем). В "roll_dice" —
+	// скрытый бросок.
 	Hidden *bool `json:"hidden,omitempty"`
 	// Source — подпись «откуда прилетело» для "apply_status" («Заклинание
 	// «Огненный шар»»). Показываемый текст со стороны клиента — сервер, как

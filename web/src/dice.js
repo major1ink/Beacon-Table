@@ -18,6 +18,9 @@
 // общий виджет (см. web/src/roll-log.js) — страница сама монтирует
 // createRollLog и кормит его событием vtt:rollResult.
 
+import { icon } from "./icons.js";
+import { isRollHidden, setRollHidden, withRollMode } from "./roll-mode.js";
+
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 
 // diceTermRe — тот же разбор формулы на члены, что и на сервере
@@ -95,7 +98,8 @@ export function formatRolls(formula, rolls) {
   return groups.map((g) => `${g.label}[${g.values.join(", ")}]`).join(" + ");
 }
 
-export function initDiceRoller(controlsContainer, send) {
+// hiddenToggle — кнопка скрытых бросков (roll-mode.js); role — чья панель, для подсказки.
+export function initDiceRoller(controlsContainer, send, { hiddenToggle = false, role = "dm" } = {}) {
   controlsContainer.classList.add("dice-tray");
   controlsContainer.innerHTML = `
     <div class="dice-buttons">${DICE.map(
@@ -107,6 +111,7 @@ export function initDiceRoller(controlsContainer, send) {
       <span class="dice-mod-value">+0</span>
       <button type="button" data-mod="1" title="Модификатор +1">+</button>
       <button type="button" data-clear title="Очистить бросок">Сброс</button>
+      ${hiddenToggle ? `<button type="button" data-hidden aria-pressed="false">${icon("eye-off", { size: 13 })}</button>` : ""}
     </div>
     <div class="dice-custom">
       <input type="text" placeholder="напр. 2d6+3" aria-label="Формула броска" />
@@ -154,7 +159,7 @@ export function initDiceRoller(controlsContainer, send) {
   // следующий бросок случайно складывался с прошлым.
   function roll(formula) {
     if (!formula) return;
-    send({ type: "roll_dice", formula });
+    send(withRollMode({ type: "roll_dice", formula }));
     clear();
   }
 
@@ -171,6 +176,25 @@ export function initDiceRoller(controlsContainer, send) {
     btn.onclick = () => mutate((p) => (p.mod += step));
   }
   controlsContainer.querySelector("[data-clear]").onclick = clear;
+  const hiddenBtn = controlsContainer.querySelector("[data-hidden]");
+  if (hiddenBtn) {
+    const who = role === "dm" ? "только ДМ" : "только вы и ДМ";
+    const renderHidden = () => {
+      const on = isRollHidden();
+      hiddenBtn.classList.toggle("has", on);
+      hiddenBtn.setAttribute("aria-pressed", String(on));
+      hiddenBtn.title = on
+        ? `Скрытые броски включены: результат видят ${who}, трансляция — нет. Действует и на броски с листа, из карточек и книг`
+        : `Скрытые броски: результат увидят ${who}`;
+    };
+    hiddenBtn.onclick = () => {
+      setRollHidden(!isRollHidden());
+      renderHidden();
+    };
+    // Режим могли переключить в другом окне того же стола.
+    window.addEventListener("storage", renderHidden);
+    renderHidden();
+  }
   controlsContainer.querySelector("[data-roll-custom]").onclick = () => roll(customInput.value.trim());
   customInput.addEventListener("input", renderFromInput);
   customInput.addEventListener("keydown", (e) => {

@@ -3,6 +3,8 @@
 import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
 import { createRollLog } from "../roll-log.js";
+import { createDiceFx, initDiceFxSelect } from "../dice-fx.js";
+import { initDiceSoundToggle } from "../dice-sound.js";
 import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
 import { openSheetDock, isSheetDockOpen } from "../sheet-dock.js";
 import { setCardOpener } from "../combatant-card.js";
@@ -183,14 +185,18 @@ const PLAYER_DRAW_HELP = {
   // важен: док задаёт высоту, которая остаётся канвасу, а Pixi снимает её
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
-  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg));
+  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg), { hiddenToggle: true, role: "player" });
   // Чат стола — вторая вкладка того же окна (chat.js); адресаты — из vtt:playerList.
   const rollLog = createRollLog(document.getElementById("diceLog"), {
     layout: "plate",
     corner: "bottom-left",
     chat: { role: "player", selfId: me.id, send: (m) => vtt.send(m) },
   });
-  document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
+  // В лог — когда кубы встали.
+  const diceFx = createDiceFx(document.getElementById("canvasWrap"), { role: "player" });
+  document.addEventListener("vtt:rollResult", (e) => diceFx.play(e.detail).then(() => rollLog.push(e.detail)));
+  initDiceFxSelect(document.getElementById("diceFxSelect"));
+  initDiceSoundToggle(document.getElementById("diceSoundToggle"));
   document.addEventListener("vtt:chatHistory", (e) => rollLog.chat.setHistory(e.detail));
   document.addEventListener("vtt:chatMessage", (e) => rollLog.chat.push(e.detail));
   document.addEventListener("vtt:playerList", (e) => rollLog.chat.setParticipants(e.detail || []));

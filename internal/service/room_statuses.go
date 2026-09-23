@@ -524,7 +524,7 @@ func (r *Room) applyPeriodicModifiers(cmb *domain.Combatant, period string) {
 			if m.Note != "" {
 				label += " (" + m.Note + ")"
 			}
-			r.relayRoll(cmb.Name, formula, label, result)
+			r.relayRoll(nil, cmb.Name, formula, label, result, false)
 			delta += result.Total
 		}
 	}
