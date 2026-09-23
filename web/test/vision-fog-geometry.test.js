@@ -20,8 +20,8 @@
 // при любой расстановке токенов и источников света.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeVisionPlan, computeVisionPlanWithFallback, QUANTUM_LADDER, LIGHT_STEPS } from "../src/vtt/vision-plan.js";
-import { computeVisibilityPolygon, weldWalls, wallBlocksLight } from "../src/geometry.js";
+import { computeVisionPlan, computeVisionPlanWithFallback, computeLightLayer, QUANTUM_LADDER, LIGHT_STEPS } from "../src/vtt/vision-plan.js";
+import { computeVisibilityPolygon, weldWalls, wallBlocksLight, distToSegment } from "../src/geometry.js";
 import { unionAll, subtractNested, differenceMulti, quantizePoints, gridUnitsToWorld } from "../src/vtt/light-geometry.js";
 import { manorWalls, manorWorld, manorGrid } from "./fixtures/walls-manor.js";
 
@@ -823,4 +823,54 @@ test("смена света зоны сбрасывает кэш плана", ()
   const second = computeVisionPlanWithFallback(lit, false, memo);
   assert.ok(!second.unchanged, "правка света зоны не заметилась планом");
   assert.ok(second.plan.dimIslands.length > 0);
+});
+
+test("свет у стены и в углу не уходит иглой сквозь стену", () => {
+  // Пойманы фаззером: источник вплотную к стене или в углу, лучи в вершину
+  // промахивались мимо обеих стен угла (погрешность u) и светили на весь
+  // радиус сквозь стену.
+  const cases = [
+    {
+      corners: [
+        [1073.711700906954, 1167.709740309734], [920.1508981312638, 1273.8528232108183],
+        [737.1479124636542, 1221.6696990281966], [662.5077246924351, 1061.703988767578],
+        [752.4359185916926, 901.8246387797329], [939.2147299544355, 937.2665363861319],
+        [1082.1959042311105, 1012.6717849704391],
+      ],
+      light: [840.5893867893915, 918.6445787845215],
+      dim: 85,
+    },
+    {
+      corners: [
+        [412.4983951648335, 1053.7624088028626], [386.23782246067094, 753.307990260879],
+        [805.0227001192043, 719.9269628403449], [831.2832728233668, 1066.1734178349634],
+      ],
+      light: [829.6866842494252, 1064.9688826858046],
+      dim: 173,
+    },
+  ];
+  for (const { corners, light: [lx, ly], dim } of cases) {
+    const walls = Object.fromEntries(
+      corners.map((p, i) => {
+        const q = corners[(i + 1) % corners.length];
+        return [`w${i}`, { id: `w${i}`, x1: p[0], y1: p[1], x2: q[0], y2: q[1] }];
+      }),
+    );
+    const light = { x: lx, y: ly, lightOnly: true, light: { enabled: true, bright: dim / 2, dim } };
+    const scene = { width: 2000, height: 2000, grid: { size: 50, unitsPerCell: 5 }, globalLight: "", walls, tokens: { t: light }, buildings: {} };
+    const { dimMulti } = computeLightLayer(scene, WORKING_QUANTUM, [light], 2000, 2000);
+    const wallList = Object.values(walls);
+    for (const poly of dimMulti) {
+      for (const [x, y] of poly[0]) {
+        let inside = false;
+        for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
+          const [xi, yi] = corners[i];
+          const [xj, yj] = corners[j];
+          if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+        }
+        const d = Math.min(...wallList.map((w) => distToSegment(x, y, w.x1, w.y1, w.x2, w.y2)));
+        assert.ok(inside || d < 1, `вершина света ${x.toFixed(1)},${y.toFixed(1)} в ${d.toFixed(0)} px за стеной`);
+      }
+    }
+  }
 });

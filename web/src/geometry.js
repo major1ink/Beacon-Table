@@ -15,9 +15,14 @@ export function raySegmentT(ox, oy, dx, dy, ax, ay, bx, by) {
   const acx = ax - ox, acy = ay - oy;
   const t = (ex * acy - ey * acx) / det;
   const u = (dx * acy - dy * acx) / det;
-  if (t < 0 || u < 0 || u > 1) return null;
+  // Допуск на u: луч в общую вершину двух стен из-за погрешности промахивался
+  // мимо обеих (u = 1 + 1e-12 у одной, −1e-12 у другой) и уходил иглой света
+  // через угол на весь радиус. 1e-9 длины стены — миллионные доли пикселя.
+  if (t < 0 || u < -U_EPS || u > 1 + U_EPS) return null;
   return t;
 }
+
+const U_EPS = 1e-9;
 
 // wallsInRange — стены, до которых от точки (ox,oy) не дальше radius. Стена
 // дальше радиуса не может заслонить НИЧЕГО внутри круга — луч всё равно
