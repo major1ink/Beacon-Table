@@ -7,6 +7,7 @@
 // живёт в локальной сети, канала «наружу» у него нет.
 import { openModal, showAlert } from "./modal.js";
 import { fetchVersion } from "./api.js";
+import { copyToClipboard } from "./clipboard.js";
 
 const REPO_URL = "https://github.com/major1ink/Beacon-Table";
 export const SUPPORT_EMAIL = "info@beacontable.ru";
@@ -64,30 +65,6 @@ export function installErrorCapture() {
     const r = e.reason;
     remember("promise", r instanceof Error ? r.stack || `${r.name}: ${r.message}` : formatArgs([r]));
   });
-}
-
-// copyToClipboard — clipboard API, при отказе старый execCommand: на не-https
-// адресе (стол в локалке по http) прав на буфер часто нет.
-async function copyToClipboard(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // пробуем запасной путь ниже
-  }
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.style.cssText = "position:fixed;top:-1000px;opacity:0;";
-  document.body.appendChild(ta);
-  ta.select();
-  let ok = false;
-  try {
-    ok = document.execCommand("copy");
-  } catch {
-    ok = false;
-  }
-  ta.remove();
-  return ok;
 }
 
 function pad(n) {

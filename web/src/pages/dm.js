@@ -77,6 +77,7 @@ import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutorial.js";
 import { dmTourSteps } from "../tutorial-dm.js";
 import { escapeHtml, cssUrl } from "../html.js";
+import { copyToClipboard, flashCopied } from "../clipboard.js";
 import { asButton } from "../a11y.js";
 
 // Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
@@ -2748,21 +2749,15 @@ async function renderBroadcastLink() {
   }
 }
 
+// Клик по полю выделяет ссылку целиком: её длина такая, что мышью её тянуть
+// неудобно, а Ctrl+C после выделения работает везде.
+broadcastLinkInput.onclick = () => broadcastLinkInput.select();
+
 broadcastCopyBtn.onclick = async () => {
-  const url = broadcastLinkInput.value;
-  try {
-    await navigator.clipboard.writeText(url);
-  } catch {
-    // Буфер обмена недоступен (не защищённое соединение, отказ в правах) —
-    // выделяем текст, чтобы ссылку можно было скопировать вручную.
-    broadcastLinkInput.select();
-    return;
-  }
-  const label = broadcastCopyBtn.textContent;
-  broadcastCopyBtn.textContent = "Скопировано";
-  setTimeout(() => {
-    broadcastCopyBtn.textContent = label;
-  }, 1500);
+  const ok = await copyToClipboard(broadcastLinkInput.value);
+  // Не вышло даже запасным путём — выделяем ссылку, чтобы её забрали руками.
+  if (!ok) broadcastLinkInput.select();
+  flashCopied(broadcastCopyBtn, {}, ok);
 };
 
 // ---- экраны, ожидающие подтверждения (раздел "Настройки") ----
