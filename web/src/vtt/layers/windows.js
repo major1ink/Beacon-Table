@@ -1,4 +1,4 @@
-import { Container, Graphics, Text, BlurFilter } from "pixi.js";
+import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { wallMidpoint } from "../../geometry.js";
 
 // Значки окон (domain.Wall.Window) — эмодзи "🪟" в кружке-подложке, тот же
@@ -15,12 +15,31 @@ import { wallMidpoint } from "../../geometry.js";
 // секрет, отдельного visibleWindows()-фильтра по роли поэтому нет (в отличие
 // от doors.js, где секретную дверь прячем от игрока).
 //
-// shadow — небольшая мягкая тень под значком (GPU-блюр, тот же приём, что у
-// ручного тумана — см. layers/manual-fog.js): просто смещённый затемнённый
-// кружок позади подложки, для ощущения глубины/реалистичности, а не честная
-// светотень от источников света.
+// shadow — небольшая мягкая тень под значком: смещённый затемнённый кружок
+// позади подложки, для ощущения глубины, а не честная светотень. Раньше —
+// BlurFilter на каждом значке: фильтр рисует объект в отдельную текстуру, и
+// два окна стоили ~2 мс GPU на кадр, а на карте с десятками окон — десятки.
+// Теперь одна общая текстура с уже размытым кружком.
 const ICON_SIZE = 18;
 const GLASS_COLOR = 0x8fd3ff;
+const SHADOW_R = ICON_SIZE * 0.62;
+const SHADOW_SOFT = 6; // ширина размытого края, как у прежнего BlurFilter strength 3
+
+let shadowTexture = null;
+function getShadowTexture() {
+  if (shadowTexture) return shadowTexture;
+  const size = Math.ceil((SHADOW_R + SHADOW_SOFT) * 2) + 2;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(size / 2, size / 2, Math.max(0, SHADOW_R - SHADOW_SOFT), size / 2, size / 2, SHADOW_R + SHADOW_SOFT);
+  grad.addColorStop(0, "rgba(0,0,0,0.35)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  shadowTexture = Texture.from(c);
+  return shadowTexture;
+}
 
 export function createWindowsLayer(ctx) {
   const container = new Container();
@@ -28,8 +47,9 @@ export function createWindowsLayer(ctx) {
 
   function createView() {
     const root = new Container();
-    const shadow = new Graphics();
-    shadow.filters = [new BlurFilter({ strength: 3, quality: 2 })];
+    const shadow = new Sprite(getShadowTexture());
+    shadow.anchor.set(0.5);
+    shadow.position.set(2, 3);
     const bg = new Graphics();
     const icon = new Text({ text: "🪟", style: { fontSize: ICON_SIZE } });
     icon.anchor.set(0.5);
@@ -43,7 +63,6 @@ export function createWindowsLayer(ctx) {
     // 1/scale — постоянный ЭКРАННЫЙ размер значка независимо от зума карты
     // (тот же приём, что и у значка двери — см. doors.js).
     view.root.scale.set(1 / scale);
-    view.shadow.clear().circle(2, 3, ICON_SIZE * 0.62).fill({ color: 0x000000, alpha: 0.35 });
     view.bg
       .clear()
       .circle(0, 0, ICON_SIZE * 0.62)
