@@ -4,6 +4,7 @@ import { Application, Container } from "pixi.js";
 // contentSecurityPolicy), и без этой замены рендер карты не стартует вовсе.
 import "pixi.js/unsafe-eval";
 import { createDirtyFlags } from "./dirty.js";
+import { renderOnDemand } from "./render-on-demand.js";
 import { createCamera, applyCameraTransform, resetCamera, clampCamera, worldSize, canvasPos, screenToWorld } from "./camera.js";
 import { createAudio } from "./audio.js";
 import { createSideMenu } from "./side-menu.js";
@@ -66,6 +67,8 @@ export async function initVTT({ canvasId, role, playerId }) {
   if (app.renderer.name !== "webgl") {
     console.warn(`beacon: рендер идёт не через WebGL, а через "${app.renderer.name}" — часть эффектов будет пропущена или посчитана на CPU.`);
   }
+
+  renderOnDemand(app);
 
   const world = new Container();
   app.stage.addChild(world);
