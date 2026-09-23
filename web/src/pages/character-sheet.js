@@ -40,6 +40,7 @@ import { wireCatalogLinks } from "../catalog-links.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM, isPlayer } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { cssUrl } from "../html.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -1352,7 +1353,7 @@ function renderTab5() {
   const tbody = h("tbody", {});
   for (const e of inventory) {
     const avatar = h("div", { class: "inv-avatar" });
-    if (e.imageUrl) avatar.style.backgroundImage = `url("${e.imageUrl}")`;
+    if (e.imageUrl) avatar.style.backgroundImage = cssUrl(e.imageUrl);
 
     // max = текущее количество — игрок может только потратить/выбросить
     // часть стопки, не приписать себе лишнее (см. комментарий у `let inventory`).

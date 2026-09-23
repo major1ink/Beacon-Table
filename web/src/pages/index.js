@@ -14,6 +14,7 @@ import {
 } from "../api.js";
 import { showConfirm, showAlert } from "../modal.js";
 import { isOwner, isPlayer } from "../roles.js";
+import { escapeHtml } from "../html.js";
 
 // Версия сервера в углу экрана (см. cmd/beacon-table/version.go): тег релиза
 // у сборок GoReleaser, иначе short commit hash. Тянем сразу при загрузке, а не
@@ -255,12 +256,6 @@ forgotBtn.onclick = async () => {
     showAlert("Не удалось сбросить пароль: " + err.message);
   }
 };
-
-function escapeHtml(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
 
 const registerMsg = document.getElementById("registerMsg");
 registerForm.addEventListener("submit", async (e) => {

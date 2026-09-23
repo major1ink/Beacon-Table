@@ -300,7 +300,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           apihttp.LogRequests(api.LimitAPIBodies(mux)),
+		Handler:           apihttp.SecurityHeaders(apihttp.LogRequests(api.LimitAPIBodies(mux))),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	go func() {

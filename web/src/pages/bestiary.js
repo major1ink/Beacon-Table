@@ -24,6 +24,7 @@ import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from 
 import { renderKvTable } from "../kv-table.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { ABILITIES, fmtMod, crColor, monsterGlyphName, renderAbilityTiles, renderMonsterPreview } from "../monster-block.js";
+import { cssUrl } from "../html.js";
 
 // ==================== state ====================
 
@@ -478,7 +479,7 @@ function invSection(readOnly) {
     }
     monster.inventory.forEach((e, i) => {
       const avatar = h("div", { class: "av" });
-      if (e.imageUrl) avatar.style.backgroundImage = `url("${e.imageUrl}")`;
+      if (e.imageUrl) avatar.style.backgroundImage = cssUrl(e.imageUrl);
       const name = h("span", { class: "nm", text: e.name });
       const weight = h("span", { class: "tag", text: (e.weightLb || 0) + " фнт" });
       const row = [avatar, name, weight];

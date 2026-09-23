@@ -32,6 +32,7 @@
 // одна правка вручную (вырезать/вставить абзац) при необходимости.
 import { CONDITION_RU } from "./foundry-conditions.js";
 import { cleanFoundryText } from "./foundry-text.js";
+import { escapeHtml } from "./html.js";
 
 function ru(dict, code) {
   if (!code) return "";
@@ -186,10 +187,6 @@ function acNote(items) {
     .filter((i) => i.type === "equipment" && i.system && i.system.armor && i.system.equipped)
     .map((i) => i.name.toLowerCase())
     .join(", ");
-}
-
-function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 // ─── Строка атаки оружия из машинных полей предмета ───────────────────────

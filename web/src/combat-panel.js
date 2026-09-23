@@ -25,6 +25,8 @@ import { icon } from "./icons.js";
 import { showLootTakeModal } from "./loot-take-modal.js";
 import { showAlert, showConfirm } from "./modal.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
+import { cssUrl } from "./html.js";
+import { asButton } from "./a11y.js";
 
 // FOLLOW_KEY — режим "статблок следует за ходом" переживает перезагрузку
 // страницы: это настройка привычки ДМ, а не состояние конкретного боя.
@@ -112,7 +114,7 @@ export function initCombatPanel({ send, els }) {
 
       const avatar = document.createElement("div");
       avatar.className = "combat-avatar";
-      if (cmb.image) avatar.style.backgroundImage = `url("${cmb.image}")`;
+      if (cmb.image) avatar.style.backgroundImage = cssUrl(cmb.image);
       else avatar.style.background = cmb.color || "#555";
 
       const name = document.createElement("div");
@@ -415,7 +417,7 @@ export function initCombatPanel({ send, els }) {
       top.className = "combat-row-top";
       const avatar = document.createElement("div");
       avatar.className = "combat-avatar";
-      if (k.image) avatar.style.backgroundImage = `url("${k.image}")`;
+      if (k.image) avatar.style.backgroundImage = cssUrl(k.image);
       else avatar.style.background = k.color || "#555";
       const name = document.createElement("div");
       name.className = "combat-name";
@@ -635,7 +637,7 @@ export function initCombatPanel({ send, els }) {
       row.className = "combat-search-row";
       const avatar = document.createElement("div");
       avatar.className = "combat-avatar";
-      if (m.image) avatar.style.backgroundImage = `url("${m.image}")`;
+      if (m.image) avatar.style.backgroundImage = cssUrl(m.image);
       else avatar.style.background = "#555";
       const name = document.createElement("div");
       name.className = "combat-name";
@@ -647,6 +649,7 @@ export function initCombatPanel({ send, els }) {
         name.title = m.name;
       }
       row.append(avatar, name);
+      asButton(row, `Добавить в бой: ${m.name}`);
       row.onclick = () =>
         send(
           m.kind === "character" ? { type: "add_combatant", characterId: m.id } : { type: "add_combatant", monsterId: m.id }

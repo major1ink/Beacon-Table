@@ -1,4 +1,8 @@
 import { Application, Container } from "pixi.js";
+// Pixi по умолчанию собирает шейдерные функции через new Function — это
+// запрещено политикой безопасности стола (см. internal/api/http:
+// contentSecurityPolicy), и без этой замены рендер карты не стартует вовсе.
+import "pixi.js/unsafe-eval";
 import { createDirtyFlags } from "./dirty.js";
 import { createCamera, applyCameraTransform, resetCamera, clampCamera, worldSize, canvasPos, screenToWorld } from "./camera.js";
 import { createAudio } from "./audio.js";

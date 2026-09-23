@@ -69,3 +69,18 @@ test("пусто/не-строка не падают", () => {
 test("текст без макросов Foundry не меняется (кроме обрезки краёв)", () => {
   assert.equal(cleanFoundryText("  <p>Обычное описание.</p>  "), "<p>Обычное описание.</p>");
 });
+
+// Обогатитель правил системы: в PHB-2024 он пишется и со строчной буквы, и
+// такой макрос уезжал в описание карточки как есть (заклинание «Сон»).
+test("&Reference сворачивается в подпись в любом регистре", () => {
+  assert.equal(
+    cleanFoundryText("с Невосприимчивостью к &reference[exhaustion apply=false]{Утомлению} проходят"),
+    "с Невосприимчивостью к Утомлению проходят"
+  );
+  assert.equal(cleanFoundryText("состояние &Reference[condition=prone]{Ничком}"), "состояние Ничком");
+  assert.equal(cleanFoundryText("состояние &amp;Reference[Prone]"), "состояние Prone");
+});
+
+test("&Reference без подписи — первый параметр, служебные не в счёт", () => {
+  assert.equal(cleanFoundryText("к &reference[exhaustion apply=false] иммунитет"), "к exhaustion иммунитет");
+});

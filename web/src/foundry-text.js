@@ -22,6 +22,11 @@
 // (частый случай — способности вида «[[lookup @name]] совершает действие …»).
 // Разрешаем его именем карточки, которое вызывающий передаёт вторым аргументом.
 const compendiumRefRe = /@(?:Compendium|UUID)\[[^\]]*\]\{([^}]*)\}/g;
+// referenceRe — &Reference[condition=prone]{Ничком} из dnd5e v3+: ссылка на
+// правило самой системы, переносить нечего — остаётся подпись. Регистр имени
+// Foundry не важен (PHB-2024 пишет и со строчной), амперсанд бывает
+// экранирован. Тот же разбор, что на сервере (internal/foundry/rolls.go).
+const referenceRe = /(?:&|&amp;)Reference\[([^\]]*)\](?:\{([^}]*)\})?/gi;
 const inlineRollRe = /\[\[([^\]]+)\]\](?:\{([^}]*)\})?/g;
 
 // ROLL_COMMANDS — команды, у которых после "/" идёт формула броска как есть
@@ -89,6 +94,16 @@ function cleanRoll(inner, rawLabel, name) {
   return label;
 }
 
+// cleanReference — подпись обогатителя, а без неё значение первого параметра:
+// у остальных ("apply=false") значение служебное и в тексте ни к чему.
+function cleanReference(args, label) {
+  const text = (label || "").trim();
+  if (text) return text;
+  const first = String(args || "").trim().split(/\s+/)[0] || "";
+  const eq = first.indexOf("=");
+  return eq > 0 ? first.slice(eq + 1).replace(/^["']|["']$/g, "") : first;
+}
+
 // cleanFoundryText — см. шапку модуля. Безопасна на пустом/чужом тексте: без
 // совпадений возвращает вход как есть (с обрезкой пробелов по краям). name —
 // имя импортируемой карточки для [[lookup @name]]; без него такой макрос
@@ -96,6 +111,7 @@ function cleanRoll(inner, rawLabel, name) {
 export function cleanFoundryText(text, name) {
   return String(text || "")
     .replace(compendiumRefRe, "$1")
+    .replace(referenceRe, (_, args, label) => cleanReference(args, label))
     .replace(inlineRollRe, (_, inner, label) => cleanRoll(inner, label, name))
     // Атака без подписи (см. cleanRoll) выше становится пустой строкой — на
     // её месте остаются два соседних пробела ("...+5,  на атаку."), которые

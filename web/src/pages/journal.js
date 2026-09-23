@@ -34,6 +34,7 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { showConfirm, showPrompt } from "../modal.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { asButton } from "../a11y.js";
 
 const treeEl = document.getElementById("tree");
 const searchEl = document.getElementById("search");
@@ -287,6 +288,7 @@ function folderRowEl(node, depth) {
   count.textContent = countEntries(node) || "";
 
   row.append(...indentGuides(depth), chevron, name, count);
+  asButton(row, (open ? "Свернуть папку: " : "Развернуть папку: ") + node.name);
   row.onclick = () => {
     if (open) openFolders.delete(node.path);
     else openFolders.add(node.path);

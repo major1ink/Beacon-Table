@@ -20,6 +20,7 @@ import { fetchConditions } from "./api.js";
 import { icon } from "./icons.js";
 import { describeModifier, loadTargets } from "./stat-editor.js";
 import { glyphNode } from "./condition-glyphs.js";
+import { asButton } from "./a11y.js";
 
 // ---- CSS ----
 // Стили инжектятся из JS, а не лежат в dm.html, потому что палитра нужна
@@ -374,6 +375,7 @@ function renderPalette(state) {
         cell.style.cursor = "not-allowed";
         cell.title = `${cond.name}\nКарточка ещё не сохранена.`;
       } else {
+        asButton(cell, cond.name);
         cell.onclick = () => {
           if (st) dispatch(send, target, "remove_status", { statusSlug: slug });
           else dispatch(send, target, "apply_status", { statusSlug: slug });
