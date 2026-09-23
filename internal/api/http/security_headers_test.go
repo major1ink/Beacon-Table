@@ -27,6 +27,9 @@ func TestSecurityHeadersSetOnEveryResponse(t *testing.T) {
 		if strings.Contains(csp, "script-src") && strings.Contains(csp, "'unsafe-inline' 'self'") {
 			t.Fatalf("%s: script-src разрешает inline: %s", path, csp)
 		}
+		if !strings.Contains(csp, "connect-src 'self' data:") {
+			t.Fatalf("%s: connect-src без data: — Pixi не найдёт ImageBitmap: %s", path, csp)
+		}
 		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 			t.Fatalf("%s: X-Content-Type-Options = %q", path, got)
 		}
