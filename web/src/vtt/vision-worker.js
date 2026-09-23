@@ -7,7 +7,8 @@ import { computeVisionPlanWithFallback } from "./vision-plan.js";
 const memo = {};
 
 self.onmessage = (e) => {
-  const { id, scene, isDM } = e.data;
+  const { id, scene, isDM, force } = e.data;
+  if (force) memo.planKey = null; // экран стёрт — нужен план целиком
   const { plan, error, unchanged } = computeVisionPlanWithFallback(scene, isDM, memo);
   self.postMessage({ id, plan: unchanged ? null : plan, unchanged: !!unchanged, error: error ? String((error && error.stack) || error) : null });
 };

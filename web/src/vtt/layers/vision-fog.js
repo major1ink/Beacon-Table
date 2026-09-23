@@ -1,6 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import { cutMulti, fillMulti } from "../light-geometry.js";
 import { computeVisionPlanWithFallback } from "../vision-plan.js";
+import { worldSize } from "../camera.js";
 
 // ---- освещение (см. README, раздел про свет) ----
 //
@@ -62,8 +63,8 @@ function alphaForLevel(level) {
 // одинаково ведёт себя везде.
 //
 // Тяжёлая часть (пересечение обзора и света через polygon-clipping, см.
-// light-geometry.js) считается в воркере, см. update() ниже. Первый рендер и
-// смена сцены — синхронно, иначе игрок увидел бы кадр без тумана.
+// light-geometry.js) считается в воркере, см. update() ниже. До первого
+// плана сцены игрок видит сплошную тьму (blackout), а не карту без тумана.
 export function createVisionFogLayer(ctx) {
   const container = new Container();
   const darkness = new Graphics(); // тьма + вырезанные "видно хотя бы тускло" дыры
@@ -174,13 +175,14 @@ export function createVisionFogLayer(ctx) {
   // тяжёлой сцене он стоит десятки миллисекунд, и в главном потоке это были
   // рывки при каждом шаге токена. В полёте не больше одного запроса: пока
   // воркер считает, новые правки только помечают pending, и следующим уходит
-  // самое свежее состояние. Синхронно — первый кадр и смена сцены: иначе
-  // игрок мигнул бы кадром без тумана или дырами от прошлой карты.
+  // самое свежее состояние. Смена сцены — blackout и force: воркер обязан
+  // прислать план целиком, даже если такой уже считал (экран-то стёрт).
   const worker = startWorker();
   let generation = 0;
   let inFlight = false;
   let pending = false;
   let builtFor = null;
+  let force = false;
 
   function startWorker() {
     try {
@@ -216,7 +218,7 @@ export function createVisionFogLayer(ctx) {
       buildings: s.buildings,
       fogAreas: s.fogAreas,
     };
-    worker.postMessage({ id: generation, scene, isDM: ctx.isDM });
+    worker.postMessage({ id: generation, scene, isDM: ctx.isDM, force });
   }
 
   function onWorkerResult(e) {
@@ -224,18 +226,35 @@ export function createVisionFogLayer(ctx) {
     const { id, plan, error, unchanged } = e.data;
     if (id === generation) {
       if (error) console.error("beacon: сбой пересчёта освещения (воркер) — оставляю прошлый кадр как есть:", error);
-      else if (!unchanged && plan) paintPlan(plan);
+      else if (!unchanged && plan) {
+        paintPlan(plan);
+        force = false;
+      }
     }
     if (pending) post();
   }
 
+  // blackout — до первого плана новой сцены: игроку сплошная тьма, ДМ —
+  // ничего. Так смена сцены не ждёт расчёта (на тяжёлой карте ~100 мс) и не
+  // показывает ни кадра без тумана.
+  function blackout() {
+    clearAll();
+    if (ctx.isDM || ctx.scene.fogOfWar === false) return;
+    const { w, h } = worldSize(ctx.scene);
+    darkness.rect(0, 0, w, h).fill({ color: DARK_COLOR, alpha: DARK_ALPHA });
+  }
+
   function update() {
     if (!ctx.dirty.vision) return;
-    if (workerBroken || builtFor !== ctx.scene.id) {
-      builtFor = ctx.scene.id;
-      generation++; // ответы на запросы по прошлой сцене больше не рисуем
+    if (workerBroken) {
       rebuild();
       return;
+    }
+    if (builtFor !== ctx.scene.id) {
+      builtFor = ctx.scene.id;
+      generation++; // ответы на запросы по прошлой сцене больше не рисуем
+      force = true;
+      blackout();
     }
     if (inFlight) pending = true;
     else post();

@@ -294,7 +294,8 @@ export async function initVTT({ canvasId, role, playerId }) {
           mapUrl: ctx.scene.mapUrl,
           mapStartedAt: ctx.mapStartedAt,
           mapTexture: tex ? { w: tex.orig.width, h: tex.orig.height, valid: tex.source !== null } : "спрайта нет",
-          mapSource: src
+          // У Texture.EMPTY (кадра ещё нет) resource пуст, и геттер resourceWidth падает.
+          mapSource: src && src.resource
             ? {
                 uploadMethodId: src.uploadMethodId,
                 pixel: [src.pixelWidth, src.pixelHeight],
