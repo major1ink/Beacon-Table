@@ -4795,7 +4795,7 @@ document.addEventListener("mousedown", (e) => {
 // он сам подхватит новую ширину родителя канваса).
 const sidePanel = document.getElementById("panel");
 const panelResizer = document.getElementById("panelResizer");
-const railSectionBtns = [...document.querySelectorAll("#rail [data-section], #railMenu [data-section]")];
+const railSectionBtns = [...document.querySelectorAll("#rail [data-section], #railMenu [data-section], #toolsFlyout [data-section]")];
 const panelSections = [...document.querySelectorAll(".panel-section[data-panel]")];
 let openPanelSection = null;
 
@@ -4838,6 +4838,8 @@ function setSidePanelSection(name, { focus = false } = {}) {
   });
   // «⋯» подсвечен, пока открыт один из его разделов (аккаунты, настройки).
   railMoreBtn.classList.toggle("active", !!openPanelSection && railMenu.querySelector(`[data-section="${openPanelSection}"]`) !== null);
+  // «Инструменты» — так же: «Освещение» это раздел их колонки.
+  syncRailToolsActive();
   panelSections.forEach((s) => s.classList.toggle("active", s.dataset.panel === openPanelSection));
   if (opening && openPanelSection && panelOpenHandlers[openPanelSection]) {
     panelOpenHandlers[openPanelSection]();
@@ -4967,9 +4969,18 @@ function setToolsFlyout(open, { focus = false } = {}) {
   const top = btn.top + btn.height / 2 - h / 2 - hostRect.top;
   toolsFlyout.style.top = Math.round(Math.max(8, Math.min(top, hostRect.height - h - 8))) + "px";
 }
+let armedTool = "select";
+// syncRailToolsActive — иконка горит и когда открыт раздел из этой колонки:
+// сама колонка на это время свёрнута, иначе непонятно, откуда панель.
+function syncRailToolsActive() {
+  const armed = !!toolsFlyout.querySelector(`[data-tool="${armedTool}"]`);
+  const section = !!(openPanelSection && toolsFlyout.querySelector(`[data-section="${openPanelSection}"]`));
+  railToolsBtn.classList.toggle("active", armed || section);
+}
 railToolsBtn.onclick = (e) => setToolsFlyout(!toolsFlyoutOpen, { focus: e && e.detail === 0 });
 document.addEventListener("vtt:toolChanged", (e) => {
-  railToolsBtn.classList.toggle("active", !!toolsFlyout.querySelector(`[data-tool="${e.detail}"]`));
+  armedTool = e.detail;
+  syncRailToolsActive();
   for (const b of toolsFlyout.querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", String(b.dataset.tool === e.detail));
 });
 // Esc по ступеням: обрыв цепочки (interaction.js) → снять инструмент → свернуть колонку.
@@ -5036,7 +5047,7 @@ document.addEventListener("keydown", (e) => {
 
 // ---- подсказки иконок рейла (RAIL_HELP) ----
 // Пока раздел открыт, его подсказка молчит — накрывала бы панель.
-for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-section]")) {
+for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-section], #toolsFlyout > .rail-btn[data-section]")) {
   attachTooltip(btn, () => (openPanelSection === btn.dataset.section ? null : RAIL_HELP[btn.dataset.section]));
 }
 attachTooltip(railToolsBtn, () => (toolsFlyoutOpen ? null : RAIL_HELP.tools));
