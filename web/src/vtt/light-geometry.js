@@ -129,6 +129,50 @@ export function intersectMulti(a, b) {
   return polygonClipping.intersection(a, b);
 }
 
+// intersectMultiSafe — intersectMulti с повтором на грубой сетке. Кольцо
+// затухания с дырами ∩ обзор изредка роняет polygon-clipping, и кольцо
+// пропадало целиком — полоса рисовалась ярче, чем должна. Повтор с точками,
+// прижатыми к сетке 0,5, 1, затем 4 px — тот же приём, что QUANTUM_LADDER у
+// всего расчёта, только для одной фигуры. Цена — нахлёст на соседнее кольцо
+// не шире половины шага, и только там, где кольца раньше не было вовсе.
+// Кидает, если не помог ни один шаг.
+const SAFE_STEPS = [0.5, 1, 4];
+
+export function intersectMultiSafe(a, b) {
+  try {
+    return intersectMulti(a, b);
+  } catch (err) {
+    for (const q of SAFE_STEPS) {
+      try {
+        return intersectMulti(snapMulti(a, q), snapMulti(b, q));
+      } catch {
+        /* следующий шаг сетки */
+      }
+    }
+    throw err;
+  }
+}
+
+function snapMulti(multi, q) {
+  const out = [];
+  for (const poly of multi) {
+    const rings = [];
+    for (const ring of poly) {
+      const r = [];
+      for (const [x, y] of ring) {
+        const sx = Math.round(x / q) * q;
+        const sy = Math.round(y / q) * q;
+        const prev = r[r.length - 1];
+        if (prev && prev[0] === sx && prev[1] === sy) continue;
+        r.push([sx, sy]);
+      }
+      if (r.length >= 4) rings.push(r);
+    }
+    if (rings.length) out.push(rings);
+  }
+  return out;
+}
+
 // differenceMulti/unionMulti — та же булева алгебра, что unionAll/
 // intersectMulti, но НАД УЖЕ ГОТОВЫМИ MultiPolygon (не сырыми точками
 // raycasting'а — на вход unionAll нужен именно точечный формат одного

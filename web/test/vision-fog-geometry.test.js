@@ -874,3 +874,29 @@ test("свет у стены и в углу не уходит иглой скв�
     }
   }
 });
+
+test("кольцо затухания не пропадает, когда пересечение с обзором роняет polygon-clipping", () => {
+  // Пойман сравнением: на этой расстановке «кольцо ∩ обзор» для уровня 0.25
+  // падало внутри библиотеки, и кольцо молча выбрасывалось — полоса
+  // рисовалась без поволоки. Теперь повтор на грубой сетке
+  // (intersectMultiSafe).
+  let s = 99;
+  const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  let scene = null;
+  for (let i = 0; i <= 33; i++) {
+    const tokens = {};
+    for (let k = 0; k < 2 + Math.floor(rnd() * 3); k++) tokens["o" + k] = { x: rnd() * manorWorld.w, y: rnd() * manorWorld.h, ownerId: "p" };
+    for (let k = 0; k < 3 + Math.floor(rnd() * 6); k++) {
+      tokens["l" + k] = {
+        x: rnd() * manorWorld.w,
+        y: rnd() * manorWorld.h,
+        lightOnly: true,
+        light: { enabled: true, bright: 5 + Math.floor(rnd() * 20), dim: 20 + Math.floor(rnd() * 40), color: rnd() < 0.3 ? "#ffaa55" : "" },
+      };
+    }
+    scene = { ...makeScene([], ""), tokens };
+  }
+  const { plan } = computeVisionPlanWithFallback(scene, false);
+  const ring = plan.rings.find((r) => r.level === 0.25);
+  assert.ok(ring && multiArea(ring.multi) > 100000, "кольцо 0.25 пропало");
+});

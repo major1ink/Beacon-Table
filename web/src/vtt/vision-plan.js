@@ -23,6 +23,7 @@ import { worldSize } from "./camera.js";
 import {
   unionAll,
   intersectMulti,
+  intersectMultiSafe,
   differenceMulti,
   subtractNested,
   unionMulti,
@@ -354,7 +355,7 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
   for (const { level, multi } of ringMultis) {
     let reveal = null;
     try {
-      reveal = intersectMulti(visionMulti, multi);
+      reveal = intersectMultiSafe(visionMulti, multi);
     } catch {
       continue; // см. выше — кольцо не нарисуется, туман войны от этого не пострадает
     }
@@ -380,7 +381,7 @@ export function computeVisionPlan(scene, isDM, quantum, memo) {
   for (const { color, multi } of layerTints) {
     let visible = null;
     try {
-      visible = intersectMulti(visionMulti, multi);
+      visible = intersectMultiSafe(visionMulti, multi);
     } catch {
       continue; // как и с кольцами: без заливки зона просто останется белой
     }
