@@ -2,6 +2,7 @@ import { Assets, Container, Graphics, Matrix, Sprite, Text, Texture } from "pixi
 import { isVideoUrl } from "../../geometry.js";
 import { dashedCircle } from "../dash.js";
 import { createVideoTexture } from "../video-texture.js";
+import { releaseVideoStage } from "../gl-video-uploader.js";
 import { gridUnitsToWorld } from "../light-geometry.js";
 import { isGlyph, glyphDataURL } from "../../condition-glyphs.js";
 
@@ -61,7 +62,27 @@ export function createTokensLayer(ctx) {
     const set = tokenArtViews.get(url);
     if (!set) return;
     set.delete(view);
-    if (set.size === 0) tokenArtViews.delete(url);
+    if (set.size === 0) {
+      tokenArtViews.delete(url);
+      releaseTokenVideo(url);
+    }
+  }
+
+  // releaseTokenVideo — видео-арт, который больше никто не показывает (ушли
+  // со сцены с этими токенами): без этого ролик декодировался и заливался в
+  // текстуру до конца сессии.
+  function releaseTokenVideo(url) {
+    const v = tokenVideoCache.get(url);
+    if (!v) return;
+    v.pause();
+    v.removeAttribute("src");
+    v.load();
+    ctx.unregisterUnlockable(v);
+    releaseVideoStage(v);
+    tokenVideoCache.delete(url);
+    const tex = tokenTextureCache.get(url);
+    if (tex && tex !== Texture.EMPTY) tex.destroy(true);
+    tokenTextureCache.delete(url);
   }
   // drawArt — заливка artGfx текстурой: матрица переводит пиксели текстуры
   // в локальные координаты токена так, чтобы текстура растянулась ровно на
@@ -172,14 +193,7 @@ export function createTokensLayer(ctx) {
     if (now - last < 3000) return; // тот же файл уже пересоздавали только что — не долбим сервер запросами
     lastRecoveryAt.set(url, now);
 
-    const old = tokenVideoCache.get(url);
-    if (old) {
-      old.pause();
-      old.removeAttribute("src");
-      old.load();
-    }
-    tokenVideoCache.delete(url);
-    tokenTextureCache.delete(url);
+    releaseTokenVideo(url);
     getTokenTexture(url); // заново создаёт <video>, ждёт первый кадр, досчитывает все вьюхи с этим артом
   }
 
@@ -221,7 +235,12 @@ export function createTokensLayer(ctx) {
       // потом подменяем и досчитываем заливку всем токенам с этим артом.
       tex = Texture.EMPTY;
       tokenTextureCache.set(url, tex);
-      createVideoTexture(getTokenVideo(url), (loaded) => {
+      const video = getTokenVideo(url);
+      createVideoTexture(video, (loaded) => {
+        if (tokenVideoCache.get(url) !== video) {
+          loaded.destroy(true); // арт успели отпустить, пока ждали кадр
+          return;
+        }
         tokenTextureCache.set(url, loaded);
         refreshArtViews(url);
       });

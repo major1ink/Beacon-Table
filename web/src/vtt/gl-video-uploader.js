@@ -117,6 +117,17 @@ function stagedFrame(video, width, height) {
   return canvas;
 }
 
+// releaseVideoStage — отпустить промежуточный canvas выброшенного видео
+// сразу: он держит видеопамять размером с кадр, а WeakMap отдаст его только
+// со сборкой мусора.
+export function releaseVideoStage(video) {
+  const canvas = stages.get(video);
+  if (!canvas) return;
+  canvas.width = 0;
+  canvas.height = 0;
+  stages.delete(video);
+}
+
 export function installVideoUploaderFix() {
   extensions.add(glUploadVideoResourceSafe);
 }
