@@ -2,6 +2,7 @@
 // [[...]] — общий модуль для журнала стола (pages/journal.js) и текста
 // карточек библиотек, чтобы все поверхности вели себя одинаково.
 import { marked } from "marked";
+import { sanitizeHtml } from "../html.js";
 
 // wikiLinkRe — [[Заголовок]] или [[Заголовок|Текст ссылки]]. Не жадный (.+?),
 // чтобы "[[A]] и [[B]]" на одной строке не схлопнулись в одну ссылку.
@@ -152,7 +153,9 @@ export function renderNoteHtml(rawMarkdown) {
     const hint = folder ? ` "${t.replace(/"/g, "'")}"` : "";
     return `[${label}](wikilink:${encodeURIComponent(t)}${hint})`;
   });
-  return marked.parse(withLinks, { breaks: true });
+  // Очистка обязательна: marked пропускает сырой HTML как есть, а тексты
+  // сюда приходят от игроков и из чужих модулей Foundry (см. src/html.js).
+  return sanitizeHtml(marked.parse(withLinks, { breaks: true }));
 }
 
 // scrollToHeading — прокрутить containerEl к заголовку (h1–h4) с текстом

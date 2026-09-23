@@ -7,6 +7,7 @@
 // что делать с выбором (POST в инвентарь, WS "hub_add_item" и т.п.).
 import { fetchItems } from "./api.js";
 import { icon } from "./icons.js";
+import { cssUrl } from "./html.js";
 
 // initItemPicker(container, opts) — очищает container и рендерит в него
 // поле поиска + степпер количества + список результатов. opts.onPick(item,
@@ -66,7 +67,7 @@ export function initItemPicker(container, { onPick, placeholder = "Поиск п
       r.className = "item-picker-result";
       const avatar = document.createElement("div");
       avatar.className = "item-picker-avatar";
-      if (it.imageUrl) avatar.style.backgroundImage = `url("${it.imageUrl}")`;
+      if (it.imageUrl) avatar.style.backgroundImage = cssUrl(it.imageUrl);
       const name = document.createElement("div");
       name.className = "item-picker-name";
       name.textContent = it.name;

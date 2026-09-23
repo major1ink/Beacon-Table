@@ -4,6 +4,7 @@
 // из kv-table.js + этих плиток + свёрнутых блоков текста.
 import { el } from "./card-shell.js";
 import { icon } from "./icons.js";
+import { escapeHtml } from "./html.js";
 
 export const ABILITIES = [
   { key: "str", label: "Сил", full: "Сила" },
@@ -93,7 +94,7 @@ export function renderMonsterPreview(monster, { glyphNode }) {
       el("div", { class: "mp-token", role: "img", "aria-label": "Токен" }, [art]),
       el("div", { class: "mp-chip" }, [
         el("span", { class: "mp-av" }, [monster.imageUrl ? el("img", { src: monster.imageUrl, alt: "" }) : glyphNode(monsterGlyphName(monster), "")]),
-        el("span", {}, [el("div", { text: monster.name || "Без имени" }), el("div", { class: "mp-nums", html: `ини <b>${ini}</b> · КД <b>${monster.ac || 0}</b> · <b>${monster.hp || 0}/${monster.hp || 0}</b>` })]),
+        el("span", {}, [el("div", { text: monster.name || "Без имени" }), el("div", { class: "mp-nums", html: `ини <b>${escapeHtml(ini)}</b> · КД <b>${escapeHtml(monster.ac || 0)}</b> · <b>${escapeHtml(monster.hp || 0)}/${escapeHtml(monster.hp || 0)}</b>` })]),
       ]),
       el("span", { class: "card-aside-note", html: "Перетащи существо из списка на карту — токен и боец в трекере появятся с этими числами. " + icon("creature", { size: 12 }) })
     );

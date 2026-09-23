@@ -1,0 +1,1 @@
+function e(t,a){return t.setAttribute("role","button"),t.hasAttribute("tabindex")||(t.tabIndex=0),a&&!t.hasAttribute("aria-label")&&t.setAttribute("aria-label",a),t.addEventListener("keydown",r=>{r.key!=="Enter"&&r.key!==" "||(r.preventDefault(),t.click())}),t}export{e as a};

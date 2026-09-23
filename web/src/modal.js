@@ -14,6 +14,9 @@
 // диалог работал на любой странице и внутри iframe, не требуя CSS в каждой.
 import { icon } from "./icons.js";
 
+let modalUid = 0;
+const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 let styleInjected = false;
 function injectStyle() {
   if (styleInjected) return;
@@ -84,12 +87,17 @@ export function openModal({ title, danger, okLabel, cancelLabel, buildBody, onOk
     overlay.className = "bt-modal-overlay";
     const modal = document.createElement("div");
     modal.className = "bt-modal";
+    // Иначе диктор читает диалог как кусок страницы под ним.
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
     overlay.appendChild(modal);
 
     const head = document.createElement("div");
     head.className = "bt-modal-head";
     const titleEl = document.createElement("span");
+    titleEl.id = "bt-modal-title-" + ++modalUid;
     titleEl.textContent = title;
+    modal.setAttribute("aria-labelledby", titleEl.id);
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "bt-modal-close";
@@ -125,6 +133,22 @@ export function openModal({ title, danger, okLabel, cancelLabel, buildBody, onOk
       if (e.key === "Escape") {
         e.preventDefault();
         finish(onCancel());
+        return;
+      }
+      if (e.key !== "Tab") return;
+      // Иначе Tab уводит фокус на страницу под диалогом — вместе с Esc,
+      // который слушается на оверлее.
+      const items = [...modal.querySelectorAll(FOCUSABLE)].filter((el) => !el.disabled && el.offsetParent !== null);
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !modal.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
       }
     }
     // Клавиатура ловится на самом оверлее, а не на document: страница под
@@ -219,6 +243,7 @@ export function showPrompt(
       }
       field = document.createElement(multiline ? "textarea" : "input");
       field.className = multiline ? "bt-modal-textarea" : "bt-modal-input";
+      if (label) field.setAttribute("aria-label", label);
       if (!multiline) field.type = "text";
       field.value = value;
       field.placeholder = placeholder;

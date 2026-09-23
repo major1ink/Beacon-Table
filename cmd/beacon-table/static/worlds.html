@@ -56,7 +56,7 @@
     .world-card { padding: 12px 14px; justify-content: space-between; }
     .world-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
     .world-name { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .world-meta { display: flex; gap: 6px; }
+    .world-meta { display: flex; gap: 6px; flex-wrap: wrap; }
     .world-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
     .world-btn {
       border: none; border-radius: var(--radius-pill); padding: 7px 14px; font-size: 12.5px; font-weight: 600;
@@ -126,13 +126,21 @@
       #createForm input { flex: 1 1 100%; }
       #createForm select { flex: 1 1 auto; }
     }
+    /* На телефоне кнопки занимают больше половины строки, и плашки «D&D 2024
+       / На столе» заезжали под них: с этой ширины карточка складывается в
+       две строки. */
+    @media (max-width: 520px) {
+      .world-card { flex-wrap: wrap; row-gap: 10px; }
+      .world-info { flex: 1 1 100%; }
+      .world-actions { flex: 1 1 100%; justify-content: flex-end; }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/worlds-DQHnBsX1.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-BTog_PUr.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-BOMvyAUk.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-D7UrRewQ.js">
+  <script type="module" crossorigin src="/assets/worlds-BeFiwud6.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-8PYXbR7M.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-KB00GlQ-.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-B9hDvCiC.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-D8taCUqH.js">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-Dwb8jLHT.js">
   <link rel="stylesheet" crossorigin href="/assets/icons-ViAw6sDJ.css">
 </head>
 <body>
@@ -172,7 +180,7 @@
       <h2>Создать мир</h2>
       <form id="createForm">
         <input type="text" id="worldName" placeholder="Название мира" maxlength="80" required />
-        <select id="worldSystem">
+        <select id="worldSystem" aria-label="Система мира">
           <option value="dnd5e-2024">D&amp;D 2024</option>
           <option value="dnd5e-2014">D&amp;D 5e (2014)</option>
         </select>

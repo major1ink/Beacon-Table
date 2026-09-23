@@ -31,6 +31,7 @@ import { TOOL_HELP, PANEL_HELP } from "../tool-help.js";
 import { isPlayer } from "../roles.js";
 import { uploadAvatarFile } from "../avatar-cropper.js";
 import { installErrorCapture, openBugReport } from "../bug-report.js";
+import { cssUrl } from "../html.js";
 
 // Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
 // сессии, а не с момента нажатия кнопки.
@@ -115,7 +116,7 @@ async function renderCharDock(chars) {
     chip.setAttribute("aria-label", chip.title);
     // Видео-аватар (webm/mp4 токен-арт) как background не покажется —
     // такому персонажу оставляем ту же букву-заглушку, что и безаватарному.
-    if (c.avatarUrl && !isVideoUrl(c.avatarUrl)) chip.style.backgroundImage = `url("${c.avatarUrl}")`;
+    if (c.avatarUrl && !isVideoUrl(c.avatarUrl)) chip.style.backgroundImage = cssUrl(c.avatarUrl);
     else chip.textContent = (c.name || "?").trim().charAt(0).toUpperCase();
     chip.onclick = () => openCharacterSheet(c);
     dock.appendChild(chip);
@@ -463,7 +464,7 @@ async function renderPregens() {
     row.className = "char-row";
     const avatar = document.createElement("div");
     avatar.className = "char-avatar";
-    if (p.avatarUrl && !isVideoUrl(p.avatarUrl)) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+    if (p.avatarUrl && !isVideoUrl(p.avatarUrl)) avatar.style.backgroundImage = cssUrl(p.avatarUrl);
     else avatar.textContent = (p.name || "?").trim().charAt(0).toUpperCase();
     const nameWrap = document.createElement("div");
     nameWrap.className = "char-name";
@@ -519,7 +520,7 @@ async function renderChars() {
     row.className = "char-row";
     const avatar = document.createElement("div");
     avatar.className = "char-avatar";
-    if (c.avatarUrl) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
+    if (c.avatarUrl) avatar.style.backgroundImage = cssUrl(c.avatarUrl);
     else avatar.textContent = "—";
     const name = document.createElement("div");
     name.className = "char-name";

@@ -6,6 +6,7 @@
 // pages/dm.js и pages/player.js (см. план фичи).
 import { icon } from "./icons.js";
 import { showAlert } from "./modal.js";
+import { cssUrl } from "./html.js";
 
 // showLootTakeModal(opts) — создаёт оверлей поверх всей страницы, возвращает
 // {close, update(entries)} для вызывающей стороны (например, обновить список
@@ -82,7 +83,7 @@ export function showLootTakeModal({ title, entries, characters, onTake }) {
 
       const avatar = document.createElement("div");
       avatar.className = "loot-modal-avatar";
-      if (e.imageUrl) avatar.style.backgroundImage = `url("${e.imageUrl}")`;
+      if (e.imageUrl) avatar.style.backgroundImage = cssUrl(e.imageUrl);
       else avatar.innerHTML = icon("backpack", { size: 16 });
 
       const info = document.createElement("div");

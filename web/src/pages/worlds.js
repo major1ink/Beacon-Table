@@ -7,6 +7,7 @@ import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, delet
 import { openModal, showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { startTour } from "../tutorial.js";
+import { escapeHtml } from "../html.js";
 
 // Версия сервера в углу — как на экране входа (index.js). Молча пусто при ошибке.
 fetchVersion()
@@ -27,35 +28,29 @@ function systemLabel(system) {
   return SYSTEM_LABELS[system] || system;
 }
 
-function escapeHtml(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
-
 // Мир может быть ещё запущен (ДМ пришёл сюда сразу после логина, а не кнопкой
 // «К мирам» из стола, которая гасит стол) — тогда «Открыть стол →» вместо
 // «Запустить», как и было. Удаление такого мира сначала снимет его со стола.
 function worldCardHTML(c) {
-  const players = c.accounts ? `<span class="pill-badge">игроков: ${c.accounts}</span>` : "";
+  const players = c.accounts ? `<span class="pill-badge">игроков: ${escapeHtml(c.accounts)}</span>` : "";
   const badge = c.active ? `<span class="pill-badge on">На столе</span>` : "";
   const actionBtn = c.active
-    ? `<button class="world-btn open-btn" data-id="${c.id}">Открыть стол →</button>`
-    : `<button class="world-btn launch-btn" data-id="${c.id}">Запустить</button>`;
+    ? `<button class="world-btn open-btn" data-id="${escapeHtml(c.id)}">Открыть стол →</button>`
+    : `<button class="world-btn launch-btn" data-id="${escapeHtml(c.id)}">Запустить</button>`;
   return `
-    <div class="row-card world-card" data-id="${c.id}">
+    <div class="row-card world-card" data-id="${escapeHtml(c.id)}">
       <div class="world-info">
         <div class="world-name">${escapeHtml(c.name)}</div>
         <div class="world-meta">
-          <span class="pill-badge">${systemLabel(c.system)}</span>
+          <span class="pill-badge">${escapeHtml(systemLabel(c.system))}</span>
           ${players}
           ${badge}
         </div>
       </div>
       <div class="world-actions">
         ${actionBtn}
-        <button class="icon-btn export-btn" data-id="${c.id}" title="Экспортировать мир в .zip">⬇</button>
-        <button class="icon-btn danger delete-btn" data-id="${c.id}" title="Удалить">✕</button>
+        <button class="icon-btn export-btn" data-id="${escapeHtml(c.id)}" title="Экспортировать мир в .zip">⬇</button>
+        <button class="icon-btn danger delete-btn" data-id="${escapeHtml(c.id)}" title="Удалить">✕</button>
       </div>
     </div>
   `;

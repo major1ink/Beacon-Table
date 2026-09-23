@@ -76,6 +76,8 @@ import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabe
 import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutorial.js";
 import { dmTourSteps } from "../tutorial-dm.js";
+import { escapeHtml, cssUrl } from "../html.js";
+import { asButton } from "../a11y.js";
 
 // Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
 // сессии, а не с момента нажатия кнопки.
@@ -454,6 +456,7 @@ function renderAssetsGrid() {
     name.className = "asset-tile-name folder-tile-name";
     name.textContent = assetFolderName(f.path);
     tile.appendChild(name);
+    asButton(tile, `Открыть папку: ${assetFolderName(f.path)}`);
     tile.onclick = () => {
       currentAssetFolder = f.path;
       renderAssetsGrid();
@@ -493,7 +496,7 @@ function renderAssetsGrid() {
       v.playsInline = true;
       tile.appendChild(v);
     } else {
-      tile.style.backgroundImage = `url("${a.url}")`;
+      tile.style.backgroundImage = cssUrl(a.url);
     }
     if (!isTokens) {
       tile.addEventListener("dragstart", (e) => {
@@ -607,7 +610,7 @@ function renderShowcaseNow() {
   showcaseNowEl.className = "showcase-now";
   const thumb = document.createElement("div");
   thumb.className = "showcase-now-thumb";
-  thumb.style.backgroundImage = `url("${latestShowcase}")`;
+  thumb.style.backgroundImage = cssUrl(latestShowcase);
   const body = document.createElement("div");
   body.className = "showcase-now-body";
   const title = document.createElement("div");
@@ -639,7 +642,8 @@ function renderShowcaseGrid() {
     tile.className = "asset-tile item-tile";
     if (a.url === latestShowcase) tile.classList.add("showing");
     tile.title = a.url === latestShowcase ? "Снять с экрана игроков" : "Показать на экране игроков и трансляции";
-    tile.style.backgroundImage = `url("${a.url}")`;
+    tile.style.backgroundImage = cssUrl(a.url);
+    asButton(tile, tile.title + ": " + a.name);
     tile.onclick = () => (a.url === latestShowcase ? hideImage() : showImage(a.url));
     const name = document.createElement("span");
     name.className = "asset-tile-name";
@@ -2292,7 +2296,7 @@ async function renderAccounts() {
   try {
     [accs, chars] = await Promise.all([fetchAdminAccounts(), fetchAdminCharacters()]);
   } catch (err) {
-    accountsList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
+    accountsList.innerHTML = `<p class="hint">Ошибка: ${escapeHtml(err.message)}</p>`;
     return;
   }
   const charsByAccount = new Map();
@@ -2307,9 +2311,9 @@ async function renderAccounts() {
     const roleLabel = accountRoleLabel(a.role);
     row.innerHTML = `
       <div class="account-top">
-        <span class="account-name">${a.username}</span>
-        <span class="account-role">${roleLabel}</span>
-        <span class="status-pill ${a.status}">${a.status === "pending" ? "ждёт одобрения" : "активен"}</span>
+        <span class="account-name">${escapeHtml(a.username)}</span>
+        <span class="account-role">${escapeHtml(roleLabel)}</span>
+        <span class="status-pill ${escapeHtml(a.status)}">${a.status === "pending" ? "ждёт одобрения" : "активен"}</span>
       </div>
       <div class="hint" style="margin-bottom:6px;">создан ${formatAccDate(a.createdAt)}</div>
     `;
@@ -2920,7 +2924,7 @@ async function renderFoundryModules() {
   try {
     foundryModulesCache = (await fetchFoundryModules()) || [];
   } catch (err) {
-    foundryModulesList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
+    foundryModulesList.innerHTML = `<p class="hint">Ошибка: ${escapeHtml(err.message)}</p>`;
     return;
   }
   drawFoundryModules();
@@ -2941,14 +2945,14 @@ function drawFoundryModules(updatesById) {
     row.className = "account-row";
     let pill = "";
     if (upd) {
-      if (upd.error) pill = `<span class="status-pill error" title="${upd.error}">не проверилось</span>`;
-      else if (upd.updateAvailable) pill = `<span class="status-pill update">вышла ${upd.latestVersion}</span>`;
+      if (upd.error) pill = `<span class="status-pill error" title="${escapeHtml(upd.error)}">не проверилось</span>`;
+      else if (upd.updateAvailable) pill = `<span class="status-pill update">вышла ${escapeHtml(upd.latestVersion)}</span>`;
       else pill = `<span class="status-pill active">актуально</span>`;
     }
     row.innerHTML = `
       <div class="account-top">
-        <span class="account-name">${m.title}</span>
-        <span class="account-version">v${m.version || "?"}</span>
+        <span class="account-name">${escapeHtml(m.title)}</span>
+        <span class="account-version">v${escapeHtml(m.version || "?")}</span>
         ${pill}
       </div>
       <div class="hint" style="margin-bottom:6px;">импортирован ${formatModuleDate(m.importedAt)}</div>
@@ -3083,7 +3087,7 @@ function pregenPoolRow(p) {
 
   const avatar = document.createElement("div");
   avatar.className = "dmchar-avatar";
-  if (p.avatarUrl) avatar.style.backgroundImage = `url("${p.avatarUrl}")`;
+  if (p.avatarUrl) avatar.style.backgroundImage = cssUrl(p.avatarUrl);
   else avatar.textContent = "—";
 
   const name = document.createElement("div");
@@ -3093,7 +3097,12 @@ function pregenPoolRow(p) {
   // игрока, у которого может быть такое же имя (заготовка — это шаблон листа,
   // персонажа из неё ещё не создали).
   const status = orphan ? `заготовка · игрок ${p.claimedByUsername || ""} удалил персонажа` : "заготовка · свободна";
-  name.innerHTML = `${p.name}<div style="font-size:11px;opacity:0.55;">${status}${sub ? ` · ${sub}` : ""}</div>`;
+  // Имена придумывают люди — только текстовым узлом (см. src/html.js).
+  name.textContent = p.name || "";
+  const pregenSub = document.createElement("div");
+  pregenSub.style.cssText = "font-size:11px;opacity:0.55;";
+  pregenSub.textContent = status + (sub ? ` · ${sub}` : "");
+  name.appendChild(pregenSub);
   row.append(avatar, name);
 
   const sheetBtn = document.createElement("button");
@@ -3209,12 +3218,17 @@ function assignedCharRow(c, pregen) {
   handle.innerHTML = icon("grip-vertical", { size: 14 });
   const avatar = document.createElement("div");
   avatar.className = "dmchar-avatar";
-  if (c.avatarUrl) avatar.style.backgroundImage = `url("${c.avatarUrl}")`;
+  if (c.avatarUrl) avatar.style.backgroundImage = cssUrl(c.avatarUrl);
   else avatar.textContent = "—";
   const name = document.createElement("div");
   name.className = "dmchar-name";
-  if (pregen) name.innerHTML = `${c.name}<div style="font-size:11px;opacity:0.55;">из заготовки «${pregen.name}»</div>`;
-  else name.textContent = c.name;
+  name.textContent = c.name || "";
+  if (pregen) {
+    const fromPregen = document.createElement("div");
+    fromPregen.style.cssText = "font-size:11px;opacity:0.55;";
+    fromPregen.textContent = `из заготовки «${pregen.name}»`;
+    name.appendChild(fromPregen);
+  }
   const sheetBtn = document.createElement("button");
   sheetBtn.className = "icon-btn";
   sheetBtn.innerHTML = icon("scroll", { size: 14 });
@@ -3251,7 +3265,7 @@ async function renderDmCharacters() {
   try {
     [dmCharacters, pregens] = await Promise.all([fetchAdminCharacters(), fetchAdminPregens().catch(() => [])]);
   } catch (err) {
-    dmCharactersList.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
+    dmCharactersList.innerHTML = `<p class="hint">Ошибка: ${escapeHtml(err.message)}</p>`;
     return;
   }
   dmCharactersList.innerHTML = "";
@@ -3692,6 +3706,7 @@ function renderSfxButton(playlist, t) {
   const btn = document.createElement("div");
   btn.className = "bt-sfx-btn";
   btn.title = t.name;
+  btn.setAttribute("role", "button");
   btn.tabIndex = 0;
   const label = document.createElement("span");
   label.className = "bt-sfx-label";
@@ -3747,6 +3762,7 @@ function renderPlaylistItem(p) {
 
   const header = document.createElement("div");
   header.className = "bt-playlist-header";
+  asButton(header, (expanded ? "Свернуть плейлист: " : "Развернуть плейлист: ") + p.name);
   header.onclick = () => {
     if (expanded) openPlaylistIds.delete(p.id);
     else openPlaylistIds.add(p.id);
@@ -4459,7 +4475,7 @@ function openSpellStatusPicker(payload) {
     cb.value = t.id;
     const av = document.createElement("span");
     av.className = "picker-avatar";
-    if (t.image) av.style.backgroundImage = `url("${t.image}")`;
+    if (t.image) av.style.backgroundImage = cssUrl(t.image);
     else av.style.background = t.color || "#555";
     const name = document.createElement("span");
     name.textContent = t.label || "Без имени";
@@ -4519,7 +4535,7 @@ function renderLootHub() {
     row.className = "dmchar-row item-row";
     const avatar = document.createElement("div");
     avatar.className = "dmchar-avatar";
-    if (entry.imageUrl) avatar.style.backgroundImage = `url("${entry.imageUrl}")`;
+    if (entry.imageUrl) avatar.style.backgroundImage = cssUrl(entry.imageUrl);
     else avatar.textContent = "—";
     row.appendChild(avatar);
     const name = document.createElement("div");
@@ -5750,6 +5766,7 @@ async function renderTeleport() {
     meta.textContent = names.join(", ");
     meta.title = "Доска, где нарисована связь";
     row.append(nameSpan, meta);
+    asButton(row, `Перейти на сцену: ${scene.name}`);
     row.onclick = () => {
       openSceneHere(scene.id);
       closeSidePanel();
@@ -5970,7 +5987,7 @@ function updateBgPreview() {
     bgPreview.appendChild(v);
   } else {
     bgPreview.textContent = "";
-    bgPreview.style.backgroundImage = `url("${url}")`;
+    bgPreview.style.backgroundImage = cssUrl(url);
   }
 }
 fMapUrl.addEventListener("change", updateBgPreview);
@@ -5994,7 +6011,8 @@ function renderAssetTable() {
   for (const a of latestAssets.maps || []) {
     const row = document.createElement("div");
     row.className = "asset-row" + (a.url === fMapUrl.value ? " selected" : "");
-    row.innerHTML = `<span class="asset-name">${a.name}</span><span class="asset-meta">${a.ext || ""} · ${formatSize(a.size)} · ${formatDate(a.modTime)}</span>`;
+    row.innerHTML = `<span class="asset-name">${escapeHtml(a.name)}</span><span class="asset-meta">${escapeHtml(a.ext || "")} · ${formatSize(a.size)} · ${formatDate(a.modTime)}</span>`;
+    asButton(row, `Выбрать карту: ${a.name}`);
     row.onclick = () => {
       fMapUrl.value = a.url;
       updateBgPreview();
@@ -6052,7 +6070,8 @@ function renderAudioAssetTable() {
   for (const a of latestAssets.audio || []) {
     const row = document.createElement("div");
     row.className = "asset-row" + (a.url === fAmbientUrl.value ? " selected" : "");
-    row.innerHTML = `<span class="asset-name">${a.name}</span><span class="asset-meta">${a.ext || ""} · ${formatSize(a.size)} · ${formatDate(a.modTime)}</span>`;
+    row.innerHTML = `<span class="asset-name">${escapeHtml(a.name)}</span><span class="asset-meta">${escapeHtml(a.ext || "")} · ${formatSize(a.size)} · ${formatDate(a.modTime)}</span>`;
+    asButton(row, `Выбрать трек: ${a.name}`);
     row.onclick = () => {
       fAmbientUrl.value = a.url;
       renderAudioAssetTable();

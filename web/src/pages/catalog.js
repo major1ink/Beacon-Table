@@ -41,6 +41,8 @@ import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { escapeHtml, cssUrl } from "../html.js";
+import { asButton } from "../a11y.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -458,7 +460,7 @@ async function refresh() {
   try {
     list = await cfg.fetchAll();
   } catch (err) {
-    rowsEl.innerHTML = `<p class="hint">Ошибка: ${err.message}</p>`;
+    rowsEl.innerHTML = `<p class="hint">Ошибка: ${escapeHtml(err.message)}</p>`;
     return;
   }
   renderRows();
@@ -478,7 +480,7 @@ function buildRow(x) {
   if (cfg.avatar) {
     const avatar = document.createElement("div");
     avatar.className = "catalog-avatar";
-    if (x.imageUrl) avatar.style.backgroundImage = `url("${x.imageUrl}")`;
+    if (x.imageUrl) avatar.style.backgroundImage = cssUrl(x.imageUrl);
     else if (cfg.avatarNode) avatar.appendChild(cfg.avatarNode(x));
     else avatar.innerHTML = icon(cfg.avatarIcon || "image", { size: 14 });
     row.appendChild(avatar);
@@ -488,6 +490,7 @@ function buildRow(x) {
   name.className = "catalog-name";
   name.textContent = cfg.nameText ? cfg.nameText(x) : parts.ru;
   name.title = x.name;
+  asButton(name, `Открыть карточку: ${x.name}`);
   name.onclick = () => openDetail(x);
   const subText = cfg.subText ? cfg.subText(x) : parts.en;
   if (subText) {
@@ -710,7 +713,7 @@ window.addEventListener("message", (e) => {
     return;
   }
   if (!cfg) {
-    rowsEl.innerHTML = `<p class="hint">Неизвестный тип каталога: ${type}</p>`;
+    rowsEl.innerHTML = `<p class="hint">Неизвестный тип каталога: ${escapeHtml(type)}</p>`;
     createForm.style.display = "none";
     importLabel.style.display = "none";
     return;
