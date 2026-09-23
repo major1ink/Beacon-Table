@@ -433,6 +433,84 @@ test("memo не влияет на результат расчёта", () => {
   }
 });
 
+// assertSameShape — фигуры совпадают: площадь и принадлежность точек сетки.
+// Инкрементальное объединение слоя света отдаёт те же фигуры, но куски могут
+// идти в другом порядке, поэтому deepEqual не годится, а булева разность
+// сама спотыкается на этой карте.
+function insideMulti(multi, x, y) {
+  let inside = false;
+  for (const poly of multi) {
+    for (const ring of poly) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i];
+        const [xj, yj] = ring[j];
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+function assertSameShape(a, b, what) {
+  const da = multiArea(a);
+  const db = multiArea(b);
+  assert.ok(Math.abs(da - db) < 1, `${what}: площадь ${da.toFixed(1)} против ${db.toFixed(1)} px²`);
+  const N = 50;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const x = ((i + 0.5) / N) * manorWorld.w + 0.123;
+      const y = ((j + 0.5) / N) * manorWorld.h + 0.311;
+      assert.equal(insideMulti(a, x, y), insideMulti(b, x, y), `${what}: точка ${x.toFixed(0)},${y.toFixed(0)}`);
+    }
+  }
+}
+
+test("кэш полос по источникам и объединение с памятью совпадают с расчётом с нуля", () => {
+  // Шаг одного факела, шаг наблюдателя, дверь — ровно то, что делает стол
+  // между кадрами. Каждый раз сверяем с расчётом без memo.
+  const rnd = makeRandom(2024);
+  const lights = [];
+  for (let i = 0; i < 14; i++) {
+    const color = i % 3 === 0 ? "#ffb070" : "";
+    lights.push({ x: rnd() * manorWorld.w, y: rnd() * manorWorld.h, lightOnly: true, light: { enabled: true, bright: 10 + Math.floor(rnd() * 20), dim: 40, color } });
+  }
+  const walker = { x: 300, y: 800, light: { enabled: true, bright: 20, dim: 40, color: "#ff9d3c" } };
+  const watcher = { x: 900, y: 900 };
+  const doors = manorWalls.filter((w) => w.door).map((w) => w.id);
+  const memo = {};
+  const dmMemo = {};
+  let scene = makeScene([walker, watcher, ...lights], "");
+  const check = (step) => {
+    const got = computeVisionPlanWithFallback(scene, false, memo).plan;
+    const want = computeVisionPlanWithFallback(scene, false).plan;
+    assertSameShape(got.dimIslands.map((d) => d.poly), want.dimIslands.map((d) => d.poly), `${step}: освещённое`);
+    assert.equal(got.rings.length, want.rings.length, `${step}: число колец`);
+    got.rings.forEach((r, i) => assertSameShape(r.multi, want.rings[i].multi, `${step}: кольцо ${i}`));
+    assert.equal(got.tints.length, want.tints.length, `${step}: число цветов`);
+    got.tints.forEach((t, i) => assertSameShape(t.multi, want.tints.find((x) => x.color === t.color).multi, `${step}: цвет ${t.color}`));
+    const dm = computeVisionPlanWithFallback(scene, true, dmMemo).plan;
+    const dmWant = computeVisionPlanWithFallback(scene, true).plan;
+    dm.tints.forEach((t) => assertSameShape(t.multi, dmWant.tints.find((x) => x.color === t.color).multi, `${step}: цвет у ДМ`));
+  };
+  const move = (id, dx) => {
+    scene = { ...scene, tokens: { ...scene.tokens, [id]: { ...scene.tokens[id], x: scene.tokens[id].x + dx } } };
+  };
+  check("старт");
+  for (let i = 0; i < 5; i++) {
+    move("tok-0", 90);
+    check(`шаг факела ${i}`);
+  }
+  move("tok-1", 120);
+  check("шаг наблюдателя");
+  move("tok-5", -200);
+  check("сдвиг другого источника");
+  for (const id of doors.slice(0, 2)) {
+    scene = { ...scene, walls: { ...scene.walls, [id]: { ...scene.walls[id], doorState: "open" } } };
+    check(`дверь ${id}`);
+  }
+  move("tok-0", -300);
+  check("факел вернулся");
+});
+
 test("сдвиг источника света сбрасывает кэш слоя света", () => {
   // Самый опасный для кэша случай: наблюдатель стоит на месте, а двигается
   // ИСТОЧНИК. Если ключ (lightLayerKey) не учтёт его координаты, игрок будет

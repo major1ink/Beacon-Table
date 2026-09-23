@@ -150,6 +150,57 @@ export function unionMulti(a, b) {
   return polygonClipping.union(a, b);
 }
 
+// unionMany — объединение списка MultiPolygon одним проходом. Цепочка
+// unionMulti по тем же фигурам заново перемалывала растущий результат на
+// каждом шаге: на 37 источниках — 200 мс против единиц.
+export function unionMany(multis) {
+  const parts = multis.filter((m) => m && m.length);
+  if (parts.length === 0) return EMPTY;
+  if (parts.length === 1) return parts[0];
+  return polygonClipping.union(...parts);
+}
+
+// unionInto — base ∪ added, где base — уже готовое объединение (его
+// многоугольники не пересекаются). В библиотеку уходят только куски base,
+// чья рамка задевает рамку added: остальные слиться не могут и переходят
+// в ответ как есть. Шаг одного факела по карте с тремя десятками
+// источников — один маленький union вместо всего слоя.
+export function unionInto(base, added) {
+  const adds = added.filter((m) => m && m.length);
+  if (adds.length === 0) return base || EMPTY;
+  if (!base || !base.length) return unionMany(adds);
+  const box = newBox();
+  for (const m of adds) growBox(box, m);
+  const touched = [];
+  const kept = [];
+  for (const poly of base) {
+    if (boxesTouch(growBox(newBox(), [poly]), box)) touched.push(poly);
+    else kept.push(poly);
+  }
+  const merged = touched.length ? polygonClipping.union(touched, ...adds) : unionMany(adds);
+  return kept.length ? kept.concat(merged) : merged;
+}
+
+function newBox() {
+  return [Infinity, Infinity, -Infinity, -Infinity];
+}
+
+function boxesTouch(a, b) {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+}
+
+function growBox(box, multi) {
+  for (const poly of multi) {
+    for (const [x, y] of poly[0]) {
+      if (x < box[0]) box[0] = x;
+      if (y < box[1]) box[1] = y;
+      if (x > box[2]) box[2] = x;
+      if (y > box[3]) box[3] = y;
+    }
+  }
+  return box;
+}
+
 // worldRect — MultiPolygon на весь мир целиком (глобальный свет "на всю
 // карту" — кнопки тулбара ДМ).
 export function worldRect(w, h) {

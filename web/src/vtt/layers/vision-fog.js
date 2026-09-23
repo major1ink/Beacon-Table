@@ -62,13 +62,8 @@ function alphaForLevel(level) {
 // одинаково ведёт себя везде.
 //
 // Тяжёлая часть (пересечение обзора и света через polygon-clipping, см.
-// light-geometry.js) НЕ гоняется синхронно на каждый mousemove во время
-// драга токена (а драг шлёт move_token десятками раз в секунду — см.
-// interaction.js/README) — scheduleRebuild схлопывает все запросы в рамках
-// одного анимационного кадра в один rebuild(), который на момент срабатывания
-// читает АКТУАЛЬНОЕ состояние сцены. Первый рендер — исключение: он должен
-// быть синхронным, иначе один кадр между первым snapshot и первым rAF показал
-// бы карту вообще без тумана (пустой Graphics).
+// light-geometry.js) считается в воркере, см. update() ниже. Первый рендер и
+// смена сцены — синхронно, иначе игрок увидел бы кадр без тумана.
 export function createVisionFogLayer(ctx) {
   const container = new Container();
   const darkness = new Graphics(); // тьма + вырезанные "видно хотя бы тускло" дыры
@@ -175,26 +170,75 @@ export function createVisionFogLayer(ctx) {
     }
   }
 
-  let rafHandle = null;
-  let builtOnce = false;
-  function scheduleRebuild() {
-    if (rafHandle != null) return;
-    rafHandle = requestAnimationFrame(() => {
-      rafHandle = null;
-      rebuild();
-    });
+  // Дальше первого кадра расчёт идёт в воркере (vision-worker.js): на
+  // тяжёлой сцене он стоит десятки миллисекунд, и в главном потоке это были
+  // рывки при каждом шаге токена. В полёте не больше одного запроса: пока
+  // воркер считает, новые правки только помечают pending, и следующим уходит
+  // самое свежее состояние. Синхронно — первый кадр и смена сцены: иначе
+  // игрок мигнул бы кадром без тумана или дырами от прошлой карты.
+  const worker = startWorker();
+  let generation = 0;
+  let inFlight = false;
+  let pending = false;
+  let builtFor = null;
+
+  function startWorker() {
+    try {
+      const w = new Worker(new URL("../vision-worker.js", import.meta.url), { type: "module" });
+      w.onmessage = onWorkerResult;
+      w.onerror = (e) => {
+        console.error("beacon: воркер освещения упал, считаю в главном потоке:", e.message || e);
+        workerBroken = true;
+        inFlight = false;
+        rebuild();
+      };
+      return w;
+    } catch (err) {
+      console.error("beacon: воркер освещения не запустился, считаю в главном потоке:", err);
+      return null;
+    }
+  }
+  let workerBroken = !worker;
+
+  function post() {
+    inFlight = true;
+    pending = false;
+    const s = ctx.scene;
+    const scene = {
+      id: s.id,
+      width: s.width,
+      height: s.height,
+      grid: s.grid,
+      fogOfWar: s.fogOfWar,
+      globalLight: s.globalLight,
+      tokens: s.tokens,
+      walls: s.walls,
+      buildings: s.buildings,
+      fogAreas: s.fogAreas,
+    };
+    worker.postMessage({ id: generation, scene, isDM: ctx.isDM });
+  }
+
+  function onWorkerResult(e) {
+    inFlight = false;
+    const { id, plan, error, unchanged } = e.data;
+    if (id === generation) {
+      if (error) console.error("beacon: сбой пересчёта освещения (воркер) — оставляю прошлый кадр как есть:", error);
+      else if (!unchanged && plan) paintPlan(plan);
+    }
+    if (pending) post();
   }
 
   function update() {
     if (!ctx.dirty.vision) return;
-    if (!builtOnce) {
-      // первый рендер — синхронно, чтобы не мигнуть кадром без тумана
-      // (см. комментарий выше про rAF-throttle).
-      builtOnce = true;
+    if (workerBroken || builtFor !== ctx.scene.id) {
+      builtFor = ctx.scene.id;
+      generation++; // ответы на запросы по прошлой сцене больше не рисуем
       rebuild();
       return;
     }
-    scheduleRebuild();
+    if (inFlight) pending = true;
+    else post();
   }
 
   return { container, update };
