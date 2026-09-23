@@ -781,6 +781,15 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
   65% { transform: translate(calc(var(--dfx-x) * -0.08), -10px) rotate(calc(var(--dfx-r) * -0.03)) scale(1.04); }
   100% { opacity: 1; transform: none; }
 }
+/* 3D (dice-3d.js): кубы катаются по холсту, подпись и итог — внизу. */
+.dfx-warn { color: #e0b070; }
+.dfx-box { position: absolute; inset: 4% 6%; transition: opacity var(--dfx-out, 450ms) ease; }
+.dfx-box[hidden] { display: none; }
+.dfx-box.is-out { opacity: 0; }
+/* Страницы красят любой canvas фоном карты — у кубов он должен быть прозрачным. */
+.dfx-box canvas { display: block; width: 100% !important; height: 100% !important; background: transparent !important; }
+.dfx-stage.dfx-3d { top: auto; bottom: 7%; transform: none; }
+.dfx-stage.dfx-3d.is-out { transform: translateY(8px); }
 @keyframes dfx-land { 0% { transform: scale(1.18); } 100% { transform: none; } }
 /* Упрощённый вид — без полёта. */
 .dfx-lite .dfx-die, .dfx-rush .dfx-die { animation: dfx-pop 0.25s ease-out both; }

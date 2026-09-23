@@ -1,11 +1,15 @@
 // dice-fx.js — анимация броска поверх карты. Значения уже брошены сервером,
-// анимация подгоняется под них. 2D на SVG, а не 3D: легко и идёт на телевизоре.
+// анимация подгоняется под них. По умолчанию 2D на SVG — легко и идёт на
+// телевизоре; объёмные кубы (dice-3d.js) — отдельный режим по выбору.
 
 import { rollGroups } from "./dice.js";
 import { icon } from "./icons.js";
+import { createDice3d, notation3d, webglAvailable } from "./dice-3d.js";
+import { diceSoundOn, playRollSound, preloadDiceSound } from "./dice-sound.js";
 
 const MODE_KEY = "beacon:diceFx";
 export const DICE_FX_MODES = [
+  ["3d", "Объёмная (3D)"],
   ["full", "Полная"],
   ["lite", "Упрощённая"],
   ["off", "Выключена"],
@@ -39,7 +43,17 @@ export function initDiceFxSelect(select) {
     ([id, label]) => `<option value="${id}">${label}</option>`,
   ).join("");
   select.value = diceFxMode();
-  select.onchange = () => setDiceFxMode(select.value);
+  const warn = document.createElement("p");
+  warn.className = "hint dfx-warn";
+  warn.textContent =
+    "Браузер не даёт WebGL — 3D недоступно, кубы будут плоскими. Включите аппаратное ускорение в настройках браузера.";
+  select.after(warn);
+  const check = () => (warn.hidden = select.value !== "3d" || webglAvailable());
+  select.onchange = () => {
+    setDiceFxMode(select.value);
+    check();
+  };
+  check();
 }
 
 // Анимацию видят все, кому бросок пришёл; броски сервера без fromRole — никто.
@@ -52,6 +66,8 @@ const TIMING = {
   lite: { settle: 320, hold: 2200, out: 300 },
   rush: { settle: 320, hold: 1200, out: 200 },
 };
+// 3D: сколько держать итог после того, как кубы встали.
+const HOLD_3D = 3000;
 const MAX_DICE = 12;
 const MAX_QUEUE = 4;
 
@@ -114,7 +130,8 @@ function dieSvg(sides, text) {
 }
 
 // play резолвится, когда кубы встали (или сразу, если не показываем).
-export function createDiceFx(host, { role } = {}) {
+// getMode — режим не из настроек устройства (трансляции его задаёт ДМ).
+export function createDiceFx(host, { role, getMode } = {}) {
   const layer = document.createElement("div");
   layer.className = "dice-fx" + (role === "tv" ? " dice-fx--tv" : "");
   layer.setAttribute("aria-hidden", "true");
@@ -122,9 +139,11 @@ export function createDiceFx(host, { role } = {}) {
 
   const queue = [];
   let busy = false;
+  let dice3d = null;
+  if (diceSoundOn()) preloadDiceSound();
 
   function play(data) {
-    const mode = role === "tv" ? "full" : diceFxMode();
+    const mode = getMode ? getMode() : diceFxMode();
     if (mode === "off" || !shouldPlay(data)) return Promise.resolve();
     return new Promise((resolve) => {
       queue.push({ data, mode, resolve });
@@ -146,12 +165,23 @@ export function createDiceFx(host, { role } = {}) {
     run(item.data, mode, item.resolve).then(next);
   }
 
-  function run(data, mode, onSettle) {
-    const t = TIMING[mode];
+  async function run(data, mode, onSettle) {
+    if (mode === "3d") {
+      const notation = notation3d(data.formula, data.rolls);
+      if (notation) {
+        dice3d ??= createDice3d(layer);
+        const box = await dice3d;
+        if (box) return run3d(box, notation, data, onSettle);
+      }
+      mode = "full";
+    }
+    return run2d(data, mode, onSettle);
+  }
+
+  // Шапка «кто» и итог — общие для 2D и 3D.
+  function makeStage(data, mode) {
     const stage = document.createElement("div");
     stage.className = `dfx-stage dfx-${mode}`;
-    stage.style.setProperty("--dfx-out", t.out + "ms");
-
     const who = document.createElement("div");
     who.className = "dfx-who";
     who.textContent = data.label
@@ -160,6 +190,43 @@ export function createDiceFx(host, { role } = {}) {
     if (data.hidden)
       who.insertAdjacentHTML("afterbegin", icon("eye-off", { size: 14 }));
     stage.appendChild(who);
+    const sum = document.createElement("div");
+    sum.className = "dfx-sum";
+    if (data.modifier) {
+      const mod = document.createElement("span");
+      mod.className = "dfx-mod";
+      mod.textContent =
+        (data.modifier > 0 ? "+ " : "− ") + Math.abs(data.modifier);
+      sum.appendChild(mod);
+    }
+    const total = document.createElement("span");
+    total.className = "dfx-total";
+    total.textContent = "= " + data.total;
+    sum.appendChild(total);
+    return { stage, sum };
+  }
+
+  async function run3d(box, notation, data, onSettle) {
+    const t = TIMING.full;
+    const { stage, sum } = makeStage(data, "3d");
+    stage.style.setProperty("--dfx-out", t.out + "ms");
+    stage.appendChild(sum);
+    layer.appendChild(stage);
+    await box.roll(notation);
+    stage.classList.add("is-settled");
+    onSettle();
+    await wait(HOLD_3D);
+    stage.classList.add("is-out");
+    box.fadeOut();
+    await wait(t.out);
+    stage.remove();
+    box.clear();
+  }
+
+  function run2d(data, mode, onSettle) {
+    const t = TIMING[mode];
+    const { stage, sum } = makeStage(data, mode);
+    stage.style.setProperty("--dfx-out", t.out + "ms");
 
     const row = document.createElement("div");
     row.className = "dfx-row";
@@ -192,22 +259,10 @@ export function createDiceFx(host, { role } = {}) {
       more.textContent = `+${faces.length - shown.length}`;
       row.appendChild(more);
     }
-    const sum = document.createElement("div");
-    sum.className = "dfx-sum";
-    if (data.modifier) {
-      const mod = document.createElement("span");
-      mod.className = "dfx-mod";
-      mod.textContent =
-        (data.modifier > 0 ? "+ " : "− ") + Math.abs(data.modifier);
-      sum.appendChild(mod);
-    }
-    const total = document.createElement("span");
-    total.className = "dfx-total";
-    total.textContent = "= " + data.total;
-    sum.appendChild(total);
     row.appendChild(sum);
     stage.appendChild(row);
     layer.appendChild(stage);
+    playRollSound(shown.length, t.settle);
 
     const spin = setInterval(() => {
       els.forEach(
@@ -234,6 +289,10 @@ export function createDiceFx(host, { role } = {}) {
   }
 
   return { play, el: layer };
+}
+
+function wait(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function spinText(face) {

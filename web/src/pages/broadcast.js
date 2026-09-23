@@ -37,7 +37,13 @@ function startTable() {
   // управляет ДМ.
   initShowcaseOverlay({ role: "tv" });
 
-  const diceFx = createDiceFx(document.getElementById("canvasWrap"), { role: "tv" });
+  // Режим задаёт ДМ в настройках стола.
+  let dice3d = false;
+  document.addEventListener("vtt:combatState", (e) => (dice3d = !!e.detail.broadcastDice3d));
+  const diceFx = createDiceFx(document.getElementById("canvasWrap"), {
+    role: "tv",
+    getMode: () => (dice3d ? "3d" : "full"),
+  });
   document.addEventListener("vtt:rollResult", (e) => diceFx.play(e.detail));
 
   initZoomHud();

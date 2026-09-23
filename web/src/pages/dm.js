@@ -7,6 +7,7 @@ import { mapObjectsOf } from "../vtt/map-objects.js";
 import { initDiceRoller } from "../dice.js";
 import { createRollLog } from "../roll-log.js";
 import { createDiceFx, initDiceFxSelect } from "../dice-fx.js";
+import { initDiceSoundToggle } from "../dice-sound.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
 import { invalidateActionsPeek } from "../combat-actions-peek.js";
 import { initCombatPanel } from "../combat-panel.js";
@@ -4756,6 +4757,14 @@ hideBroadcastDiceToggle.onchange = () => {
   vtt.send({ type: "set_hide_broadcast_dice", hideBroadcastDice: !hideBroadcastDiceToggle.checked });
 };
 initDiceFxSelect(document.getElementById("diceFxSelect"));
+initDiceSoundToggle(document.getElementById("diceSoundToggle"));
+const broadcastDice3dToggle = document.getElementById("broadcastDice3dToggle");
+document.addEventListener("vtt:combatState", (e) => {
+  broadcastDice3dToggle.checked = !!e.detail.broadcastDice3d;
+});
+broadcastDice3dToggle.onchange = () => {
+  vtt.send({ type: "set_broadcast_dice_3d", broadcastDice3d: broadcastDice3dToggle.checked });
+};
 
 const hidePlayerDrawingsToggle = document.getElementById("hidePlayerDrawingsToggle");
 document.addEventListener("vtt:combatState", (e) => {

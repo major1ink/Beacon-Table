@@ -211,6 +211,8 @@ type ClientMsg struct {
 	HidePlayerDrawings *bool `json:"hidePlayerDrawings,omitempty"`
 	// HideBroadcastDice — только для "set_hide_broadcast_dice".
 	HideBroadcastDice *bool `json:"hideBroadcastDice,omitempty"`
+	// BroadcastDice3D — только для "set_broadcast_dice_3d".
+	BroadcastDice3D *bool `json:"broadcastDice3d,omitempty"`
 
 	// HideLightMarkers — только для "set_hide_light_markers": общий тумблер
 	// стола (раздел "Настройки"), прятать ли у ДМ лампочки токенов света вне

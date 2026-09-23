@@ -4,6 +4,7 @@ import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
 import { createRollLog } from "../roll-log.js";
 import { createDiceFx, initDiceFxSelect } from "../dice-fx.js";
+import { initDiceSoundToggle } from "../dice-sound.js";
 import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
 import { openSheetDock, isSheetDockOpen } from "../sheet-dock.js";
 import { setCardOpener } from "../combatant-card.js";
@@ -195,6 +196,7 @@ const PLAYER_DRAW_HELP = {
   const diceFx = createDiceFx(document.getElementById("canvasWrap"), { role: "player" });
   document.addEventListener("vtt:rollResult", (e) => diceFx.play(e.detail).then(() => rollLog.push(e.detail)));
   initDiceFxSelect(document.getElementById("diceFxSelect"));
+  initDiceSoundToggle(document.getElementById("diceSoundToggle"));
   document.addEventListener("vtt:chatHistory", (e) => rollLog.chat.setHistory(e.detail));
   document.addEventListener("vtt:chatMessage", (e) => rollLog.chat.push(e.detail));
   document.addEventListener("vtt:playerList", (e) => rollLog.chat.setParticipants(e.detail || []));

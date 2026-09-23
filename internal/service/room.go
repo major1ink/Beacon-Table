@@ -813,6 +813,13 @@ func (r *Room) handleInbound(im inboundMsg) {
 			r.handleSetHidePlayerDrawings(*im.msg.HidePlayerDrawings)
 		}
 		return
+	case "set_broadcast_dice_3d":
+		if im.msg.BroadcastDice3D != nil {
+			r.combat.BroadcastDice3D = *im.msg.BroadcastDice3D
+			r.markCombatDirty()
+			r.broadcastCombat()
+		}
+		return
 	case "set_hide_broadcast_dice":
 		if im.msg.HideBroadcastDice != nil {
 			r.combat.HideBroadcastDice = *im.msg.HideBroadcastDice
@@ -2523,6 +2530,7 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		"playerDrawingEnabled": r.combat.PlayerDrawingEnabled,
 		"hidePlayerDrawings":   r.combat.HidePlayerDrawings,
 		"hideBroadcastDice":    r.combat.HideBroadcastDice,
+		"broadcastDice3d":      r.combat.BroadcastDice3D,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()
