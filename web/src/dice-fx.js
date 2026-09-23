@@ -142,6 +142,16 @@ export function createDiceFx(host, { role, getMode } = {}) {
   let dice3d = null;
   if (diceSoundOn()) preloadDiceSound();
 
+  // warm — собрать 3D-сцену кубов заранее, в простое: сборка — long task
+  // ~120 мс, и без прогрева он приходился на первый бросок, когда на кубы
+  // смотрят все.
+  function warm() {
+    if ((getMode ? getMode() : diceFxMode()) !== "3d") return;
+    const idle = window.requestIdleCallback || ((f) => setTimeout(f, 2000));
+    idle(() => (dice3d ??= createDice3d(layer)), { timeout: 5000 });
+  }
+  warm();
+
   function play(data) {
     const mode = getMode ? getMode() : diceFxMode();
     if (mode === "off" || !shouldPlay(data)) return Promise.resolve();
@@ -288,7 +298,7 @@ export function createDiceFx(host, { role, getMode } = {}) {
     });
   }
 
-  return { play, el: layer };
+  return { play, warm, el: layer };
 }
 
 function wait(ms) {
