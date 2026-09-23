@@ -43,20 +43,15 @@ test("неразобранная формула — значения как ес
   );
 });
 
-test("анимацию видит бросивший и трансляция, броски сервера — никто", () => {
-  const player = { fromRole: "player", fromId: "acc-1", rolls: [7] };
-  const dm = { fromRole: "dm", rolls: [7] };
-  const auto = { rolls: [7] };
-
-  assert.equal(shouldPlay(player, { role: "player", selfId: "acc-1" }), true);
-  assert.equal(shouldPlay(player, { role: "player", selfId: "acc-2" }), false);
-  assert.equal(shouldPlay(player, { role: "dm" }), false);
-  assert.equal(shouldPlay(dm, { role: "dm" }), true);
-  assert.equal(shouldPlay(dm, { role: "player", selfId: "acc-1" }), false);
-  assert.equal(shouldPlay(player, { role: "tv" }), true);
-  assert.equal(shouldPlay(auto, { role: "tv" }), false);
+test("анимацию видят все, кому пришёл бросок; броски сервера — никто", () => {
   assert.equal(
-    shouldPlay({ fromRole: "dm", rolls: [] }, { role: "tv" }),
+    shouldPlay({ fromRole: "player", fromId: "acc-1", rolls: [7] }),
+    true,
+  );
+  assert.equal(shouldPlay({ fromRole: "dm", rolls: [7] }), true);
+  assert.equal(shouldPlay({ rolls: [7] }), false);
+  assert.equal(
+    shouldPlay({ fromRole: "dm", rolls: [] }),
     false,
     "модификатор без кости крутить нечего",
   );

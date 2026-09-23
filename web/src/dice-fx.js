@@ -42,17 +42,15 @@ export function initDiceFxSelect(select) {
   select.onchange = () => setDiceFxMode(select.value);
 }
 
-// Анимацию видит бросивший и трансляция; броски сервера без fromRole — никто.
-export function shouldPlay(data, { role, selfId }) {
-  if (!data || !data.fromRole || !(data.rolls || []).length) return false;
-  if (role === "tv") return true;
-  if (role === "dm") return data.fromRole === "dm";
-  return data.fromRole === "player" && !!selfId && data.fromId === selfId;
+// Анимацию видят все, кому бросок пришёл; броски сервера без fromRole — никто.
+export function shouldPlay(data) {
+  return !!data && !!data.fromRole && (data.rolls || []).length > 0;
 }
 
 const TIMING = {
-  full: { settle: 900, hold: 1700, out: 280 },
-  lite: { settle: 320, hold: 1050, out: 200 },
+  full: { settle: 900, hold: 3400, out: 450 },
+  lite: { settle: 320, hold: 2200, out: 300 },
+  rush: { settle: 320, hold: 1200, out: 200 },
 };
 const MAX_DICE = 12;
 const MAX_QUEUE = 4;
@@ -116,7 +114,7 @@ function dieSvg(sides, text) {
 }
 
 // play резолвится, когда кубы встали (или сразу, если не показываем).
-export function createDiceFx(host, { role, selfId } = {}) {
+export function createDiceFx(host, { role } = {}) {
   const layer = document.createElement("div");
   layer.className = "dice-fx" + (role === "tv" ? " dice-fx--tv" : "");
   layer.setAttribute("aria-hidden", "true");
@@ -127,8 +125,7 @@ export function createDiceFx(host, { role, selfId } = {}) {
 
   function play(data) {
     const mode = role === "tv" ? "full" : diceFxMode();
-    if (mode === "off" || !shouldPlay(data, { role, selfId }))
-      return Promise.resolve();
+    if (mode === "off" || !shouldPlay(data)) return Promise.resolve();
     return new Promise((resolve) => {
       queue.push({ data, mode, resolve });
       // Затор — старое сразу в лог.
@@ -145,7 +142,7 @@ export function createDiceFx(host, { role, selfId } = {}) {
     }
     busy = true;
     // Догоняем очередь.
-    const mode = queue.length ? "lite" : item.mode;
+    const mode = queue.length ? "rush" : item.mode;
     run(item.data, mode, item.resolve).then(next);
   }
 

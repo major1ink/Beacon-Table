@@ -98,8 +98,8 @@ export function formatRolls(formula, rolls) {
   return groups.map((g) => `${g.label}[${g.values.join(", ")}]`).join(" + ");
 }
 
-// hiddenToggle — кнопка скрытых бросков ДМ (roll-mode.js).
-export function initDiceRoller(controlsContainer, send, { hiddenToggle = false } = {}) {
+// hiddenToggle — кнопка скрытых бросков (roll-mode.js); role — чья панель, для подсказки.
+export function initDiceRoller(controlsContainer, send, { hiddenToggle = false, role = "dm" } = {}) {
   controlsContainer.classList.add("dice-tray");
   controlsContainer.innerHTML = `
     <div class="dice-buttons">${DICE.map(
@@ -178,13 +178,14 @@ export function initDiceRoller(controlsContainer, send, { hiddenToggle = false }
   controlsContainer.querySelector("[data-clear]").onclick = clear;
   const hiddenBtn = controlsContainer.querySelector("[data-hidden]");
   if (hiddenBtn) {
+    const who = role === "dm" ? "только ДМ" : "только вы и ДМ";
     const renderHidden = () => {
       const on = isRollHidden();
       hiddenBtn.classList.toggle("has", on);
       hiddenBtn.setAttribute("aria-pressed", String(on));
       hiddenBtn.title = on
-        ? "Скрытые броски включены: результат видят только ДМ — ни игроки, ни трансляция. Действует и на броски из карточек и книг"
-        : "Скрытые броски: результат увидят только ДМ";
+        ? `Скрытые броски включены: результат видят ${who}, трансляция — нет. Действует и на броски с листа, из карточек и книг`
+        : `Скрытые броски: результат увидят ${who}`;
     };
     hiddenBtn.onclick = () => {
       setRollHidden(!isRollHidden());

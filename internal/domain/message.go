@@ -268,8 +268,8 @@ type ClientMsg struct {
 	// Condition.DefaultRounds из карточки».
 	Rounds *int `json:"rounds,omitempty"`
 	// Hidden — метка видна только ДМ (см. AppliedStatus.Hidden), только для
-	// "apply_status". nil — как в карточке (то есть видна всем). В "roll_dice"
-	// от ДМ — скрытый бросок.
+	// "apply_status". nil — как в карточке (то есть видна всем). В "roll_dice" —
+	// скрытый бросок.
 	Hidden *bool `json:"hidden,omitempty"`
 	// Source — подпись «откуда прилетело» для "apply_status" («Заклинание
 	// «Огненный шар»»). Показываемый текст со стороны клиента — сервер, как

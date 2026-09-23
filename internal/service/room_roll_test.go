@@ -49,9 +49,22 @@ func TestHiddenRollOnlyForDM(t *testing.T) {
 		t.Error("скрытый бросок ушёл игроку или на трансляцию")
 	}
 
+}
+
+func TestPlayerHiddenRollForSelfAndDM(t *testing.T) {
+	r, dm, p1, tv := rollRoom()
+	sheet := &chatClient{role: domain.RolePlayer, playerID: "acc-1", name: "Валера"} // сокет листа того же игрока
+	p2 := &chatClient{role: domain.RolePlayer, playerID: "acc-2", name: "Гость"}
+	r.clients[sheet] = true
+	r.clients[p2] = true
+	yes := true
 	r.handleRollDice(p1, domain.ClientMsg{Type: "roll_dice", Formula: "1d20", Hidden: &yes})
-	if len(tv.rolls()) != 1 {
-		t.Error("игрок не может скрыть бросок — флаг от него игнорируется")
+
+	if len(dm.rolls()) != 1 || len(p1.rolls()) != 1 || len(sheet.rolls()) != 1 {
+		t.Error("скрытый бросок игрока должны видеть ДМ и сам игрок во всех своих окнах")
+	}
+	if len(p2.rolls()) != 0 || len(tv.rolls()) != 0 {
+		t.Error("скрытый бросок игрока ушёл другому игроку или на трансляцию")
 	}
 }
 

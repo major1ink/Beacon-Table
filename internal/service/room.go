@@ -1427,7 +1427,7 @@ func (r *Room) handleRollDice(c RoomClient, msg domain.ClientMsg) {
 	if err != nil {
 		return // некорректная/вне-лимитов формула — просто игнорируем
 	}
-	hidden := msg.Hidden != nil && *msg.Hidden && c.Role() == domain.RoleDM
+	hidden := msg.Hidden != nil && *msg.Hidden
 	r.relayRoll(c, r.rollerName(c, msg.CharacterID), msg.Formula, clampRunes(msg.Label, maxRollLabel), result, hidden)
 }
 
@@ -1457,7 +1457,13 @@ func (r *Room) rollerName(c RoomClient, characterID string) string {
 // клиент не раздул roll_result-payload, рассылаемый всем клиентам комнаты.
 const maxRollLabel = 80
 
-// relayRoll: from == nil — бросок сервера, без анимации кубов; hidden — только ДМ.
+// sameRoller — c это тот же игрок, что кинул (с листа бросок идёт с другого сокета).
+func sameRoller(from, c RoomClient) bool {
+	return from != nil && from.Role() == domain.RolePlayer && c.Role() == domain.RolePlayer && c.PlayerID() == from.PlayerID()
+}
+
+// relayRoll: from == nil — бросок сервера, без анимации кубов; hidden — только ДМ
+// и самому бросившему игроку.
 func (r *Room) relayRoll(from RoomClient, name, formula, label string, result domain.RollResult, hidden bool) {
 	payload := map[string]any{
 		"type":     "roll_result",
@@ -1483,7 +1489,7 @@ func (r *Room) relayRoll(from RoomClient, name, formula, label string, result do
 	}
 	for c := range r.clients {
 		switch {
-		case hidden && c.Role() != domain.RoleDM:
+		case hidden && c.Role() != domain.RoleDM && !sameRoller(from, c):
 			continue
 		case c.Role() == domain.RoleTV && r.combat.HideBroadcastDice:
 			continue

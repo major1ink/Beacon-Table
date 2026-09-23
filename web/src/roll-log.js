@@ -346,7 +346,7 @@ function renderCard({ name, label, formula, rolls, modifier, total, hidden }) {
   who.textContent = label ? `${name} — ${label}` : name;
   if (hidden) {
     who.insertAdjacentHTML("afterbegin", icon("eye-off", { size: 12 }));
-    who.title = "Скрытый бросок — видят только ДМ";
+    who.title = "Скрытый бросок — видят ДМ и бросивший";
   }
   card.appendChild(who);
 

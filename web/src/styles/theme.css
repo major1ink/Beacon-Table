@@ -783,7 +783,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 }
 @keyframes dfx-land { 0% { transform: scale(1.18); } 100% { transform: none; } }
 /* Упрощённый вид — без полёта. */
-.dfx-lite .dfx-die { animation: dfx-pop 0.25s ease-out both; }
+.dfx-lite .dfx-die, .dfx-rush .dfx-die { animation: dfx-pop 0.25s ease-out both; }
 @keyframes dfx-pop { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   .dfx-die, .is-settled .dfx-die { animation: none; }
