@@ -68,9 +68,31 @@ const glUploadVideoResourceSafe = {
     // кадров, и она одинаково валидна в WebGL1 и WebGL2. Если кадра сейчас нет,
     // Chromium снова молча ничего не сделает — но теперь это просто пустой
     // кадр, а не приговор текстуре.
-    gl.texSubImage2D(target, 0, 0, 0, glTexture.format, glTexture.type, source.resource);
+    gl.texSubImage2D(target, 0, 0, 0, glTexture.format, glTexture.type, stagedFrame(source.resource, width, height));
   },
 };
+
+// Заливка прямо из <video> в Chromium на Linux без аппаратного декодера идёт
+// через CPU: 4K-кадр — 90 мс на GT 1030, видео-карта роняла стол до 24 FPS.
+// Через ускоренный 2D-canvas тот же кадр — 1,4 мс, пиксели те же.
+const stages = new WeakMap();
+
+function stagedFrame(video, width, height) {
+  if (!(video instanceof HTMLVideoElement)) return video;
+  let canvas = stages.get(video);
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    stages.set(video, canvas);
+  }
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const c2d = canvas.getContext("2d");
+  c2d.clearRect(0, 0, width, height); // у webm-токенов с альфой кадры иначе накладываются
+  c2d.drawImage(video, 0, 0, width, height);
+  return canvas;
+}
 
 export function installVideoUploaderFix() {
   extensions.add(glUploadVideoResourceSafe);

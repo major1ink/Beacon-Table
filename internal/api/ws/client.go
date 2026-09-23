@@ -33,16 +33,25 @@ var (
 type Client struct {
 	conn       *websocket.Conn
 	room       service.RoomService
-	out        chan any
+	out        chan []byte
 	role       domain.ClientRole
 	playerID   string
 	playerName string
 }
 
 // Send implements service.RoomClient.
+//
+// Сериализуем здесь, в горутине комнаты: payload ссылается на живые карты
+// сцены, и json.Marshal в writeLoop гонялся с их правкой (fatal error:
+// concurrent map iteration and map write).
 func (c *Client) Send(v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		slog.Warn("Не удалось сериализовать сообщение клиенту", "err", err)
+		return
+	}
 	select {
-	case c.out <- v:
+	case c.out <- b:
 	default:
 		// клиент не успевает читать — не блокируем хаб, просто теряем кадр
 		// состояния (следующий snapshot/delta его всё равно догонит по факту)
@@ -79,7 +88,7 @@ func serveWs(gw *Gateway, room service.RoomService, w http.ResponseWriter, r *ht
 	}
 	defer gw.untrack(conn)
 
-	c := &Client{conn: conn, room: room, out: make(chan any, 16), role: role, playerID: playerID, playerName: playerName}
+	c := &Client{conn: conn, room: room, out: make(chan []byte, 16), role: role, playerID: playerID, playerName: playerName}
 	room.Join(c)
 
 	go c.writeLoop()
@@ -94,16 +103,12 @@ func (c *Client) writeLoop() {
 	}()
 	for {
 		select {
-		case v, ok := <-c.out:
+		case b, ok := <-c.out:
 			if !ok {
 				_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 				_ = c.conn.WriteMessage(websocket.CloseMessage,
 					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 				return
-			}
-			b, err := json.Marshal(v)
-			if err != nil {
-				continue
 			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {
