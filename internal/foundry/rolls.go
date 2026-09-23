@@ -40,8 +40,9 @@ var inlineRollRe = regexp.MustCompile(`\[\[((?:[^\[\]]|\[[^\[\]]*\])+)\]\](?:\{(
 // referenceRe — &Reference[condition=prone]{Prone} из dnd5e v3+: ссылка на
 // правило в самой системе, переносить нечего — оставляем подпись. В тексте
 // журнала амперсанд обычно уже экранирован (&amp;Reference[…]) — принимаем
-// оба вида.
-var referenceRe = regexp.MustCompile(`(?:&|&amp;)Reference\[([^\]]*)\](?:\{([^}]*)\})?`)
+// оба вида. Регистр имени Foundry не важен, и модули пишут вперемешку
+// (&Reference и &reference в одном абзаце) — (?i) обязателен.
+var referenceRe = regexp.MustCompile(`(?i)(?:&|&amp;)Reference\[([^\]]*)\](?:\{([^}]*)\})?`)
 
 // abilityNames/skillNames — те же сокращения и названия, что и в остальном
 // приложении (см. web/src/monster-import.js: «Тел +4, Мдр +2»). Именительный
@@ -76,7 +77,7 @@ func RewriteRolls(text string) string {
 // rewriteRollsNamed — RewriteRolls с именем документа для обогатителя
 // [[lookup @name]] (см. lookupValue). Пустое name — прежнее поведение.
 func rewriteRollsNamed(text, name string) string {
-	if !strings.Contains(text, "[[") && !strings.Contains(text, "Reference[") {
+	if !strings.Contains(text, "[[") && !strings.Contains(strings.ToLower(text), "reference[") {
 		return text
 	}
 	out := replaceWithTail(text, inlineRollRe, func(parts []string, tail string) string {
@@ -90,10 +91,12 @@ func rewriteRollsNamed(text, name string) string {
 		if label := strings.TrimSpace(parts[2]); label != "" {
 			return label
 		}
-		// &Reference[condition=prone] без подписи — берём значение параметра.
+		// &Reference[condition=prone] без подписи — берём значение первого
+		// параметра: у остальных ("apply=false", "display=...") значение
+		// служебное и в текст ему не нужно.
 		_, values := parseRollArgs(parts[1])
 		if len(values) > 0 {
-			return values[len(values)-1]
+			return values[0]
 		}
 		return ""
 	})
