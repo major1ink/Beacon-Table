@@ -335,15 +335,19 @@ function load(key) {
   }
 }
 
-function renderCard({ name, label, formula, rolls, modifier, total }) {
+function renderCard({ name, label, formula, rolls, modifier, total, hidden }) {
   const card = document.createElement("div");
-  card.className = "roll-card";
+  card.className = "roll-card" + (hidden ? " is-hidden" : "");
 
   const who = document.createElement("div");
   who.className = "roll-card-who";
   // label — необязательная подпись броска ("Атлетика", "Спасбросок Ловкости",
   // "Гоблин — Укус"), см. internal/domain/message.go: ClientMsg.Label.
   who.textContent = label ? `${name} — ${label}` : name;
+  if (hidden) {
+    who.insertAdjacentHTML("afterbegin", icon("eye-off", { size: 12 }));
+    who.title = "Скрытый бросок — видят только ДМ";
+  }
   card.appendChild(who);
 
   const recipe = document.createElement("div");

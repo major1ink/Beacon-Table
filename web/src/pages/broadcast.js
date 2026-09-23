@@ -4,6 +4,7 @@
 // но результат странице не нужен — вызов "выстрелил и забыл".
 import { initVTT } from "../vtt/index.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
+import { createDiceFx } from "../dice-fx.js";
 import { broadcastAccessGranted, requestBroadcastAccess, broadcastRequestState } from "../api.js";
 
 // Экран трансляции работает без аккаунта — вместо него ключ трансляции (см.
@@ -35,6 +36,9 @@ function startTable() {
   // (см. web/src/showcase-overlay.js). На трансляции закрыть нельзя, показом
   // управляет ДМ.
   initShowcaseOverlay({ role: "tv" });
+
+  const diceFx = createDiceFx(document.getElementById("canvasWrap"), { role: "tv" });
+  document.addEventListener("vtt:rollResult", (e) => diceFx.play(e.detail));
 
   initZoomHud();
 }

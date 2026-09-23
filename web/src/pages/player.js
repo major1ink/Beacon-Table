@@ -3,6 +3,7 @@
 import { initVTT } from "../vtt/index.js";
 import { initDiceRoller } from "../dice.js";
 import { createRollLog } from "../roll-log.js";
+import { createDiceFx, initDiceFxSelect } from "../dice-fx.js";
 import { openFloatingWindow, postToOpenWindows, isFloatingWindowOpen } from "../floating-window.js";
 import { openSheetDock, isSheetDockOpen } from "../sheet-dock.js";
 import { setCardOpener } from "../combatant-card.js";
@@ -190,7 +191,10 @@ const PLAYER_DRAW_HELP = {
     corner: "bottom-left",
     chat: { role: "player", selfId: me.id, send: (m) => vtt.send(m) },
   });
-  document.addEventListener("vtt:rollResult", (e) => rollLog.push(e.detail));
+  // В лог — когда кубы встали.
+  const diceFx = createDiceFx(document.getElementById("canvasWrap"), { role: "player", selfId: me.id });
+  document.addEventListener("vtt:rollResult", (e) => diceFx.play(e.detail).then(() => rollLog.push(e.detail)));
+  initDiceFxSelect(document.getElementById("diceFxSelect"));
   document.addEventListener("vtt:chatHistory", (e) => rollLog.chat.setHistory(e.detail));
   document.addEventListener("vtt:chatMessage", (e) => rollLog.chat.push(e.detail));
   document.addEventListener("vtt:playerList", (e) => rollLog.chat.setParticipants(e.detail || []));

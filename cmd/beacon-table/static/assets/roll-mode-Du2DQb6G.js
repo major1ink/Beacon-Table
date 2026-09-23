@@ -1,0 +1,1 @@
+const t="beacon:rollHidden";function o(){try{return localStorage.getItem(t)==="1"}catch{return!1}}function l(e){try{e?localStorage.setItem(t,"1"):localStorage.removeItem(t)}catch{}}function n(e){return o()?{...e,hidden:!0}:e}export{o as i,l as s,n as w};

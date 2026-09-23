@@ -1109,37 +1109,39 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-CeTS9F6V.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-8PYXbR7M.js">
+  <script type="module" crossorigin src="/assets/dm-DFPEHidz.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-7HrcyHwh.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-KB00GlQ-.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-Cw3kDtRB.js">
   <link rel="modulepreload" crossorigin href="/assets/drag-DVDIF09E.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-CdnhewMC.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-D_qBpELm.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-Dl0kupqo.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DzttuJh9.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
-  <link rel="modulepreload" crossorigin href="/assets/showcase-overlay-CXZ42Hgh.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-DQWlWzLi.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-Bqf488Ig.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-CkBSgfWS.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-fx-D17zoW45.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-BnmXQfkh.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-CqxmBoMj.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-BgFx1jRA.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-BbcXX-M2.js">
   <link rel="modulepreload" crossorigin href="/assets/hp-bar-BLhQlGnT.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-ByJRptTp.js">
-  <link rel="modulepreload" crossorigin href="/assets/card-shell-DFKxEThP.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-BjSNiQdQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-GzWGIoLh.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
-  <link rel="modulepreload" crossorigin href="/assets/stat-editor-CHbFHdSO.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-B86V438T.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-6CJcA59I.js">
+  <link rel="modulepreload" crossorigin href="/assets/stat-editor-DROSd9q4.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-Cf72ulOe.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CR-pG5Id.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-Cl63VTFM.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-BTbU_m_O.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-B9hDvCiC.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-B_Y1R85U.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-BeehQgS6.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-D56hywAT.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-Dwb8jLHT.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-ViAw6sDJ.css">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-Ce2W17w7.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-YxcEDbrN.css">
 </head>
 <body>
   <div id="appBody">
@@ -1477,6 +1479,10 @@
                 <p class="hint">Убирает с карты всё, что нарисовали игроки, не стирая — снял галочку, и пометки вернулись.</p>
               </div>
               <div class="field-block">
+                <div class="checkbox-row"><label><input type="checkbox" class="switch" id="broadcastDiceToggle" /> Показывать броски на трансляции</label></div>
+                <p class="hint">Кубы игроков и ДМ катятся по экрану трансляции с именем персонажа. Отдельный бросок можно скрыть кнопкой с глазом в лотке кубов — его увидят только ДМ.</p>
+              </div>
+              <div class="field-block">
                 <div class="checkbox-row"><label><input type="checkbox" class="switch" id="combatHighlightActiveToggle" /> Подсвечивать токен активного хода</label></div>
                 <p class="hint">Токен бойца, чей сейчас ход, обводится красным — видно всем, пока идёт бой.</p>
               </div>
@@ -1492,6 +1498,11 @@
               <div class="field-block">
                 <div class="checkbox-row"><label><input type="checkbox" class="switch" id="hideLightMarkersToggle" /> Скрывать лампочки света вне режима «Освещение»</label></div>
                 <p class="hint">Иконки-лампочки на карте ДМ видны, только когда открыт раздел «Освещение». Само освещение работает всегда.</p>
+              </div>
+              <div class="field-block">
+                <label class="field-label" for="diceFxSelect">Анимация бросков</label>
+                <select id="diceFxSelect"></select>
+                <p class="hint">Свои броски катятся кубами по карте, в лог результат попадает, когда кубы встали. Только для этого устройства; на слабом компьютере — «Упрощённая» или «Выключена».</p>
               </div>
               <!-- Режим обучения — тур по столу (см. web/src/tutorial.js).
                    Включение начинает тур заново с первого шага. -->

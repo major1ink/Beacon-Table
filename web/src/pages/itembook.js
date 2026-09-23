@@ -28,6 +28,7 @@ import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { withRollMode } from "../roll-mode.js";
 
 // ==================== state ====================
 
@@ -418,7 +419,7 @@ function connectRollSocket() {
 function sendRoll(formula, label) {
   if (!rollWS) return;
   const fullLabel = item && item.name ? `${item.name} — ${label || ""}`.trim().replace(/ —$/, "") : label;
-  rollWS.send({ type: "roll_dice", formula, label: fullLabel });
+  rollWS.send(withRollMode({ type: "roll_dice", formula, label: fullLabel }));
 }
 
 

@@ -29,6 +29,7 @@ import { combatantCardHint, openCombatantCard } from "./combatant-card.js";
 import { icon } from "./icons.js";
 import { enhanceRolls } from "./inline-rolls.js";
 import { renderNoteHtml } from "./notes/markdown.js";
+import { withRollMode } from "./roll-mode.js";
 
 const CSS = `
 .actions-peek {
@@ -212,7 +213,7 @@ function render(el, monster, combatant, send, pinned) {
   // существа в подпись броска, чтобы в общем логе было видно, кто кидал.
   const sendRoll = (formula, label) => {
     const full = `${combatant.name} — ${label || ""}`.trim().replace(/ —$/, "");
-    send({ type: "roll_dice", formula, label: full });
+    send(withRollMode({ type: "roll_dice", formula, label: full }));
   };
 
   const head = document.createElement("div");
