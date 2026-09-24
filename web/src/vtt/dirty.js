@@ -27,6 +27,21 @@ export function createDirtyFlags() {
   };
 }
 
+// reuseUnchanged — сервер шлёт сцену целиком на каждую правку (на каждый шаг
+// перетаскиваемого токена), и все разделы приходят новыми объектами, даже
+// нетронутые. Совпавший по содержимому раздел подменяем прошлым объектом:
+// иначе diffAndMarkDirty, сравнивая по ссылке, перестраивает стены, туман,
+// рисунки и сетку на каждое эхо хода.
+export function reuseUnchanged(prevScene, nextScene) {
+  if (!prevScene) return;
+  for (const key of Object.keys(nextScene)) {
+    const prev = prevScene[key];
+    const next = nextScene[key];
+    if (prev === next || !prev || !next || typeof prev !== "object" || typeof next !== "object") continue;
+    if (JSON.stringify(prev) === JSON.stringify(next)) nextScene[key] = prev;
+  }
+}
+
 // diffAndMarkDirty — сравнивает новый и старый scene, выставляет только
 // затронутые биты. Сравнение — по ссылке/JSON, а не построчный дифф: снапшоты
 // приходят с частотой WS-сообщений (не кадров), так что даже наивное

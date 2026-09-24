@@ -5342,8 +5342,15 @@ function renderLightList() {
 }
 
 onPanelOpen("light", renderLightList);
+// Снапшот приходит на каждый шаг любого перетаскиваемого токена, а список
+// пересобирает DOM целиком — перерисовываем, только если источники поменялись.
+let lightListKey = null;
 document.addEventListener("vtt:sceneUpdated", () => {
-  if (openPanelSection === "light") renderLightList();
+  if (openPanelSection !== "light") return;
+  const key = JSON.stringify(lightTokensSorted());
+  if (key === lightListKey) return;
+  lightListKey = key;
+  renderLightList();
 });
 
 // ================= панель «Туман»: фигура и список зон =================
@@ -5513,8 +5520,15 @@ onPanelOpen("fog", () => {
   renderFogZoneList();
   if (!fogToolActive) document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "fog" }));
 });
+// Та же причина, что у списка света: зоны не менялись — DOM не трогаем
+// (объект fogAreas переиспользуется между снапшотами, см. vtt/dirty.js).
+let fogListFor = null;
 document.addEventListener("vtt:sceneUpdated", () => {
-  if (openPanelSection === "fog") renderFogZoneList();
+  if (openPanelSection !== "fog") return;
+  const areas = vtt.getScene().fogAreas;
+  if (areas === fogListFor) return;
+  fogListFor = areas;
+  renderFogZoneList();
 });
 document.addEventListener("vtt:toolChanged", (e) => {
   fogToolActive = e.detail === "fog";

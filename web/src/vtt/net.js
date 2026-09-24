@@ -1,5 +1,5 @@
 import { DEFAULT_WORLD_W, DEFAULT_WORLD_H } from "./camera.js";
-import { diffAndMarkDirty } from "./dirty.js";
+import { diffAndMarkDirty, reuseUnchanged } from "./dirty.js";
 import { openSocket } from "../ws-reconnect.js";
 import { initConnectionBanner } from "../connection-banner.js";
 
@@ -69,6 +69,7 @@ export function createNet(ctx, audio) {
       if (!nextScene.drawings) nextScene.drawings = {};
       if (!nextScene.teleports) nextScene.teleports = {};
       if (!nextScene.grid) nextScene.grid = { size: 0, offsetX: 0, offsetY: 0 };
+      reuseUnchanged(ctx.scene, nextScene);
       // Зона показа ограничивает камеру только у игрока и трансляции; ДМ
       // видит карту целиком, у него зона — рамка (см. camera.js: viewBounds).
       if (!ctx.isDM && nextScene.viewZone) nextScene.viewBounds = nextScene.viewZone;
