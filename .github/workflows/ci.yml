@@ -47,6 +47,11 @@ jobs:
       - name: task test
         run: task test
 
+      # Десктоп (-tags desktop) ни тесты, ни линтер не видят — хотя бы
+      # собираем его. Под Windows: там Wails не нужен CGO и WebKitGTK.
+      - name: Десктоп собирается
+        run: GOOS=windows CGO_ENABLED=0 go vet -tags desktop ./cmd/beacon-table
+
       - name: task web:build:check
         run: task web:build:check
 

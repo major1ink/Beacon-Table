@@ -2758,6 +2758,38 @@ async function renderBroadcastLink() {
 // неудобно, а Ctrl+C после выделения работает везде.
 broadcastLinkInput.onclick = () => broadcastLinkInput.select();
 
+// Десктоп открывает трансляцию своим окном — сразу на втором мониторе.
+// window.beaconDesktop на Linux появляется уже после загрузки страницы,
+// отсюда и событие.
+const broadcastWindowBlock = document.getElementById("broadcastWindowBlock");
+const broadcastWindowBtn = document.getElementById("broadcastWindowBtn");
+function showDesktopCast() {
+  broadcastWindowBlock.hidden = !window.beaconDesktop;
+}
+showDesktopCast();
+document.addEventListener("beacon:desktop", showDesktopCast);
+// Одна кнопка открывает и закрывает: десктоп сообщает, что окно открылось
+// или его закрыли (в том числе крестиком на самом телевизоре).
+document.addEventListener("beacon:broadcast", (e) => {
+  broadcastWindowBtn.textContent = e.detail.open ? "Закрыть окно трансляции" : "Открыть на втором мониторе";
+});
+broadcastWindowBtn.onclick = () => window.beaconDesktop && window.beaconDesktop.toggleBroadcast();
+
+// «При закрытии окна» — настройка десктопа, а не стола: живёт у десктопа,
+// сюда приходит событием и уходит обратно им же.
+const closeActionBlock = document.getElementById("closeActionBlock");
+const closeActionSelect = document.getElementById("closeActionSelect");
+document.addEventListener("beacon:desktop-state", (e) => {
+  closeActionBlock.hidden = !e.detail.tray;
+  closeActionSelect.value = e.detail.closeAction;
+});
+function requestDesktopState() {
+  if (window.beaconDesktop && window.beaconDesktop.requestState) window.beaconDesktop.requestState();
+}
+requestDesktopState();
+document.addEventListener("beacon:desktop", requestDesktopState);
+closeActionSelect.onchange = () => window.beaconDesktop && window.beaconDesktop.setCloseAction(closeActionSelect.value);
+
 broadcastCopyBtn.onclick = async () => {
   const ok = await copyToClipboard(broadcastLinkInput.value);
   // Не вышло даже запасным путём — выделяем ссылку, чтобы её забрали руками.

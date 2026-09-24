@@ -55,8 +55,6 @@ const (
 )
 
 func main() {
-	ctx := context.Background()
-
 	// Подкоманда `beacon-table backup` — один бэкап и выход, аргументы после
 	// неё разбираются как обычные (--data, --config).
 	if len(os.Args) > 1 && os.Args[1] == "backup" {
@@ -64,26 +62,57 @@ func main() {
 		return
 	}
 
+	// В десктопе сперва экран запуска: где лежит папка стола, или вовсе
+	// чужой сервер — тогда свой не поднимается и ничего не создаётся.
+	if runDesktop != nil {
+		runDesktop(prepareIn)
+		return
+	}
+
+	table, err := prepare(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) || errors.Is(err, errShowVersion) {
+			return // справку или версию уже напечатали (см. bindFlags)
+		}
+		// Журнал может быть ещё не настроен — печатаем как есть.
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	cfg := table.cfg
+
+	// Адрес занимаем до всего остального: если порт занят (обычно — прошлой
+	// копией, которую запустили двойным кликом и не увидели), то мы всё
+	// равно не поднимемся, а по дороге успели бы перевыпустить временный
+	// пароль ДМ и обесценить тот, с которым уже работает живая копия.
+	ln, err := table.listen()
+	if err != nil {
+		fatal("Не удалось занять адрес",
+			"addr", cfg.Addr, "err", err,
+			"hint", "скорее всего Beacon Table уже запущен — откройте "+browserURL(cfg.Addr)+" или закройте прошлую копию; либо смените BEACON_ADDR в beacon.conf")
+	}
+	table.serve(ln, nil, func() {
+		if shouldOpenBrowser(cfg) {
+			openBrowser(browserURL(cfg.Addr))
+		}
+	})
+}
+
+// prepare разбирает настройки, заводит каталог данных и журнал — всё, что
+// нужно до подъёма стола. Ошибку возвращает, а не выходит: у десктопа её
+// некуда напечатать, он покажет её на своём экране.
+func prepare(args []string) (server, error) {
 	// Настройки разбираем до всего остального: с --help/--version программа
 	// должна напечатать своё и выйти молча, не создавая каталогов и не
 	// печатая ничего лишнего.
-	cfg, configFile, err := loadConfig(os.Args[1:])
+	cfg, configFile, err := loadConfig(args)
 	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return // справку flag напечатал сам
-		}
-		if errors.Is(err, errShowVersion) {
-			return // версию напечатал bindFlags (см. version.go)
-		}
-		// Журнал ещё не настроен — печатаем как есть.
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return server{}, err
 	}
 
 	// Каталог данных создаём до настройки журнала: файл журнала по умолчанию
 	// лежит именно в нём, а без журнала не видно и остальных ошибок старта.
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
-		fatal("Не удалось создать каталог данных", "path", cfg.DataDir, "err", err)
+		return server{}, fmt.Errorf("не удалось создать каталог данных %s: %w", cfg.DataDir, err)
 	}
 
 	logLevel, logPath := setupLogging(cfg)
@@ -117,16 +146,47 @@ func main() {
 		}
 	}
 
-	// Адрес занимаем до всего остального: если порт занят (обычно — прошлой
-	// копией, которую запустили двойным кликом и не увидели), то мы всё
-	// равно не поднимемся, а по дороге успели бы перевыпустить временный
-	// пароль ДМ и обесценить тот, с которым уже работает живая копия.
-	ln, err := net.Listen("tcp", cfg.Addr)
-	if err != nil {
-		fatal("Не удалось занять адрес",
-			"addr", cfg.Addr, "err", err,
-			"hint", "скорее всего Beacon Table уже запущен — откройте "+browserURL(cfg.Addr)+" или закройте прошлую копию; либо смените BEACON_ADDR в beacon.conf")
+	return server{ctx: context.Background(), cfg: cfg, configFile: configFile, logLevel: logLevel, version: version}, nil
+}
+
+// prepareIn — prepare в папке стола, выбранной на экране запуска десктопа:
+// всё, что у одиночного бинарника лежит рядом с ним, ложится в неё.
+func prepareIn(dir string) (server, error) {
+	//nolint:gosec // G703: папку выбрал сам пользователь на экране запуска десктопа
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return server{}, fmt.Errorf("не удалось создать папку стола %s: %w", dir, err)
 	}
+	if err := os.Chdir(dir); err != nil {
+		return server{}, fmt.Errorf("не удалось открыть папку стола %s: %w", dir, err)
+	}
+	// Своих настроек в новой папке ещё нет — заводим пример здесь же, иначе
+	// поиск (см. findConfigFile) подхватил бы beacon.conf рядом с программой.
+	if _, err := os.Stat(configFileName); os.IsNotExist(err) {
+		_ = writeExampleConfig(configFileName)
+	}
+	return prepare(os.Args[1:])
+}
+
+// server — всё, что нужно, чтобы поднять стол: разобранные настройки и
+// журнал. Отдельно от main, потому что десктоп поднимает стол не сразу, а
+// после выбора на своём экране.
+type server struct {
+	ctx        context.Context
+	cfg        Config
+	configFile string
+	logLevel   *slog.LevelVar
+	version    string
+}
+
+func (a server) listen() (net.Listener, error) {
+	return net.Listen("tcp", a.cfg.Addr)
+}
+
+// serve держит стол на уже занятом адресе до сигнала, кнопки «Выключить
+// сервер» у ДМ или закрытия stop; возвращается, когда мир сохранён.
+// ready вызывается, как только сервер начал принимать запросы.
+func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
+	ctx, cfg, configFile, logLevel, version := a.ctx, a.cfg, a.configFile, a.logLevel, a.version
 
 	db, err := sqlite.Open(cfg.DBPath())
 	if err != nil {
@@ -311,13 +371,14 @@ func main() {
 	slog.Info("Сервер запущен", "addr", cfg.Addr)
 	printAccessURLs(cfg.Addr)
 
-	if shouldOpenBrowser(cfg) {
-		openBrowser(browserURL(cfg.Addr))
+	if ready != nil {
+		ready()
 	}
 
 	select {
 	case <-sigCh:
 	case <-stopCh:
+	case <-stop:
 	}
 	stopBackground()
 	shutdown(srv, gateway, companies, db)

@@ -197,7 +197,13 @@ Excalidraw для Obsidian. Одну и ту же доску можно прав
 
 ## Быстрый старт
 
-Если хочется просто попробовать — скачайте готовый файл под свою систему со страницы [Releases](https://github.com/major1ink/Beacon-Table/releases/latest).
+Если хочется просто попробовать — скачайте готовый файл под свою систему со страницы [Releases](https://github.com/major1ink/Beacon-Table/releases/latest) или с [зеркала на сайте](https://beacontable.ru/download.html):
+
+| Система | Файл |
+|---|---|
+| Windows (в том числе на ARM) | `beacon-table_<версия>_windows_amd64.exe` |
+| Linux | `beacon-table_<версия>_linux_amd64`, на Raspberry Pi и ARM-серверах — `_linux_arm64` |
+| macOS (Apple Silicon и Intel) | `beacon-table_<версия>_darwin_universal` |
 
 Положите его в пустую папку и запустите.
 
@@ -205,13 +211,13 @@ Linux/macOS:
 
 ```bash
 chmod +x beacon-table_*        # GitHub не хранит бит "исполняемый"
-./beacon-table_v0.8.1_linux_amd64
+./beacon-table_*_linux_amd64   # на Mac — ./beacon-table_*_darwin_universal
 ```
 
-Windows:
+Windows — двойной клик по файлу или из PowerShell:
 
 ```powershell
-.\beacon-table_v0.8.1_windows_amd64.exe
+.\beacon-table_0.8.5_windows_amd64.exe   # подставьте версию из имени скачанного файла
 ```
 
 Через секунду стол должен открыться в браузере.
@@ -369,7 +375,7 @@ A complete Beacon Table world can be exported and moved between servers as a sin
 
 ### Quick start
 
-Download a prebuilt binary for your OS from [Releases](https://github.com/major1ink/Beacon-Table/releases/latest) and run it.
+Download a prebuilt binary for your OS from [Releases](https://github.com/major1ink/Beacon-Table/releases/latest) and run it: `windows_amd64.exe` (also runs on Windows on ARM), `linux_amd64` / `linux_arm64`, or `darwin_universal` for any Mac.
 
 No Go installation is required. The frontend and default SRD data are already included in the binary.
 

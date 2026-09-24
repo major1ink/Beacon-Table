@@ -23,6 +23,28 @@ tasks:
     cmds:
       - go build -o {{.BIN}} ./cmd/beacon-table
 
+  build:desktop:
+    desc: Собрать десктоп (своё окно вместо браузера; на Linux нужны libgtk-3-dev и libwebkit2gtk-4.1-dev)
+    # gtk3, а не GTK4 по умолчанию Wails: на webkitgtk-6.0 WebGL стола на NVIDIA
+    # заметно медленнее (перетаскивание 30 FPS против 42), с DMA-BUF и без.
+    cmds:
+      - go build -tags desktop,gtk3 -o {{.BIN}}-desktop ./cmd/beacon-table
+
+  package:linux:
+    desc: Собрать десктоп и пакеты .deb/.rpm в dist/ — как в CI (нужен nfpm)
+    cmds:
+      - mkdir -p build dist
+      - go build -tags desktop,gtk3 -trimpath -ldflags "-s -w" -o build/beacon-table-desktop ./cmd/beacon-table
+      - for fmt in deb rpm; do VERSION=0.0.0-dev nfpm package -f packaging/linux/nfpm.yaml -p $fmt -t dist/beacon-table-desktop_0.0.0-dev_linux_amd64.$fmt; done
+
+  winres:
+    desc: >-
+      Пересобрать иконку и манифест Windows (cmd/beacon-table/rsrc_windows_amd64.syso)
+      после смены static/icon-512.png — нужен go-winres
+    dir: packaging/windows
+    cmds:
+      - go-winres make --in winres.json --arch amd64 --out ../../cmd/beacon-table/rsrc
+
   run:
     desc: Запустить сервер (go run)
     cmds:

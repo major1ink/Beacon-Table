@@ -17,16 +17,28 @@ builds:
     goarch:
       - amd64
       - arm64
+    ignore:
+      # Windows на ARM сама запускает amd64 через эмуляцию — отдельная
+      # сборка только добавляла строчку выбора на странице загрузки.
+      - goos: windows
+        goarch: arm64
     flags:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
 
+# Один файл для Mac на Intel и на Apple Silicon: человеку не нужно
+# выяснять, какой у него процессор.
+universal_binaries:
+  - id: beacon-table
+    replace: true
+
 archives:
   - id: beacon-table
     formats: ["binary"]
+    # У универсальной сборки Arch — "all"; в имени файла понятнее universal.
     name_template: >-
-      {{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      {{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ if eq .Arch "all" }}universal{{ else }}{{ .Arch }}{{ end }}
     files:
       - none*
 

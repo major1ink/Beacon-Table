@@ -1,0 +1,160 @@
+<!doctype html>
+<!-- Экран запуска десктопа (см. desktop.go): его отдаёт сам десктоп, сервер
+     стола в этот момент ещё не поднят. Цвета — из web/src/styles/theme.css. -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Beacon Table</title>
+<style>
+  :root {
+    --bg: #131318; --panel-bg: #1c1c25; --surface: #26262f; --surface-hover: #303039;
+    --border: rgba(255, 255, 255, 0.08); --text: #eee; --text-dim: rgba(238, 238, 238, 0.55);
+    --accent: #7c6cf0; --accent-hover: #6a5ae0; --accent-bg: rgba(124, 108, 240, 0.16);
+    --danger: #e07a7a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid; place-items: center; padding: 16px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: min(580px, 100%); padding: 28px; border-radius: 18px;
+    background: var(--panel-bg); border: 1px solid var(--border);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  }
+  h1 { margin: 0 0 4px; font: 600 26px/1.2 "Cormorant Garamond", Georgia, serif; letter-spacing: 0.02em; }
+  .lead { margin: 0 0 20px; color: var(--text-dim); }
+  .option {
+    display: block; padding: 14px 16px; margin-bottom: 10px; border-radius: 12px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .option:hover { background: var(--surface-hover); }
+  .option:has(input[type=radio]:checked) { border-color: var(--accent); background: var(--accent-bg); }
+  .option input[type=radio] { accent-color: var(--accent); margin: 0 8px 0 0; vertical-align: -2px; }
+  .title { font-weight: 600; }
+  .hint { margin: 4px 0 0 24px; color: var(--text-dim); font-size: 13px; }
+  .server {
+    display: block; width: calc(100% - 24px); margin: 10px 0 0 24px; padding: 9px 11px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit;
+  }
+  .server:focus { outline: none; border-color: var(--accent); }
+  .error { margin: 4px 0 14px; padding: 10px 12px; border-radius: 8px; background: rgba(224, 122, 122, 0.12); color: var(--danger); font-size: 13.5px; }
+  button {
+    width: 100%; margin-top: 8px; padding: 11px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--accent); color: #fff; font-family: inherit; font-size: 15px; font-weight: 600; line-height: 1;
+  }
+  button:hover { background: var(--accent-hover); }
+  .folder { display: flex; gap: 8px; margin: 10px 0 0 24px; }
+  .folder .server { margin: 0; width: auto; flex: 1; min-width: 0; }
+  button.ghost {
+    width: auto; margin: 0; padding: 9px 12px; white-space: nowrap; font-weight: 500;
+    background: var(--surface-hover); color: var(--text); border: 1px solid var(--border);
+  }
+  button.ghost:hover { background: var(--bg); }
+  .recent { margin: 8px 0 0 24px; display: flex; flex-direction: column; gap: 2px; }
+  .recent button {
+    width: auto; margin: 0; padding: 4px 0; text-align: left; background: none; color: var(--text-dim);
+    font-family: inherit; font-size: 13px; line-height: 1.3; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .recent button:hover { background: none; color: var(--text); }
+  .message { color: var(--text-dim); text-align: center; }
+  /* Первый запуск: поле адреса — только когда выбран сервер. */
+  .reveal { display: none; }
+  .option:has(input[type=radio]:checked) .reveal { display: block; }
+  .overlay {
+    position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
+    background: rgba(8, 8, 12, 0.78);
+  }
+  .dialog { border-color: var(--accent); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6); }
+  .dialog h2 { margin: 0 0 6px; font-size: 20px; }
+  .dialog .folder { margin: 0 0 6px; }
+  button.link {
+    width: 100%; margin-top: 10px; padding: 6px; background: none; color: var(--text-dim);
+    font-size: 13px; font-weight: 400;
+  }
+  button.link:hover { background: none; color: var(--text); }
+</style>
+</head>
+<body>
+{{if .Message}}
+  <p class="message">{{.Message}}</p>
+{{else}}
+  <form class="card" id="main" action="/start" method="get" {{if .Ask}}inert{{end}}>
+    <h1>Beacon Table</h1>
+    <p class="lead">Где сегодня стол?</p>
+    {{if and .Error (not .Ask)}}<p class="error">{{.Error}}</p>{{end}}
+    <label class="option">
+      <input type="radio" name="mode" value="local" {{if not .Remote}}checked{{end}}>
+      <span class="title">На этом компьютере</span>
+      {{if .FirstRun}}<p class="hint">Стол поднимется здесь: телевизор и игроки подключаются к этому компьютеру. Куда сохранять данные, спросим следующим шагом.</p>
+      {{else}}<p class="hint">Стол поднимется здесь: телевизор и игроки подключаются к этому компьютеру. Всё хранится в папке ниже — чтобы перенести стол, скопируйте её.</p>
+      <span class="folder">
+        <input class="server" name="folder" id="folder" value="{{.Folder}}" aria-label="Папка стола" spellcheck="false">
+        <button class="ghost" type="button" id="pick">Изменить…</button>
+      </span>{{end}}
+      {{if gt (len .Recent) 1}}<span class="recent">{{range .Recent}}<button type="button" data-folder="{{.}}" title="{{.}}">{{.}}</button>{{end}}</span>{{end}}
+    </label>
+    <label class="option">
+      <input type="radio" name="mode" value="remote" id="remote" {{if .Remote}}checked{{end}}>
+      <span class="title">Подключиться к серверу</span>
+      <p class="hint">Стол уже работает на сервере — например, на VPS.</p>
+      <input class="server{{if .FirstRun}} reveal{{end}}" name="server" id="server" value="{{.Server}}" placeholder="https://table.example.ru" autocomplete="url" spellcheck="false">
+    </label>
+    <button type="submit" id="open" {{if not .Ask}}autofocus{{end}}>Открыть стол</button>
+  </form>
+  {{if .Ask}}
+  <!-- Первый выбор «на этом компьютере»: папка для данных поверх всего
+       экрана — его нельзя проглядеть. -->
+  <div class="overlay" id="firstRun">
+    <form class="card dialog" action="/folder" method="get">
+      <input type="hidden" name="ask" value="1">
+      <h2>Выберите, куда сохранить данные программы</h2>
+      <p class="lead">Миры, карты, загрузки и настройки лягут в эту папку. Перенести стол на другой компьютер — скопировать её целиком.</p>
+      {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+      <span class="folder">
+        <input class="server" name="folder" id="firstFolder" value="{{.Folder}}" aria-label="Папка для данных" spellcheck="false" autofocus>
+        <button class="ghost" type="button" id="firstPick">Изменить…</button>
+      </span>
+      <button type="submit">Сохранить</button>
+      <button class="link" type="button" id="back">Назад</button>
+    </form>
+  </div>
+  {{end}}
+  <script>
+    // Начали вводить адрес — значит, выбран сервер; взялись за папку — этот компьютер.
+    const server = document.getElementById("server");
+    server.addEventListener("focus", () => { document.getElementById("remote").checked = true; });
+    const folder = document.getElementById("folder");
+    const local = document.querySelector('input[value="local"]');
+    if (folder) {
+      folder.addEventListener("focus", () => { local.checked = true; });
+      // Не submit: Enter жмёт первую кнопку отправки формы, и вместо «Открыть
+      // стол» открывался бы диалог выбора папки.
+      document.getElementById("pick").addEventListener("click", () => {
+        const form = document.getElementById("main");
+        form.action = "/pick";
+        form.submit();
+      });
+    }
+    const first = document.getElementById("firstRun");
+    if (first) {
+      document.getElementById("firstPick").addEventListener("click", () => {
+        const form = first.querySelector("form");
+        form.action = "/pick";
+        form.submit();
+      });
+      document.getElementById("back").addEventListener("click", () => {
+        first.remove();
+        document.getElementById("main").inert = false;
+        document.getElementById("open").focus();
+      });
+    }
+    for (const b of document.querySelectorAll("[data-folder]")) {
+      b.addEventListener("click", () => { folder.value = b.dataset.folder; local.checked = true; });
+    }
+  </script>
+{{end}}
+</body>
+</html>
