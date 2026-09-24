@@ -230,6 +230,23 @@ Windows — двойной клик по файлу или из PowerShell:
 http://<адрес-компьютера>:8080/broadcast.html
 ```
 
+### Десктопная версия
+
+Тот же стол, но в своём окне вместо вкладки браузера. При запуске можно поднять стол на этом компьютере или подключиться к столу на сервере. Окно трансляции для телевизора открывается прямо из окна ДМ, а когда окно закрыто, стол продолжает работать из трея.
+
+| Система | Файл |
+|---|---|
+| Windows | `beacon-table-desktop_<версия>_windows_amd64.exe` |
+| macOS (Apple Silicon и Intel) | `beacon-table-desktop_<версия>_darwin_universal.zip` |
+| Linux (Debian, Ubuntu) | `beacon-table-desktop_<версия>_linux_amd64.deb` |
+| Linux (Fedora, openSUSE) | `beacon-table-desktop_<версия>_linux_amd64.rpm` |
+
+- **Windows**: запустите `.exe`. Нужен WebView2 — в Windows 11 он уже есть, в Windows 10 обычно приходит вместе с Edge.
+- **macOS**: распакуйте `.zip` и перенесите приложение в «Программы». У приложения нет сертификата разработчика, поэтому при первом запуске macOS спросит подтверждение: «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
+- **Linux**: поставьте пакет — `sudo apt install ./beacon-table-desktop_*.deb` или `sudo dnf install ./beacon-table-desktop_*.rpm`. Зависимость от WebKitGTK подтянется сама.
+
+При первом запуске программа спросит, где хранить данные стола. По умолчанию это «Документы/Beacon Table». Папку можно переносить целиком, как хранилище Obsidian.
+
 ### Запуск на VPS
 
 Если у вас уже есть VPS с доменом, можно запустить Beacon Table через Docker.
@@ -378,6 +395,8 @@ A complete Beacon Table world can be exported and moved between servers as a sin
 Download a prebuilt binary for your OS from [Releases](https://github.com/major1ink/Beacon-Table/releases/latest) and run it: `windows_amd64.exe` (also runs on Windows on ARM), `linux_amd64` / `linux_arm64`, or `darwin_universal` for any Mac.
 
 No Go installation is required. The frontend and default SRD data are already included in the binary.
+
+There is also a desktop app that runs the table in its own window instead of a browser tab: `beacon-table-desktop_*_windows_amd64.exe` (needs WebView2), `_darwin_universal.zip` (unsigned, confirm it once in Privacy & Security), and `_linux_amd64.deb` / `.rpm`.
 
 For source builds:
 
