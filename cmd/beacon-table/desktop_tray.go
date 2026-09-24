@@ -3,6 +3,7 @@
 package main
 
 import (
+	_ "embed"
 	"log/slog"
 	"os/exec"
 	"runtime"
@@ -24,6 +25,12 @@ type tray struct {
 	castOpen bool
 }
 
+// trayTemplateIcon — значок для строки меню macOS: шаблон, который система
+// сама красит под тему (packaging/macos/tray-icon.py).
+//
+//go:embed desktop_tray_mac.png
+var trayTemplateIcon []byte
+
 const (
 	castOpenLabel  = "Открыть окно трансляции"
 	castCloseLabel = "Закрыть окно трансляции"
@@ -44,7 +51,12 @@ func (l *launcher) newTray() {
 	l.fillTrayMenu(false)
 
 	t := l.app.SystemTray.New()
-	t.SetIcon(icon)
+	if runtime.GOOS == "darwin" {
+		// Цветная иконка в строке меню macOS смотрится чужой.
+		t.SetTemplateIcon(trayTemplateIcon)
+	} else {
+		t.SetIcon(icon)
+	}
 	t.SetTooltip("Beacon Table — стол работает")
 	t.SetMenu(l.tray.menu)
 	// На Linux Wails зовёт обработчик клика и когда панель просто открывает
