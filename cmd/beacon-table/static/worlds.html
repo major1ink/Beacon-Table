@@ -10,7 +10,10 @@
   <meta name="theme-color" content="#131318" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Beacon Table" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Ярлык на iPhone: страница под строкой состояния, отступ даёт safe-area
+       (см. theme.css: --safe-t) — иначе над столом белая полоса. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Миры</title>
   <style>
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -121,7 +124,10 @@
 
     @media (max-width: 860px), (max-height: 500px) {
       body { align-items: flex-start; }
-      #page { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: 0; min-height: 100dvh; }
+      #page {
+        padding: calc(18px + var(--safe-t)) calc(16px + var(--safe-r)) calc(18px + var(--safe-b)) calc(16px + var(--safe-l));
+        border-radius: 0; min-height: 100dvh;
+      }
       #createForm { flex-wrap: wrap; }
       #createForm input { flex: 1 1 100%; }
       #createForm select { flex: 1 1 auto; }
@@ -135,13 +141,13 @@
       .world-actions { flex: 1 1 100%; justify-content: flex-end; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/worlds-BdQ9Boba.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-hrdAlu1V.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-uNQlFFkV.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DJ2sZH9C.js">
+  <script type="module" crossorigin src="/assets/worlds-BMtwgQnv.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-C_6pssTb.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DKhtjNqL.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-Z3S5GKsM.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-BQZqByLh.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-feN1l5EY.css">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-BEr6jfie.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
 </head>
 <body>
   <div id="splash"></div>
