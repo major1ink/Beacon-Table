@@ -33,17 +33,19 @@ var launcherPage = template.Must(template.New("launcher").Parse(launcherHTML))
 
 func init() { runDesktop = desktopWindow }
 
-func desktopWindow(table server) {
+func desktopWindow(open func(dir string) (server, error)) {
 	// WebKitGTK на NVIDIA заметно лагает с рендером через DMA-BUF.
 	if runtime.GOOS == "linux" && os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
 		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	}
 
-	l := &launcher{table: table, prefs: loadDesktopPrefs(), stop: make(chan struct{})}
+	l := &launcher{open: open, prefs: loadDesktopPrefs(), stop: make(chan struct{})}
 	app := application.New(application.Options{
-		Name:   "Beacon Table",
-		Logger: slog.Default(),
-		Mac:    application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		Name: "Beacon Table",
+		// Свой журнал Wails — только предупреждения и ошибки: окно создаётся
+		// раньше, чем прочитан уровень журнала из beacon.conf папки стола.
+		LogLevel: slog.LevelWarn,
+		Mac:      application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		// Экран выбора отдаёт сам десктоп: сервера стола в этот момент
 		// может не быть вовсе.
 		Assets: application.AssetOptions{Handler: l, DisableLogging: true},
@@ -83,7 +85,8 @@ const (
 // launcher — экран выбора «стол на этом компьютере / подключиться к
 // серверу» и то, что поднято по этому выбору.
 type launcher struct {
-	table server
+	open  func(dir string) (server, error) // prepareIn: подготовить стол в папке
+	table server                           // заполнен, когда стол поднимается здесь
 	app   *application.App
 	win   *application.WebviewWindow
 	stop  chan struct{}
@@ -99,11 +102,19 @@ func (l *launcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if r.URL.Path != "/start" {
+	q := r.URL.Query()
+	switch r.URL.Path {
+	case "/start":
+	case "/pick":
+		l.pickFolder(w, q)
+		return
+	case "/folder":
+		l.saveFolder(w, q)
+		return
+	default:
 		l.render(w, "")
 		return
 	}
-	q := r.URL.Query()
 	if l.served != nil && q.Get("mode") == "local" {
 		go l.win.SetURL(browserURL(l.table.cfg.Addr))
 		l.message(w, "Открываю стол…")
@@ -111,33 +122,14 @@ func (l *launcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch q.Get("mode") {
 	case "local":
-		ln, err := l.table.listen()
-		if err != nil {
-			slog.Error("Не удалось занять адрес", "addr", l.table.cfg.Addr, "err", err)
-			l.prefs.Mode = "local"
-			l.render(w, "Не удалось занять адрес "+l.table.cfg.Addr+": скорее всего Beacon Table уже запущен. Закройте прошлую копию или смените BEACON_ADDR в beacon.conf.")
+		l.prefs.Mode = "local"
+		// Папку ещё ни разу не выбирали — спрашиваем поверх экрана, а не
+		// молча кладём данные туда, куда человек не смотрел.
+		if len(l.prefs.Folders) == 0 && strings.TrimSpace(q.Get("folder")) == "" {
+			l.page(w, launcherView{Ask: true, Folder: defaultFolder()})
 			return
 		}
-		l.prefs.Mode = "local"
-		l.remember()
-		l.origin = strings.TrimSuffix(browserURL(l.table.cfg.Addr), "/")
-		l.served = make(chan struct{})
-		go func() {
-			// Настоящий адрес сервера, а не asset-сервер Wails: куки, WS и
-			// проверки «открыто с этой машины» работают как в браузере.
-			l.table.serve(ln, l.stop, func() { l.win.SetURL(browserURL(l.table.cfg.Addr)) })
-			close(l.served)
-			select {
-			case <-l.stop:
-				// Окно уже закрыто и ждёт в shutdown: цикла Wails больше нет,
-				// Quit ждал бы его вечно.
-			default:
-				// Стол остановили изнутри («Выключить сервер» у ДМ) — окну
-				// показывать больше нечего.
-				l.app.Quit()
-			}
-		}()
-		l.message(w, "Запускаю стол…")
+		l.startLocal(w, q.Get("folder"), false)
 	case "remote":
 		l.prefs.Mode = "remote"
 		target, err := serverURL(q.Get("server"))
@@ -290,13 +282,131 @@ func (l *launcher) shutdown() {
 }
 
 func (l *launcher) render(w http.ResponseWriter, errText string) {
+	l.page(w, launcherView{Error: errText})
+}
+
+// startLocal поднимает стол в папке; ask — запрос пришёл из окна выбора
+// папки, и ошибку показываем в нём же.
+func (l *launcher) startLocal(w http.ResponseWriter, raw string, ask bool) {
+	fail := func(text string) {
+		l.page(w, launcherView{Ask: ask, Folder: strings.TrimSpace(raw), Error: text})
+	}
+	folder, err := folderPath(raw)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+	table, err := l.open(folder)
+	if err != nil {
+		slog.Error("Не удалось подготовить папку стола", "folder", folder, "err", err)
+		fail(err.Error())
+		return
+	}
+	ln, err := table.listen()
+	if err != nil {
+		slog.Error("Не удалось занять адрес", "addr", table.cfg.Addr, "err", err)
+		fail("Не удалось занять адрес " + table.cfg.Addr + ": скорее всего Beacon Table уже запущен. Закройте прошлую копию или смените BEACON_ADDR в beacon.conf.")
+		return
+	}
+	l.table = table
+	l.prefs.useFolder(folder)
+	l.remember()
+	l.origin = strings.TrimSuffix(browserURL(l.table.cfg.Addr), "/")
+	l.served = make(chan struct{})
+	go func() {
+		// Настоящий адрес сервера, а не asset-сервер Wails: куки, WS и
+		// проверки «открыто с этой машины» работают как в браузере.
+		l.table.serve(ln, l.stop, func() { l.win.SetURL(browserURL(l.table.cfg.Addr)) })
+		close(l.served)
+		select {
+		case <-l.stop:
+			// Окно уже закрыто и ждёт в shutdown: цикла Wails больше нет,
+			// Quit ждал бы его вечно.
+		default:
+			// Стол остановили изнутри («Выключить сервер» у ДМ) — окну
+			// показывать больше нечего.
+			l.app.Quit()
+		}
+	}()
+	l.message(w, "Запускаю стол…")
+}
+
+// saveFolder — «Сохранить» в окне выбора папки: папку создаём сразу, чтобы
+// ошибка (нет прав, опечатка в пути) всплыла в этом окне, и тут же
+// поднимаем стол — «на этом компьютере» человек уже выбрал.
+func (l *launcher) saveFolder(w http.ResponseWriter, q url.Values) {
+	folder, err := folderPath(q.Get("folder"))
+	if err == nil {
+		if mkErr := os.MkdirAll(folder, 0o750); mkErr != nil {
+			err = errors.New("Не удалось создать папку " + folder + ": " + mkErr.Error())
+		}
+	}
+	if err != nil {
+		l.page(w, launcherView{Ask: true, Folder: strings.TrimSpace(q.Get("folder")), Error: err.Error()})
+		return
+	}
+	l.startLocal(w, folder, true)
+}
+
+// launcherView — что показать на экране запуска. Ask — окно выбора папки
+// поверх экрана (первый выбор «на этом компьютере»); Folder — папка в поле,
+// если пусто — последняя открытая.
+type launcherView struct {
+	Ask    bool
+	Folder string
+	Error  string
+}
+
+func (l *launcher) page(w http.ResponseWriter, v launcherView) {
+	if v.Folder == "" && !v.Ask {
+		v.Folder = l.prefs.folder()
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = launcherPage.Execute(w, map[string]any{
-		"Remote": l.prefs.Mode == "remote",
-		"Server": l.prefs.Server,
-		"Addr":   browserURL(l.table.cfg.Addr),
-		"Error":  errText,
+		// Папку ещё ни разу не выбирали: на экране без поля папки, её
+		// спросят отдельным окном, когда выберут «на этом компьютере».
+		"FirstRun": len(l.prefs.Folders) == 0,
+		"Ask":      v.Ask,
+		"Remote":   l.prefs.Mode == "remote",
+		"Server":   l.prefs.Server,
+		"Folder":   v.Folder,
+		"Recent":   l.prefs.Folders,
+		"Error":    v.Error,
 	})
+}
+
+// pickFolder — системный диалог выбора папки стола. Запросы экрана запуска
+// Wails обслуживает не в потоке GTK, так что модальный диалог отсюда можно.
+func (l *launcher) pickFolder(w http.ResponseWriter, q url.Values) {
+	l.prefs.Mode = "local"
+	if s := strings.TrimSpace(q.Get("server")); s != "" {
+		l.prefs.Server = s
+	}
+	current := strings.TrimSpace(q.Get("folder"))
+	start := current
+	for start != "" {
+		if st, err := os.Stat(start); err == nil && st.IsDir() {
+			break
+		}
+		if parent := filepath.Dir(start); parent != start {
+			start = parent
+		} else {
+			start = ""
+		}
+	}
+	dlg := l.app.Dialog.OpenFile().
+		SetTitle("Папка стола").
+		CanChooseFiles(false).
+		CanChooseDirectories(true).
+		CanCreateDirectories(true)
+	if start != "" {
+		dlg = dlg.SetDirectory(start)
+	}
+	chosen, err := dlg.PromptForSingleSelection()
+	if err != nil || chosen == "" {
+		chosen = current // отменили — остаётся то, что было в поле
+	}
+	l.page(w, launcherView{Ask: q.Get("ask") == "1", Folder: chosen})
 }
 
 func (l *launcher) message(w http.ResponseWriter, text string) {
@@ -351,8 +461,65 @@ func checkServer(target string) error {
 // desktopPrefs — прошлый выбор на экране запуска: в следующий раз хватает
 // одного Enter.
 type desktopPrefs struct {
-	Mode   string `json:"mode"`
-	Server string `json:"server,omitempty"`
+	Mode    string   `json:"mode"`
+	Server  string   `json:"server,omitempty"`
+	Folders []string `json:"folders,omitempty"` // папки стола, последняя открытая — первой
+}
+
+const maxRecentFolders = 5
+
+// folder — какую папку стола предложить: последнюю открытую, а при первом
+// запуске — «Документы/Beacon Table».
+func (p desktopPrefs) folder() string {
+	if len(p.Folders) > 0 {
+		return p.Folders[0]
+	}
+	return defaultFolder()
+}
+
+func (p *desktopPrefs) useFolder(dir string) {
+	list := []string{dir}
+	for _, f := range p.Folders {
+		if f != dir && len(list) < maxRecentFolders {
+			list = append(list, f)
+		}
+	}
+	p.Folders = list
+}
+
+// defaultFolder — «Документы/Beacon Table»: папка стола — документ
+// пользователя, её копируют и бэкапят, место ей там, где её видно. Нет
+// «Документов» (голый Linux) — каталог данных программ по XDG, а не
+// корень домашней папки.
+func defaultFolder() string {
+	if docs := documentsDir(); docs != "" {
+		return filepath.Join(docs, "Beacon Table")
+	}
+	home, _ := os.UserHomeDir()
+	if runtime.GOOS == "linux" {
+		data := os.Getenv("XDG_DATA_HOME")
+		if data == "" {
+			data = filepath.Join(home, ".local", "share")
+		}
+		return filepath.Join(data, "beacon-table")
+	}
+	return filepath.Join(home, "Beacon Table")
+}
+
+// folderPath — папка стола из поля ввода: только абсолютный путь, иначе
+// она легла бы туда, откуда запустили программу, — ровно то, от чего
+// выбор папки и уводит.
+func folderPath(raw string) (string, error) {
+	dir := strings.TrimSpace(raw)
+	if strings.HasPrefix(dir, "~") {
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, strings.TrimPrefix(dir, "~"))
+		}
+	}
+	if dir == "" || !filepath.IsAbs(dir) {
+		return "", errors.New("Укажите полный путь к папке стола или выберите её кнопкой «Изменить…»")
+	}
+	return filepath.Clean(dir), nil
 }
 
 func desktopPrefsPath() (string, error) {

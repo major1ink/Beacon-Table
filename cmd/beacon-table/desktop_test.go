@@ -2,7 +2,11 @@
 
 package main
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestServerURL(t *testing.T) {
 	ok := map[string]string{
@@ -23,5 +27,29 @@ func TestServerURL(t *testing.T) {
 		if got, err := serverURL(in); err == nil {
 			t.Errorf("serverURL(%q) = %q без ошибки", in, got)
 		}
+	}
+}
+
+func TestFolderPath(t *testing.T) {
+	if _, err := folderPath("data"); err == nil {
+		t.Error("относительный путь пропущен — папка легла бы туда, откуда запустили программу")
+	}
+	if _, err := folderPath("  "); err == nil {
+		t.Error("пустой путь пропущен")
+	}
+	got, err := folderPath("~/Beacon Table/")
+	if err != nil || !filepath.IsAbs(got) || filepath.Base(got) != "Beacon Table" {
+		t.Errorf("folderPath(~/Beacon Table/) = %q, %v", got, err)
+	}
+}
+
+func TestUseFolder(t *testing.T) {
+	var p desktopPrefs
+	for _, d := range []string{"/a", "/b", "/c", "/d", "/e", "/f", "/b"} {
+		p.useFolder(d)
+	}
+	want := []string{"/b", "/f", "/e", "/d", "/c"}
+	if strings.Join(p.Folders, " ") != strings.Join(want, " ") {
+		t.Errorf("недавние папки %v, ждали %v", p.Folders, want)
 	}
 }
