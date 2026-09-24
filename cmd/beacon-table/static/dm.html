@@ -163,6 +163,7 @@
     [hidden] { display: none !important; }
 
     .field-block { display: flex; flex-direction: column; gap: 5px; width: 100%; box-sizing: border-box; }
+    .field-block[hidden] { display: none; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .field-label-row button { padding: 4px 8px; font-size: 11px; width: auto; }
     .contact-links a { color: var(--accent); text-decoration: none; }
@@ -1109,7 +1110,7 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-B7cM-M1t.js"></script>
+  <script type="module" crossorigin src="/assets/dm-BThixpAl.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/icons-hrdAlu1V.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
@@ -1521,6 +1522,15 @@
 
           <!-- Трансляция: как пустить телевизор к столу. -->
           <div class="set-tab-panel" data-settab-panel="cast">
+            <!-- Только в десктопе (см. cmd/beacon-table/desktop.go): кнопку
+                 показывает dm.js, когда есть window.beaconDesktop. -->
+            <div class="field-block" id="broadcastWindowBlock" hidden>
+              <span class="field-label">Окно трансляции</span>
+              <div class="row-inline">
+                <button id="broadcastWindowBtn" type="button">Открыть на втором мониторе</button>
+              </div>
+              <p class="hint">Телевизор или проектор подключён к этому компьютеру вторым монитором — окно откроется на нём во весь экран. Если откроется обычным окном — перетащите его на телевизор и нажмите F11; Esc выходит из полноэкранного режима.</p>
+            </div>
             <div class="field-block">
               <span class="field-label" id="broadcastLinkLabel">Ссылка на трансляцию</span>
               <input type="text" id="broadcastLink" readonly value="…" aria-labelledby="broadcastLinkLabel" />

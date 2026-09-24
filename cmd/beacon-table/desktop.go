@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed desktop_launcher.html
@@ -49,17 +50,35 @@ func desktopWindow(table server) {
 	})
 	l.app = app
 	l.win = app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:       mainWindow,
 		Title:      "Beacon Table",
 		Width:      1440,
 		Height:     900,
 		StartState: application.WindowStateMaximised,
-		JS:         backButtonJS(),
+		JS:         desktopJS(),
+		// Кнопки стола зовут десктоп голым именем события (см. desktopJS).
+		// Любой скрипт страницы может сделать то же, поэтому по событию
+		// десктоп только открывает окно трансляции на уже выбранном сервере.
+		AllowSimpleEventEmit: true,
+	})
+	// Главное окно закрыли — закрывается и трансляция, иначе приложение
+	// жило бы дальше ради одного окна телевизора.
+	l.win.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { app.Quit() })
+	app.Event.On(broadcastEvent, func(e *application.CustomEvent) {
+		if e.Sender == mainWindow {
+			l.toggleBroadcast()
+		}
 	})
 	if err := app.Run(); err != nil {
 		slog.Error("Окно закрылось с ошибкой", "err", err)
 	}
 	l.shutdown()
 }
+
+const (
+	mainWindow     = "main"
+	broadcastEvent = "beacon:broadcast"
+)
 
 // launcher — экран выбора «стол на этом компьютере / подключиться к
 // серверу» и то, что поднято по этому выбору.
@@ -71,7 +90,9 @@ type launcher struct {
 
 	mu     sync.Mutex
 	prefs  desktopPrefs
-	served chan struct{} // стол поднят здесь; второй раз его не поднимаем
+	served chan struct{}              // стол поднят здесь; второй раз его не поднимаем
+	origin string                     // сервер, выбранный на экране запуска
+	cast   *application.WebviewWindow // окно трансляции, пока открыто
 }
 
 func (l *launcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +120,7 @@ func (l *launcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		l.prefs.Mode = "local"
 		l.remember()
+		l.origin = strings.TrimSuffix(browserURL(l.table.cfg.Addr), "/")
 		l.served = make(chan struct{})
 		go func() {
 			// Настоящий адрес сервера, а не asset-сервер Wails: куки, WS и
@@ -129,6 +151,9 @@ func (l *launcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		l.prefs.Server = target
 		l.remember()
+		if u, err := url.Parse(target); err == nil {
+			l.origin = u.Scheme + "://" + u.Host
+		}
 		// Не из обработчика: запрос окна может обслуживаться в том же потоке
 		// GTK, куда SetURL передаёт работу, и они ждали бы друг друга.
 		go l.win.SetURL(target)
@@ -136,6 +161,77 @@ func (l *launcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		l.render(w, "")
 	}
+}
+
+// toggleBroadcast — открыть окно трансляции или закрыть уже открытое:
+// управлять телевизором ДМ должен из своего окна, а не искать окно на нём.
+//
+// Окно — на том же сервере, что и главное. Ключ не нужен: окна делят
+// cookie, а сессия ДМ пускает и на трансляцию. Есть второй монитор — окно
+// сразу на нём во весь экран: ради этого десктоп и нужен, в браузере
+// вкладку пришлось бы перетаскивать руками.
+func (l *launcher) toggleBroadcast() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.cast != nil {
+		go l.cast.Close()
+		return
+	}
+	if l.origin == "" {
+		return
+	}
+	opts := application.WebviewWindowOptions{
+		Name:   "broadcast",
+		Title:  "Beacon Table — трансляция",
+		URL:    l.origin + "/broadcast.html",
+		Width:  1280,
+		Height: 720,
+		// У окна во весь экран нет заголовка с крестиком — без клавиш из
+		// него не выйти иначе как закрыв всю программу.
+		KeyBindings: map[string]func(application.Window){
+			"escape": func(w application.Window) { w.UnFullscreen() },
+			"f11":    func(w application.Window) { w.ToggleFullscreen() },
+		},
+	}
+	if s := secondScreen(l.app); s != nil && canPlaceWindows() {
+		opts.Screen = s
+		opts.StartState = application.WindowStateFullscreen
+	}
+	l.cast = l.app.Window.NewWithOptions(opts)
+	l.cast.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+		l.mu.Lock()
+		l.cast = nil
+		l.mu.Unlock()
+		l.castChanged(false)
+	})
+	l.castChanged(true)
+}
+
+// castChanged — сказать столу в главном окне, открыта ли трансляция: от
+// этого зависит надпись на кнопке.
+func (l *launcher) castChanged(open bool) {
+	l.win.ExecJS(fmt.Sprintf(`document.dispatchEvent(new CustomEvent("beacon:broadcast", { detail: { open: %t } }))`, open))
+}
+
+// canPlaceWindows — может ли программа сама поставить окно на нужный
+// монитор. Под Wayland решает композитор: окно «во весь экран на втором
+// мониторе» легло бы поверх главного на первом.
+func canPlaceWindows() bool {
+	if runtime.GOOS != "linux" {
+		return true
+	}
+	return os.Getenv("WAYLAND_DISPLAY") == "" || os.Getenv("GDK_BACKEND") == "x11"
+}
+
+// secondScreen — монитор, на котором нет главного окна: при двух экранах
+// это телевизор или проектор. nil, если экран один.
+func secondScreen(app *application.App) *application.Screen {
+	for _, s := range app.Screen.GetAll() {
+		if !s.IsPrimary {
+			return s
+		}
+	}
+	return nil
 }
 
 // launcherURL — адрес экрана запуска: его отдаёт asset-сервер Wails, у
@@ -147,23 +243,38 @@ func launcherURL() string {
 	return "wails://localhost/"
 }
 
-// backButtonJS — кнопка «к выбору сервера» на любой странице, которая не
-// стол: ошибка WebKit (сервер не ответил, упал посреди игры), заглушка
-// прокси и т. п. Иначе из такой страницы окну некуда деться. Страницы стола
-// узнаём по собранным стилям из /assets/ — их нет ни у страниц ошибок, ни
-// у самого экрана запуска.
-func backButtonJS() string {
+// desktopJS — то, что десктоп добавляет в каждую страницу окна:
+//   - window.beaconDesktop: стол по нему узнаёт, что он в десктопе, и
+//     показывает кнопки, которых нет в браузере (событие "beacon:desktop" —
+//     на Linux скрипт приходит уже после загрузки страницы);
+//   - кнопку «к выбору сервера» на любой странице, которая не стол: ошибка
+//     WebKit (сервер не ответил, упал посреди игры), заглушка прокси и т. п.,
+//     иначе окну из неё некуда деться. Страницы стола узнаём по собранным
+//     стилям из /assets/ — их нет ни у страниц ошибок, ни у экрана запуска.
+func desktopJS() string {
 	return fmt.Sprintf(`(() => {
   const home = %q;
-  if (location.href.startsWith(home) || document.getElementById("bt-desktop-back")) return;
-  if (document.querySelector('link[rel="stylesheet"][href*="/assets/"]')) return;
-  const a = document.createElement("a");
-  a.id = "bt-desktop-back";
-  a.href = home;
-  a.textContent = "← К выбору сервера";
-  a.style.cssText = "position:fixed;left:16px;bottom:16px;z-index:2147483647;padding:10px 16px;border-radius:10px;background:#7c6cf0;color:#fff;font:600 15px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,.35)";
-  (document.body || document.documentElement).appendChild(a);
-})();`, launcherURL())
+  const send = (msg) => {
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.external) window.webkit.messageHandlers.external.postMessage(msg);
+    else if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(msg);
+  };
+  if (!window.beaconDesktop) {
+    window.beaconDesktop = { toggleBroadcast: () => send("wails:event:emit:%s") };
+    document.dispatchEvent(new Event("beacon:desktop"));
+  }
+  const back = () => {
+    if (location.href.startsWith(home) || document.getElementById("bt-desktop-back")) return;
+    if (document.querySelector('link[rel="stylesheet"][href*="/assets/"]')) return;
+    const a = document.createElement("a");
+    a.id = "bt-desktop-back";
+    a.href = home;
+    a.textContent = "← К выбору сервера";
+    a.style.cssText = "position:fixed;left:16px;bottom:16px;z-index:2147483647;padding:10px 16px;border-radius:10px;background:#7c6cf0;color:#fff;font:600 15px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,.35)";
+    (document.body || document.documentElement).appendChild(a);
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", back);
+  else back();
+})();`, launcherURL(), broadcastEvent)
 }
 
 // shutdown — окно закрыто: поднятый стол должен сохранить мир до выхода.
