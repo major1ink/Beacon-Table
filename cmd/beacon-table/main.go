@@ -117,16 +117,52 @@ func main() {
 		}
 	}
 
+	table := server{ctx: ctx, cfg: cfg, configFile: configFile, logLevel: logLevel, version: version}
+
+	// В десктопе сперва экран выбора: стол на этом компьютере или чужой
+	// сервер — во втором случае свой не поднимается вовсе.
+	if runDesktop != nil {
+		runDesktop(table)
+		return
+	}
+
 	// Адрес занимаем до всего остального: если порт занят (обычно — прошлой
 	// копией, которую запустили двойным кликом и не увидели), то мы всё
 	// равно не поднимемся, а по дороге успели бы перевыпустить временный
 	// пароль ДМ и обесценить тот, с которым уже работает живая копия.
-	ln, err := net.Listen("tcp", cfg.Addr)
+	ln, err := table.listen()
 	if err != nil {
 		fatal("Не удалось занять адрес",
 			"addr", cfg.Addr, "err", err,
 			"hint", "скорее всего Beacon Table уже запущен — откройте "+browserURL(cfg.Addr)+" или закройте прошлую копию; либо смените BEACON_ADDR в beacon.conf")
 	}
+	table.serve(ln, nil, func() {
+		if shouldOpenBrowser(cfg) {
+			openBrowser(browserURL(cfg.Addr))
+		}
+	})
+}
+
+// server — всё, что нужно, чтобы поднять стол: разобранные настройки и
+// журнал. Отдельно от main, потому что десктоп поднимает стол не сразу, а
+// после выбора на своём экране.
+type server struct {
+	ctx        context.Context
+	cfg        Config
+	configFile string
+	logLevel   *slog.LevelVar
+	version    string
+}
+
+func (a server) listen() (net.Listener, error) {
+	return net.Listen("tcp", a.cfg.Addr)
+}
+
+// serve держит стол на уже занятом адресе до сигнала, кнопки «Выключить
+// сервер» у ДМ или закрытия stop; возвращается, когда мир сохранён.
+// ready вызывается, как только сервер начал принимать запросы.
+func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
+	ctx, cfg, configFile, logLevel, version := a.ctx, a.cfg, a.configFile, a.logLevel, a.version
 
 	db, err := sqlite.Open(cfg.DBPath())
 	if err != nil {
@@ -311,24 +347,14 @@ func main() {
 	slog.Info("Сервер запущен", "addr", cfg.Addr)
 	printAccessURLs(cfg.Addr)
 
-	// Ждём в фоне: в десктопной сборке главный поток отдан под окно — Wails
-	// требует крутить свой цикл именно в нём.
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-sigCh:
-		case <-stopCh:
-		}
-		close(done)
-	}()
+	if ready != nil {
+		ready()
+	}
 
-	if runDesktop != nil {
-		runDesktop(browserURL(cfg.Addr), done)
-	} else {
-		if shouldOpenBrowser(cfg) {
-			openBrowser(browserURL(cfg.Addr))
-		}
-		<-done
+	select {
+	case <-sigCh:
+	case <-stopCh:
+	case <-stop:
 	}
 	stopBackground()
 	shutdown(srv, gateway, companies, db)

@@ -17,9 +17,9 @@ import (
 // короткий ответ на вопрос «а запустилось ли».
 
 // runDesktop — своё окно вместо браузера; задан только в сборке с -tags
-// desktop (см. desktop.go). Возвращается, когда окно закрыли или закрылся
-// done.
-var runDesktop func(url string, done <-chan struct{})
+// desktop (см. desktop.go). Сам решает, поднимать ли стол, и возвращается,
+// когда окно закрыли, а поднятый стол сохранил мир.
+var runDesktop func(table server)
 
 // shouldOpenBrowser — открывать ли браузер при этом запуске.
 //

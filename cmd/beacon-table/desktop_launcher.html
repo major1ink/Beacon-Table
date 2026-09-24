@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- Экран запуска десктопа (см. desktop.go): его отдаёт сам десктоп, сервер
+     стола в этот момент ещё не поднят. Цвета — из web/src/styles/theme.css. -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Beacon Table</title>
+<style>
+  :root {
+    --bg: #131318; --panel-bg: #1c1c25; --surface: #26262f; --surface-hover: #303039;
+    --border: rgba(255, 255, 255, 0.08); --text: #eee; --text-dim: rgba(238, 238, 238, 0.55);
+    --accent: #7c6cf0; --accent-hover: #6a5ae0; --accent-bg: rgba(124, 108, 240, 0.16);
+    --danger: #e07a7a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid; place-items: center; padding: 16px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: min(460px, 100%); padding: 28px; border-radius: 18px;
+    background: var(--panel-bg); border: 1px solid var(--border);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  }
+  h1 { margin: 0 0 4px; font: 600 26px/1.2 "Cormorant Garamond", Georgia, serif; letter-spacing: 0.02em; }
+  .lead { margin: 0 0 20px; color: var(--text-dim); }
+  .option {
+    display: block; padding: 14px 16px; margin-bottom: 10px; border-radius: 12px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .option:hover { background: var(--surface-hover); }
+  .option:has(input[type=radio]:checked) { border-color: var(--accent); background: var(--accent-bg); }
+  .option input[type=radio] { accent-color: var(--accent); margin: 0 8px 0 0; vertical-align: -2px; }
+  .title { font-weight: 600; }
+  .hint { margin: 4px 0 0 24px; color: var(--text-dim); font-size: 13px; }
+  .server {
+    display: block; width: calc(100% - 24px); margin: 10px 0 0 24px; padding: 9px 11px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit;
+  }
+  .server:focus { outline: none; border-color: var(--accent); }
+  .error { margin: 4px 0 14px; padding: 10px 12px; border-radius: 8px; background: rgba(224, 122, 122, 0.12); color: var(--danger); font-size: 13.5px; }
+  button {
+    width: 100%; margin-top: 8px; padding: 11px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--accent); color: #fff; font: 600 15px/1 inherit;
+  }
+  button:hover { background: var(--accent-hover); }
+  .message { color: var(--text-dim); text-align: center; }
+</style>
+</head>
+<body>
+{{if .Message}}
+  <p class="message">{{.Message}}</p>
+{{else}}
+  <form class="card" action="/start" method="get">
+    <h1>Beacon Table</h1>
+    <p class="lead">Где сегодня стол?</p>
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <label class="option">
+      <input type="radio" name="mode" value="local" {{if not .Remote}}checked{{end}}>
+      <span class="title">На этом компьютере</span>
+      <p class="hint">Стол поднимется здесь ({{.Addr}}): телевизор и игроки подключаются к этому компьютеру.</p>
+    </label>
+    <label class="option">
+      <input type="radio" name="mode" value="remote" id="remote" {{if .Remote}}checked{{end}}>
+      <span class="title">Подключиться к серверу</span>
+      <p class="hint">Стол уже работает на сервере — например, на VPS.</p>
+      <input class="server" name="server" id="server" value="{{.Server}}" placeholder="https://table.example.ru" autocomplete="url" spellcheck="false">
+    </label>
+    <button type="submit" autofocus>Открыть стол</button>
+  </form>
+  <script>
+    // Начали вводить адрес — значит, выбран сервер.
+    const server = document.getElementById("server");
+    server.addEventListener("focus", () => { document.getElementById("remote").checked = true; });
+  </script>
+{{end}}
+</body>
+</html>
