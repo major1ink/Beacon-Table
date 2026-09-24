@@ -242,7 +242,7 @@ http://<адрес-компьютера>:8080/broadcast.html
 | Linux (Fedora, openSUSE) | `beacon-table-desktop_<версия>_linux_amd64.rpm` |
 
 - **Windows**: запустите `.exe`. Нужен WebView2 — в Windows 11 он уже есть, в Windows 10 обычно приходит вместе с Edge.
-- **macOS**: распакуйте `.zip` и перенесите приложение в «Программы». У приложения нет сертификата разработчика, поэтому при первом запуске macOS спросит подтверждение: «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
+- **macOS**: распакуйте `.zip` и перенесите приложение в «Программы». Приложение не заверено сертификатом Apple, поэтому при первом запуске macOS предупредит о неизвестном разработчике. Подлинность файла можно проверить по `checksums.txt` из релиза.
 - **Linux**: поставьте пакет — `sudo apt install ./beacon-table-desktop_*.deb` или `sudo dnf install ./beacon-table-desktop_*.rpm`. Зависимость от WebKitGTK подтянется сама.
 
 При первом запуске программа спросит, где хранить данные стола. По умолчанию это «Документы/Beacon Table». Папку можно переносить целиком, как хранилище Obsidian.
@@ -396,7 +396,7 @@ Download a prebuilt binary for your OS from [Releases](https://github.com/major1
 
 No Go installation is required. The frontend and default SRD data are already included in the binary.
 
-There is also a desktop app that runs the table in its own window instead of a browser tab: `beacon-table-desktop_*_windows_amd64.exe` (needs WebView2), `_darwin_universal.zip` (unsigned, confirm it once in Privacy & Security), and `_linux_amd64.deb` / `.rpm`.
+There is also a desktop app that runs the table in its own window instead of a browser tab: `beacon-table-desktop_*_windows_amd64.exe` (needs WebView2), `_darwin_universal.zip` (not notarized by Apple; verify it against `checksums.txt`), and `_linux_amd64.deb` / `.rpm`.
 
 For source builds:
 
