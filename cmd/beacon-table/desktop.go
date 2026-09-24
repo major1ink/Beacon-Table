@@ -83,7 +83,8 @@ func desktopWindow(open func(dir string) (server, error)) {
 		// экрана запуска, который сам ждёт этот поток (диалог выбора папки).
 		if l.closeToTray.Load() && l.tray.hides.Load() {
 			e.Cancel()
-			l.win.Hide()
+			// Не в хуке: он идёт в потоке GTK, а подсказка ждёт диалог.
+			go l.hideToTray()
 		}
 	})
 	// Иначе главное окно закрыли — закрывается и трансляция, иначе приложение
@@ -161,6 +162,7 @@ type launcher struct {
 	prefs  desktopPrefs
 	served chan struct{}              // стол поднят здесь; второй раз его не поднимаем
 	origin string                     // сервер, выбранный на экране запуска
+	folder string                     // папка стола, если он поднят здесь
 	cast   *application.WebviewWindow // окно трансляции, пока открыто
 	tray   tray
 
@@ -397,6 +399,7 @@ func (l *launcher) startLocal(w http.ResponseWriter, raw string, ask bool) {
 		return
 	}
 	l.table = table
+	l.folder = folder
 	l.prefs.useFolder(folder)
 	l.remember()
 	l.origin = strings.TrimSuffix(browserURL(l.table.cfg.Addr), "/")
@@ -558,6 +561,8 @@ type desktopPrefs struct {
 	Server      string   `json:"server,omitempty"`
 	Folders     []string `json:"folders,omitempty"`     // папки стола, последняя открытая — первой
 	CloseAction string   `json:"closeAction,omitempty"` // "quit" — крестик закрывает программу; иначе прячет в трей
+	// Подсказку «программа в трее» показали: второй раз не нужна.
+	TrayHintShown bool `json:"trayHintShown,omitempty"`
 }
 
 func (p desktopPrefs) closeToTray() bool { return p.CloseAction != closeQuit }

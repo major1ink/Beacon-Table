@@ -15,10 +15,19 @@ import (
 // если слушаем конкретный адрес ("127.0.0.1:8080"), то печатается он один —
 // перебирать интерфейсы, на которых сервера всё равно нет, незачем.
 func printAccessURLs(addr string) {
+	for _, u := range accessURLs(addr) {
+		slog.Info("Стол доступен по адресу — ДМ и игроки входят через одну страницу", "url", u)
+	}
+
+	slog.Info("Трансляция (ТВ/проектор): ссылку с ключом ДМ берёт на столе, раздел «Настройки»")
+}
+
+// accessURLs — адреса, по которым стол открывают игроки и телевизор; их же
+// показывает трей десктопа.
+func accessURLs(addr string) []string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		slog.Info("Стол доступен по адресу", "url", "http://localhost"+addr+"/")
-		return
+		return []string{"http://localhost" + addr + "/"}
 	}
 	ips := []string{host}
 	if host == "" || host == "0.0.0.0" || host == "::" {
@@ -27,15 +36,15 @@ func printAccessURLs(addr string) {
 			ips = []string{"localhost"}
 		}
 	}
+	urls := make([]string, 0, len(ips))
 	for _, ip := range ips {
-		slog.Info("Стол доступен по адресу — ДМ и игроки входят через одну страницу", "url", "http://"+net.JoinHostPort(ip, port)+"/")
+		urls = append(urls, "http://"+net.JoinHostPort(ip, port)+"/")
 	}
-
-	slog.Info("Трансляция (ТВ/проектор): ссылку с ключом ДМ берёт на столе, раздел «Настройки»")
+	return urls
 }
 
-// virtualIfaceHints — куски имён интерфейсов, по которым отсеиваем адреса
-var virtualIfaceHints = []string{"vpn", "vethernet", "virtual", "docker", "hyper-v", "loopback", "tap", "tun", "wsl"}
+// "amn" — AmneziaVPN (интерфейс amn0): его адрес игрокам в сети ни к чему.
+var virtualIfaceHints = []string{"vpn", "vethernet", "virtual", "docker", "hyper-v", "loopback", "tap", "tun", "wsl", "amn"}
 
 func localIPv4s() []string {
 	ifaces, err := net.Interfaces()
