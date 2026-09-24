@@ -152,6 +152,7 @@ func prepare(args []string) (server, error) {
 // prepareIn — prepare в папке стола, выбранной на экране запуска десктопа:
 // всё, что у одиночного бинарника лежит рядом с ним, ложится в неё.
 func prepareIn(dir string) (server, error) {
+	//nolint:gosec // G703: папку выбрал сам пользователь на экране запуска десктопа
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return server{}, fmt.Errorf("не удалось создать папку стола %s: %w", dir, err)
 	}

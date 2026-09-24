@@ -1,0 +1,188 @@
+name: desktop
+
+# Десктопные сборки — стол в своём окне (cmd/beacon-table/desktop.go).
+# Отдельно от GoReleaser: тот собирает серверные бинарники кросс-компиляцией
+# с одной машины, а окну на macOS и Linux нужен CGO и родной раннер.
+#
+# Из release.yml вызывается с тегом — файлы уходят в релиз, а их суммы
+# дописываются в общий checksums.txt. В PR, который трогает десктоп, и
+# вручную (Actions → desktop → Run workflow) — только артефакты прогона:
+# проверить сборку, особенно macOS, до тега.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - cmd/beacon-table/desktop*
+      - cmd/beacon-table/main.go
+      - packaging/**
+      - .github/workflows/desktop.yml
+      - go.mod
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    # CGO на Windows Wails не нужен — собираем с Linux, как и сервер.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Версия
+        run: ./packaging/version.sh "${{ inputs.tag }}" >> "$GITHUB_ENV"
+
+      - name: Сборка
+        run: |
+          mkdir -p dist
+          # -H windowsgui: без него рядом с окном открывалась бы консоль.
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags desktop -trimpath \
+            -ldflags "-s -w -H windowsgui -X main.version=$VERSION" \
+            -o "dist/beacon-table-desktop_${VERSION}_windows_amd64.exe" ./cmd/beacon-table
+
+      - name: В релиз
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" dist/* --clobber
+
+      - name: Артефакт прогона
+        if: inputs.tag == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist/*
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Версия
+        run: ./packaging/version.sh "${{ inputs.tag }}" >> "$GITHUB_ENV"
+
+      - name: Сборка
+        env:
+          CGO_ENABLED: "1"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: |
+          mkdir -p build dist
+          # Одно приложение для Apple Silicon и Intel, как и у сервера.
+          for arch in arm64 amd64; do
+            GOARCH=$arch go build -tags desktop -trimpath \
+              -ldflags "-s -w -X main.version=$VERSION" -o "build/$arch" ./cmd/beacon-table
+          done
+          lipo -create -output build/beacon-table-desktop build/arm64 build/amd64
+
+      - name: Приложение
+        run: |
+          APP="build/Beacon Table.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp build/beacon-table-desktop "$APP/Contents/MacOS/"
+          sed "s/__VERSION__/$VERSION/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
+
+          ICONSET=build/icon.iconset
+          mkdir -p "$ICONSET"
+          for s in 16 32 128 256 512; do
+            sips -z $s $s cmd/beacon-table/static/icon-512.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+          done
+          for s in 16 32 128 256; do
+            sips -z $((s * 2)) $((s * 2)) cmd/beacon-table/static/icon-512.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+          done
+          iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/icon.icns"
+
+          # Подпись без сертификата (ad-hoc): неподписанное приложение на
+          # Apple Silicon не запускается вовсе. Gatekeeper всё равно спросит
+          # при первом запуске — это до покупки сертификата разработчика.
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" "dist/beacon-table-desktop_${VERSION}_darwin_universal.zip"
+
+      - name: В релиз
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" dist/* --clobber
+
+      - name: Артефакт прогона
+        if: inputs.tag == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos
+          path: dist/*
+
+  linux:
+    # 22.04, а не latest: собранное со свежим glibc не запустится на
+    # Ubuntu 22.04 и Debian 12.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Версия
+        run: ./packaging/version.sh "${{ inputs.tag }}" >> "$GITHUB_ENV"
+
+      - name: WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Сборка
+        run: |
+          mkdir -p build dist
+          # gtk3: на GTK4 (webkitgtk-6.0) WebGL стола на NVIDIA медленнее.
+          go build -tags desktop,gtk3 -trimpath \
+            -ldflags "-s -w -X main.version=$VERSION" -o build/beacon-table-desktop ./cmd/beacon-table
+
+      - name: Пакеты
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+          for fmt in deb rpm; do
+            nfpm package -f packaging/linux/nfpm.yaml -p $fmt \
+              -t "dist/beacon-table-desktop_${VERSION}_linux_amd64.$fmt"
+          done
+
+      - name: В релиз
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" dist/* --clobber
+
+      - name: Артефакт прогона
+        if: inputs.tag == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: dist/*
+
+  checksums:
+    # Сайт советует сверять файл с checksums.txt — десктопные файлы должны
+    # быть в нём же, а не в отдельном списке, который никто не найдёт.
+    if: inputs.tag != ''
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Дописать суммы в checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -D rel -p checksums.txt -p 'beacon-table-desktop_*'
+          cd rel
+          grep -v 'beacon-table-desktop_' checksums.txt > merged.txt || true
+          sha256sum beacon-table-desktop_* >> merged.txt
+          mv merged.txt checksums.txt
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" checksums.txt --clobber

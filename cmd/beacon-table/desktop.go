@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -226,6 +227,16 @@ func secondScreen(app *application.App) *application.Screen {
 	return nil
 }
 
+// capitalize — ошибки в коде строчные (как везде в проекте), а на экране
+// это отдельная фраза.
+func capitalize(s string) string {
+	r := []rune(s)
+	if len(r) > 0 {
+		r[0] = unicode.ToUpper(r[0])
+	}
+	return string(r)
+}
+
 // launcherURL — адрес экрана запуска: его отдаёт asset-сервер Wails, у
 // которого на Windows своя схема.
 func launcherURL() string {
@@ -337,8 +348,9 @@ func (l *launcher) startLocal(w http.ResponseWriter, raw string, ask bool) {
 func (l *launcher) saveFolder(w http.ResponseWriter, q url.Values) {
 	folder, err := folderPath(q.Get("folder"))
 	if err == nil {
+		//nolint:gosec // G703: папку выбрал сам пользователь на своём экране запуска
 		if mkErr := os.MkdirAll(folder, 0o750); mkErr != nil {
-			err = errors.New("Не удалось создать папку " + folder + ": " + mkErr.Error())
+			err = errors.New("не удалось создать папку " + folder + ": " + mkErr.Error())
 		}
 	}
 	if err != nil {
@@ -371,7 +383,7 @@ func (l *launcher) page(w http.ResponseWriter, v launcherView) {
 		"Server":   l.prefs.Server,
 		"Folder":   v.Folder,
 		"Recent":   l.prefs.Folders,
-		"Error":    v.Error,
+		"Error":    capitalize(v.Error),
 	})
 }
 
@@ -385,6 +397,7 @@ func (l *launcher) pickFolder(w http.ResponseWriter, q url.Values) {
 	current := strings.TrimSpace(q.Get("folder"))
 	start := current
 	for start != "" {
+		//nolint:gosec // G703: путь из поля экрана запуска — его вписал сам пользователь
 		if st, err := os.Stat(start); err == nil && st.IsDir() {
 			break
 		}
@@ -427,13 +440,13 @@ func (l *launcher) remember() {
 func serverURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", errors.New("Укажите адрес сервера, например https://table.example.ru")
+		return "", errors.New("укажите адрес сервера, например https://table.example.ru")
 	}
 	if !strings.Contains(raw, "://") {
 		raw = "https://" + raw
 	}
 	u, err := url.Parse(raw)
-	bad := errors.New("Не похоже на адрес сервера: " + raw)
+	bad := errors.New("не похоже на адрес сервера: " + raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return "", bad
 	}
@@ -452,7 +465,7 @@ func checkServer(target string) error {
 	client := &http.Client{Timeout: 6 * time.Second}
 	resp, err := client.Get(target) //nolint:gosec // G107: адрес ввёл сам пользователь на экране запуска
 	if err != nil {
-		return errors.New("Сервер " + target + " не отвечает. Проверьте адрес и интернет.")
+		return errors.New("сервер " + target + " не отвечает. Проверьте адрес и интернет.")
 	}
 	_ = resp.Body.Close()
 	return nil
@@ -517,7 +530,7 @@ func folderPath(raw string) (string, error) {
 		}
 	}
 	if dir == "" || !filepath.IsAbs(dir) {
-		return "", errors.New("Укажите полный путь к папке стола или выберите её кнопкой «Изменить…»")
+		return "", errors.New("укажите полный путь к папке стола или выберите её кнопкой «Изменить…»")
 	}
 	return filepath.Clean(dir), nil
 }

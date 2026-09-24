@@ -1,0 +1,40 @@
+# Пакеты .deb и .rpm десктопной сборки (см. .github/workflows/desktop.yml).
+# Окну нужен системный WebKitGTK — пакет объявляет его зависимостью, и
+# apt/dnf ставят его сами; голый бинарник на чистой системе не запустился бы.
+name: beacon-table-desktop
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: games
+priority: optional
+maintainer: Beacon Table <info@beacontable.ru>
+vendor: Beacon Table
+homepage: https://beacontable.ru/
+license: AGPL-3.0
+description: |
+  Виртуальный стол для D&D в своём окне.
+  Стол поднимается на этом компьютере (данные — в выбранной папке) или
+  открывается с сервера; телевизор и игроки подключаются по сети.
+
+# Права — явно: иначе в пакет уезжает umask машины, где собирали.
+contents:
+  - src: build/beacon-table-desktop
+    dst: /usr/bin/beacon-table-desktop
+    file_info:
+      mode: 0755
+  - src: packaging/linux/beacon-table.desktop
+    dst: /usr/share/applications/beacon-table.desktop
+    file_info:
+      mode: 0644
+  - src: cmd/beacon-table/static/icon-512.png
+    dst: /usr/share/icons/hicolor/512x512/apps/beacon-table.png
+    file_info:
+      mode: 0644
+
+overrides:
+  deb:
+    depends:
+      - libwebkit2gtk-4.1-0
+  rpm:
+    depends:
+      - webkit2gtk4.1

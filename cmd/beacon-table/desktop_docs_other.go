@@ -41,6 +41,7 @@ func documentsDir() string {
 		if filepath.Clean(dir) == filepath.Clean(home) {
 			return ""
 		}
+		//nolint:gosec // G703: путь из стандартного файла XDG в домашнем каталоге
 		if st, err := os.Stat(dir); err == nil && st.IsDir() {
 			return dir
 		}

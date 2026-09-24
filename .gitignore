@@ -8,6 +8,7 @@
 beacon.conf
 /web/node_modules
 /dist
+/build
 /.task
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Beacon Table
+Comment=Виртуальный стол для настольных ролевых игр
+Exec=beacon-table-desktop
+Icon=beacon-table
+Terminal=false
+Categories=Game;RolePlaying;
+Keywords=D&D;DnD;VTT;RPG;
