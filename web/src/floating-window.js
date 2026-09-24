@@ -17,6 +17,7 @@
 
 import { showConfirm } from "./modal.js";
 import { attachDrag } from "./drag.js";
+import { createBackLayer } from "./back-stack.js";
 
 let styleInjected = false;
 function injectStyle() {
@@ -52,15 +53,18 @@ function injectStyle() {
        Брейкпоинт общий, см. theme.css. */
     @media (max-width: 860px), (max-height: 500px) {
       .fw-window {
-        left: 0 !important; top: 0 !important;
-        width: 100% !important; height: 100dvh !important;
+        /* --vv-* — видимая часть над клавиатурой iOS (visual-viewport.js). */
+        left: 0 !important; top: var(--vv-top, 0px) !important;
+        width: 100% !important; height: var(--vv-h, 100dvh) !important;
         min-width: 0; min-height: 0; border: none; border-radius: 0;
         resize: none;
+        box-sizing: border-box; padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
       }
       .fw-titlebar { cursor: default; padding: 8px 8px 8px 12px; }
       .fw-btn { width: 34px; height: 34px; font-size: 15px; }
       /* 🗗 на телефоне — вторая вкладка, из которой не вернуться. */
       .fw-popout { display: none; }
+      .fw-own-header .fw-titlebar { display: none; }
     }
   `;
   document.head.appendChild(style);
@@ -182,7 +186,16 @@ export function openFloatingWindow({
     }
   }
 
+  // «Назад» на телефоне закрывает окно — как ✕, с тем же вопросом у
+  // страниц с долгим процессом; передумали — окно снова ловит «Назад».
+  const backLayer = createBackLayer(async () => {
+    if (await confirmClose()) close();
+    else backLayer.set(true);
+  });
+  backLayer.set(true);
+
   async function close() {
+    backLayer.set(false);
     await flushIframe();
     window.removeEventListener("message", onMessage);
     el.remove();
@@ -225,7 +238,10 @@ export function openFloatingWindow({
   // window.open). Встроенная страница вместо этого шлёт postMessage
   // родителю — ловим его здесь и закрываем плавающее окно.
   function onMessage(e) {
-    if (e.source === iframe.contentWindow && e.data && e.data.type === "beacon:closeFloatingWindow") close();
+    if (e.source !== iframe.contentWindow || !e.data) return;
+    if (e.data.type === "beacon:closeFloatingWindow") close();
+    // У страницы своя шапка с ✕ — на телефоне своя строка заголовка лишняя (см. embed.js).
+    if (e.data.type === "beacon:ownHeader") el.classList.add("fw-own-header");
   }
   window.addEventListener("message", onMessage);
 

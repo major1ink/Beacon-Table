@@ -26,6 +26,7 @@ import { renderSpellPreview } from "../spell-preview.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { SCHOOLS, schoolInfo } from "../spell-school.js";
 import { withRollMode } from "../roll-mode.js";
+import { announceOwnHeader } from "../embed.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -504,6 +505,8 @@ editToggleBtn.onclick = () => {
 
 initFullscreenButton(document.getElementById("fullscreenBtn"));
 
+// Своя шапка с ✕ — рамке на телефоне своя не нужна (см. embed.js).
+announceOwnHeader();
 document.getElementById("closeBtn").onclick = () => {
   // Плавающее окно (обычный случай, см. floating-window.js) — iframe, не
   // умеет window.close() сам, сообщаем родителю; вынесенное 🗗-кнопкой в

@@ -10,13 +10,23 @@
   <meta name="theme-color" content="#131318" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Beacon Table" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Ярлык на iPhone: страница под строкой состояния, отступ даёт safe-area
+       (см. theme.css: --safe-t) — иначе над столом белая полоса. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Игрок</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
 
-    #app { position: fixed; inset: 0; display: none; flex-direction: column; }
+    /* Отступ под вырез/скругления/полоску «домой» — у всего стола разом:
+       карта и всё, что к ней прижато (колонка меряет канвас), остаются в
+       видимой части экрана. Полноэкранные слои поверх (лист, окна, чат)
+       отступают сами. */
+    #app {
+      position: fixed; inset: 0; display: none; flex-direction: column;
+      padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
+    }
     #app.ready { display: flex; }
 
     /* ---- #charDock — столбик своих персонажей в углу карты (pages/player.js:
@@ -193,14 +203,18 @@
 
       #diceBtn { display: flex; }
 
-      #zoomHud { right: 6px; bottom: 6px; padding: 5px; gap: 5px; }
+      /* Колонка иконок справа поверх карты (~60px) — HUD встаёт левее неё,
+         иначе «+» уходил под колонку. В портрете колонки там нет (ниже). */
+      #zoomHud { right: 66px; bottom: 6px; padding: 5px; gap: 5px; }
       #zoomHud button { width: 38px; height: 38px; }
 
       /* max-height: у длинного пула лоток переносится в несколько рядов. */
       #diceDock { display: none; }
       body.dice-open #diceDock {
-        display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 7;
-        max-height: 40dvh; overflow-y: auto; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        /* right — мимо колонки иконок, иначе она накрывала «Бросить». */
+        display: flex; position: fixed; left: 0; right: calc(66px + var(--safe-r)); bottom: 0; z-index: 7;
+        max-height: 40dvh; overflow-y: auto;
+        padding: 8px calc(10px + var(--safe-r)) calc(8px + var(--safe-b)) calc(10px + var(--safe-l));
       }
       /* Каждая часть своей строкой: на десктопе они flex:0 0 auto и ряд
          кубиков уезжал за правый край вместе с d100. */
@@ -209,14 +223,29 @@
       /* HUD зума под лотком всё равно не виден. */
       body.dice-open #zoomHud { display: none; }
       /* Лоток закрывает низ карты — сжимаем область лога, окно само
-         поднимется (см. roll-log.js: place). 40dvh — потолок лотка. */
-      body.dice-open #diceLog { bottom: 40dvh; }
+         поднимется (см. roll-log.js: place). Высоту меряет player.js. */
+      body.dice-open #diceLog { bottom: var(--dice-tray-h, 40dvh); }
 
       /* Модалки во весь экран: 420px на телефоне и так занимают всё. */
       #charsModal, #settingsModal {
         width: 100%; max-width: none; height: 100dvh; max-height: none;
-        border: none; border-radius: 0; padding: 14px 16px calc(20px + env(safe-area-inset-bottom));
+        border: none; border-radius: 0;
+        padding: calc(14px + var(--safe-t)) calc(16px + var(--safe-r)) calc(20px + var(--safe-b)) calc(16px + var(--safe-l));
       }
+    }
+
+    /* Пальцем зумят щипком — «−»/«+» только занимают место. */
+    @media (pointer: coarse) and (max-width: 860px), (pointer: coarse) and (max-height: 500px) {
+      #zoomHud #zoomOutBtn, #zoomHud #zoomInBtn { display: none; }
+    }
+
+    /* Портрет телефона: колонка иконок — нижней панелью (theme.css:
+       .vtt-side-menu--bar), стол заканчивается над ней, так что HUD, «Чат»
+       и лог бросков встают выше сами. Лоток кубов — тоже над панелью. */
+    @media (max-width: 600px) {
+      #app { padding-bottom: var(--mbar-h); }
+      #zoomHud { right: 6px; }
+      body.dice-open #diceDock { right: 0; bottom: var(--mbar-h); padding-bottom: 8px; }
     }
   </style>
 </head>

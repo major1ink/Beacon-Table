@@ -7,6 +7,7 @@
 // что был у старых hover-иконок, просто без самого hover. Клик мимо колонки
 // или Esc закрывают текущую открытую.
 import { attachTooltip, hideTooltip } from "../tooltip.js";
+import { createBackLayer } from "../back-stack.js";
 
 export function createSideMenu(ctx) {
   const column = document.createElement("div");
@@ -45,12 +46,19 @@ export function createSideMenu(ctx) {
     document.body.classList.toggle("vtt-side-panel-full-open", !!openPanel && openPanel.classList.contains("vtt-side-panel--full"));
   }
 
+  // «Назад» на телефоне закрывает открытую панель (см. back-stack.js).
+  const backLayer = createBackLayer(() => closeOpen());
+
   function closeOpen() {
+    backLayer.set(false);
     if (openPanel) {
       openPanel.style.display = "none";
       openPanel.host?.querySelector(".vtt-side-menu-btn")?.classList.remove("open");
     }
     const toggle = openPanelToggle;
+    // Панель из второго ряда «⋯» живёт внутри него — ряд держался открытым
+    // ради неё и сворачивается вместе с ней.
+    if (openPanel?.host?.classList.contains("vtt-side-menu-more-item")) setMoreOpen(false);
     openPanel = null;
     openPanelSticky = false;
     openPanelOnCanvas = false;
@@ -99,6 +107,7 @@ export function createSideMenu(ctx) {
   // другой иконке колонки.
   function addButton(icon, title, onClick, opts) {
     const btn = iconButton(icon, title);
+    if (opts && opts.more) btn.classList.add("vtt-side-menu-more-item");
     if (opts && opts.tip) attachTooltip(btn, opts.tip);
     btn.onclick = () => {
       closeOpen();
@@ -123,6 +132,7 @@ export function createSideMenu(ctx) {
   function addIcon(icon, title, opts) {
     const wrap = document.createElement("div");
     wrap.style.cssText = "position:relative;";
+    if (opts && opts.more) wrap.classList.add("vtt-side-menu-more-item");
     const btn = iconButton(icon, title);
     const panel = document.createElement("div");
     panel.className = "vtt-side-panel" + (opts && opts.mobileFull ? " vtt-side-panel--full" : "");
@@ -146,8 +156,12 @@ export function createSideMenu(ctx) {
         return;
       }
       closeOpen();
+      // Иконка из второго ряда «⋯»: её панель — потомок ряда, ряд должен
+      // остаться видимым, пока она открыта (см. addMoreButton).
+      if (wrap.classList.contains("vtt-side-menu-more-item")) setMoreOpen(true);
       panel.style.display = "flex";
       btn.classList.add("open");
+      backLayer.set(true);
       // Гасим подсказку явно, а не надеемся на глобальный mousedown-хук:
       // порядок pointerenter и mousedown у синтезированного клика не
       // гарантирован, и подсказка успевала остаться висеть поверх только
@@ -176,10 +190,46 @@ export function createSideMenu(ctx) {
     return panel;
   }
 
+  // ---- нижняя панель телефона (см. theme.css: .vtt-side-menu--bar) ----
+  // В портрете телефона колонка ложится полосой вдоль низа экрана, и
+  // дюжина иконок в ширину не встаёт. Редкие (opts.more у addIcon/
+  // addButton) прячутся за «⋯» и по нему выезжают вторым рядом над
+  // полосой; вне полосы «⋯» не видна, а они стоят в колонке как обычно.
+  // Второй ряд сворачивается любым выбором в колонке и касанием мимо неё.
+  function setMoreOpen(open) {
+    column.classList.toggle("more-open", open);
+    moreBtn?.classList.toggle("open", open);
+  }
+  let moreBtn = null;
+  function addMoreButton(icon, title) {
+    moreBtn = iconButton(icon, title);
+    moreBtn.classList.add("vtt-side-menu-more-btn");
+    moreBtn.onclick = () => {
+      const open = !column.classList.contains("more-open");
+      closeOpen();
+      setMoreOpen(open);
+    };
+    column.appendChild(moreBtn);
+    position();
+    return moreBtn;
+  }
+  // Кнопка без панели (addButton) ряд сворачивает; с панелью (addIcon) —
+  // решает её onclick выше: своя панель из ряда держит его открытым.
+  column.addEventListener("click", (e) => {
+    const btn = e.target.closest?.(".vtt-side-menu-btn");
+    if (btn && btn !== moreBtn && !btn.parentElement.querySelector(":scope > .vtt-side-panel")) setMoreOpen(false);
+  });
+  function setBarMode(on) {
+    column.classList.toggle("vtt-side-menu--bar", on);
+  }
+
   // pointerdown, а не mousedown: пальцем синтетический mousedown приходит
   // только после отрыва, а над прокруткой не приходит вовсе.
   document.addEventListener("pointerdown", (e) => {
-    if (!openPanel || openPanelSticky || column.contains(e.target)) return;
+    if (column.contains(e.target)) return;
+    // С открытой панелью ряд свернёт closeOpen (sticky-панель — не свернёт).
+    if (!openPanel) setMoreOpen(false);
+    if (!openPanel || openPanelSticky) return;
     if (openPanelOnCanvas && (e.target === ctx.canvas || e.target.closest?.(".bt-modal-overlay"))) return;
     closeOpen();
   });
@@ -204,5 +254,5 @@ export function createSideMenu(ctx) {
   new ResizeObserver(position).observe(ctx.canvas);
   new ResizeObserver(position).observe(column);
 
-  return { addIcon, addButton, addSeparator };
+  return { addIcon, addButton, addSeparator, addMoreButton, setBarMode };
 }

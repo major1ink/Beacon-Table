@@ -21,6 +21,7 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { REFERENCE_KINDS, kindInfo, kindLabel } from "../reference-kind.js";
+import { announceOwnHeader } from "../embed.js";
 
 // ==================== state ====================
 
@@ -353,6 +354,8 @@ editToggleBtn.onclick = () => {
 
 initFullscreenButton(document.getElementById("fullscreenBtn"));
 
+// Своя шапка с ✕ — рамке на телефоне своя не нужна (см. embed.js).
+announceOwnHeader();
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {
     window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);

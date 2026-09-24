@@ -35,6 +35,9 @@ import { isPlayer } from "../roles.js";
 import { uploadAvatarFile } from "../avatar-cropper.js";
 import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { cssUrl } from "../html.js";
+import { initVisualViewport } from "../visual-viewport.js";
+import { initWakeLock } from "../wake-lock.js";
+import { trackOpenClass } from "../back-stack.js";
 
 // Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
 // сессии, а не с момента нажатия кнопки.
@@ -186,7 +189,12 @@ const PLAYER_DRAW_HELP = {
   // важен: док задаёт высоту, которая остаётся канвасу, а Pixi снимает её
   // ровно один раз, внутри app.init() (см. vtt/index.js). Отправка идёт
   // через замыкание на vtt — до конца boot() кликать всё равно негде.
-  initDiceRoller(document.getElementById("diceDock"), (msg) => vtt.send(msg), { hiddenToggle: true, role: "player" });
+  const diceDock = document.getElementById("diceDock");
+  initDiceRoller(diceDock, (msg) => vtt.send(msg), { hiddenToggle: true, role: "player" });
+  // Телефон: лоток лежит поверх низа карты, и лог бросков с кнопкой «Чат»
+  // поднимаются ровно на его высоту (player.html: --dice-tray-h) — она
+  // зависит от ширины экрана и длины пула.
+  new ResizeObserver(() => document.body.style.setProperty("--dice-tray-h", diceDock.offsetHeight + "px")).observe(diceDock);
   // Чат стола — вторая вкладка того же окна (chat.js); адресаты — из vtt:playerList.
   const rollLog = createRollLog(document.getElementById("diceLog"), {
     layout: "plate",
@@ -210,7 +218,8 @@ const PLAYER_DRAW_HELP = {
 
   // ---- колонка иконок (vtt/side-menu.js) — вся навигация, как рейл ДМ.
   // Первой уже стоит громкость (audio.js). Группы: инструменты ·
-  // справочники и окна · аккаунт.
+  // справочники и окна · аккаунт. more: true — в портрете телефона иконка
+  // уходит за «⋯» нижней панели (см. side-menu.js: addMoreButton).
   vtt.sideMenu.addSeparator();
 
   // Линейка — инструмент, не панель: .active держит setPlayerTool.
@@ -252,12 +261,12 @@ const PLAYER_DRAW_HELP = {
 
   // Карты — сцены, открытые ДМ для самостоятельного просмотра (см.
   // scene-picker.js); панель сама прячется, пока выбирать не из чего.
-  const scenesPanel = vtt.sideMenu.addIcon(icon("map", { size: 16 }), "Карты", { width: 250, tip: PANEL_HELP.scenes });
+  const scenesPanel = vtt.sideMenu.addIcon(icon("map", { size: 16 }), "Карты", { width: 250, tip: PANEL_HELP.scenes, more: true });
   mountScenePicker(scenesPanel, { send: vtt.send });
 
   // Призыв — попросить существо на карту (см. summon-panel.js); панель
   // прячется, пока ДМ ничего не разрешил.
-  const summonPanel = vtt.sideMenu.addIcon(icon("creature", { size: 16 }), "Призыв", { width: 260, tip: PANEL_HELP.summon });
+  const summonPanel = vtt.sideMenu.addIcon(icon("creature", { size: 16 }), "Призыв", { width: 260, tip: PANEL_HELP.summon, more: true });
   mountSummonPanel(summonPanel, { send: vtt.send });
 
   // ПКМ по своему токену — лист/статблок, состояния, форма, зрение, свет.
@@ -274,6 +283,7 @@ const PLAYER_DRAW_HELP = {
     width: 280,
     sticky: true,
     mobileFull: true,
+    more: true,
     tip: PANEL_HELP.boards,
     // Список перечитывается на открытии панели, а не подпиской: доски
     // заводят редко, и держать ради этого ещё один канал незачем.
@@ -307,10 +317,20 @@ const PLAYER_DRAW_HELP = {
     diceBtn.classList.toggle("open", open);
   }, { tip: PANEL_HELP.dice });
   diceBtn.id = "diceBtn";
-  vtt.sideMenu.addButton(icon("sliders", { size: 16 }), "Настройки", openSettings, { tip: PANEL_HELP.settings });
+  // «Назад» на телефоне закрывает лоток (см. back-stack.js).
+  trackOpenClass(document.body, "dice-open", () => diceBtn.click());
+  vtt.sideMenu.addButton(icon("sliders", { size: 16 }), "Настройки", openSettings, { tip: PANEL_HELP.settings, more: true });
   vtt.sideMenu.addButton(icon("log-out", { size: 16 }), "Выйти", logout, {
     tip: { title: "Выйти", summary: `Завершить сессию ${me.username} и вернуться на вход.` },
+    more: true,
   });
+  vtt.sideMenu.addMoreButton(icon("more", { size: 16 }), "Ещё");
+  // Портрет телефона — нижняя панель вместо колонки. Брейкпоинт тот же,
+  // что в theme.css (.vtt-side-menu--bar) и player.html (#app).
+  const barMedia = matchMedia("(max-width: 600px)");
+  const syncBar = () => vtt.sideMenu.setBarMode(barMedia.matches);
+  barMedia.addEventListener("change", syncBar);
+  syncBar();
 
   // Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
   // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
@@ -360,6 +380,8 @@ document.getElementById("zoomOutBtn").onclick = () => document.dispatchEvent(new
 document.getElementById("zoomResetBtn").onclick = () => document.dispatchEvent(new CustomEvent("vtt:resetView"));
 
 initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
+initVisualViewport();
+initWakeLock();
 
 // ================= инструменты карты =================
 // Линейка и пометки — иконки в колонке над канвасом (как у ДМ). Инструмент
@@ -404,6 +426,7 @@ document.getElementById("bugReportBtn").onclick = () => openBugReport();
 settingsOverlay.addEventListener("mousedown", (e) => {
   if (e.target === settingsOverlay) settingsOverlay.classList.remove("open");
 });
+trackOpenClass(settingsOverlay, "open", () => settingsOverlay.classList.remove("open"));
 
 // ================= "Мои персонажи" =================
 const charsOverlay = document.getElementById("charsOverlay");
@@ -606,6 +629,7 @@ document.getElementById("charsCloseBtn").onclick = () => charsOverlay.classList.
 charsOverlay.addEventListener("mousedown", (e) => {
   if (e.target === charsOverlay) charsOverlay.classList.remove("open");
 });
+trackOpenClass(charsOverlay, "open", () => charsOverlay.classList.remove("open"));
 
 // ================= Компендиум (см. compendium-menu.js/catalog.js) =================
 // Заклинания/Предметы/Справочник переехали из модалок в один

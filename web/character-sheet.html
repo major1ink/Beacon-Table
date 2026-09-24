@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Лист персонажа</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
@@ -239,7 +239,9 @@
     .v-abil { background: var(--surface); border-radius: 14px; padding: 7px 5px 6px; text-align: center; }
     .v-abil-name {
       font-size: 9px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-dim);
-      line-height: 1.25; overflow-wrap: anywhere;
+      /* Переносом по слогам: на телефоне «ТЕЛОСЛОЖЕНИЕ» не влезает в плитку,
+         и anywhere рвал его без дефиса посреди слога. */
+      line-height: 1.25; hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word;
     }
     .v-abil-mod {
       display: block; width: 100%; padding: 2px 0 0; background: none; color: var(--text);
@@ -426,7 +428,8 @@
     @media (max-width: 860px), (max-height: 500px) {
       #topBar { gap: 6px; padding: 7px 10px; }
       #charSub { display: none; } /* то же есть в шапке карточки чтения */
-      #saveStatus { min-width: 0; }
+      /* margin-right: auto у скрытого #charSub прижимал ✕ вправо — теперь он. */
+      #saveStatus { min-width: 0; margin-left: auto; }
       /* Вкладки отдельной строкой с прокруткой: пятью в 390px не встают. */
       .tabs { order: 5; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
       .tabs::-webkit-scrollbar { display: none; }
