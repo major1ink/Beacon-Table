@@ -1110,7 +1110,7 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BThixpAl.js"></script>
+  <script type="module" crossorigin src="/assets/dm-W-AgxCpx.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/icons-hrdAlu1V.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
@@ -1506,6 +1506,16 @@
                 <select id="diceFxSelect"></select>
                 <div class="checkbox-row"><label><input type="checkbox" class="switch" id="diceSoundToggle" /> Звук бросков</label></div>
                 <p class="hint">Броски всех за столом катятся кубами по карте, в лог результат попадает, когда кубы встали. «Объёмная (3D)» — кубы с физикой, тяжелее для видеокарты; на слабом компьютере — «Упрощённая» или «Выключена». Только для этого устройства; громкость звука — ползунок «Эффекты».</p>
+              </div>
+              <!-- Только в десктопе и только если есть трей (см.
+                   cmd/beacon-table/desktop.go): показывает dm.js. -->
+              <div class="field-block" id="closeActionBlock" hidden>
+                <label class="field-label" for="closeActionSelect">При закрытии окна</label>
+                <select id="closeActionSelect">
+                  <option value="tray">Сворачивать в трей — стол продолжает работать</option>
+                  <option value="quit">Закрывать программу</option>
+                </select>
+                <p class="hint">В трее стол доступен игрокам и телевизору; открыть окно или выключить стол — из значка в трее. Только для этого компьютера.</p>
               </div>
               <div class="field-block">
                 <div class="checkbox-row"><label><input type="checkbox" class="switch" id="fpsMeterToggle" /> Счётчик кадров (FPS)</label></div>

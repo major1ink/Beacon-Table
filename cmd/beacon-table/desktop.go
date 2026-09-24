@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -41,6 +42,7 @@ func desktopWindow(open func(dir string) (server, error)) {
 	}
 
 	l := &launcher{open: open, prefs: loadDesktopPrefs(), stop: make(chan struct{})}
+	l.closeToTray.Store(l.prefs.closeToTray())
 	icon, _ := staticFiles.ReadFile("static/icon-512.png")
 	app := application.New(application.Options{
 		Name: "Beacon Table",
@@ -74,13 +76,48 @@ func desktopWindow(open func(dir string) (server, error)) {
 		// десктоп только открывает окно трансляции на уже выбранном сервере.
 		AllowSimpleEventEmit: true,
 	})
-	// Главное окно закрыли — закрывается и трансляция, иначе приложение
+	// Есть трей — крестик только прячет окно: стол для игроков и телевизора
+	// работает дальше, вернуть окно можно из трея.
+	l.win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		// Без l.mu: хук идёт в потоке GTK, а замок может держать обработчик
+		// экрана запуска, который сам ждёт этот поток (диалог выбора папки).
+		if l.closeToTray.Load() && l.tray.hides.Load() {
+			e.Cancel()
+			l.win.Hide()
+		}
+	})
+	// Иначе главное окно закрыли — закрывается и трансляция, иначе приложение
 	// жило бы дальше ради одного окна телевизора.
 	l.win.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { app.Quit() })
 	app.Event.On(broadcastEvent, func(e *application.CustomEvent) {
 		if e.Sender == mainWindow {
 			l.toggleBroadcast()
 		}
+	})
+	// Настройки десктопа со страницы стола: запрос текущих и смена
+	// «при закрытии окна» (см. desktopJS и раздел «Интерфейс ДМ»).
+	app.Event.On(stateEvent, func(e *application.CustomEvent) {
+		if e.Sender == mainWindow {
+			l.sendState()
+		}
+	})
+	for _, action := range []string{closeTray, closeQuit} {
+		app.Event.On(closeEvent+action, func(e *application.CustomEvent) {
+			if e.Sender != mainWindow {
+				return
+			}
+			l.mu.Lock()
+			l.prefs.CloseAction = action
+			l.closeToTray.Store(l.prefs.closeToTray())
+			l.remember()
+			l.mu.Unlock()
+			l.sendState()
+		})
+	}
+	l.newTray()
+	// Окна WebKit появляются только на старте приложения.
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		reloadOnCrash(l.win)
 	})
 	if err := app.Run(); err != nil {
 		slog.Error("Окно закрылось с ошибкой", "err", err)
@@ -92,7 +129,24 @@ const (
 	desktopAppID   = "ru.beacontable.BeaconTable"
 	mainWindow     = "main"
 	broadcastEvent = "beacon:broadcast"
+	stateEvent     = "beacon:state"
+	closeEvent     = "beacon:close:"
+	closeTray      = "tray"
+	closeQuit      = "quit"
 )
+
+// sendState — настройки десктопа странице стола: что делать с крестиком и
+// есть ли вообще трей (нет — выбирать нечего, пункт скрыт).
+func (l *launcher) sendState() {
+	l.mu.Lock()
+	action := closeQuit
+	if l.prefs.closeToTray() {
+		action = closeTray
+	}
+	l.mu.Unlock()
+	l.win.ExecJS(fmt.Sprintf(`document.dispatchEvent(new CustomEvent("beacon:desktop-state", { detail: { closeAction: %q, tray: %t } }))`,
+		action, l.tray.hides.Load()))
+}
 
 // launcher — экран выбора «стол на этом компьютере / подключиться к
 // серверу» и то, что поднято по этому выбору.
@@ -108,6 +162,9 @@ type launcher struct {
 	served chan struct{}              // стол поднят здесь; второй раз его не поднимаем
 	origin string                     // сервер, выбранный на экране запуска
 	cast   *application.WebviewWindow // окно трансляции, пока открыто
+	tray   tray
+
+	closeToTray atomic.Bool // копия prefs.closeToTray() для хука закрытия окна
 }
 
 func (l *launcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +259,7 @@ func (l *launcher) toggleBroadcast() {
 		opts.StartState = application.WindowStateFullscreen
 	}
 	l.cast = l.app.Window.NewWithOptions(opts)
+	go reloadOnCrash(l.cast)
 	l.cast.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 		l.mu.Lock()
 		l.cast = nil
@@ -214,6 +272,7 @@ func (l *launcher) toggleBroadcast() {
 // castChanged — сказать столу в главном окне, открыта ли трансляция: от
 // этого зависит надпись на кнопке.
 func (l *launcher) castChanged(open bool) {
+	l.trayCast(open)
 	l.win.ExecJS(fmt.Sprintf(`document.dispatchEvent(new CustomEvent("beacon:broadcast", { detail: { open: %t } }))`, open))
 }
 
@@ -273,7 +332,14 @@ func desktopJS() string {
     else if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(msg);
   };
   if (!window.beaconDesktop) {
-    window.beaconDesktop = { toggleBroadcast: () => send("wails:event:emit:%s") };
+    window.beaconDesktop = {
+      toggleBroadcast: () => send("wails:event:emit:%s"),
+      // Ответ приходит событием "beacon:desktop-state".
+      requestState: () => send("wails:event:emit:%s"),
+      setCloseAction: (action) => {
+        if (action === %q || action === %q) send("wails:event:emit:%s" + action);
+      },
+    };
     document.dispatchEvent(new Event("beacon:desktop"));
   }
   const back = () => {
@@ -288,7 +354,7 @@ func desktopJS() string {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", back);
   else back();
-})();`, launcherURL(), broadcastEvent)
+})();`, launcherURL(), broadcastEvent, stateEvent, closeTray, closeQuit, closeEvent)
 }
 
 // shutdown — окно закрыто: поднятый стол должен сохранить мир до выхода.
@@ -338,7 +404,10 @@ func (l *launcher) startLocal(w http.ResponseWriter, raw string, ask bool) {
 	go func() {
 		// Настоящий адрес сервера, а не asset-сервер Wails: куки, WS и
 		// проверки «открыто с этой машины» работают как в браузере.
-		l.table.serve(ln, l.stop, func() { l.win.SetURL(browserURL(l.table.cfg.Addr)) })
+		l.table.serve(ln, l.stop, func() {
+			l.win.SetURL(browserURL(l.table.cfg.Addr))
+			l.enableTray()
+		})
 		close(l.served)
 		select {
 		case <-l.stop:
@@ -485,10 +554,13 @@ func checkServer(target string) error {
 // desktopPrefs — прошлый выбор на экране запуска: в следующий раз хватает
 // одного Enter.
 type desktopPrefs struct {
-	Mode    string   `json:"mode"`
-	Server  string   `json:"server,omitempty"`
-	Folders []string `json:"folders,omitempty"` // папки стола, последняя открытая — первой
+	Mode        string   `json:"mode"`
+	Server      string   `json:"server,omitempty"`
+	Folders     []string `json:"folders,omitempty"`     // папки стола, последняя открытая — первой
+	CloseAction string   `json:"closeAction,omitempty"` // "quit" — крестик закрывает программу; иначе прячет в трей
 }
+
+func (p desktopPrefs) closeToTray() bool { return p.CloseAction != closeQuit }
 
 const maxRecentFolders = 5
 
