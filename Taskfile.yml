@@ -23,6 +23,11 @@ tasks:
     cmds:
       - go build -o {{.BIN}} ./cmd/beacon-table
 
+  build:desktop:
+    desc: Собрать десктоп (своё окно вместо браузера; на Linux нужны libgtk-3-dev и libwebkit2gtk-4.1-dev)
+    cmds:
+      - go build -tags desktop,gtk3 -o {{.BIN}}-desktop ./cmd/beacon-table
+
   run:
     desc: Запустить сервер (go run)
     cmds:

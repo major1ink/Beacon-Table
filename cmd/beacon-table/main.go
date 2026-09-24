@@ -311,13 +311,24 @@ func main() {
 	slog.Info("Сервер запущен", "addr", cfg.Addr)
 	printAccessURLs(cfg.Addr)
 
-	if shouldOpenBrowser(cfg) {
-		openBrowser(browserURL(cfg.Addr))
-	}
+	// Ждём в фоне: в десктопной сборке главный поток отдан под окно — Wails
+	// требует крутить свой цикл именно в нём.
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-sigCh:
+		case <-stopCh:
+		}
+		close(done)
+	}()
 
-	select {
-	case <-sigCh:
-	case <-stopCh:
+	if runDesktop != nil {
+		runDesktop(browserURL(cfg.Addr), done)
+	} else {
+		if shouldOpenBrowser(cfg) {
+			openBrowser(browserURL(cfg.Addr))
+		}
+		<-done
 	}
 	stopBackground()
 	shutdown(srv, gateway, companies, db)
