@@ -8,6 +8,7 @@ import { initDiceRoller } from "../dice.js";
 import { createRollLog } from "../roll-log.js";
 import { createDiceFx, initDiceFxSelect } from "../dice-fx.js";
 import { initDiceSoundToggle } from "../dice-sound.js";
+import { initFpsMeterToggle } from "../fps-meter.js";
 import { openFloatingWindow, postToOpenWindows } from "../floating-window.js";
 import { invalidateActionsPeek } from "../combat-actions-peek.js";
 import { initCombatPanel } from "../combat-panel.js";
@@ -4758,6 +4759,7 @@ hideBroadcastDiceToggle.onchange = () => {
 };
 initDiceFxSelect(document.getElementById("diceFxSelect"));
 initDiceSoundToggle(document.getElementById("diceSoundToggle"));
+initFpsMeterToggle(document.getElementById("fpsMeterToggle"));
 const broadcastDice3dToggle = document.getElementById("broadcastDice3dToggle");
 document.addEventListener("vtt:combatState", (e) => {
   broadcastDice3dToggle.checked = !!e.detail.broadcastDice3d;
