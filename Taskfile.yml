@@ -25,6 +25,8 @@ tasks:
 
   build:desktop:
     desc: Собрать десктоп (своё окно вместо браузера; на Linux нужны libgtk-3-dev и libwebkit2gtk-4.1-dev)
+    # gtk3, а не GTK4 по умолчанию Wails: на webkitgtk-6.0 WebGL стола на NVIDIA
+    # заметно медленнее (перетаскивание 30 FPS против 42), с DMA-BUF и без.
     cmds:
       - go build -tags desktop,gtk3 -o {{.BIN}}-desktop ./cmd/beacon-table
 
