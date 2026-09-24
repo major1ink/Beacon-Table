@@ -22,12 +22,14 @@ contents:
     dst: /usr/bin/beacon-table-desktop
     file_info:
       mode: 0755
-  - src: packaging/linux/beacon-table.desktop
-    dst: /usr/share/applications/beacon-table.desktop
+  # Имя ярлыка и иконки = ApplicationID окна (см. desktop.go): по нему
+  # панель задач находит иконку запущенного окна.
+  - src: packaging/linux/ru.beacontable.BeaconTable.desktop
+    dst: /usr/share/applications/ru.beacontable.BeaconTable.desktop
     file_info:
       mode: 0644
   - src: cmd/beacon-table/static/icon-512.png
-    dst: /usr/share/icons/hicolor/512x512/apps/beacon-table.png
+    dst: /usr/share/icons/hicolor/512x512/apps/ru.beacontable.BeaconTable.png
     file_info:
       mode: 0644
 

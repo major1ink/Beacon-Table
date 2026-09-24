@@ -9,7 +9,7 @@
   <key>CFBundleDisplayName</key>
   <string>Beacon Table</string>
   <key>CFBundleIdentifier</key>
-  <string>ru.beacontable.desktop</string>
+  <string>ru.beacontable.BeaconTable</string>
   <key>CFBundleVersion</key>
   <string>__VERSION__</string>
   <key>CFBundleShortVersionString</key>

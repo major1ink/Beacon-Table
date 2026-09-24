@@ -41,8 +41,18 @@ func desktopWindow(open func(dir string) (server, error)) {
 	}
 
 	l := &launcher{open: open, prefs: loadDesktopPrefs(), stop: make(chan struct{})}
+	icon, _ := staticFiles.ReadFile("static/icon-512.png")
 	app := application.New(application.Options{
 		Name: "Beacon Table",
+		// Иконка окна — Alt+Tab и панель задач там, где иконку берут у окна
+		// (X11). Под Wayland её ищут по ApplicationID ниже.
+		Icon: icon,
+		Linux: application.LinuxOptions{
+			// Совпадает с именем ярлыка в пакете (packaging/linux): только
+			// так GNOME и KDE связывают окно с ярлыком и показывают иконку,
+			// а не шестерёнку.
+			ApplicationID: desktopAppID,
+		},
 		// Свой журнал Wails — только предупреждения и ошибки: окно создаётся
 		// раньше, чем прочитан уровень журнала из beacon.conf папки стола.
 		LogLevel: slog.LevelWarn,
@@ -79,6 +89,7 @@ func desktopWindow(open func(dir string) (server, error)) {
 }
 
 const (
+	desktopAppID   = "ru.beacontable.BeaconTable"
 	mainWindow     = "main"
 	broadcastEvent = "beacon:broadcast"
 )
