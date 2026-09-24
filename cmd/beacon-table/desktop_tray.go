@@ -103,7 +103,6 @@ func (l *launcher) showMain() {
 // hideToTray — крестик при поднятом столе. В первый раз объясняем, куда
 // делось окно: иначе похоже, что программа закрылась, и её запускают снова.
 func (l *launcher) hideToTray() {
-	l.win.Hide()
 	l.mu.Lock()
 	first := !l.prefs.TrayHintShown
 	if first {
@@ -111,12 +110,17 @@ func (l *launcher) hideToTray() {
 		l.remember()
 	}
 	l.mu.Unlock()
-	if first {
-		l.app.Dialog.Info().
-			SetTitle("Beacon Table работает в трее").
-			SetMessage("Стол по-прежнему доступен игрокам и телевизору. Открыть окно или выключить стол — из значка в трее.\n\nЧтобы крестик закрывал программу: Настройки → Интерфейс ДМ → «При закрытии окна».").
-			Show()
+	if !first {
+		l.win.Hide()
+		return
 	}
+	// Диалог — над ещё видимым окном, прячем по кнопке: Wails вешает его на
+	// текущее окно, и у спрятанного под Wayland он просто не показывается.
+	dlg := l.app.Dialog.Info().
+		SetTitle("Beacon Table работает в трее").
+		SetMessage("Стол по-прежнему доступен игрокам и телевизору. Открыть окно или выключить стол — из значка в трее.\n\nЧтобы крестик закрывал программу: Настройки → Интерфейс ДМ → «При закрытии окна».")
+	dlg.AddButton("Понятно").OnClick(func() { l.win.Hide() }).SetAsDefault()
+	dlg.Show()
 }
 
 // trayCast — надпись пункта трансляции вслед за окном (как и кнопка на
