@@ -35,8 +35,7 @@ const CSS = `
 .actions-peek {
   position: fixed; z-index: 60; width: 360px; max-width: calc(100vw - 16px); max-height: 74vh; overflow: auto;
   display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px;
-  background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border); border-radius: var(--radius);
   box-shadow: var(--shadow-float); color: var(--text); font-size: 12.5px; line-height: 1.45;
 }

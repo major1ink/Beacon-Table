@@ -129,7 +129,6 @@ export function createSideMenu(ctx) {
     panel.style.cssText =
       "display:none;flex-direction:column;gap:8px;position:absolute;right:calc(100% + 8px);top:50%;" +
       "transform:translateY(-50%);background:var(--glass-bg-strong,rgba(22,22,29,0.88));" +
-      "backdrop-filter:var(--glass-blur,blur(20px));-webkit-backdrop-filter:var(--glass-blur,blur(20px));" +
       "border:1px solid var(--glass-border,rgba(255,255,255,0.07));border-radius:var(--radius-lg,16px);padding:10px 12px;" +
       "min-width:190px;max-height:calc(100vh - 20px);overflow-y:auto;box-shadow:var(--shadow-float,0 12px 32px rgba(0,0,0,0.45));";
     if (opts && opts.width) {

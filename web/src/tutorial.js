@@ -61,7 +61,6 @@ function injectStyle() {
       position: fixed; z-index: 451; box-sizing: border-box; width: min(360px, calc(100vw - 24px));
       display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 12px;
       background: var(--glass-bg-strong, rgba(22, 22, 29, 0.92)); color: var(--text, #eee);
-      backdrop-filter: var(--glass-blur, blur(20px)); -webkit-backdrop-filter: var(--glass-blur, blur(20px));
       border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.07)); border-radius: var(--radius-lg, 18px);
       box-shadow: var(--shadow-float, 0 16px 40px rgba(0, 0, 0, 0.45));
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; line-height: 1.5;

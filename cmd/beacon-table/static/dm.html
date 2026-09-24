@@ -97,7 +97,7 @@
       /* Центр ставит dm.js (placeSidePanel) один раз в margin-top: живой
          align-self: center двигал бы панель при смене вкладки. */
       align-self: flex-start; max-height: calc(100% - 28px);
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 0 solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: none;
       transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
       display: flex; flex-direction: column; z-index: 6;
@@ -218,7 +218,7 @@
        накрывают — колонка ведёт себя как они, а не как док игрока. */
     #sheetDock.sheet-dock {
       margin: 14px 0 14px 10px; z-index: 6; overflow: hidden;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
     }
     #sheetDock .sheet-dock-header { background: transparent; }
@@ -238,7 +238,7 @@
        занят только зумом и от боя не зависит вообще. */
     #statusBar {
       position: absolute; right: 150px; bottom: 10px; z-index: 5;
-      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;
       display: flex; align-items: center; gap: 8px; font-size: 12px; max-width: calc(100% - 240px);
@@ -287,7 +287,7 @@
       position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6;
       display: none; flex-direction: column; gap: 5px;
       min-width: 160px; max-width: min(260px, calc(100vw - 24px));
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       box-shadow: var(--shadow-float); padding: 9px 12px;
       overflow: visible; white-space: normal;
@@ -301,7 +301,7 @@
 
     #tokenMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -344,7 +344,7 @@
     #spellStatusPicker {
       position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60;
       display: none; flex-direction: column; gap: 6px; padding: 12px; width: 300px; max-height: 70vh; overflow: auto;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius); box-shadow: var(--shadow-float);
       font-size: 13px;
     }
@@ -378,7 +378,7 @@
        pages/dm.js: canvasMenu) */
     #canvasMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -424,7 +424,7 @@
 
     #wallPointMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -434,7 +434,7 @@
 
     #fogAreaMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -457,7 +457,7 @@
 
     #buildingMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -467,7 +467,7 @@
 
     #wallMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -481,7 +481,7 @@
 
     #noteMarkerMenu {
       position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 170px;
@@ -495,7 +495,7 @@
     /* меню портала (ПКМ по порталу, см. pages/dm.js: teleportMenu) */
     #teleportMenu {
       position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 210px;
@@ -511,7 +511,7 @@
 
     #zoomHud {
       position: absolute; right: 10px; bottom: 10px; z-index: 5;
-      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
     }
@@ -1109,39 +1109,39 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BCvHEKIa.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-D2tS5Ts8.js">
+  <script type="module" crossorigin src="/assets/dm-B7cM-M1t.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-hrdAlu1V.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-Bo6CVTAE.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-uNQlFFkV.js">
   <link rel="modulepreload" crossorigin href="/assets/drag-DVDIF09E.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-Cv92kJ8o.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-Dx-nwQH6.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-ByBpCSn1.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-BS8qTbut.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-BF50diHY.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-fx-UcIXHPMv.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-l-2f8m0M.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-BHwQBtOI.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-fx-DnQKFGKO.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-B2ciyRpz.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-bJWAywOk.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DUPRw1EG.js">
+  <link rel="modulepreload" crossorigin href="/assets/bug-report-ZfPm8yi2.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-B_4IH7a_.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-Uxi3Btyb.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-hVxAQUaN.js">
   <link rel="modulepreload" crossorigin href="/assets/hp-bar-BLhQlGnT.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-Cpb4cFST.js">
-  <link rel="modulepreload" crossorigin href="/assets/card-shell-go6IzF5P.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-9sbNhxKI.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-C5n7U7c0.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
-  <link rel="modulepreload" crossorigin href="/assets/stat-editor-B4tdRgGs.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-C2QdHjaE.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CwzjAdBT.js">
+  <link rel="modulepreload" crossorigin href="/assets/stat-editor-DVUuhb6G.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-1yQUMOUU.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-na8DaPcV.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-BH0t5zgz.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-C2l9dsa_.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DJ2sZH9C.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-VPZNwoh3.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-D7gJqyll.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-bIsI1MNb.css">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-BQZqByLh.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-feN1l5EY.css">
 </head>
 <body>
   <div id="appBody">

@@ -98,7 +98,7 @@
       /* Центр ставит dm.js (placeSidePanel) один раз в margin-top: живой
          align-self: center двигал бы панель при смене вкладки. */
       align-self: flex-start; max-height: calc(100% - 28px);
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 0 solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: none;
       transition: flex-basis .16s ease, width .16s ease, margin .16s ease, box-shadow .16s ease;
       display: flex; flex-direction: column; z-index: 6;
@@ -219,7 +219,7 @@
        накрывают — колонка ведёт себя как они, а не как док игрока. */
     #sheetDock.sheet-dock {
       margin: 14px 0 14px 10px; z-index: 6; overflow: hidden;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-float);
     }
     #sheetDock .sheet-dock-header { background: transparent; }
@@ -239,7 +239,7 @@
        занят только зумом и от боя не зависит вообще. */
     #statusBar {
       position: absolute; right: 150px; bottom: 10px; z-index: 5;
-      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;
       display: flex; align-items: center; gap: 8px; font-size: 12px; max-width: calc(100% - 240px);
@@ -288,7 +288,7 @@
       position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6;
       display: none; flex-direction: column; gap: 5px;
       min-width: 160px; max-width: min(260px, calc(100vw - 24px));
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       box-shadow: var(--shadow-float); padding: 9px 12px;
       overflow: visible; white-space: normal;
@@ -302,7 +302,7 @@
 
     #tokenMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -345,7 +345,7 @@
     #spellStatusPicker {
       position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60;
       display: none; flex-direction: column; gap: 6px; padding: 12px; width: 300px; max-height: 70vh; overflow: auto;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius); box-shadow: var(--shadow-float);
       font-size: 13px;
     }
@@ -379,7 +379,7 @@
        pages/dm.js: canvasMenu) */
     #canvasMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -425,7 +425,7 @@
 
     #wallPointMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -435,7 +435,7 @@
 
     #fogAreaMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -458,7 +458,7 @@
 
     #buildingMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -468,7 +468,7 @@
 
     #wallMenu {
       position: fixed; display: none; z-index: 10;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 150px;
@@ -482,7 +482,7 @@
 
     #noteMarkerMenu {
       position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 170px;
@@ -496,7 +496,7 @@
     /* меню портала (ПКМ по порталу, см. pages/dm.js: teleportMenu) */
     #teleportMenu {
       position: fixed; display: none; z-index: 10; flex-direction: column; gap: 4px;
-      background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg-strong);
       border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
       padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
       min-width: 210px;
@@ -512,7 +512,7 @@
 
     #zoomHud {
       position: absolute; right: 10px; bottom: 10px; z-index: 5;
-      background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      background: var(--glass-bg);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
     }

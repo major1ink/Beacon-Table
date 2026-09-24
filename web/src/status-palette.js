@@ -32,8 +32,7 @@ const CSS = `
 .status-palette {
   position: fixed; z-index: 60; width: 296px; max-height: 72vh; overflow: auto;
   display: flex; flex-direction: column; gap: 8px; padding: 10px;
-  background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border); border-radius: var(--radius);
   box-shadow: var(--shadow-float); color: var(--text); font-size: 13px;
 }

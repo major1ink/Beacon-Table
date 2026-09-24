@@ -15,7 +15,7 @@ import { showConfirm } from "./modal.js";
 const CSS = `
 .pt-menu {
   position: fixed; display: none; z-index: 10; min-width: 190px; box-sizing: border-box;
-  background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
   padding: 8px; font-size: 13px; box-shadow: var(--shadow-float);
   max-height: calc(100vh - 16px); overflow-y: auto;
