@@ -207,6 +207,9 @@ func (a *API) handleCompanyImport(w http.ResponseWriter, r *http.Request) {
 	if len(res.RenamedLogins) > 0 {
 		out["renamedLogins"] = res.RenamedLogins
 	}
+	if len(res.MissingModules) > 0 {
+		out["missingModules"] = res.MissingModules
+	}
 	writeJSON(w, http.StatusCreated, out)
 }
 

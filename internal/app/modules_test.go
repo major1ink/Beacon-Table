@@ -136,7 +136,7 @@ func TestWorldPack_CarriesModules(t *testing.T) {
 	}
 
 	// Мир до модулей едет без списка и остаётся «миром до модулей».
-	legacy, _ := src.Create(ctx, "Старый", domain.SystemDnD5e2024)
+	legacy, _ := src.createWorld(ctx, "Старый", domain.SystemDnD5e2024, nil)
 	res, err = dst.ImportWorld(ctx, exportToZip(t, src, legacy.ID, false))
 	if err != nil {
 		t.Fatal(err)
@@ -224,5 +224,47 @@ func TestCloneCopiesModuleImages(t *testing.T) {
 	saved, err = best.Update(ctx, created.ID, broken)
 	if err != nil || saved.ImageURL != "/module-assets/extra/bestiary/gone.webp" {
 		t.Fatalf("ссылка на пропавший файл: %q %v", saved.ImageURL, err)
+	}
+}
+
+func TestCreateWorldSystems(t *testing.T) {
+	ctx := context.Background()
+	m, _ := newTestManager(t)
+	m.dice = service.NewDiceRoller()
+	t.Cleanup(m.Shutdown)
+
+	var ids []string
+	for _, s := range m.Systems() {
+		ids = append(ids, s.ID)
+	}
+	if strings.Join(ids, ",") != "custom,dnd5e-2014,dnd5e-2024" {
+		t.Fatalf("системы: %v", ids)
+	}
+
+	// «Своя система» — с базовыми состояниями, и они видны в мире.
+	c, err := m.Create(ctx, "Хоумбрю", domain.SystemCustom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(c.Modules, ",") != domain.BaseModuleID {
+		t.Fatalf("модули мира «Своей системы»: %v", c.Modules)
+	}
+	if err := m.Launch(ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	prone, err := m.Current().Conditions.Get(ctx, "base--prone")
+	if err != nil || prone.Slug != "prone" || prone.Module != domain.BaseModuleID {
+		t.Fatalf("базовое состояние: %+v %v", prone, err)
+	}
+
+	// Мир на системном модуле — сам модуль, без базовых состояний.
+	d, err := m.Create(ctx, "D&D", domain.SystemDnD5e2024)
+	if err != nil || strings.Join(d.Modules, ",") != domain.SystemDnD5e2024 {
+		t.Fatalf("мир D&D: %+v %v", d, err)
+	}
+
+	// Системы нет на сервере — мир не создаётся.
+	if _, err := m.Create(ctx, "Чужой", "pathfinder"); err == nil {
+		t.Fatal("мир создан на неустановленной системе")
 	}
 }

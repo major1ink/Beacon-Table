@@ -3,7 +3,7 @@
 // поднят на сервере (см. internal/app.CompanyManager — активен ровно один).
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
-import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer, fetchTutorial, saveTutorial } from "../api.js";
+import { fetchMe, apiLogout, fetchCompanies, fetchSystems, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer, fetchTutorial, saveTutorial } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { startTour } from "../tutorial.js";
@@ -23,9 +23,32 @@ const importBtn = document.getElementById("importBtn");
 const importFile = document.getElementById("importFile");
 const importMsg = document.getElementById("importMsg");
 
-const SYSTEM_LABELS = { "dnd5e-2024": "D&D 2024", "dnd5e-2014": "D&D 5e (2014)" };
+// Игровые системы приходят с сервера: «Своя система» и системные модули
+// (см. api.js: fetchSystems). Система мира, модуля которой на сервере нет,
+// показывается своим id с пометкой — мир из чужого архива.
+let systemTitles = {};
 function systemLabel(system) {
-  return SYSTEM_LABELS[system] || system;
+  return systemTitles[system] || `${system} — модуль не установлен`;
+}
+
+async function loadSystems() {
+  const select = document.getElementById("worldSystem");
+  let systems = [];
+  try {
+    systems = await fetchSystems();
+  } catch (err) {
+    createMsg.textContent = "Не удалось получить список систем: " + err.message;
+    createMsg.className = "msg error";
+  }
+  systemTitles = Object.fromEntries(systems.map((s) => [s.id, s.title]));
+  select.replaceChildren(
+    ...systems.map((s) => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.title;
+      return opt;
+    }),
+  );
 }
 
 // Мир может быть ещё запущен (ДМ пришёл сюда сразу после логина, а не кнопкой
@@ -229,6 +252,11 @@ importFile.addEventListener("change", async (e) => {
     if (renamed.length) {
       msg += ` Логины переименованы из-за совпадений: ${renamed.map(([o, n]) => `${o} → ${n}`).join(", ")}.`;
     }
+    // Мир из чужого архива: его модулей на этом сервере может не быть —
+    // мир работает, но без их карточек, пока модули не поставят.
+    if (world.missingModules && world.missingModules.length) {
+      msg += ` Не хватает модулей: ${world.missingModules.join(", ")} — без них в мире не будет их карточек.`;
+    }
     importMsg.textContent = msg;
     importMsg.className = "msg ok";
     render();
@@ -264,6 +292,7 @@ fetchMe().then(async (me) => {
     return;
   }
   if (me.mustChangePassword) passwordBox.style.display = "";
+  await loadSystems();
   await render();
   initTutorial();
 });

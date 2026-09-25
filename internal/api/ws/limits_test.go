@@ -46,7 +46,7 @@ func testTable(t *testing.T) (url, cookie string) {
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	company, err := mgr.Create(ctx, "Мир", domain.SystemDnD5e2024)
+	company, err := mgr.Create(ctx, "Мир", domain.SystemCustom)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

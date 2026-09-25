@@ -211,10 +211,16 @@ func (m *CompanyManager) Create(ctx context.Context, name, system string) (*doma
 	if name == "" || len(name) > maxCompanyNameLen {
 		return nil, &domain.ValidationError{Msg: "название мира — обязательно, до 80 символов"}
 	}
-	if !domain.ValidSystem(system) {
-		return nil, &domain.ValidationError{Msg: "неизвестная система"}
+	if !m.systemInstalled(system) {
+		return nil, &domain.ValidationError{Msg: "игровая система не установлена — поставь её модуль"}
 	}
-	c := &domain.Company{ID: newID(), Name: name, System: system}
+	return m.createWorld(ctx, name, system, defaultModules(system))
+}
+
+// createWorld — без проверки системы: импорт мира создаёт его и на
+// системе, которой на этом сервере (пока) нет.
+func (m *CompanyManager) createWorld(ctx context.Context, name, system string, modules []string) (*domain.Company, error) {
+	c := &domain.Company{ID: newID(), Name: name, System: system, Modules: modules}
 	if err := m.companies.Create(ctx, c); err != nil {
 		return nil, err
 	}

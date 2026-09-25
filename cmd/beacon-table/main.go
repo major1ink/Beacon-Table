@@ -27,6 +27,7 @@ import (
 	"beacon-table/internal/app"
 	"beacon-table/internal/backup"
 	"beacon-table/internal/module"
+	"beacon-table/internal/module/base"
 	"beacon-table/internal/quota"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
@@ -225,7 +226,7 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 
 	// Модули контента: встроенный каталог D&D, установленные в
 	// <data>/modules и папки в разработке (--modules-dev).
-	modules := module.NewRegistry(filepath.Join(cfg.DataDir, "modules"), builtinModules(systemFiles), cfg.ModulesDev, serverVersion())
+	modules := module.NewRegistry(filepath.Join(cfg.DataDir, "modules"), append(builtinModules(systemFiles), base.Module()), cfg.ModulesDev, serverVersion())
 	if len(cfg.ModulesDev) > 0 {
 		slog.Info("Модули в разработке", "папки", cfg.ModulesDev)
 	}

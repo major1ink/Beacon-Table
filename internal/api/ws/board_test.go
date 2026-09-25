@@ -48,7 +48,7 @@ func newBoardTestbed(t *testing.T) *boardTestbed {
 		service.NewDiceRoller(), module.NewRegistry("", nil, nil, ""),
 		filepath.Join(root, "data"), filepath.Join(root, "uploads"), "/uploads/", true, nil,
 	)
-	co, err := mgr.Create(ctx, "Мир", domain.SystemDnD5e2024)
+	co, err := mgr.Create(ctx, "Мир", domain.SystemCustom)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

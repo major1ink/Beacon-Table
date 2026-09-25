@@ -196,7 +196,8 @@ func (c *Catalog[T]) fromModule(id string) bool {
 }
 
 func (c *Catalog[T]) List(ctx context.Context) ([]*T, error) {
-	var all []*T
+	// Не nil: пустая библиотека уходит клиенту как [], а не null.
+	all := []*T{}
 	for _, s := range c.sources {
 		list, err := s.List(ctx)
 		if err != nil {

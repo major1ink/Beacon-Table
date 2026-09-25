@@ -9,8 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/module"
+	"beacon-table/internal/module/base"
 	"beacon-table/internal/repository/sqlite"
 )
 
@@ -29,8 +32,21 @@ func newTestManager(t *testing.T) (*CompanyManager, string) {
 		dataRoot:    filepath.Join(root, "data"),
 		uploadsRoot: filepath.Join(root, "uploads"),
 		uploadsURL:  "/uploads/",
+		modules:     module.NewRegistry("", testSystems(), nil, ""),
 	}
 	return m, root
+}
+
+// testSystems — системные модули D&D без карточек (тестам миров нужна
+// только возможность создать мир на этой системе) и базовые состояния.
+func testSystems() []*module.Module {
+	out := []*module.Module{base.Module()}
+	for _, id := range []string{domain.SystemDnD5e2014, domain.SystemDnD5e2024} {
+		out = append(out, module.Builtin(fstest.MapFS{}, "systemdata", id, &module.Manifest{
+			Format: module.Format, ID: id, Type: module.TypeSystem, Title: id, Version: "1.0.0", LegacyIDs: true,
+		}))
+	}
+	return out
 }
 
 func writeFile(t *testing.T, path, content string) {
@@ -447,10 +463,11 @@ func TestWorldPack_ImportRejectsBadManifest(t *testing.T) {
 	m, _ := newTestManager(t)
 
 	cases := map[string]string{
-		"чужой формат":  `{"format":"foundry/v11","world":{"name":"X","system":"dnd5e-2024"}}`,
-		"нет системы":   `{"format":"beacon-world/v1","world":{"name":"X","system":"pathfinder"}}`,
-		"нет названия":  `{"format":"beacon-world/v1","world":{"name":"","system":"dnd5e-2024"}}`,
-		"нет манифеста": ``,
+		"чужой формат":   `{"format":"foundry/v11","world":{"name":"X","system":"dnd5e-2024"}}`,
+		"кривая система": `{"format":"beacon-world/v1","world":{"name":"X","system":"Pathfinder 2e!"}}`,
+		"пустая система": `{"format":"beacon-world/v1","world":{"name":"X","system":""}}`,
+		"нет названия":   `{"format":"beacon-world/v1","world":{"name":"","system":"dnd5e-2024"}}`,
+		"нет манифеста":  ``,
 	}
 	for name, manifest := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -464,5 +481,23 @@ func TestWorldPack_ImportRejectsBadManifest(t *testing.T) {
 				t.Fatalf("ожидали *domain.ValidationError, получили %v", err)
 			}
 		})
+	}
+}
+
+// TestWorldPack_ImportUnknownSystem — мир на системе, которой на сервере
+// нет, импортируется: карточек системы в нём не будет, пока не поставят её
+// модуль, а ImportResult называет, чего не хватает.
+func TestWorldPack_ImportUnknownSystem(t *testing.T) {
+	ctx := context.Background()
+	m, _ := newTestManager(t)
+	res, err := m.ImportWorld(ctx, makeZip(t, map[string]string{
+		"manifest.json":        `{"format":"beacon-world/v1","world":{"name":"Чужой","system":"pathfinder"}}`,
+		"world/scenes/ok.json": `{}`,
+	}))
+	if err != nil {
+		t.Fatalf("мир на неизвестной системе не импортировался: %v", err)
+	}
+	if res.Company.System != "pathfinder" || len(res.MissingModules) != 1 || res.MissingModules[0] != "pathfinder" {
+		t.Fatalf("импорт: %+v, не хватает %v", res.Company, res.MissingModules)
 	}
 }

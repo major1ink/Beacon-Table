@@ -180,10 +180,8 @@
       <h2>Создать мир</h2>
       <form id="createForm">
         <input type="text" id="worldName" placeholder="Название мира" maxlength="80" required />
-        <select id="worldSystem" aria-label="Система мира">
-          <option value="dnd5e-2024">D&amp;D 2024</option>
-          <option value="dnd5e-2014">D&amp;D 5e (2014)</option>
-        </select>
+        <!-- Системы — с сервера: «Своя система» и системные модули (см. worlds.js: loadSystems). -->
+        <select id="worldSystem" aria-label="Система мира"></select>
         <button type="submit">Создать</button>
       </form>
       <div id="createMsg" class="msg"></div>

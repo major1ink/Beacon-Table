@@ -45,7 +45,7 @@ func newModuleEnv(t *testing.T) *moduleEnv {
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	world, err := mgr.Create(ctx, "Мир", domain.SystemDnD5e2024)
+	world, err := mgr.Create(ctx, "Мир", domain.SystemCustom)
 	if err != nil {
 		t.Fatal(err)
 	}

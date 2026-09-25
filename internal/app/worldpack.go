@@ -471,8 +471,8 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 	if strings.TrimSpace(man.World.Name) == "" {
 		return nil, &domain.ValidationError{Msg: "в архиве не указано название мира"}
 	}
-	if !domain.ValidSystem(man.World.System) {
-		return nil, &domain.ValidationError{Msg: "в архиве неизвестная игровая система: " + man.World.System}
+	if !validSystemID.MatchString(man.World.System) {
+		return nil, &domain.ValidationError{Msg: "в архиве неверный id игровой системы: " + man.World.System}
 	}
 
 	// Квоту проверяем ДО создания мира и распаковки: размер загрузок виден
@@ -482,12 +482,24 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 		return nil, err
 	}
 
-	company, err := m.Create(ctx, man.World.Name, man.World.System)
+	// Мир из архива без списка модулей — мир до модулей (Modules nil):
+	// подключён модуль его системы, как и было.
+	name := strings.TrimSpace(man.World.Name)
+	if len(name) > maxCompanyNameLen {
+		name = name[:maxCompanyNameLen]
+	}
+	company, err := m.createWorld(ctx, name, man.World.System, nil)
 	if err != nil {
 		return nil, err
 	}
 	var missingModules []string
-	if man.World.Modules != nil {
+	if man.World.Modules == nil {
+		for _, id := range company.EnabledModules() {
+			if _, err := m.modules.Get(id); err != nil {
+				missingModules = append(missingModules, id)
+			}
+		}
+	} else {
 		ids := make([]string, 0, len(man.World.Modules))
 		for _, ref := range man.World.Modules {
 			ids = append(ids, ref.ID)

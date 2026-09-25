@@ -2,24 +2,24 @@ package domain
 
 import "time"
 
-// Система правил, по которой ведётся мир (World.System) — только это
-// значение отличает форму листа персонажа и то, какая подпапка
-// systemdata/{bestiary,spells,items}/<system> подключается как каталог "из
-// коробки" (см. internal/repository/monsterfile/spellfile/itemfile: system.go
-// и internal/service/company.go: Launch). Новые системы добавляются сюда
-// плюс в web/src/pages/worlds.js (выпадающий список) — больше нигде
-// специального ветвления по системе в коде нет, всё остальное — общие для
-// D&D 5e поля "умного бланка" (см. character_sheet.go).
+// SystemCustom — «Своя система (без правил)»: единственная игровая система,
+// встроенная в ядро. Все остальные приходят системными модулями (см.
+// internal/module, Manifest.Type == "system"), и id системы мира — это id
+// такого модуля. Ядро не знает ни одной игровой системы.
+const SystemCustom = "custom"
+
+// BaseModuleID — встроенный модуль «Базовые состояния» (см.
+// internal/module/base): его получает мир «Своей системы».
+const BaseModuleID = "base"
+
+// SystemDnD5e2014/SystemDnD5e2024 — id модулей D&D. В ядре нужны только
+// миграции старых установок (до миров всё было на D&D 2024, см.
+// app.CompanyManager.Bootstrap) и тестам; уйдут вместе с выносом D&D из
+// бинарника.
 const (
 	SystemDnD5e2014 = "dnd5e-2014"
 	SystemDnD5e2024 = "dnd5e-2024"
 )
-
-// ValidSystem — есть ли такая система в списке поддерживаемых (используется
-// при создании компании, см. service.CompanyManager.Create).
-func ValidSystem(system string) bool {
-	return system == SystemDnD5e2014 || system == SystemDnD5e2024
-}
 
 // Company — один "мир"/стол: изолированный набор сцен, бестиария,
 // заклинаний, предметов, заметок, плейлистов и персонажей игроков,
@@ -46,8 +46,11 @@ func (c *Company) EnabledModules() []string {
 	if c.Modules != nil {
 		return c.Modules
 	}
-	if c.System == "" {
+	switch c.System {
+	case "":
 		return nil
+	case SystemCustom:
+		return []string{BaseModuleID}
 	}
 	return []string{c.System}
 }

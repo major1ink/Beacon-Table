@@ -173,3 +173,12 @@ func writeModuleErr(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 	}
 }
+
+// handleSystemsList — GET /api/systems: на каких игровых системах можно
+// создать мир — «Своя система» и системные модули на сервере.
+func (a *API) handleSystemsList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireOwner(w, r); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, a.Companies.Systems())
+}

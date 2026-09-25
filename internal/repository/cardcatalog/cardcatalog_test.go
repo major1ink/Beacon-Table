@@ -95,3 +95,12 @@ func TestCatalogWithSeveralModules(t *testing.T) {
 		t.Fatalf("клон в библиотеке с пометками модуля: %+v", got)
 	}
 }
+
+// Пустой мир без модулей: список — пустой срез, а не nil (клиенту уходит
+// [], а не null).
+func TestEmptyCatalogListIsNotNil(t *testing.T) {
+	list, err := monsterfile.NewCatalog(monsterfile.NewStore(t.TempDir())).List(context.Background())
+	if err != nil || list == nil {
+		t.Fatalf("пустой каталог: %v %v", list, err)
+	}
+}

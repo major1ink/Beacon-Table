@@ -47,6 +47,11 @@ export async function apiChangeOwnPassword(oldPassword, newPassword) {
 export async function fetchCompanies() {
   return apiFetch("/api/companies");
 }
+// fetchSystems — на каких игровых системах можно создать мир: «Своя
+// система» и системные модули на сервере (см. app.CompanyManager.Systems).
+export async function fetchSystems() {
+  return apiFetch("/api/systems");
+}
 export async function createCompany(name, system) {
   return apiFetch("/api/companies", { method: "POST", body: JSON.stringify({ name, system }) });
 }

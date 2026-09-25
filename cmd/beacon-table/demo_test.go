@@ -94,7 +94,7 @@ func testDemoTable(t *testing.T) *app.CompanyManager {
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	company, err := mgr.Create(ctx, "Демо", domain.SystemDnD5e2024)
+	company, err := mgr.Create(ctx, "Демо", domain.SystemCustom)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
