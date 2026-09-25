@@ -20,6 +20,7 @@ import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { inApp } from "../native-app.js";
 import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { renderKvTable } from "../kv-table.js";
 import { glyphNode } from "../condition-glyphs.js";
@@ -450,7 +451,8 @@ function spellsSection(readOnly) {
         // рендерит его в iframe) — вкладывать туда ещё один плавающий менеджер
         // окон незачем, поэтому просто открываем обычной вкладкой браузера
         // (тот же приём, что popoutBtn в floating-window.js).
-        name.onclick = () => window.open(`/spellbook.html?id=${spellId}`, "spell-" + spellId);
+        const url = `/spellbook.html?id=${spellId}`;
+        name.onclick = () => (inApp ? location.assign(url) : window.open(url, "spell-" + spellId));
       }
       const row = [name, h("span", { class: "tag", text: spellLevelLabel(ref.level) })];
       if (!readOnly) {
