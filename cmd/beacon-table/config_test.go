@@ -267,3 +267,25 @@ func captureStdout(t *testing.T) func() string {
 		return buf.String()
 	}
 }
+
+// TestLoadConfigModulesDev — папки модулей в разработке: списком через
+// разделитель путей ОС из окружения, флаг перебивает окружение.
+func TestLoadConfigModulesDev(t *testing.T) {
+	withWorkDir(t)
+	sep := string(os.PathListSeparator)
+	t.Setenv(envModulesDev, "mods/a"+sep+sep+" mods/b ")
+	cfg, _, err := loadConfig(nil)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if len(cfg.ModulesDev) != 2 || cfg.ModulesDev[0] != "mods/a" || cfg.ModulesDev[1] != "mods/b" {
+		t.Fatalf("из окружения: %q", cfg.ModulesDev)
+	}
+	cfg, _, err = loadConfig([]string{"--modules-dev", "other"})
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if len(cfg.ModulesDev) != 1 || cfg.ModulesDev[0] != "other" {
+		t.Fatalf("флаг: %q", cfg.ModulesDev)
+	}
+}

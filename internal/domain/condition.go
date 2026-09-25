@@ -40,7 +40,11 @@ type Condition struct {
 	// игнорируется (см. conditionfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в библиотеку и править копию
 	// (кнопка «Клонировать», см. web/src/pages/conditions.js).
-	System          bool   `json:"system,omitempty"`
+	System bool `json:"system,omitempty"`
+	// Module — id модуля, из которого пришла карточка (см. internal/module);
+	// проставляется сервером при чтении, как и System. Пусто у карточек
+	// библиотеки мира.
+	Module          string `json:"module,omitempty"`
 	Source          string `json:"source,omitempty"` // "PHB'24", "самодельное"...
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 

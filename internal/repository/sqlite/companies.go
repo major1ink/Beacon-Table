@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -28,29 +29,59 @@ func NewCompanyStore(db *sql.DB) *CompanyStore {
 
 func scanCompany(row interface{ Scan(...any) error }) (*domain.Company, error) {
 	var c domain.Company
-	var createdAt string
-	if err := row.Scan(&c.ID, &c.Name, &c.System, &createdAt); err != nil {
+	var createdAt, modules string
+	if err := row.Scan(&c.ID, &c.Name, &c.System, &modules, &createdAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
 		return nil, err
 	}
 	c.CreatedAt, _ = time.Parse(timeLayout, createdAt)
+	// Пустая строка — мир до модулей (nil, см. Company.EnabledModules);
+	// "[]" — модули явно выключены все.
+	if modules != "" {
+		c.Modules = []string{}
+		_ = json.Unmarshal([]byte(modules), &c.Modules)
+	}
 	return &c, nil
+}
+
+func encodeModules(modules []string) string {
+	if modules == nil {
+		return ""
+	}
+	b, _ := json.Marshal(modules)
+	return string(b)
+}
+
+// SetModules — какие модули подключены к миру (порядок важен, см.
+// domain.Company.Modules).
+func (s *CompanyStore) SetModules(ctx context.Context, id string, modules []string) error {
+	if modules == nil {
+		modules = []string{}
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE companies SET modules = ? WHERE id = ?`, encodeModules(modules), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 // Create implements repository.CompanyRepository.
 func (s *CompanyStore) Create(ctx context.Context, c *domain.Company) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO companies (id, name, system, created_at) VALUES (?, ?, ?, ?)`,
-		c.ID, c.Name, c.System, time.Now().Format(timeLayout),
+		`INSERT INTO companies (id, name, system, modules, created_at) VALUES (?, ?, ?, ?, ?)`,
+		c.ID, c.Name, c.System, encodeModules(c.Modules), time.Now().Format(timeLayout),
 	)
 	return err
 }
 
 // List implements repository.CompanyRepository.
 func (s *CompanyStore) List(ctx context.Context) ([]*domain.Company, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, system, created_at FROM companies ORDER BY created_at`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, system, modules, created_at FROM companies ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +99,7 @@ func (s *CompanyStore) List(ctx context.Context) ([]*domain.Company, error) {
 
 // ByID implements repository.CompanyRepository.
 func (s *CompanyStore) ByID(ctx context.Context, id string) (*domain.Company, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, name, system, created_at FROM companies WHERE id = ?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, system, modules, created_at FROM companies WHERE id = ?`, id)
 	return scanCompany(row)
 }
 

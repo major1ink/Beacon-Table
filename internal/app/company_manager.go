@@ -15,7 +15,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -23,6 +22,7 @@ import (
 	"sync"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/module"
 	"beacon-table/internal/quota"
 	"beacon-table/internal/repository"
 	"beacon-table/internal/repository/boardfile"
@@ -65,6 +65,13 @@ type ActiveWorld struct {
 	Assets    service.AssetService
 
 	Foundry service.FoundryService
+
+	// Modules — модули, подключённые к миру при запуске, в порядке
+	// подключения. MissingModules — включённые в мире, но не найденные на
+	// сервере (удалены или ещё не установлены): мир работает без их
+	// карточек, интерфейс предлагает их поставить.
+	Modules        []*module.Module
+	MissingModules []string
 }
 
 // CompanyManager — держит список миров и то, какой из них сейчас запущен на
@@ -79,7 +86,7 @@ type CompanyManager struct {
 	accounts  repository.AccountRepository
 	sessions  repository.SessionRepository
 	dice      service.DiceRoller
-	systemFS  fs.FS
+	modules   *module.Registry
 
 	dataRoot    string // корень пользовательских данных легаси-компании, обычно "data"
 	uploadsRoot string // корень загрузок легаси-компании, обычно "uploads"
@@ -106,9 +113,9 @@ type CompanyManager struct {
 // данные инсталляции, существовавшей до появления миров (см. Bootstrap);
 // любая другая компания получает свои собственные подпапки внутри тех же
 // корней.
-func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, systemFS fs.FS, dataRoot, uploadsRoot, uploadsURL string, allowPrivateFoundryNet bool, uploadQuota *quota.Tracker) *CompanyManager {
+func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, modules *module.Registry, dataRoot, uploadsRoot, uploadsURL string, allowPrivateFoundryNet bool, uploadQuota *quota.Tracker) *CompanyManager {
 	return &CompanyManager{
-		db: db, companies: companies, accounts: accounts, sessions: sessions, dice: dice, systemFS: systemFS,
+		db: db, companies: companies, accounts: accounts, sessions: sessions, dice: dice, modules: modules,
 		dataRoot: dataRoot, uploadsRoot: uploadsRoot, uploadsURL: uploadsURL,
 		allowPrivateFoundryNet: allowPrivateFoundryNet,
 		quota:                  uploadQuota,
@@ -118,6 +125,23 @@ func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accou
 
 // ChatHistory — ручка лимита истории чата для настроек (cmd/beacon-table/settings.go).
 func (m *CompanyManager) ChatHistory() *service.ChatHistoryLimit { return m.chatHistory }
+
+// Modules — реестр модулей контента сервера (см. internal/module).
+func (m *CompanyManager) Modules() *module.Registry { return m.modules }
+
+// resolveModules — модули мира company в порядке подключения; ненайденные
+// id — во втором списке.
+func (m *CompanyManager) resolveModules(company *domain.Company) (found []*module.Module, missing []string) {
+	for _, id := range company.EnabledModules() {
+		mod, err := m.modules.Get(id)
+		if err != nil {
+			missing = append(missing, id)
+			continue
+		}
+		found = append(found, mod)
+	}
+	return found, missing
+}
 
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу
 // ассетов этого мира, и импорту мира из архива.
@@ -330,31 +354,32 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
 	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
 	boardRepo := boardfile.NewStore(filepath.Join(dataRoot, "boards"))
-	monsterRepo := monsterfile.NewCatalog(
-		monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")),
-		monsterfile.NewSystemStore(m.systemFS, "systemdata/bestiary/"+company.System),
+	// Карточки модулей: у каждого вида — источник на каждый подключённый
+	// модуль, в порядке подключения (см. cardcatalog.Catalog).
+	mods, missingMods := m.resolveModules(company)
+	if len(missingMods) > 0 {
+		slog.Warn("Мир запущен без части модулей — их нет на сервере", "world", company.Name, "modules", missingMods)
+	}
+	var (
+		monsterSrc   []*monsterfile.SystemStore
+		spellSrc     []*spellfile.SystemStore
+		itemSrc      []*itemfile.SystemStore
+		referenceSrc []*referencefile.SystemStore
+		conditionSrc []*conditionfile.SystemStore
 	)
-	spellRepo := spellfile.NewCatalog(
-		spellfile.NewStore(filepath.Join(dataRoot, "spells")),
-		spellfile.NewSystemStore(m.systemFS, "systemdata/spells/"+company.System),
-	)
-	itemRepo := itemfile.NewCatalog(
-		itemfile.NewStore(filepath.Join(dataRoot, "items")),
-		itemfile.NewSystemStore(m.systemFS, "systemdata/items/"+company.System),
-	)
-	referenceRepo := referencefile.NewCatalog(
-		referencefile.NewStore(filepath.Join(dataRoot, "references")),
-		referencefile.NewSystemStore(m.systemFS, "systemdata/references/"+company.System),
-	)
-	// conditionRepo — библиотека состояний, тот же каталог «из коробки» +
-	// пользовательская библиотека, что и у остальных четырёх. Подпапка
-	// systemdata/conditions/<system> — единственное место, где реализовано
-	// требование «статусы делятся по игровым системам»: у мира на D&D 2014
-	// своё истощение, у мира на 2024 — своё.
-	conditionRepo := conditionfile.NewCatalog(
-		conditionfile.NewStore(filepath.Join(dataRoot, "conditions")),
-		conditionfile.NewSystemStore(m.systemFS, "systemdata/conditions/"+company.System),
-	)
+	for _, mod := range mods {
+		prefix, id := mod.Manifest.IDPrefix(), mod.Manifest.ID
+		monsterSrc = append(monsterSrc, monsterfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindBestiary), prefix, id))
+		spellSrc = append(spellSrc, spellfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindSpells), prefix, id))
+		itemSrc = append(itemSrc, itemfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindItems), prefix, id))
+		referenceSrc = append(referenceSrc, referencefile.NewModuleStore(mod.FS, mod.ContentDir(module.KindReferences), prefix, id))
+		conditionSrc = append(conditionSrc, conditionfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindConditions), prefix, id))
+	}
+	monsterRepo := monsterfile.NewCatalog(monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")), monsterSrc...)
+	spellRepo := spellfile.NewCatalog(spellfile.NewStore(filepath.Join(dataRoot, "spells")), spellSrc...)
+	itemRepo := itemfile.NewCatalog(itemfile.NewStore(filepath.Join(dataRoot, "items")), itemSrc...)
+	referenceRepo := referencefile.NewCatalog(referencefile.NewStore(filepath.Join(dataRoot, "references")), referenceSrc...)
+	conditionRepo := conditionfile.NewCatalog(conditionfile.NewStore(filepath.Join(dataRoot, "conditions")), conditionSrc...)
 	assetRepo := localfs.NewStore(uploadsRoot, uploadsURL, m.quota.World(uploadsRoot))
 	if err := assetRepo.EnsureDirs(); err != nil {
 		return err
@@ -408,6 +433,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 			bestiary, spells, items, references, conditions, pregenRepo,
 			m.allowPrivateFoundryNet,
 		),
+		Modules:        mods,
+		MissingModules: missingMods,
 	}
 
 	m.mu.Lock()

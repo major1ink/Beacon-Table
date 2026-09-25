@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -15,6 +14,7 @@ import (
 	apiws "beacon-table/internal/api/ws"
 	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
+	"beacon-table/internal/module"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
@@ -38,7 +38,7 @@ func TestGatewayCloseAllSaysGoodbye(t *testing.T) {
 	sessions := sqlite.NewSessionStore(db, accounts)
 	companies := sqlite.NewCompanyStore(db)
 	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
-		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
+		module.NewRegistry("", nil, nil, ""), filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestGatewayRefusesConnectionsAfterClose(t *testing.T) {
 	sessions := sqlite.NewSessionStore(db, accounts)
 	companies := sqlite.NewCompanyStore(db)
 	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
-		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
+		module.NewRegistry("", nil, nil, ""), filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestHandshakeRejectsForeignOrigin(t *testing.T) {
 	sessions := sqlite.NewSessionStore(db, accounts)
 	companies := sqlite.NewCompanyStore(db)
 	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
-		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
+		module.NewRegistry("", nil, nil, ""), filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}

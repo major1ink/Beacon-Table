@@ -32,7 +32,11 @@ type Spell struct {
 	// игнорируется (см. spellfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в общую библиотеку (см.
 	// web/src/pages/spellbook.js).
-	System          bool   `json:"system,omitempty"`
+	System bool `json:"system,omitempty"`
+	// Module — id модуля, из которого пришла карточка (см. internal/module);
+	// проставляется сервером при чтении, как и System. Пусто у карточек
+	// библиотеки мира.
+	Module          string `json:"module,omitempty"`
 	Source          string `json:"source,omitempty"` // "PHB'24", "MHH"...
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 

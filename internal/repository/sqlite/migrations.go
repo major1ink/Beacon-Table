@@ -42,6 +42,7 @@ var schemaMigrations = []migration{
 	{version: 1, name: "исходная схема", apply: migrateV1},
 	{version: 2, name: "тип плейлиста (панель эффектов)", apply: migrateV2},
 	{version: 3, name: "чат за столом", apply: migrateV3},
+	{version: 4, name: "модули мира", apply: migrateV4},
 }
 
 // sqlExec — общее у *sql.DB и *sql.Tx: чтобы вспомогательные функции
@@ -112,6 +113,14 @@ func applyOne(db *sql.DB, m migration) error {
 // migrateV2 — playlists.kind (см. domain.PlaylistKindSFX).
 func migrateV2(tx *sql.Tx) error {
 	return addColumnIfMissing(tx, "playlists", "kind", `TEXT NOT NULL DEFAULT ''`)
+}
+
+// migrateV4 — companies.modules: JSON-список id модулей, подключённых к
+// миру (см. domain.Company.Modules). Пустая строка у миров, созданных до
+// модулей, — «модуль их системы» (см. Company.EnabledModules).
+func migrateV4(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE companies ADD COLUMN modules TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 // migrateV3 — chat_messages (sqlite/chat.go); company_id на строке, как у pregen_characters.

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -16,6 +15,7 @@ import (
 	apiws "beacon-table/internal/api/ws"
 	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
+	"beacon-table/internal/module"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
@@ -38,7 +38,7 @@ func TestTwoDMsInSameWorld(t *testing.T) {
 	root := t.TempDir()
 	mgr := app.NewCompanyManager(
 		db, sqlite.NewCompanyStore(db), accounts, sessions,
-		service.NewDiceRoller(), fstest.MapFS{},
+		service.NewDiceRoller(), module.NewRegistry("", nil, nil, ""),
 		filepath.Join(root, "data"), filepath.Join(root, "uploads"), "/uploads/", true, nil,
 	)
 

@@ -104,6 +104,12 @@ type Config struct {
 	// ChatHistory — сколько сообщений чата хранить между перезапусками; 0 — не хранить.
 	ChatHistory int
 
+	// ModulesDev — папки модулей контента в разработке (см.
+	// internal/module.SourceDev): читаются как есть, без упаковки в .btmod,
+	// и перекрывают установленные модули с тем же id. Для тех, кто наполняет
+	// модули; в обычной установке пусто.
+	ModulesDev []string
+
 	// ---- публичное демо ----
 	// DemoMode — сервер работает витриной: на странице входа появляется
 	// выбор «я ведущий / я игрок». Гость-ведущий получает права ДМ ВНУТРИ
@@ -206,6 +212,8 @@ const (
 	envUploadsWorldQuota = "BEACON_UPLOADS_WORLD_QUOTA"
 
 	envChatHistory = "BEACON_CHAT_HISTORY"
+
+	envModulesDev = "BEACON_MODULES_DEV"
 
 	envDemoMode  = "BEACON_DEMO_MODE"
 	envDemoWorld = "BEACON_DEMO_WORLD"
@@ -351,6 +359,7 @@ func envValues() map[string]string {
 		envUploadsQuota, envUploadsWorldQuota,
 		envDemoMode, envDemoWorld, envDemoReset,
 		envChatHistory,
+		envModulesDev,
 	} {
 		if v, ok := os.LookupEnv(key); ok {
 			values[key] = v
@@ -426,6 +435,9 @@ func applyValues(cfg *Config, values map[string]string, source string) error {
 			return fmt.Errorf("%s в %s: %q — ожидалось целое число не меньше 0", envChatHistory, source, v)
 		}
 		cfg.ChatHistory = n
+	}
+	if v, ok := values[envModulesDev]; ok && v != "" {
+		cfg.ModulesDev = splitPathList(unquote(v))
 	}
 	if v, ok := values[envLogLevel]; ok && v != "" {
 		level := strings.ToLower(unquote(v))
@@ -553,6 +565,7 @@ func bindFlags(cfg *Config, args []string) error {
 	origins := fs.String("allowed-origins", strings.Join(cfg.AllowedOrigins, ","), "дополнительные адреса, с которых разрешено открывать стол, через запятую")
 	fs.String("config", "", "путь к файлу настроек (по умолчанию "+configFileName+" рядом с программой)")
 	fs.BoolVar(&cfg.ResetDMPassword, "reset-dm-password", false, "выдать ДМ новый временный пароль при запуске")
+	modulesDev := fs.String("modules-dev", strings.Join(cfg.ModulesDev, string(os.PathListSeparator)), "папки модулей контента в разработке (через "+string(os.PathListSeparator)+"), читаются без упаковки")
 	showVersion := fs.Bool("version", false, "напечатать версию и выйти")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -573,6 +586,7 @@ func bindFlags(cfg *Config, args []string) error {
 		"open-browser":  envOpenBrowser,
 		"uploads-quota": envUploadsQuota, "uploads-world-quota": envUploadsWorldQuota,
 		"chat-history": envChatHistory,
+		"modules-dev":  envModulesDev,
 	}
 	fs.Visit(func(f *flag.Flag) {
 		if key, ok := flagToEnv[f.Name]; ok {
@@ -580,6 +594,7 @@ func bindFlags(cfg *Config, args []string) error {
 		}
 	})
 	cfg.AllowedOrigins = splitOrigins(*origins)
+	cfg.ModulesDev = splitPathList(*modulesDev)
 
 	// Флаги проверяем здесь: значения из файла и окружения уже проверил
 	// applyValues, но флаг приходит мимо него.
@@ -603,4 +618,16 @@ func bindFlags(cfg *Config, args []string) error {
 		return fmt.Errorf("--uploads-world-quota %q: ожидался размер вроде 5GB", *worldQuota)
 	}
 	return nil
+}
+
+// splitPathList — список папок через разделитель путей ОС (";" в Windows,
+// ":" в остальных), пустые элементы отбрасываются.
+func splitPathList(v string) []string {
+	var out []string
+	for _, p := range filepath.SplitList(v) {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

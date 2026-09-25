@@ -28,8 +28,26 @@ func ValidSystem(system string) bool {
 // параллельные тенанты, а Foundry-подобное переключение "какой мир сейчас
 // на столе".
 type Company struct {
-	ID        string
-	Name      string
-	System    string // SystemDnD5e2014 | SystemDnD5e2024
+	ID     string
+	Name   string
+	System string // SystemDnD5e2014 | SystemDnD5e2024
+	// Modules — id модулей контента, подключённых к миру (см.
+	// internal/module), в порядке подключения: при совпадении id карточек
+	// побеждает подключённый раньше. nil — мир создан до модулей, см.
+	// EnabledModules.
+	Modules   []string
 	CreatedAt time.Time
+}
+
+// EnabledModules — модули, чьи карточки видны в мире. У миров, созданных до
+// модулей, список пуст, и тогда подключён модуль их системы — ровно тот
+// каталог «из коробки», который они видели раньше.
+func (c *Company) EnabledModules() []string {
+	if c.Modules != nil {
+		return c.Modules
+	}
+	if c.System == "" {
+		return nil
+	}
+	return []string{c.System}
 }

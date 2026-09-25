@@ -30,7 +30,11 @@ type Item struct {
 	// игнорируется (см. itemfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в общую библиотеку (см.
 	// web/src/pages/itembook.js).
-	System          bool   `json:"system,omitempty"`
+	System bool `json:"system,omitempty"`
+	// Module — id модуля, из которого пришла карточка (см. internal/module);
+	// проставляется сервером при чтении, как и System. Пусто у карточек
+	// библиотеки мира.
+	Module          string `json:"module,omitempty"`
 	ImageURL        string `json:"imageUrl,omitempty"` // иконка предмета
 	Source          string `json:"source,omitempty"`   // "DMG", "XGE"...
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`

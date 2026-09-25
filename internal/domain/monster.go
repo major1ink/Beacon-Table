@@ -33,7 +33,11 @@ type Monster struct {
 	// карточки нельзя редактировать/удалять (см. monsterfile.Catalog.Update/
 	// Delete — domain.ErrForbidden) — только клонировать в пользовательскую
 	// библиотеку (см. web/src/pages/bestiary.js).
-	System          bool   `json:"system,omitempty"`
+	System bool `json:"system,omitempty"`
+	// Module — id модуля, из которого пришла карточка (см. internal/module);
+	// проставляется сервером при чтении, как и System. Пусто у карточек
+	// библиотеки мира.
+	Module          string `json:"module,omitempty"`
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 	// FoundryActorID — id актёра Foundry, из документа которого собрана эта
 	// карточка. Нужен ровно для одного: связать её с токенами, уже

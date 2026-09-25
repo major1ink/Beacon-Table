@@ -33,6 +33,8 @@ type CompanyRepository interface {
 	List(ctx context.Context) ([]*domain.Company, error)
 	ByID(ctx context.Context, id string) (*domain.Company, error)
 	Delete(ctx context.Context, id string) error
+	// SetModules — модули, подключённые к миру (domain.Company.Modules).
+	SetModules(ctx context.Context, id string, modules []string) error
 	// ActiveID/SetActiveID — id компании, сейчас запущенной на сервере
 	// (server_state, ключ "active_company_id"); пустая строка — ничего не
 	// запущено (валидно на свежей установке до первого "Создать мир").

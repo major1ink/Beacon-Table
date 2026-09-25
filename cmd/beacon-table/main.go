@@ -26,6 +26,7 @@ import (
 	apiws "beacon-table/internal/api/ws"
 	"beacon-table/internal/app"
 	"beacon-table/internal/backup"
+	"beacon-table/internal/module"
 	"beacon-table/internal/quota"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
@@ -222,7 +223,13 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 			"на мир", quota.FormatSize(cfg.UploadsWorldQuota))
 	}
 
-	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy, uploadQuota)
+	// Модули контента: встроенный каталог D&D, установленные в
+	// <data>/modules и папки в разработке (--modules-dev).
+	modules := module.NewRegistry(filepath.Join(cfg.DataDir, "modules"), builtinModules(systemFiles), cfg.ModulesDev, serverVersion())
+	if len(cfg.ModulesDev) > 0 {
+		slog.Info("Модули в разработке", "папки", cfg.ModulesDev)
+	}
+	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, modules, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy, uploadQuota)
 	companies.ChatHistory().Set(cfg.ChatHistory)
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
@@ -300,6 +307,7 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 		fatal("Не удалось открыть встроенный каталог", "err", err)
 	}
 	mux.Handle(systemAssetsURL, http.StripPrefix(systemAssetsURL, http.FileServer(http.FS(systemAssets))))
+	mux.Handle(moduleAssetsURL, moduleAssetsHandler(modules))
 
 	api.RegisterRoutes(mux)
 	gateway := apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc, apiws.Options{

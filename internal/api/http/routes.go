@@ -129,6 +129,13 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// см. company_handlers.go / app.CompanyManager.ExportWorld/ImportWorld.
 	mux.HandleFunc("GET /api/companies/{id}/export", a.handleCompanyExport)
 	mux.HandleFunc("POST /api/companies/import", a.handleCompanyImport)
+	// Модули контента — ставит, удаляет и включает в мирах владелец, см.
+	// module_handlers.go.
+	mux.HandleFunc("GET /api/modules", a.handleModulesList)
+	mux.HandleFunc("POST /api/modules", a.handleModuleInstall)
+	mux.HandleFunc("DELETE /api/modules/{id}", a.handleModuleDelete)
+	mux.HandleFunc("GET /api/companies/{id}/modules", a.handleWorldModulesGet)
+	mux.HandleFunc("PUT /api/companies/{id}/modules", a.handleWorldModulesSet)
 
 	mux.HandleFunc("GET /api/characters", a.handleCharactersList)
 	mux.HandleFunc("POST /api/characters", a.handleCharacterCreate)
