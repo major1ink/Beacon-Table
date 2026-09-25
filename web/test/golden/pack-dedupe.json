@@ -5,5 +5,10 @@
  "sameAsItself": true,
  "changedField": false,
  "numberVsString": true,
- "missingVsEmpty": true
+ "missingVsEmpty": true,
+ "missingVsEmptyList": true,
+ "nullVsEmptyObject": true,
+ "emptyVsFilledList": false,
+ "zeroVsMissing": true,
+ "zeroVsValue": false
 }

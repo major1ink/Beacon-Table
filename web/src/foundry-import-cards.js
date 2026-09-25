@@ -64,10 +64,18 @@ export function cardKey(target, card) {
 // которое он собирается записать, уже там такое же. Сравниваем только
 // importируемые поля — то, что ДМ дописал сам (свои теги, заметки в
 // описании соседних полей), карточку «изменившейся» не делает.
+//
+// Пустое значение и отсутствующее поле — одно и то же: маппер отдаёт
+// tags: [], spells: [], weightLb: 0, а сервер пустые списки, нули и false
+// не хранит (omitempty), и без этого повторный импорт считал изменившимся
+// каждое существо и каждый предмет без веса.
 export function sameCard(existing, mapped) {
+  const isComposite = (v) => v !== null && typeof v === "object";
+  const isEmpty = (v) =>
+    v === null || v === undefined || v === "" || v === 0 || v === false || (isComposite(v) && Object.keys(v).length === 0);
   for (const [key, value] of Object.entries(mapped)) {
     const before = existing[key];
-    const isComposite = (v) => v !== null && typeof v === "object";
+    if (isEmpty(value) && isEmpty(before)) continue;
     if (isComposite(value) || isComposite(before)) {
       if (JSON.stringify(before ?? null) !== JSON.stringify(value ?? null)) return false;
       continue;

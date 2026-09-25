@@ -222,7 +222,9 @@ export function applyLssImport(sheet, parsed, targetIsClassic) {
     if (!Number.isNaN(n)) sheet.combat.hpCurrent = n;
   }
   if (typeof vitality.isDying === "boolean") sheet.combat.isDying = vitality.isDying;
-  const hitDieMatch = /d(\d+)/i.exec(val(vitality["hit-die"]) || "");
+  // Кость хитов в реальных экспортах LSS — «1к8» (кириллица), в английских
+  // шаблонах — «1d8»: принимаем обе.
+  const hitDieMatch = /[dк](\d+)/i.exec(val(vitality["hit-die"]) || "");
   if (hitDieMatch) {
     const faces = hitDieMatch[1];
     const level = sheet.info.level || 1;

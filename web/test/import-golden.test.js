@@ -111,6 +111,12 @@ test("импорт пакета: совпадение с уже заведённ
     changedField: sameCard({ ...card, range: "другое" }, card),
     numberVsString: sameCard({ level: "0" }, { level: 0 }),
     missingVsEmpty: sameCard({}, { note: "" }),
+    // сервер не хранит пустые списки (omitempty) — это не изменение карточки
+    missingVsEmptyList: sameCard({ name: "Гоблин" }, { name: "Гоблин", tags: [], spells: [] }),
+    nullVsEmptyObject: sameCard({ extra: null }, { extra: {} }),
+    emptyVsFilledList: sameCard({ tags: [] }, { tags: ["гоблиноид"] }),
+    zeroVsMissing: sameCard({ name: "Рюкзак" }, { name: "Рюкзак", weightLb: 0, requiresAttunement: false }),
+    zeroVsValue: sameCard({ weightLb: 5 }, { weightLb: 0 }),
   });
 });
 
@@ -130,6 +136,19 @@ function lss(file, targetIsClassic) {
 
 test("LSS 2024 → лист 2024 и лист 2014", () => {
   matchGolden("lss-2024", { to2024: lss("lss/lss-2024.json", false), to2014: lss("lss/lss-2024.json", true) });
+});
+
+test("LSS: кость хитов с русской «к» и с латинской d", () => {
+  const withDie = (die) => {
+    const outer = JSON.parse(fixtureText("lss/lss-2024.json"));
+    const data = JSON.parse(outer.data);
+    data.vitality["hit-die"] = { value: die };
+    outer.data = JSON.stringify(data);
+    const sheet = freshSheet();
+    applyLssImport(sheet, parseLssExport(JSON.stringify(outer)), false);
+    return [sheet.combat.hitDiceTotal, sheet.combat.hitDiceCurrent];
+  };
+  matchGolden("lss-hit-die", { ru: withDie("1к8"), en: withDie("1d10"), none: withDie("") });
 });
 
 test("LSS 2014 → лист 2014", () => {
