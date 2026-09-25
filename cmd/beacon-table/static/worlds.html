@@ -141,13 +141,13 @@
       .world-actions { flex: 1 1 100%; justify-content: flex-end; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/worlds-c9JtOkte.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-BwZXTdhR.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-6SfgUqPz.js">
+  <script type="module" crossorigin src="/assets/worlds-DAmsVPrf.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-DsdpjbfO.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-CjjtUKka.js">
   <link rel="modulepreload" crossorigin href="/assets/native-app-BgGKemc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-BLh0huYg.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-9MOqYh7h.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-L39dyIVe.js">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-DdLqDjfj.js">
   <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
 </head>
 <body>
@@ -187,10 +187,8 @@
       <h2>Создать мир</h2>
       <form id="createForm">
         <input type="text" id="worldName" placeholder="Название мира" maxlength="80" required />
-        <select id="worldSystem" aria-label="Система мира">
-          <option value="dnd5e-2024">D&amp;D 2024</option>
-          <option value="dnd5e-2014">D&amp;D 5e (2014)</option>
-        </select>
+        <!-- Системы — с сервера: «Своя система» и системные модули (см. worlds.js: loadSystems). -->
+        <select id="worldSystem" aria-label="Система мира"></select>
         <button type="submit">Создать</button>
       </form>
       <div id="createMsg" class="msg"></div>
