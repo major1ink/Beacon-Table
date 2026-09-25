@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Журнал</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
@@ -391,6 +391,15 @@
 
     /* На широком экране список и запись видны разом — возвращаться некуда. */
     #dirBackBtn { display: none; }
+
+    /* Палец: строки дерева в 24px — мимо; кнопки папки висят на :hover,
+       которого у пальца нет, — показываем их всегда. */
+    @media (pointer: coarse) {
+      .folder-row, .entry-row, .root-row { min-height: 40px; }
+      .folder-actions { visibility: visible; }
+      .folder-actions .icon-btn { width: 32px; height: 32px; margin: 0; }
+      .page-item { min-height: 36px; }
+    }
 
     @media (max-width: 860px), (max-height: 500px) {
       #app { flex-direction: column; }

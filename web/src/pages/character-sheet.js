@@ -42,6 +42,7 @@ import { isGM, isPlayer } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
+import { announceOwnHeader } from "../embed.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -2768,6 +2769,8 @@ document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click",
 document.getElementById("modeBtn").onclick = () => setMode(mode === "view" ? "edit" : "view");
 initFullscreenButton(document.getElementById("fullscreenBtn"));
 
+// Своя шапка с ✕ — рамке на телефоне своя не нужна (см. embed.js).
+announceOwnHeader();
 document.getElementById("closeBtn").onclick = () => {
   // По умолчанию лист открывается ВНУТРИ dm.html/player.html как плавающее
   // окно (см. web/src/floating-window.js) — это iframe, а не отдельная

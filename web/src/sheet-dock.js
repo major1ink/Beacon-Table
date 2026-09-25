@@ -20,6 +20,7 @@
 
 import { openFloatingWindow } from "./floating-window.js";
 import { attachDrag } from "./drag.js";
+import { createBackLayer } from "./back-stack.js";
 
 const WIDTH_KEY = "beacon:sheetDockWidth";
 const MIN_WIDTH = 300;
@@ -69,11 +70,15 @@ function injectStyle() {
        Брейкпоинт общий, см. theme.css. */
     @media (max-width: 860px), (max-height: 500px) {
       .sheet-dock.open {
+        /* --vv-* — видимая часть над клавиатурой iOS (visual-viewport.js). */
         position: fixed; inset: 0; z-index: 300;
+        top: var(--vv-top, 0px); bottom: auto; height: var(--vv-h, 100dvh);
         width: auto !important; border-right: none;
+        box-sizing: border-box; padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
       }
       /* Тянуть и выносить нечего: плавающее окно там тоже полноэкранное. */
       .sheet-dock-resizer, .sheet-dock-popout { display: none; }
+      .sheet-dock--own-header .sheet-dock-header { display: none; }
       .sheet-dock-header { padding: 8px 8px 8px 14px; }
       .sheet-dock-title { font-size: 14px; }
     }
@@ -91,6 +96,8 @@ let titleEl = null;
 // Своего знания про канвас у дока нет: он просто занимает место в потоке,
 // а кто на это реагирует — дело страницы (см. pages/player.js).
 let notifyLayout = () => {};
+// «Назад» на телефоне закрывает лист (см. back-stack.js).
+const backLayer = createBackLayer(() => closeSheetDock());
 
 function clampWidth(px) {
   return Math.max(MIN_WIDTH, Math.min(Math.round(window.innerWidth * MAX_WIDTH_FRACTION), px));
@@ -170,7 +177,10 @@ function build(hostEl) {
   // в какой рамке открыта.
   window.addEventListener("message", (e) => {
     if (e.origin !== location.origin || !e.data) return;
-    if (e.data.type === "beacon:closeFloatingWindow" && iframeEl && e.source === iframeEl.contentWindow) closeSheetDock();
+    if (!iframeEl || e.source !== iframeEl.contentWindow) return;
+    if (e.data.type === "beacon:closeFloatingWindow") closeSheetDock();
+    // У листа своя шапка с ✕ — на телефоне шапка дока лишняя (см. embed.js).
+    if (e.data.type === "beacon:ownHeader") dockEl.classList.add("sheet-dock--own-header");
   });
   window.addEventListener("resize", () => {
     if (!dockEl.classList.contains("open")) return;
@@ -197,6 +207,7 @@ export function openSheetDock(hostEl, { key, title, url, onLayoutChange }) {
   // Класс на <body>: доку не хватает z-index против колонки иконок карты —
   // он внутри #app, она прямой ребёнок body. Прячет её theme.css.
   document.body.classList.add("sheet-dock-open");
+  backLayer.set(true);
   if (!wasOpen) notifyLayout();
   return dockEl;
 }
@@ -207,6 +218,7 @@ export function closeSheetDock() {
   document.body.classList.remove("sheet-dock-open");
   iframeEl.removeAttribute("src");
   current = null;
+  backLayer.set(false);
   notifyLayout();
 }
 

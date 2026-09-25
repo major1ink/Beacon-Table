@@ -264,7 +264,10 @@ export function createInteraction(ctx) {
         // Палец мог уже тащить токен — жест отменяем без записи на сервер.
         document.dispatchEvent(new CustomEvent("vtt:cancelGesture"));
         swallowNextTap();
-        canvas.dispatchEvent(new MouseEvent("contextmenu", { clientX: x, clientY: y, bubbles: true, cancelable: true }));
+        const ev = new MouseEvent("contextmenu", { clientX: x, clientY: y, bubbles: true, cancelable: true });
+        // Пометка для хит-теста: палец толще курсора (см. fingerSlop у игрока).
+        ev.fromTouch = true;
+        canvas.dispatchEvent(ev);
       }, LONG_PRESS_MS),
     };
   });
@@ -2419,6 +2422,19 @@ export function createInteraction(ctx) {
     let dragStart = null;
     let dragLastPos = null;
     let dragTraveled = 0;
+    // fingerPan — пан карты одним пальцем по пустому месту: {sx, sy, camX,
+    // camY}. У мыши для этого средняя кнопка, у пальца её нет, а два пальца
+    // (жест выше) — не то, чего ждут от карты на телефоне. У ДМ один палец
+    // остаётся инструментом: там он рисует стены и туман.
+    let fingerPan = null;
+
+    // fingerSlop — запас хит-теста своего токена под палец, в мировых
+    // единицах: на телефоне при карте «целиком» токен мельче пальца, и без
+    // запаса касание уходило мимо — в пан.
+    const FINGER_SLOP_PX = 22;
+    function fingerSlop() {
+      return FINGER_SLOP_PX / getTransform(screenW(), screenH(), ctx.scene, ctx.camera).scale;
+    }
 
     // speedCache/ensureSpeedLoaded/currentCombatantFor — общие с ДМ-веткой
     // выше (см. их определение и обоснование там): характеристика
@@ -2452,6 +2468,7 @@ export function createInteraction(ctx) {
       cancelDraw();
       rulerFrom = null;
       dragTokenId = null;
+      fingerPan = null;
       rulerLine.clear();
       distanceLabel.hide();
     });
@@ -2496,8 +2513,10 @@ export function createInteraction(ctx) {
       // клик попадал в чужой объект, драг не начинался, и персонаж
       // "залипал" на месте — сойти он не мог, пока ДМ не убирал то, на что
       // он наступил (см. geometry.tokenAt о порядке выбора из стопки).
+      const touch = e.pointerType === "touch";
       const hitId = tokenAt(x, y, ctx.scene.tokens, {
         filter: (t) => t.ownerId === ctx.playerId && !isLocked(t) && !turnBlocksMove(t),
+        slop: touch ? fingerSlop() : 0,
       });
       if (hitId) {
         dragTokenId = hitId;
@@ -2506,11 +2525,22 @@ export function createInteraction(ctx) {
         dragLastPos = dragStart;
         dragTraveled = 0;
         ensureSpeedLoaded(t0);
+      } else if (touch) {
+        const { sx, sy } = canvasPos(e, canvas);
+        fingerPan = { sx, sy, camX: ctx.camera.x, camY: ctx.camera.y };
       }
     });
 
     canvas.addEventListener("pointermove", (e) => {
       if (ctx.touchPanning) return;
+      if (fingerPan) {
+        const { sx, sy } = canvasPos(e, canvas);
+        const { scale } = getTransform(screenW(), screenH(), ctx.scene, ctx.camera);
+        ctx.camera.x = fingerPan.camX - (sx - fingerPan.sx) / scale;
+        ctx.camera.y = fingerPan.camY - (sy - fingerPan.sy) / scale;
+        applyCameraAndRender();
+        return;
+      }
       const { x, y } = mousePos(e);
 
       if (drawActive) {
@@ -2606,6 +2636,7 @@ export function createInteraction(ctx) {
       dragStart = null;
       dragLastPos = null;
       dragTraveled = 0;
+      fingerPan = null;
       distanceLabel.hide();
     });
 
@@ -2640,7 +2671,10 @@ export function createInteraction(ctx) {
         return;
       }
       // Свой токен — меню как у ДМ, урезанное (см. player-token-menu.js).
-      const ownId = tokenAt(x, y, ctx.scene.tokens, { filter: (t) => !t.lightOnly && t.ownerId === ctx.playerId });
+      const ownId = tokenAt(x, y, ctx.scene.tokens, {
+        filter: (t) => !t.lightOnly && t.ownerId === ctx.playerId,
+        slop: e.fromTouch ? fingerSlop() : 0,
+      });
       if (!ownId) return;
       e.preventDefault();
       document.dispatchEvent(

@@ -43,6 +43,7 @@ import { openSocket } from "../ws-reconnect.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { escapeHtml, cssUrl } from "../html.js";
 import { asButton } from "../a11y.js";
+import { announceOwnHeader } from "../embed.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -688,6 +689,8 @@ importFile.addEventListener("change", async (e) => {
 
 initFullscreenButton(document.getElementById("fullscreenBtn"));
 
+// Своя шапка с ✕ — рамке на телефоне своя не нужна (см. embed.js).
+announceOwnHeader();
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {
     window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);

@@ -10,13 +10,18 @@
   <meta name="theme-color" content="#131318" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Beacon Table" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Ярлык на iPhone: страница под строкой состояния, отступ даёт safe-area
+       (см. theme.css: --safe-t) — иначе над столом белая полоса. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — DM</title>
   <style>
     html, body { height: 100%; }
     body {
       margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       display: flex; flex-direction: column; overflow: hidden; font-size: 13px;
+      /* Вырез и полоска «домой» на планшете/телефоне, см. theme.css: --safe-*. */
+      box-sizing: border-box; padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
     }
     button { cursor: pointer; padding: 8px 12px; border: none; border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; transition: background .12s ease; }
     button svg { flex: 0 0 auto; }
@@ -1110,39 +1115,39 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-W-AgxCpx.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-hrdAlu1V.js">
+  <script type="module" crossorigin src="/assets/dm-DwRVHAi_.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-C_6pssTb.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-uNQlFFkV.js">
-  <link rel="modulepreload" crossorigin href="/assets/drag-DVDIF09E.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-ByBpCSn1.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-BS8qTbut.js">
+  <link rel="modulepreload" crossorigin href="/assets/back-stack-C8cwVhaZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DKhtjNqL.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-Ai0JsaWs.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DrQOL3XD.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-BHwQBtOI.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-fx-DnQKFGKO.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-B2ciyRpz.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-Bt2DOJg1.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-fx-BVJ9U5gn.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-gVXwkrAt.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/bug-report-ZfPm8yi2.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-B_4IH7a_.js">
+  <link rel="modulepreload" crossorigin href="/assets/wake-lock-0DU6CLVg.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-1cz-k8V3.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-hVxAQUaN.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-CImEDDyN.js">
   <link rel="modulepreload" crossorigin href="/assets/hp-bar-BLhQlGnT.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-9sbNhxKI.js">
-  <link rel="modulepreload" crossorigin href="/assets/card-shell-C5n7U7c0.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-26fTNKmZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-gaUNrZud.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
-  <link rel="modulepreload" crossorigin href="/assets/stat-editor-DVUuhb6G.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-1yQUMOUU.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-na8DaPcV.js">
+  <link rel="modulepreload" crossorigin href="/assets/stat-editor-mHP3ziUh.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-DBIWC3r7.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-DM3zoVmY.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DJ2sZH9C.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-VPZNwoh3.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-Z3S5GKsM.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-BS9MSVT6.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-BQZqByLh.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-feN1l5EY.css">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-BEr6jfie.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
 </head>
 <body>
   <div id="appBody">

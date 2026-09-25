@@ -18,6 +18,7 @@ import { rollGroups } from "./dice.js";
 import { icon } from "./icons.js";
 import { attachDrag } from "./drag.js";
 import { createChatPane } from "./chat.js";
+import { createBackLayer } from "./back-stack.js";
 
 // createRollLog(container, opts) → { push, clear, el }
 //   container — элемент-хост; модуль строит внутри .roll-log-body и вешает
@@ -210,6 +211,9 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
     b.hidden = n === 0;
   }
 
+  // «Назад» на телефоне закрывает чат во весь экран — как ✕ (back-stack.js).
+  const backLayer = createBackLayer(() => closeBtn.onclick());
+
   function render() {
     const closed = state.mode === "closed";
     const collapsed = state.mode === "collapsed";
@@ -226,6 +230,7 @@ function createPlate(container, { max, corner, storageKey, chat: chatOpts }) {
     collapseBtn.innerHTML = icon(collapsed ? "chevron-down" : "minus", { size: 13 });
     const full = !!fullMedia && fullMedia.matches && visible && !collapsed;
     win.classList.toggle("roll-log-win--full", full);
+    backLayer.set(full);
     if (full && win.parentElement !== document.body) document.body.appendChild(win);
     else if (!full && win.parentElement !== container) container.appendChild(win);
     if (visible && !collapsed) unread[state.tab] = 0;

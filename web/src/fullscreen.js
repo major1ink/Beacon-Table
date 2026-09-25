@@ -29,6 +29,12 @@ export function initFullscreenButton(btn, renderContent = defaultContent) {
     return;
   }
   const embedded = window.parent !== window;
+  // В окне на телефоне кнопка бесполезна: окно и так во весь экран, а
+  // полноэкранный режим включает кнопка самого стола. Брейкпоинт общий.
+  if (embedded && matchMedia("(max-width: 860px), (max-height: 500px)").matches) {
+    btn.remove();
+    return;
+  }
 
   function sync() {
     const active = !!document.fullscreenElement;

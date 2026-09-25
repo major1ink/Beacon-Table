@@ -62,6 +62,22 @@
   --shadow-float: 0 16px 40px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.3);
   --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.35);
   --ring-accent: 0 0 0 3px rgba(124, 108, 240, 0.35);
+
+  /* Вырез, скругления и системные полосы телефона. Работают только при
+     viewport-fit=cover в meta viewport — без него браузер сам сжимает
+     страницу, и тут везде 0. Внутри iframe (лист, окна) тоже 0: отступ
+     даёт рамка вокруг него. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+}
+
+/* Телефон: зум страницы щипком и двойным тапом только мешает — интерфейс
+   разъезжается, а назад его не собрать. Карта масштабируется своим жестом
+   (vtt/interaction.js), доска — своим (touch-action у их канвасов none). */
+@media (pointer: coarse) {
+  html { touch-action: pan-x pan-y; }
 }
 
 /* ---- скроллбар — тонкий и тёмный вместо системного, везде одинаковый ---- */
@@ -599,8 +615,11 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
    roll-log.js по matchMedia. !important — размер/положение ставит инлайном place(). */
 .roll-log-win--full {
   position: fixed; inset: 0; z-index: 300;
-  width: auto !important; height: auto !important; left: 0 !important; top: 0 !important;
+  width: auto !important; left: 0 !important;
+  /* Высота — видимая часть над клавиатурой iOS (visual-viewport.js). */
+  top: var(--vv-top, 0px) !important; bottom: auto; height: var(--vv-h, 100dvh) !important;
   border-radius: 0; border: none;
+  box-sizing: border-box; padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
 }
 .roll-log-win--full .roll-log-resize { display: none; }
 .roll-log-win--full .roll-log-head { cursor: default; padding: 8px 8px 8px 14px; }
@@ -951,6 +970,15 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 
   /* hover пальцем залипает — подсказка висит поверх открытого. */
   .bt-tip { display: none !important; }
+
+  /* Строки справочника (catalog.html): удалить/добавить/цель. */
+  .catalog-row { padding: 9px 8px; }
+  .catalog-row button { min-width: 38px; min-height: 38px; }
+  .catalog-target select { --field-h: 38px; }
+
+  /* Шапки страниц в окнах (у каждой свои 28–30px на #closeBtn и соседях).
+     :root — чтобы перебить правило страницы, оно подключено позже. */
+  :root #closeBtn, :root #editToggleBtn, :root #deleteBtn { width: 40px; height: 40px; }
 }
 
 @media (max-width: 860px), (max-height: 500px) {
@@ -992,7 +1020,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 
   /* Трекер боя (vtt/combat-bar.js, стили инлайновые) компактнее: 88px —
      четверть ландшафта телефона. */
-  .vtt-combat-bar { top: 6px !important; padding: 4px 8px !important; gap: 6px !important; }
+  .vtt-combat-bar { top: calc(6px + var(--safe-t)) !important; padding: 4px 8px !important; gap: 6px !important; }
   .cb-slot { width: 60px !important; }
   .cb-portrait-box { height: 30px !important; }
   .cb-portrait { width: 24px !important; height: 24px !important; }
@@ -1003,8 +1031,8 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
      закрыть панель её же значком нечем. */
   .vtt-side-panel {
     position: fixed !important;
-    right: 58px !important; left: 8px !important;
-    top: auto !important; bottom: 8px !important;
+    right: calc(58px + var(--safe-r)) !important; left: calc(8px + var(--safe-l)) !important;
+    top: auto !important; bottom: calc(8px + var(--safe-b)) !important;
     transform: none !important;
     width: auto !important; min-width: 0 !important;
     max-height: 62dvh !important;
@@ -1017,10 +1045,49 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
     inset: 0 !important;
     max-height: none !important;
     border: none !important; border-radius: 0 !important;
-    padding: calc(46px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)) !important;
+    padding: calc(46px + var(--safe-t)) calc(14px + var(--safe-r)) calc(14px + var(--safe-b)) calc(14px + var(--safe-l)) !important;
   }
   /* У «Справочника» своя шапка с ✕ — она и занимает эту полосу. */
   .vtt-side-panel--full > .compendium-panel-header { margin-top: -34px; }
   /* Прячем кнопки, а не колонку: панель — её потомок. */
   body.vtt-side-panel-full-open .vtt-side-menu-btn { display: none !important; }
+}
+
+/* ---- нижняя панель телефона (vtt/side-menu.js: setBarMode) ----
+   В портрете колонку иконок ставит полосой вдоль низа сам игрок
+   (pages/player.js), у ДМ колонка остаётся колонкой. Редкие иконки
+   (.vtt-side-menu-more-item) — за «⋯» и по нему вторым рядом над полосой:
+   wrap-reverse кладёт следующую строку выше, ::before — перенос строки.
+   Прятать их не через !important: у «Пометок»/«Карт» своё инлайновое
+   display:none, пока ими нельзя пользоваться, и оно должно побеждать. */
+.vtt-side-menu .vtt-side-menu-more-btn { display: none; }
+
+@media (max-width: 600px) {
+  :root { --mbar-h: calc(57px + var(--safe-b)); }
+
+  /* Инлайновые left/top ставит position() в side-menu.js. */
+  .vtt-side-menu.vtt-side-menu--bar {
+    left: 0 !important; right: 0; top: auto !important; bottom: 0;
+    flex-direction: row !important; flex-wrap: wrap-reverse;
+    justify-content: space-around; align-items: center; gap: 4px 0 !important;
+    max-height: none; overflow: visible;
+    padding: 6px calc(6px + var(--safe-r)) calc(6px + var(--safe-b)) calc(6px + var(--safe-l)) !important;
+    border-radius: 0; border-width: 1px 0 0; background: var(--panel-bg); box-shadow: none;
+  }
+  .vtt-side-menu--bar .vtt-side-menu-btn { width: 44px !important; height: 44px !important; }
+  .vtt-side-menu--bar .vtt-side-menu-sep { display: none; }
+  .vtt-side-menu--bar .vtt-side-menu-more-btn { display: flex; order: 2; }
+  .vtt-side-menu--bar .vtt-side-menu-more-item { display: none; order: 4; }
+  .vtt-side-menu--bar.more-open .vtt-side-menu-more-item { display: flex; }
+  .vtt-side-menu--bar.more-open::before { content: ""; flex: 0 0 100%; order: 3; }
+
+  /* Панель иконки — листом над полосой, во всю ширину. */
+  .vtt-side-menu--bar .vtt-side-panel:not(.vtt-side-panel--full) {
+    left: calc(8px + var(--safe-l)) !important; right: calc(8px + var(--safe-r)) !important;
+    bottom: calc(var(--mbar-h) + 8px) !important;
+  }
+  /* Панель иконки из второго ряда — над обоими рядами. */
+  .vtt-side-menu--bar.more-open .vtt-side-panel:not(.vtt-side-panel--full) {
+    bottom: calc(var(--mbar-h) + 56px) !important;
+  }
 }

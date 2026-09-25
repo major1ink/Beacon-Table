@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Компендиум</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
@@ -79,8 +79,16 @@
     #catalogImportProgress { display: none; }
     #catalogSystemHint { display: none; }
 
+    /* Палец: чипсы кругов в 22px и кнопки строк — мимо. */
+    @media (pointer: coarse) {
+      .side-chip { min-width: 40px; height: 40px; font-size: 13px; }
+      .side-item { padding: 9px 12px; }
+    }
+
     /* Телефон: фильтры сверху. */
     @media (max-width: 640px) {
+      /* Поле имени новой записи — своей строкой, рядом с кнопками ему сантиметр. */
+      #catalogCreateForm { flex-basis: 100%; }
       #app { flex-direction: column; overflow-y: auto; }
       #catalogSide { flex: 0 0 auto; border-right: none; border-bottom: 1px solid var(--border); overflow: visible; padding: 12px 16px; }
       #catalogMain { overflow: visible; flex: 1 0 auto; }

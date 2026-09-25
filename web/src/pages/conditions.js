@@ -24,6 +24,7 @@ import { renderStatusPreview } from "../status-preview.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { el as h, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
+import { announceOwnHeader } from "../embed.js";
 
 // ==================== state ====================
 
@@ -594,6 +595,8 @@ editToggleBtn.onclick = () => {
 
 initFullscreenButton(document.getElementById("fullscreenBtn"));
 
+// Своя шапка с ✕ — рамке на телефоне своя не нужна (см. embed.js).
+announceOwnHeader();
 document.getElementById("closeBtn").onclick = () => {
   if (window.parent !== window) {
     window.parent.postMessage({ type: "beacon:closeFloatingWindow" }, location.origin);

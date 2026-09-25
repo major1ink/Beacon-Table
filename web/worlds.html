@@ -10,7 +10,10 @@
   <meta name="theme-color" content="#131318" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Beacon Table" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Ярлык на iPhone: страница под строкой состояния, отступ даёт safe-area
+       (см. theme.css: --safe-t) — иначе над столом белая полоса. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Миры</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
@@ -122,7 +125,10 @@
 
     @media (max-width: 860px), (max-height: 500px) {
       body { align-items: flex-start; }
-      #page { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: 0; min-height: 100dvh; }
+      #page {
+        padding: calc(18px + var(--safe-t)) calc(16px + var(--safe-r)) calc(18px + var(--safe-b)) calc(16px + var(--safe-l));
+        border-radius: 0; min-height: 100dvh;
+      }
       #createForm { flex-wrap: wrap; }
       #createForm input { flex: 1 1 100%; }
       #createForm select { flex: 1 1 auto; }

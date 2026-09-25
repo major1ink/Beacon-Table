@@ -658,6 +658,8 @@ export function drawingAt(x, y, drawings, scale, screenPx = 8, filter) {
 export function tokenAt(x, y, tokens, opts) {
   const filter = opts && opts.filter;
   const prefer = opts && opts.prefer;
+  // slop — запас радиуса (мировые единицы) под палец, см. interaction.js.
+  const slop = (opts && opts.slop) || 0;
   let bestId = null;
   let bestRank = -1;
   let bestDist = Infinity;
@@ -666,7 +668,7 @@ export function tokenAt(x, y, tokens, opts) {
   for (const id in tokens) {
     const t = tokens[id];
     order++;
-    if (Math.hypot(t.x - x, t.y - y) >= (t.size || 20)) continue;
+    if (Math.hypot(t.x - x, t.y - y) >= (t.size || 20) + slop) continue;
     if (filter && !filter(t, id)) continue;
     const rank = prefer && prefer(t, id) ? 1 : 0;
     const dist = Math.hypot(t.x - x, t.y - y);

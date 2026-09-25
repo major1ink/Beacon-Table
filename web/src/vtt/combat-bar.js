@@ -158,14 +158,22 @@ export function createCombatBar(ctx) {
     return badge;
   }
 
+  // lastCurrentId — чей ход был на прошлой отрисовке: полосу докручиваем
+  // до текущего бойца только при смене хода, а не на каждом обновлении
+  // (ХП, состояния) — иначе она отбирала бы прокрутку у того, кто листает
+  // очередь пальцем.
+  let lastCurrentId = null;
+
   function render(state) {
     if (!state || !state.active || !(state.combatants || []).length) {
       bar.style.display = "none";
+      lastCurrentId = null;
       return;
     }
     bar.style.display = "flex";
     roundNum.textContent = String(state.round || 1);
     track.innerHTML = "";
+    let curSlot = null;
     for (const cmb of state.combatants) {
       const slot = document.createElement("div");
       const current = cmb.id === state.currentId;
@@ -227,6 +235,16 @@ export function createCombatBar(ctx) {
       }
 
       track.appendChild(slot);
+      if (current) curSlot = slot;
+    }
+    if (state.currentId !== lastCurrentId) {
+      // Длинная очередь не влезает в ширину (телефон, десяток бойцов) —
+      // ходящего ставим посередине полосы, иначе он уезжал за край.
+      if (curSlot) {
+        const left = curSlot.offsetLeft - (bar.clientWidth - curSlot.offsetWidth) / 2;
+        bar.scrollTo({ left: Math.max(0, left), behavior: lastCurrentId === null ? "auto" : "smooth" });
+      }
+      lastCurrentId = state.currentId;
     }
   }
 

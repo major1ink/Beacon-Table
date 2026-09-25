@@ -217,7 +217,7 @@ export function createAudio(ctx, sideMenu) {
   // Колонку (позиционирование у правого края канваса, клик-панели вместо
   // hover) заводит sideMenu — см. side-menu.js. Кубы (pages/dm.js) вешают
   // туда же СВОЮ отдельную иконку 🎲, а не встраиваются в эту панель.
-  const volumePanel = sideMenu.addIcon(icon("volume", { size: 16 }), "Громкость", { tip: PANEL_HELP.volume });
+  const volumePanel = sideMenu.addIcon(icon("volume", { size: 16 }), "Громкость", { tip: PANEL_HELP.volume, more: true });
 
   function addVolumeRow(iconHtml, label, title) {
     const row = document.createElement("label");

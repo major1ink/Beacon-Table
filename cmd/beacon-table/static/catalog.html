@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Компендиум</title>
   <style>
     /* Тот же каркас "шапка + прокручиваемое тело", что и у карточек одной
@@ -78,8 +78,16 @@
     #catalogImportProgress { display: none; }
     #catalogSystemHint { display: none; }
 
+    /* Палец: чипсы кругов в 22px и кнопки строк — мимо. */
+    @media (pointer: coarse) {
+      .side-chip { min-width: 40px; height: 40px; font-size: 13px; }
+      .side-item { padding: 9px 12px; }
+    }
+
     /* Телефон: фильтры сверху. */
     @media (max-width: 640px) {
+      /* Поле имени новой записи — своей строкой, рядом с кнопками ему сантиметр. */
+      #catalogCreateForm { flex-basis: 100%; }
       #app { flex-direction: column; overflow-y: auto; }
       #catalogSide { flex: 0 0 auto; border-right: none; border-bottom: 1px solid var(--border); overflow: visible; padding: 12px 16px; }
       #catalogMain { overflow: visible; flex: 1 0 auto; }
@@ -87,12 +95,12 @@
       .side-item { width: auto; padding: 5px 9px; background: var(--panel-bg); border: 1px solid var(--border); }
     }
   </style>
-  <script type="module" crossorigin src="/assets/catalog-aFXyF48Z.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-hrdAlu1V.js">
+  <script type="module" crossorigin src="/assets/catalog-aAQgYv9g.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-C_6pssTb.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-conditions-Bt57mwnP.js">
   <link rel="modulepreload" crossorigin href="/assets/foundry-text-aD0-c5DC.js">
-  <link rel="modulepreload" crossorigin href="/assets/monster-import-Dt4qkQQ-.js">
+  <link rel="modulepreload" crossorigin href="/assets/monster-import-DtRgM-5V.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-import-GiSaJoEf.js">
   <link rel="modulepreload" crossorigin href="/assets/spell-import-DXoFx05S.js">
@@ -100,11 +108,12 @@
   <link rel="modulepreload" crossorigin href="/assets/reference-import-FplRWcLQ.js">
   <link rel="modulepreload" crossorigin href="/assets/reference-kind-DdtxYxsX.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-uNQlFFkV.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DKhtjNqL.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DJ2sZH9C.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-Z3S5GKsM.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-feN1l5EY.css">
+  <link rel="modulepreload" crossorigin href="/assets/embed-B030pVr6.js">
+  <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
 </head>
 <body>
   <div id="topBar">

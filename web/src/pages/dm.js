@@ -82,6 +82,8 @@ import { dmTourSteps } from "../tutorial-dm.js";
 import { escapeHtml, cssUrl } from "../html.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
 import { asButton } from "../a11y.js";
+import { initVisualViewport } from "../visual-viewport.js";
+import { initWakeLock } from "../wake-lock.js";
 
 // Первой строкой модуля: в отчёт о баге должны попасть ошибки с начала
 // сессии, а не с момента нажатия кнопки.
@@ -284,6 +286,8 @@ function hideOwnerOnlyUI() {
 // сам заход на worlds.html его не трогает.
 // Полный экран (см. src/fullscreen.js) — в HUD зума.
 initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
+initVisualViewport();
+initWakeLock();
 
 document.getElementById("worldsBtn")?.addEventListener("click", async () => {
   if (!(await showConfirm("Выйти в список миров? Стол закроется, игроки отключатся.", { title: "К мирам", okLabel: "Выйти" }))) return;

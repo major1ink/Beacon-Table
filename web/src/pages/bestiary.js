@@ -26,6 +26,7 @@ import { glyphNode } from "../condition-glyphs.js";
 import { ABILITIES, fmtMod, crColor, monsterGlyphName, renderAbilityTiles, renderMonsterPreview } from "../monster-block.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
+import { announceOwnHeader } from "../embed.js";
 
 // ==================== state ====================
 
@@ -723,6 +724,8 @@ deleteBtn.onclick = async () => {
 
 initFullscreenButton(document.getElementById("fullscreenBtn"));
 
+// Своя шапка с ✕ — рамке на телефоне своя не нужна (см. embed.js).
+announceOwnHeader();
 document.getElementById("closeBtn").onclick = () => {
   // Плавающее окно (обычный случай, см. floating-window.js) — iframe, не
   // умеет window.close() сам, сообщаем родителю; вынесенное 🗗-кнопкой в

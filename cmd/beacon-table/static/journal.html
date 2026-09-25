@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Журнал</title>
   <style>
     /* Журнал стола: слева каталог (папки + записи, как в Foundry), справа
@@ -391,6 +391,15 @@
     /* На широком экране список и запись видны разом — возвращаться некуда. */
     #dirBackBtn { display: none; }
 
+    /* Палец: строки дерева в 24px — мимо; кнопки папки висят на :hover,
+       которого у пальца нет, — показываем их всегда. */
+    @media (pointer: coarse) {
+      .folder-row, .entry-row, .root-row { min-height: 40px; }
+      .folder-actions { visibility: visible; }
+      .folder-actions .icon-btn { width: 32px; height: 32px; margin: 0; }
+      .page-item { min-height: 36px; }
+    }
+
     @media (max-width: 860px), (max-height: 500px) {
       #app { flex-direction: column; }
       #dir { flex: 1 1 auto; min-height: 0; border-right: none; }
@@ -420,18 +429,18 @@
       #titleRow { padding: 10px 12px 0; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/journal-BBRQYRKZ.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-hrdAlu1V.js">
+  <script type="module" crossorigin src="/assets/journal-aF37jcwo.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-C_6pssTb.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-hVxAQUaN.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-uNQlFFkV.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-B_4IH7a_.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-CImEDDyN.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-DKhtjNqL.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-1cz-k8V3.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DJ2sZH9C.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-Z3S5GKsM.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-feN1l5EY.css">
+  <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
 </head>
 <body>
   <div id="app">

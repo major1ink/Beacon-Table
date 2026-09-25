@@ -10,7 +10,10 @@
   <meta name="theme-color" content="#131318" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Beacon Table" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Ярлык на iPhone: страница под строкой состояния, отступ даёт safe-area
+       (см. theme.css: --safe-t) — иначе над столом белая полоса. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — DM</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
@@ -18,6 +21,8 @@
     body {
       margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       display: flex; flex-direction: column; overflow: hidden; font-size: 13px;
+      /* Вырез и полоска «домой» на планшете/телефоне, см. theme.css: --safe-*. */
+      box-sizing: border-box; padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
     }
     button { cursor: pointer; padding: 8px 12px; border: none; border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; transition: background .12s ease; }
     button svg { flex: 0 0 auto; }

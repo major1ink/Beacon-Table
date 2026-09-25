@@ -10,7 +10,10 @@
   <meta name="theme-color" content="#131318" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Beacon Table" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Ярлык на iPhone: страница под строкой состояния, отступ даёт safe-area
+       (см. theme.css: --safe-t) — иначе над столом белая полоса. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Вход</title>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
