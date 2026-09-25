@@ -44,6 +44,8 @@ func TestRoundTrip_Monster(t *testing.T) {
 	var m domain.Monster
 	testutil.Fill(&m)
 	m.ID = "m1"
+	// Поля схемы игровой системы, которых ядро не знает, тоже сохраняются.
+	m.Extra = domain.Extra{"stats": json.RawMessage(`{"рассудок":60}`)}
 	if err := s.Create(ctx, m.ID, &m); err != nil {
 		t.Fatal(err)
 	}
@@ -126,6 +128,7 @@ func filledSheet() domain.CharacterSheet {
 	var sheet domain.CharacterSheet
 	testutil.Fill(&sheet)
 	sheet.SaveProf = map[string]bool{"str": true, "dex": false, "con": true, "int": false, "wis": true, "cha": false}
+	sheet.Extra = domain.Extra{"sanity": json.RawMessage(`{"value":60,"max":99}`)}
 	return sheet
 }
 

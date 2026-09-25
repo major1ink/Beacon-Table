@@ -131,6 +131,10 @@ type Condition struct {
 	Tags      []string `json:"tags,omitempty"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Extra — ключи JSON, которых эта структура не знает (поля схемы
+	// игровой системы и т.п.): хранятся и отдаются как есть, см. domain.Extra.
+	Extra Extra `json:"-"`
 }
 
 // DefaultConditionSlug — ключ карточки без кода Foundry: из ID, потому что

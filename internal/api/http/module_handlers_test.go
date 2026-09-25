@@ -174,3 +174,23 @@ func TestModulesAPI(t *testing.T) {
 		t.Fatalf("повторное удаление: %d", code)
 	}
 }
+
+// TestCardExtraKeysThroughAPI — поле, которого сервер не знает (поле схемы
+// системы из модуля), переживает запись через API и чтение обратно.
+func TestCardExtraKeysThroughAPI(t *testing.T) {
+	e := newModuleEnv(t)
+	code, created := e.do(t, http.MethodPost, "/api/bestiary", bytes.NewBufferString(`{"name":"Тварь"}`), "application/json", e.cookie)
+	if code != http.StatusCreated && code != http.StatusOK {
+		t.Fatalf("создание: %d %v", code, created)
+	}
+	id, _ := created["id"].(string)
+	body := `{"id":"` + id + `","name":"Тварь","ac":12,"stats":{"рассудок":60,"порча":[1,2]}}`
+	if code, out := e.do(t, http.MethodPut, "/api/bestiary/"+id, bytes.NewBufferString(body), "application/json", e.cookie); code != http.StatusOK {
+		t.Fatalf("запись: %d %v", code, out)
+	}
+	_, got := e.do(t, http.MethodGet, "/api/bestiary/"+id, nil, "", e.cookie)
+	stats, _ := got["stats"].(map[string]any)
+	if got["ac"] != float64(12) || stats["рассудок"] != float64(60) {
+		t.Fatalf("незнакомое поле потерялось: %v", got)
+	}
+}

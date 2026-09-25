@@ -64,7 +64,9 @@ func (f *filler) fill(v reflect.Value, name string, depth int) {
 		}
 		t := v.Type()
 		for i := 0; i < t.NumField(); i++ {
-			if !t.Field(i).IsExported() {
+			// json:"-" — не часть данных (domain.Extra и т.п.): заполнять
+			// нечем и незачем, в JSON оно не попадает.
+			if !t.Field(i).IsExported() || t.Field(i).Tag.Get("json") == "-" {
 				continue
 			}
 			f.fill(v.Field(i), t.Field(i).Name, depth+1)

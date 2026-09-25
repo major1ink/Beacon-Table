@@ -51,6 +51,10 @@ type Reference struct {
 	Tags        []string `json:"tags,omitempty"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Extra — ключи JSON, которых эта структура не знает (поля схемы
+	// игровой системы и т.п.): хранятся и отдаются как есть, см. domain.Extra.
+	Extra Extra `json:"-"`
 }
 
 // NewReference создаёт пустую карточку справочника с разумными дефолтами —

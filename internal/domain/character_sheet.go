@@ -98,6 +98,10 @@ type CharacterSheet struct {
 	Ideals            string `json:"ideals"`
 	Bonds             string `json:"bonds"`
 	Flaws             string `json:"flaws"`
+
+	// Extra — ключи JSON, которых эта структура не знает (поля схемы
+	// игровой системы и т.п.): хранятся и отдаются как есть, см. domain.Extra.
+	Extra Extra `json:"-"`
 }
 
 // Physical — см. CharacterSheet.Physical.

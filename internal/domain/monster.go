@@ -108,6 +108,10 @@ type Monster struct {
 	Inventory []InventoryEntry `json:"inventory,omitempty"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Extra — ключи JSON, которых эта структура не знает (поля схемы
+	// игровой системы и т.п.): хранятся и отдаются как есть, см. domain.Extra.
+	Extra Extra `json:"-"`
 }
 
 // MonsterSpellRef — одна строка списка "Заклинания" статблока монстра.
