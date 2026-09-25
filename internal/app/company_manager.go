@@ -384,6 +384,14 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	if err := assetRepo.EnsureDirs(); err != nil {
 		return err
 	}
+	// Карточки библиотеки мира не ссылаются на картинки модулей: при записи
+	// они копируются в загрузки мира (клон переживает удаление модуля).
+	localizer := &moduleAssetLocalizer{modules: m.modules, assets: assetRepo}
+	monsterRepo.WithLocalizer(localizer)
+	spellRepo.WithLocalizer(localizer)
+	itemRepo.WithLocalizer(localizer)
+	referenceRepo.WithLocalizer(localizer)
+	conditionRepo.WithLocalizer(localizer)
 
 	characterRepo := sqlite.NewCharacterStore(m.db, company.ID, company.System)
 	pregenRepo := sqlite.NewPregenStore(m.db, company.ID)

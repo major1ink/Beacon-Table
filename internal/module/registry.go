@@ -430,3 +430,13 @@ func (m *Module) Counts() map[string]int {
 	}
 	return out
 }
+
+// OpenAsset — файл из папки картинок модуля по относительному пути (как в
+// /module-assets/<id>/<rel>). Путь, уводящий за пределы папки, отклоняется.
+func (m *Module) OpenAsset(rel string) (fs.File, error) {
+	clean := path.Clean("/" + rel)[1:]
+	if clean == "" || !fs.ValidPath(clean) {
+		return nil, fs.ErrNotExist
+	}
+	return m.FS.Open(path.Join(m.AssetsDir(), clean))
+}

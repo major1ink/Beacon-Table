@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -141,5 +143,86 @@ func TestWorldPack_CarriesModules(t *testing.T) {
 	}
 	if got, _ := dst.companies.ByID(ctx, res.Company.ID); got.Modules != nil {
 		t.Fatalf("мир до модулей получил список: %v", got.Modules)
+	}
+}
+
+// TestCloneCopiesModuleImages — клон карточки модуля не должен зависеть от
+// модуля: картинки копируются в загрузки мира при сохранении карточки, и
+// после удаления модуля клон остаётся с картинкой.
+func TestCloneCopiesModuleImages(t *testing.T) {
+	ctx := context.Background()
+	m := modulesManager(t)
+	t.Cleanup(m.Shutdown)
+	extra := filepath.Join(filepath.Dir(m.dataRoot), "modules", "extra")
+	writeFile(t, filepath.Join(extra, "assets", "bestiary", "owlbear.webp"), "OWL")
+	writeFile(t, filepath.Join(extra, "assets", "items", "feather.webp"), "FEATHER")
+
+	w, err := m.Create(ctx, "Мир", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.companies.SetModules(ctx, w.ID, []string{"extra"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Launch(ctx, w.ID); err != nil {
+		t.Fatal(err)
+	}
+	best := m.Current().Bestiary
+
+	// «Клонировать» на клиенте: создать карточку и записать в неё поля
+	// карточки модуля (см. web/src/pages/bestiary.js: cloneBtn).
+	created, err := best.Create(ctx, "Совомедведь")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone := *created
+	clone.ImageURL = "/module-assets/extra/bestiary/owlbear.webp"
+	clone.Description = "![перо](/module-assets/extra/items/feather.webp) и снова /module-assets/extra/bestiary/owlbear.webp"
+	clone.Inventory = []domain.InventoryEntry{{ID: "i1", Name: "Перо", Quantity: 1, ImageURL: "/module-assets/extra/items/feather.webp"}}
+	saved, err := best.Update(ctx, created.ID, clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, uploads, url := m.rootsFor(m.Current().Company)
+	// Хранилище загрузок добавляет к имени метку времени: «<unixnano>-owlbear.webp».
+	copied := func(got, dir, name string) bool {
+		prefix := url + "tokens/modules/extra/" + dir + "/"
+		return strings.HasPrefix(got, prefix) && strings.HasSuffix(got, "-"+name) && !strings.Contains(strings.TrimPrefix(got, prefix), "/")
+	}
+	owl, feather := saved.ImageURL, saved.Inventory[0].ImageURL
+	if !copied(owl, "bestiary", "owlbear.webp") || !copied(feather, "items", "feather.webp") {
+		t.Fatalf("ссылки не переписаны: %q, %q", owl, feather)
+	}
+	if want := "![перо](" + feather + ") и снова " + owl; saved.Description != want {
+		t.Fatalf("описание: %q", saved.Description)
+	}
+	if b, err := os.ReadFile(filepath.Join(uploads, filepath.FromSlash(strings.TrimPrefix(owl, url)))); err != nil || string(b) != "OWL" {
+		t.Fatalf("файл не скопирован: %q %v", b, err)
+	}
+
+	// Повторное сохранение с той же ссылкой модуля — тот же файл, без копии.
+	again, err := best.Update(ctx, created.ID, clone)
+	if err != nil || again.ImageURL != owl {
+		t.Fatalf("повторное сохранение: %q %v", again.ImageURL, err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(uploads, "tokens", "modules", "extra", "bestiary"))
+	if len(entries) != 1 {
+		t.Fatalf("картинка скопирована повторно: %v", entries)
+	}
+
+	// Модуль удалён — клон с картинкой; ссылку на пропавший файл сохранение
+	// не трогает и не падает.
+	if err := os.RemoveAll(extra); err != nil {
+		t.Fatal(err)
+	}
+	got, err := best.Get(ctx, created.ID)
+	if err != nil || got.ImageURL != owl {
+		t.Fatalf("клон после удаления модуля: %+v %v", got, err)
+	}
+	broken := *got
+	broken.ImageURL = "/module-assets/extra/bestiary/gone.webp"
+	saved, err = best.Update(ctx, created.ID, broken)
+	if err != nil || saved.ImageURL != "/module-assets/extra/bestiary/gone.webp" {
+		t.Fatalf("ссылка на пропавший файл: %q %v", saved.ImageURL, err)
 	}
 }

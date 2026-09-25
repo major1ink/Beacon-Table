@@ -10,6 +10,7 @@
 package cardcatalog
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -134,9 +135,44 @@ type Library[T any] interface {
 // Если два источника претендуют на один id (два модуля с legacyIds —
 // D&D 2014 и 2024 в одном мире), побеждает подключённый раньше.
 type Catalog[T any] struct {
-	user    Library[T]
-	sources []*Source[T]
-	kind    Kind[T]
+	user     Library[T]
+	sources  []*Source[T]
+	kind     Kind[T]
+	localize Localizer
+}
+
+// Localizer переписывает в JSON карточки ссылки, которые не должны жить в
+// библиотеке мира, — картинки модулей (/module-assets/…): модуль могут
+// выключить или удалить, а клон его карточки должен остаться с картинкой.
+// Возвращает data как есть, если переписывать нечего.
+type Localizer interface {
+	LocalizeJSON(ctx context.Context, data []byte) ([]byte, error)
+}
+
+// WithLocalizer — перед записью в библиотеку мира карточка проходит через l.
+func (c *Catalog[T]) WithLocalizer(l Localizer) *Catalog[T] {
+	c.localize = l
+	return c
+}
+
+func (c *Catalog[T]) localizeCard(ctx context.Context, card *T) error {
+	if c.localize == nil {
+		return nil
+	}
+	data, err := json.Marshal(card)
+	if err != nil {
+		return err
+	}
+	out, err := c.localize.LocalizeJSON(ctx, data)
+	if err != nil || bytes.Equal(out, data) {
+		return err
+	}
+	var fixed T
+	if err := json.Unmarshal(out, &fixed); err != nil {
+		return err
+	}
+	*card = fixed
+	return nil
 }
 
 // New — sources в порядке подключения модулей.
@@ -199,6 +235,9 @@ func (c *Catalog[T]) Get(ctx context.Context, id string) (*T, error) {
 
 func (c *Catalog[T]) Create(ctx context.Context, id string, card *T) error {
 	c.kind.SetLibrary(card)
+	if err := c.localizeCard(ctx, card); err != nil {
+		return err
+	}
 	return c.user.Create(ctx, id, card)
 }
 
@@ -209,6 +248,9 @@ func (c *Catalog[T]) Update(ctx context.Context, id string, card *T) (bool, erro
 		return false, domain.ErrForbidden
 	}
 	c.kind.SetLibrary(card)
+	if err := c.localizeCard(ctx, card); err != nil {
+		return false, err
+	}
 	return c.user.Update(ctx, id, card)
 }
 
