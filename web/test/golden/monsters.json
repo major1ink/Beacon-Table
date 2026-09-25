@@ -1,0 +1,192 @@
+[
+ {
+  "name": "Гоблин-воитель [Goblin Warrior]",
+  "size": "Маленький",
+  "type": "фея (гоблиноид)",
+  "alignment": "Хаотичная Нейтральная",
+  "ac": 12,
+  "acNote": "щит [shield], кожаный доспех [leather armor]",
+  "hp": 10,
+  "hitDice": "3d6",
+  "speed": "30 фт.",
+  "abilities": {
+   "str": 8,
+   "dex": 15,
+   "con": 10,
+   "int": 10,
+   "wis": 8,
+   "cha": 8
+  },
+  "savingThrows": "",
+  "skills": "Скрытность +6",
+  "damageVulnerabilities": "",
+  "damageResistances": "",
+  "damageImmunities": "",
+  "conditionImmunities": "",
+  "senses": "пассивная Внимательность 9",
+  "languages": "Общий, Гоблинский",
+  "cr": "1/4",
+  "proficiencyBonus": 2,
+  "description": "<div class=\"gear\"><div class=\"gear\"><p><strong>Снаряжение:</strong> @UUID[Compendium.ag-fifthpendium.equipment.Item.phbarmLeatherArm], @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepScimitar00], @UUID[Compendium.ag-fifthpendium.equipment.Item.phbarmShield0000], @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepShortbow00]</p></div></div><h1>Гоблины</h1><p>@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.TwMrfWrYo0ZAnWB3 caption=false cite=false classes=\"no-embed mm\"]</p><h2>Гоблин-воитель</h2><p>@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.ktLVwvt2KkJVB9eS caption=false cite=false classes=\"no-embed mm\"]</p>",
+  "tags": [],
+  "spells": [],
+  "traits": "",
+  "actions": "<p><strong>Скимитар [Scimitar].</strong> Рукопашная атака оружием: +4 к попаданию, досягаемость 5 фт.. Попадание: 5 (1к6 + 2), рубящий. <p>extended.</p><p>.</p><p><em>Плюс:</em> Текст описания. </p></p><p><strong>Короткий лук [Shortbow].</strong> Дальнобойная атака оружием: +4 к попаданию, дистанция 80/320 фт.. Попадание: 5 (1к6 + 2), колющий. <p>extended.</p><p>.</p><p><em>Плюс:</em> Текст описания. </p></p>",
+  "bonusActions": "<p><strong>Проворное бегство [Nimble Escape].</strong> <p class=\"feature\">Гоблин-воитель [Goblin Warrior] Текст описания. </p></p>",
+  "reactions": "",
+  "legendaryActionsIntro": "",
+  "legendaryActions": "",
+  "lairActions": ""
+ },
+ {
+  "name": "Гоблин-проклинатель [Goblin Hexer]",
+  "size": "Маленький",
+  "type": "фея (гоблиноид)",
+  "alignment": "Хаотичная Нейтральная",
+  "ac": 13,
+  "acNote": "",
+  "hp": 45,
+  "hitDice": "10d6 + 10",
+  "speed": "30 фт.",
+  "abilities": {
+   "str": 8,
+   "dex": 16,
+   "con": 12,
+   "int": 16,
+   "wis": 10,
+   "cha": 10
+  },
+  "savingThrows": "",
+  "skills": "Ловкость рук +5, Скрытность +7",
+  "damageVulnerabilities": "",
+  "damageResistances": "",
+  "damageImmunities": "",
+  "conditionImmunities": "",
+  "senses": "пассивная Внимательность 10",
+  "languages": "Общий, Гоблинский",
+  "cr": "3",
+  "proficiencyBonus": 2,
+  "description": "<h1>Гоблины</h1><p>@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.TwMrfWrYo0ZAnWB3 caption=false cite=false classes=\"no-embed mm\"]</p><h2>Гоблин-проклинатель</h2><p>@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.145GyIunaaiDfZxI caption=false cite=false classes=\"no-embed mm\"]</p>",
+  "tags": [],
+  "spells": [
+   {
+    "name": "Малая иллюзия [Minor Illusion]",
+    "level": 0
+   },
+   {
+    "name": "Масло [Grease]",
+    "level": 1
+   },
+   {
+    "name": "Фейское сияние [Faerie Fire]",
+    "level": 1
+   },
+   {
+    "name": "Слепота/глухота [Blindness/Deafness]",
+    "level": 2
+   }
+  ],
+  "traits": "",
+  "actions": "<p><strong>Палка-проклиналка [Hex Stick].</strong> Рукопашная атака оружием: +5 к попаданию, досягаемость 5 фт.. Попадание: 12 (2к8 + 3), психическая энергия. <p class=\"feature\">extended.</p><p>.</p></p><p><strong>Мультиатака [Multiattack].</strong> <p> Текст описания. Палкой-проклиналкой Текст описания. </p></p><p><strong>Заклинания [Spellcasting].</strong> <p class=\"feature\"> Текст описания. Малая иллюзия 1 в день каждое: Масло, Слепота/глухота, Фейское сияние</p></p>",
+  "bonusActions": "",
+  "reactions": "<p><strong>Невезуха [Jinx].</strong> <p class=\"feature\"><em>Условие:</em> Текст описания. <em> Текст описания. </em> СЛ Текст описания. <em>Провал:</em> атака промахивается.</p></p>",
+  "legendaryActionsIntro": "",
+  "legendaryActions": "",
+  "lairActions": ""
+ },
+ {
+  "name": "Взрослый красный дракон [Adult Red Dragon]",
+  "size": "Огромный",
+  "type": "дракон (цветной)",
+  "alignment": "Хаотичный Злой",
+  "ac": 19,
+  "acNote": "",
+  "hp": 256,
+  "hitDice": "19d12 + 133",
+  "speed": "40 фт., полёт 80 фт., лазание 40 фт.",
+  "abilities": {
+   "str": 27,
+   "dex": 10,
+   "con": 25,
+   "int": 16,
+   "wis": 13,
+   "cha": 23
+  },
+  "savingThrows": "Лов +6, Мдр +7",
+  "skills": "Восприятие +13, Скрытность +6",
+  "damageVulnerabilities": "",
+  "damageResistances": "",
+  "damageImmunities": "огонь",
+  "conditionImmunities": "",
+  "senses": "пассивная Внимательность 23",
+  "languages": "Общий, Драконий",
+  "cr": "17",
+  "proficiencyBonus": 6,
+  "description": "<h1>Красные драконы</h1><p>@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.Rx08X1mW6m5uYldI caption=false cite=false classes=\"no-embed mm\"]</p><h2>Взрослый красный дракон</h2><p>@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.81ihWzHnwzZEfEfa caption=false cite=false classes=\"no-embed mm\"]</p><h2>Логова красных драконов</h2><p>@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.i7877t4jjZpLevaQ caption=false cite=false]</p>",
+  "tags": [],
+  "spells": [
+   {
+    "name": "Обнаружение магии [Detect Magic]",
+    "level": 1
+   },
+   {
+    "name": "Приказ [Command]",
+    "level": 1
+   },
+   {
+    "name": "Опаляющий луч [Scorching Ray]",
+    "level": 2
+   },
+   {
+    "name": "Огненный шар [Fireball]",
+    "level": 3
+   }
+  ],
+  "traits": "<p><strong>Легендарная устойчивость [Legendary Resistance].</strong> <p>Если взрослый красный дракон [adult red dragon] Текст описания. </p></p>",
+  "actions": "<p><strong>Огненное дыхание [Fire Breath].</strong> <p><em>Испытание Ловкости:</em> СЛ , каждое существо в -футовом Конусе. <em>Провал:</em> 59 (17d6) урона Огнём. <em>Успех:</em> половина урона.</p></p><p><strong>Мультиатака [Multiattack].</strong> <p>Взрослый красный дракон [Adult Red Dragon] совершает три атаки Раздиранием Текст описания. Опаляющий луч.</p></p><p><strong>Раздирание [Rend].</strong> Рукопашная атака оружием: +14 к попаданию, досягаемость 10 фт.. Попадание: 13 (1к10 + 8), рубящий; 5 (2к4), огонь. <p>extended.</p><p>.</p></p><p><strong>Заклинания [Spellcasting].</strong> <p class=\"feature\">Взрослый красный дракон [Adult Red Dragon] Текст описания. Текст описания. Обнаружение магии, Опаляющий луч, Приказ (2-й круг) 1 в день: Огненный шар</p></p>",
+  "bonusActions": "",
+  "reactions": "",
+  "legendaryActionsIntro": "Существо может совершить 3 легендарных действия, выбирая из вариантов ниже. Одновременно может быть использовано только одно легендарное действие, и только в конце хода другого существа. Существо восстанавливает потраченные легендарные действия в начале своего хода.",
+  "legendaryActions": "<p><strong>Командирская аура [Commanding Presence].</strong> <p>Взрослый красный дракон [Adult Red Dragon] сотворяет заклинание Приказ (2-й круг) с помощью действия Заклинания. Взрослый красный дракон [Adult Red Dragon] Текст описания. </p></p><p><strong>Огненные лучи [Fiery Rays].</strong> <p>Взрослый красный дракон [Adult Red Dragon] сотворяет заклинание Опаляющий луч. Взрослый красный дракон [Adult Red Dragon] Текст описания. </p></p><p><strong>Наскок [Pounce].</strong> <p>Взрослый красный дракон [Adult Red Dragon] Текст описания. .</p></p>",
+  "lairActions": ""
+ },
+ {
+  "name": "Галера [Galley]",
+  "size": "Большой",
+  "type": "",
+  "alignment": "",
+  "ac": 15,
+  "acNote": "",
+  "hp": 500,
+  "hitDice": "",
+  "speed": "0 фт.",
+  "abilities": {
+   "str": 10,
+   "dex": 10,
+   "con": 10,
+   "int": 10,
+   "wis": 10,
+   "cha": 10
+  },
+  "savingThrows": "",
+  "skills": "",
+  "damageVulnerabilities": "",
+  "damageResistances": "",
+  "damageImmunities": "яд, психическая энергия",
+  "conditionImmunities": "ослепление, очарование, глухота, испуг, паралич, окаменение, отравление, ошеломление, беспамятство",
+  "senses": "пассивная Внимательность 10",
+  "languages": "",
+  "cr": "0",
+  "proficiencyBonus": 2,
+  "description": "",
+  "tags": [],
+  "spells": [],
+  "traits": "",
+  "actions": "",
+  "bonusActions": "",
+  "reactions": "",
+  "legendaryActionsIntro": "",
+  "legendaryActions": "",
+  "lairActions": ""
+ }
+]

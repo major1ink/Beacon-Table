@@ -1,0 +1,1005 @@
+{
+ "accounts": [
+  {
+   "companyId": "",
+   "id": "acc-dm",
+   "passwordHash": "hash-dm",
+   "role": "admin",
+   "status": "active",
+   "username": "dm"
+  },
+  {
+   "companyId": "\u003cworld\u003e",
+   "id": "acc-player",
+   "passwordHash": "hash-gwen",
+   "role": "player",
+   "status": "active",
+   "username": "gwen"
+  }
+ ],
+ "characters": [
+  {
+   "accountId": "acc-player",
+   "avatarUrl": "\u003cuploads\u003e/tokens/monster.webp",
+   "id": "char-1",
+   "inventory": [
+    {
+     "id": "inv-1",
+     "imageUrl": "imageurl-4",
+     "itemId": "sys-dlinnyi-mech-longsword",
+     "name": "name-3",
+     "notes": "notes-7",
+     "quantity": 1,
+     "weightLb": 3.5
+    }
+   ],
+   "name": "Гвен",
+   "sheet": {
+    "abilities": {
+     "cha": 3,
+     "con": 3,
+     "dex": 2,
+     "int": 1,
+     "str": 1,
+     "wis": 2
+    },
+    "additionalFeatures": "additionalfeatures-45",
+    "alignment": "alignment-76",
+    "allies": "allies-44",
+    "appearance": "appearance-74",
+    "armor": {
+     "heavyArmor": true,
+     "lightArmor": true,
+     "martialWeapons": true,
+     "mediumArmor": true,
+     "otherWeapons": "otherweapons-18",
+     "shield": true,
+     "simpleWeapons": true
+    },
+    "attacksSpells": "attacksspells-41",
+    "attunementItems": [
+     {
+      "attuned": true,
+      "name": "name-99"
+     },
+     {
+      "attuned": true,
+      "name": "name-100"
+     }
+    ],
+    "background": "background-75",
+    "bonds": "bonds-103",
+    "coins": {
+     "cp": 1,
+     "ep": 1,
+     "gp": 3,
+     "pp": 2,
+     "sp": 2
+    },
+    "combat": {
+     "ac": 3,
+     "conditions": "conditions-31",
+     "darkvision": 1,
+     "deathSaveFail": 1,
+     "deathSaveSuccess": 3,
+     "exhaustion": 2,
+     "hitDiceCurrent": "hitdicecurrent-25",
+     "hitDiceTotal": "hitdicetotal-24",
+     "hpCurrent": 1,
+     "hpMax": 3,
+     "hpTemp": 2,
+     "inspiration": true,
+     "isDying": true,
+     "speed": 3
+    },
+    "equipment": "equipment-77",
+    "feats": "feats-42",
+    "features": "features-40",
+    "flaws": "flaws-104",
+    "goals": "goals-43",
+    "ideals": "ideals-102",
+    "info": {
+     "background": "background-1",
+     "class": "class-2",
+     "level": 1,
+     "playerName": "playername-8",
+     "race": "race-5",
+     "species": "species-4",
+     "subclass": "subclass-3",
+     "xp": 2
+    },
+    "notes": [
+     "notes-47",
+     "notes-48",
+     "notes-49",
+     "notes-50",
+     "notes-51",
+     "notes-52"
+    ],
+    "personalityTraits": "personalitytraits-101",
+    "physical": {
+     "age": "age-83",
+     "eyes": "eyes-86",
+     "hair": "hair-88",
+     "height": "height-84",
+     "skin": "skin-87",
+     "weight": "weight-85"
+    },
+    "preparedSpells": [
+     {
+      "castTime": "casttime-65",
+      "concentration": true,
+      "level": 1,
+      "material": true,
+      "name": "name-64",
+      "notes": "notes-67",
+      "range": "range-66",
+      "ritual": true
+     },
+     {
+      "castTime": "casttime-70",
+      "concentration": true,
+      "level": 3,
+      "material": true,
+      "name": "name-69",
+      "notes": "notes-72",
+      "range": "range-71",
+      "ritual": true
+     }
+    ],
+    "proficiencyNotes": "proficiencynotes-90",
+    "resources": [
+     {
+      "current": 3,
+      "max": 1,
+      "name": "name-91",
+      "recovery": "recovery-94"
+     },
+     {
+      "current": 1,
+      "max": 2,
+      "name": "name-95",
+      "recovery": "recovery-98"
+     }
+    ],
+    "saveProf": {
+     "cha": false,
+     "con": true,
+     "dex": false,
+     "int": false,
+     "str": true,
+     "wis": true
+    },
+    "size": "size-73",
+    "skillProf": {
+     "skillprof-key-16": 3
+    },
+    "spellcasting": {
+     "ability": "ability-53",
+     "slotsByLevel": [
+      "slotsbylevel-54",
+      "slotsbylevel-55",
+      "slotsbylevel-56",
+      "slotsbylevel-57",
+      "slotsbylevel-58",
+      "slotsbylevel-59",
+      "slotsbylevel-60",
+      "slotsbylevel-61",
+      "slotsbylevel-62"
+     ]
+    },
+    "toolsLanguages": "toolslanguages-19",
+    "traits": "traits-89",
+    "treasure": "treasure-46",
+    "weapons": [
+     {
+      "bonus": "bonus-33",
+      "damage": "damage-34",
+      "name": "name-32",
+      "notes": "notes-35"
+     },
+     {
+      "bonus": "bonus-37",
+      "damage": "damage-38",
+      "name": "name-36",
+      "notes": "notes-39"
+     }
+    ]
+   },
+   "system": "dnd5e-2024"
+  }
+ ],
+ "files": {
+  "bestiary/bestiary/lib-monster.json": {
+   "abilities": {
+    "cha": 2,
+    "con": 2,
+    "dex": 1,
+    "int": 3,
+    "str": 3,
+    "wis": 1
+   },
+   "ac": 1,
+   "acNote": "acnote-10",
+   "actions": "actions-31",
+   "alignment": "alignment-8",
+   "bonusActions": "bonusactions-32",
+   "conditionImmunities": "conditionimmunities-25",
+   "cr": "cr-28",
+   "damageImmunities": "damageimmunities-24",
+   "damageResistances": "damageresistances-23",
+   "damageVulnerabilities": "damagevulnerabilities-22",
+   "description": "description-37",
+   "foundryActorId": "foundryactorid-4",
+   "foundryModuleId": "foundrymoduleid-3",
+   "hitDice": "hitdice-12",
+   "hp": 3,
+   "id": "lib-monster",
+   "imageUrl": "\u003cuploads\u003e/tokens/monster.webp",
+   "inventory": [
+    {
+     "equipped": true,
+     "id": "id-46",
+     "imageUrl": "imageurl-49",
+     "itemId": "sys-dlinnyi-mech-longsword",
+     "name": "name-48",
+     "notes": "notes-52",
+     "quantity": 1,
+     "weightLb": 3.5
+    },
+    {
+     "equipped": true,
+     "id": "id-53",
+     "imageUrl": "imageurl-56",
+     "itemId": "itemid-54",
+     "name": "name-55",
+     "notes": "notes-59",
+     "quantity": 2,
+     "weightLb": 1.5
+    }
+   ],
+   "lairActions": "lairactions-36",
+   "languages": "languages-27",
+   "legendaryActions": "legendaryactions-35",
+   "legendaryActionsIntro": "legendaryactionsintro-34",
+   "name": "name-2",
+   "proficiencyBonus": 3,
+   "reactions": "reactions-33",
+   "savingThrows": "savingthrows-20",
+   "senses": "senses-26",
+   "size": "size-6",
+   "skills": "skills-21",
+   "speed": "speed-13",
+   "spells": [
+    {
+     "level": 1,
+     "name": "name-41",
+     "spellId": "sys-ognennyi-snaryad-fire-bolt"
+    },
+    {
+     "level": 1,
+     "name": "name-44",
+     "spellId": "spellid-43"
+    }
+   ],
+   "summonable": true,
+   "system": true,
+   "tags": [
+    "tags-38",
+    "tags-39"
+   ],
+   "traits": "traits-30",
+   "type": "type-7",
+   "updatedAt": "2026-01-02T03:04:05Z"
+  },
+  "boards/b1.md": "---\nexcalidraw-plugin: parsed\ntags: [excalidraw]\nname: Схема\nowner: acc-player\nownerName: Гвен\ndefault: observer\naccess:\n  acc-player: owner\n---\n# Excalidraw Data\n",
+  "conditions/conditions/lib-condition.json": {
+   "color": "color-8",
+   "defaultRounds": 1,
+   "description": "description-13",
+   "foundryModuleId": "foundrymoduleid-4",
+   "icon": "icon-6",
+   "id": "lib-condition",
+   "imageUrl": "imageurl-7",
+   "levels": 1,
+   "mechanics": "mechanics-24",
+   "modifiers": [
+    {
+     "mode": "mode-15",
+     "note": "note-18",
+     "perLevel": true,
+     "period": "period-17",
+     "target": "target-14",
+     "value": "value-16"
+    },
+    {
+     "mode": "mode-20",
+     "note": "note-23",
+     "perLevel": true,
+     "period": "period-22",
+     "target": "target-19",
+     "value": "value-21"
+    }
+   ],
+   "name": "name-2",
+   "overlay": true,
+   "riders": [
+    "riders-10",
+    "riders-11"
+   ],
+   "slug": "c-lib-condition",
+   "source": "source-3",
+   "system": true,
+   "tags": [
+    "tags-25",
+    "tags-26"
+   ],
+   "updatedAt": "2026-01-02T03:04:05Z"
+  },
+  "items/items/lib-item.json": {
+   "activation": "activation-12",
+   "armorClass": "armorclass-14",
+   "attunementNote": "attunementnote-8",
+   "charges": "charges-16",
+   "cost": "cost-9",
+   "damage": "damage-13",
+   "description": "description-27",
+   "foundryModuleId": "foundrymoduleid-5",
+   "id": "lib-item",
+   "imageUrl": "\u003cuploads\u003e/items/item.webp",
+   "modifiers": [
+    {
+     "mode": "mode-18",
+     "note": "note-21",
+     "perLevel": true,
+     "period": "period-20",
+     "target": "target-17",
+     "value": "value-19"
+    },
+    {
+     "mode": "mode-23",
+     "note": "note-26",
+     "perLevel": true,
+     "period": "period-25",
+     "target": "target-22",
+     "value": "value-24"
+    }
+   ],
+   "name": "name-2",
+   "properties": "properties-15",
+   "rarity": "rarity-7",
+   "requiresAttunement": true,
+   "source": "source-4",
+   "system": true,
+   "tags": [
+    "tags-28",
+    "tags-29"
+   ],
+   "type": "type-6",
+   "updatedAt": "2026-01-02T03:04:05Z",
+   "weight": "weight-10",
+   "weightLb": 3.5
+  },
+  "journal/Глава 1/e1.md": "---\nowner: acc-player\nownerName: Гвен\ndefault: observer\naccess:\n  acc-player: owner\n---\n# Таверна\n\n![карта](\u003cuploads\u003e/maps/map.webp)\n\n[[Гоблин-воитель]]\n",
+  "references/references/lib-reference.json": {
+   "description": "description-8",
+   "foundryModuleId": "foundrymoduleid-5",
+   "id": "lib-reference",
+   "imageUrl": "imageurl-3",
+   "kind": "kind-6",
+   "name": "name-2",
+   "parentName": "parentname-7",
+   "source": "source-4",
+   "system": true,
+   "tags": [
+    "tags-9",
+    "tags-10"
+   ],
+   "updatedAt": "2026-01-02T03:04:05Z"
+  },
+  "scenes/combat.json": {
+   "active": true,
+   "broadcastDice3d": true,
+   "combatants": {
+    "combatants-key-3": {
+     "ac": 2,
+     "characterId": "char-1",
+     "color": "color-8",
+     "deathSaveFail": 2,
+     "deathSaveSuccess": 1,
+     "hpCurrent": 3,
+     "hpMax": 1,
+     "hpTemp": 2,
+     "id": "id-4",
+     "image": "image-7",
+     "initiative": 1.5,
+     "monsterId": "sys-goblin-voitel-goblin-warrior",
+     "name": "name-6",
+     "ownerId": "acc-player",
+     "seq": 3,
+     "statuses": [
+      {
+       "color": "color-24",
+       "hidden": true,
+       "icon": "icon-22",
+       "imageUrl": "imageurl-23",
+       "level": 2,
+       "modifiers": [
+        {
+         "mode": "mode-29",
+         "note": "note-32",
+         "perLevel": true,
+         "period": "period-31",
+         "target": "target-28",
+         "value": "value-30"
+        },
+        {
+         "mode": "mode-34",
+         "note": "note-37",
+         "perLevel": true,
+         "period": "period-36",
+         "target": "target-33",
+         "value": "value-35"
+        }
+       ],
+       "name": "name-21",
+       "overlay": true,
+       "rounds": 3,
+       "slug": "slug-20",
+       "source": "source-27"
+      },
+      {
+       "color": "color-42",
+       "hidden": true,
+       "icon": "icon-40",
+       "imageUrl": "imageurl-41",
+       "level": 2,
+       "modifiers": [
+        {
+         "mode": "mode-47",
+         "note": "note-50",
+         "perLevel": true,
+         "period": "period-49",
+         "target": "target-46",
+         "value": "value-48"
+        },
+        {
+         "mode": "mode-52",
+         "note": "note-55",
+         "perLevel": true,
+         "period": "period-54",
+         "target": "target-51",
+         "value": "value-53"
+        }
+       ],
+       "name": "name-39",
+       "overlay": true,
+       "rounds": 3,
+       "slug": "slug-38",
+       "source": "source-45"
+      }
+     ],
+     "tokenId": "tokenid-5"
+    }
+   },
+   "currentId": "currentid-2",
+   "hideBroadcastDice": true,
+   "hideLightMarkers": true,
+   "hidePlayerDrawings": true,
+   "highlightActiveToken": true,
+   "lootingEnabled": true,
+   "playerDrawingEnabled": true,
+   "round": 2,
+   "showBuiltinCards": true,
+   "showHp": true,
+   "summonAll": true
+  },
+  "scenes/hub.json": {
+   "entries": {
+    "entries-key-1": {
+     "equipped": true,
+     "id": "id-2",
+     "imageUrl": "imageurl-5",
+     "itemId": "itemid-3",
+     "name": "name-4",
+     "notes": "notes-8",
+     "quantity": 2,
+     "weightLb": 1.5
+    }
+   }
+  },
+  "scenes/scenes/scene-1.json": {
+   "ambientUrl": "ambienturl-13",
+   "ambientVolume": 3.5,
+   "building": "building-21",
+   "buildings": {
+    "buildings-key-123": {
+     "id": "id-124",
+     "locked": true,
+     "points": [
+      {
+       "x": 3.5,
+       "y": 1.5
+      },
+      {
+       "x": 2.5,
+       "y": 3.5
+      }
+     ]
+    }
+   },
+   "doorSoundUrl": "doorsoundurl-15",
+   "drawings": {
+    "drawings-key-129": {
+     "authorId": "authorid-139",
+     "authorName": "authorname-140",
+     "color": "color-137",
+     "id": "id-130",
+     "kind": "kind-131",
+     "points": [
+      {
+       "x": 1.5,
+       "y": 2.5
+      },
+      {
+       "x": 3.5,
+       "y": 1.5
+      }
+     ],
+     "text": "text-136",
+     "width": 1.5
+    }
+   },
+   "floor": 2,
+   "fogAreas": {
+    "fogareas-key-114": {
+     "id": "id-115",
+     "light": "light-122",
+     "locked": true,
+     "name": "name-116",
+     "points": [
+      {
+       "x": 2.5,
+       "y": 3.5
+      },
+      {
+       "x": 1.5,
+       "y": 2.5
+      }
+     ],
+     "revealed": true,
+     "shape": "shape-117"
+    }
+   },
+   "fogOfWar": true,
+   "globalLight": "globallight-16",
+   "grid": {
+    "lineColor": "linecolor-11",
+    "lineOpacity": 1.5,
+    "offsetX": 2.5,
+    "offsetY": 3.5,
+    "size": 1.5,
+    "unit": "unit-10",
+    "unitsPerCell": 1.5,
+    "visible": true
+   },
+   "height": 3.5,
+   "id": "scene-1",
+   "mapUrl": "\u003cuploads\u003e/maps/map.webp",
+   "name": "name-2",
+   "noteMarkers": {
+    "notemarkers-key-94": {
+     "foundryEntry": "foundryentry-103",
+     "foundryFolder": "foundryfolder-104",
+     "id": "id-95",
+     "label": "label-98",
+     "library": "library-97",
+     "locked": true,
+     "noteId": "noteid-96",
+     "section": "section-99",
+     "size": 1.5,
+     "x": 2.5,
+     "y": 3.5
+    }
+   },
+   "playerAccess": true,
+   "teleports": {
+    "teleports-key-141": {
+     "id": "id-142",
+     "label": "label-146",
+     "locked": true,
+     "size": 2.5,
+     "targetSceneId": "targetsceneid-147",
+     "targetTeleportId": "targetteleportid-148",
+     "x": 3.5,
+     "y": 1.5
+    }
+   },
+   "tokens": {
+    "tokens-key-23": {
+     "characterId": "char-1",
+     "color": "color-27",
+     "dead": true,
+     "decor": true,
+     "foundryActorId": "foundryactorid-35",
+     "hidden": true,
+     "id": "id-24",
+     "image": "image-30",
+     "label": "label-28",
+     "light": {
+      "angle": 1.5,
+      "bright": 1.5,
+      "color": "color-38",
+      "dim": 2.5,
+      "direction": 2.5,
+      "enabled": true
+     },
+     "lightOnly": true,
+     "locked": true,
+     "loot": [
+      {
+       "equipped": true,
+       "id": "id-43",
+       "imageUrl": "imageurl-46",
+       "itemId": "sys-dlinnyi-mech-longsword",
+       "name": "name-45",
+       "notes": "notes-49",
+       "quantity": 1,
+       "weightLb": 3.5
+      },
+      {
+       "equipped": true,
+       "id": "id-50",
+       "imageUrl": "imageurl-53",
+       "itemId": "itemid-51",
+       "name": "name-52",
+       "notes": "notes-56",
+       "quantity": 2,
+       "weightLb": 1.5
+      }
+     ],
+     "monsterId": "sys-goblin-voitel-goblin-warrior",
+     "ownerId": "acc-player",
+     "shape": "shape-31",
+     "size": 3.5,
+     "statuses": [
+      {
+       "color": "color-62",
+       "hidden": true,
+       "icon": "icon-60",
+       "imageUrl": "imageurl-61",
+       "level": 1,
+       "modifiers": [
+        {
+         "mode": "mode-67",
+         "note": "note-70",
+         "perLevel": true,
+         "period": "period-69",
+         "target": "target-66",
+         "value": "value-68"
+        },
+        {
+         "mode": "mode-72",
+         "note": "note-75",
+         "perLevel": true,
+         "period": "period-74",
+         "target": "target-71",
+         "value": "value-73"
+        }
+       ],
+       "name": "name-59",
+       "overlay": true,
+       "rounds": 2,
+       "slug": "prone",
+       "source": "source-65"
+      },
+      {
+       "color": "color-80",
+       "hidden": true,
+       "icon": "icon-78",
+       "imageUrl": "imageurl-79",
+       "level": 1,
+       "modifiers": [
+        {
+         "mode": "mode-85",
+         "note": "note-88",
+         "perLevel": true,
+         "period": "period-87",
+         "target": "target-84",
+         "value": "value-86"
+        },
+        {
+         "mode": "mode-90",
+         "note": "note-93",
+         "perLevel": true,
+         "period": "period-92",
+         "target": "target-89",
+         "value": "value-91"
+        }
+       ],
+       "name": "name-77",
+       "overlay": true,
+       "rounds": 2,
+       "slug": "slug-76",
+       "source": "source-83"
+      }
+     ],
+     "vision": {
+      "mode": "mode-41",
+      "range": 1.5
+     },
+     "x": 2.5,
+     "xp": 1,
+     "y": 3.5
+    }
+   },
+   "viewZone": {
+    "h": 3.5,
+    "w": 2.5,
+    "x": 3.5,
+    "y": 1.5
+   },
+   "walls": {
+    "walls-key-105": {
+     "door": "door-111",
+     "doorSound": "doorsound-113",
+     "doorState": "doorstate-112",
+     "id": "id-106",
+     "lightThrough": true,
+     "window": true,
+     "x1": 3.5,
+     "x2": 2.5,
+     "y1": 1.5,
+     "y2": 3.5
+    }
+   },
+   "width": 2.5
+  },
+  "spells/spells/lib-spell.json": {
+   "attack": "attack-12",
+   "castTime": "casttime-7",
+   "classes": "classes-15",
+   "concentration": true,
+   "damage": "damage-13",
+   "description": "description-16",
+   "duration": "duration-10",
+   "foundryModuleId": "foundrymoduleid-4",
+   "id": "lib-spell",
+   "level": 3,
+   "material": true,
+   "materialNote": "materialnote-9",
+   "name": "name-2",
+   "range": "range-8",
+   "ritual": true,
+   "savingThrow": "savingthrow-11",
+   "school": "school-6",
+   "somatic": true,
+   "source": "source-3",
+   "statuses": [
+    {
+     "name": "name-20",
+     "note": "note-22",
+     "rounds": 1,
+     "slug": "paralyzed"
+    },
+    {
+     "name": "name-24",
+     "note": "note-26",
+     "rounds": 2,
+     "slug": "slug-23"
+    }
+   ],
+   "system": true,
+   "tags": [
+    "tags-17",
+    "tags-18"
+   ],
+   "upcast": "upcast-14",
+   "updatedAt": "2026-01-02T03:04:05Z",
+   "verbal": true
+  }
+ },
+ "playlists": [
+  {
+   "kind": "sfx",
+   "name": "Бой",
+   "tracks": [
+    {
+     "loop": true,
+     "name": "Драка",
+     "url": "\u003cuploads\u003e/audio/battle.mp3",
+     "volume": 0.7
+    }
+   ]
+  }
+ ],
+ "pregens": [
+  {
+   "avatarUrl": "\u003cuploads\u003e/tokens/monster.webp",
+   "name": "Пробный персонаж",
+   "sheet": {
+    "abilities": {
+     "cha": 3,
+     "con": 3,
+     "dex": 2,
+     "int": 1,
+     "str": 1,
+     "wis": 2
+    },
+    "additionalFeatures": "additionalfeatures-45",
+    "alignment": "alignment-76",
+    "allies": "allies-44",
+    "appearance": "appearance-74",
+    "armor": {
+     "heavyArmor": true,
+     "lightArmor": true,
+     "martialWeapons": true,
+     "mediumArmor": true,
+     "otherWeapons": "otherweapons-18",
+     "shield": true,
+     "simpleWeapons": true
+    },
+    "attacksSpells": "attacksspells-41",
+    "attunementItems": [
+     {
+      "attuned": true,
+      "name": "name-99"
+     },
+     {
+      "attuned": true,
+      "name": "name-100"
+     }
+    ],
+    "background": "background-75",
+    "bonds": "bonds-103",
+    "coins": {
+     "cp": 1,
+     "ep": 1,
+     "gp": 3,
+     "pp": 2,
+     "sp": 2
+    },
+    "combat": {
+     "ac": 3,
+     "conditions": "conditions-31",
+     "darkvision": 1,
+     "deathSaveFail": 1,
+     "deathSaveSuccess": 3,
+     "exhaustion": 2,
+     "hitDiceCurrent": "hitdicecurrent-25",
+     "hitDiceTotal": "hitdicetotal-24",
+     "hpCurrent": 1,
+     "hpMax": 3,
+     "hpTemp": 2,
+     "inspiration": true,
+     "isDying": true,
+     "speed": 3
+    },
+    "equipment": "equipment-77",
+    "feats": "feats-42",
+    "features": "features-40",
+    "flaws": "flaws-104",
+    "goals": "goals-43",
+    "ideals": "ideals-102",
+    "info": {
+     "background": "background-1",
+     "class": "class-2",
+     "level": 1,
+     "playerName": "playername-8",
+     "race": "race-5",
+     "species": "species-4",
+     "subclass": "subclass-3",
+     "xp": 2
+    },
+    "notes": [
+     "notes-47",
+     "notes-48",
+     "notes-49",
+     "notes-50",
+     "notes-51",
+     "notes-52"
+    ],
+    "personalityTraits": "personalitytraits-101",
+    "physical": {
+     "age": "age-83",
+     "eyes": "eyes-86",
+     "hair": "hair-88",
+     "height": "height-84",
+     "skin": "skin-87",
+     "weight": "weight-85"
+    },
+    "preparedSpells": [
+     {
+      "castTime": "casttime-65",
+      "concentration": true,
+      "level": 1,
+      "material": true,
+      "name": "name-64",
+      "notes": "notes-67",
+      "range": "range-66",
+      "ritual": true
+     },
+     {
+      "castTime": "casttime-70",
+      "concentration": true,
+      "level": 3,
+      "material": true,
+      "name": "name-69",
+      "notes": "notes-72",
+      "range": "range-71",
+      "ritual": true
+     }
+    ],
+    "proficiencyNotes": "proficiencynotes-90",
+    "resources": [
+     {
+      "current": 3,
+      "max": 1,
+      "name": "name-91",
+      "recovery": "recovery-94"
+     },
+     {
+      "current": 1,
+      "max": 2,
+      "name": "name-95",
+      "recovery": "recovery-98"
+     }
+    ],
+    "saveProf": {
+     "cha": false,
+     "con": true,
+     "dex": false,
+     "int": false,
+     "str": true,
+     "wis": true
+    },
+    "size": "size-73",
+    "skillProf": {
+     "skillprof-key-16": 3
+    },
+    "spellcasting": {
+     "ability": "ability-53",
+     "slotsByLevel": [
+      "slotsbylevel-54",
+      "slotsbylevel-55",
+      "slotsbylevel-56",
+      "slotsbylevel-57",
+      "slotsbylevel-58",
+      "slotsbylevel-59",
+      "slotsbylevel-60",
+      "slotsbylevel-61",
+      "slotsbylevel-62"
+     ]
+    },
+    "toolsLanguages": "toolslanguages-19",
+    "traits": "traits-89",
+    "treasure": "treasure-46",
+    "weapons": [
+     {
+      "bonus": "bonus-33",
+      "damage": "damage-34",
+      "name": "name-32",
+      "notes": "notes-35"
+     },
+     {
+      "bonus": "bonus-37",
+      "damage": "damage-38",
+      "name": "name-36",
+      "notes": "notes-39"
+     }
+    ]
+   },
+   "source": "ag-goblin-trouble"
+  }
+ ],
+ "uploads": {
+  "audio/battle.mp3": "DATA-audio/battle.mp3",
+  "items/item.webp": "DATA-items/item.webp",
+  "maps/map.webp": "DATA-maps/map.webp",
+  "tokens/monster.webp": "DATA-tokens/monster.webp"
+ },
+ "world": {
+  "name": "Мир 0.8.6",
+  "system": "dnd5e-2024"
+ }
+}

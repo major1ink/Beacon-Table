@@ -1,0 +1,817 @@
+{
+ "inspect": {
+  "actors": {
+   "count": 16,
+   "error": "",
+   "targets": {
+    "monsters": 5,
+    "pregens": 2,
+    "spells": 9
+   },
+   "type": "Actor"
+  },
+  "adventure": {
+   "count": 8,
+   "error": "",
+   "targets": {
+    "items": 1,
+    "monsters": 1,
+    "notes": 1,
+    "playlists": 1,
+    "pregens": 1,
+    "scenes": 1,
+    "skipped": 2
+   },
+   "type": "Adventure"
+  },
+  "items": {
+   "count": 12,
+   "error": "",
+   "targets": {
+    "items": 12
+   },
+   "type": "Item"
+  },
+  "lore": {
+   "count": 1,
+   "error": "",
+   "targets": {
+    "notes": 1
+   },
+   "type": "JournalEntry"
+  },
+  "macros": {
+   "count": 1,
+   "error": "",
+   "targets": {
+    "skipped": 1
+   },
+   "type": "Macro"
+  },
+  "music": {
+   "count": 1,
+   "error": "",
+   "targets": {
+    "playlists": 1
+   },
+   "type": "Playlist"
+  },
+  "places": {
+   "count": 1,
+   "error": "",
+   "targets": {
+    "scenes": 1
+   },
+   "type": "Scene"
+  },
+  "references": {
+   "count": 8,
+   "error": "",
+   "targets": {
+    "references": 8
+   },
+   "type": "Item"
+  },
+  "spells": {
+   "count": 9,
+   "error": "",
+   "targets": {
+    "spells": 9
+   },
+   "type": "Item"
+  },
+  "tables": {
+   "count": 1,
+   "error": "",
+   "targets": {
+    "skipped": 1
+   },
+   "type": "RollTable"
+  }
+ },
+ "packs": {
+  "actors": {
+   "applied": {},
+   "assets": 1,
+   "assetsMissing": 19,
+   "docs": {
+    "monsters": [
+     {
+      "name": "Взрослый красный дракон [Adult Red Dragon]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/portraits/adult-red-dragon.webp, стало ",
+       "$.items[14].img: было modules/ag-icons/debuffs/hand-chained.webp, стало ",
+       "$.items[15].img: было modules/ag-icons/magic/fire/flame-fire-dark.webp, стало ",
+       "$.items[15].system.description.value: было \u003cp\u003e Текст описания. [[/damage 2d6 fire]].\u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e[[@item.level + 1]]{Количество лучей}\u003c/p\u003e, стало \u003cp\u003e Текст описания. 2d6 (огонь).\u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003eКоличество лучей (@item.level + 1)\u003c/p\u003e",
+       "$.items[16].img: было modules/ag-icons/magic/psychic/star-purple-spiral.webp, стало ",
+       "$.items[17].system.description.value: было \u003cp\u003e Текст описания. [[/damage 2d6 fire]].\u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e[[@item.level + 1]]{Количество лучей}\u003c/p\u003e, стало \u003cp\u003e Текст описания. 2d6 (огонь).\u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003eКоличество лучей (@item.level + 1)\u003c/p\u003e",
+       "$.items[18].img: было modules/ag-icons/magic/fire/fireball-dark.webp, стало ",
+       "$.items[18].system.description.value: было \u003cp\u003e Текст описания. [[/damage 8d6 fire]] Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Урон увеличивается на [[/r 1d6]] за каждый круг ячейки выше 3-го.\u003c/p\u003e, стало \u003cp\u003e Текст описания. 8d6 (огонь) Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Урон увеличивается на 1d6 за каждый круг ячейки выше 3-го.\u003c/p\u003e",
+       "$.items[20].system.description.chat: было \u003cp class=\"feature\"\u003eThe [[lookup @name lowercase]] uses Spellcasting to cast \u003cem\u003eCommand\u003c/em\u003e (level 2 version). The [[lookup @name lowercase]] Текст описания. \u003c/p\u003e, стало \u003cp class=\"feature\"\u003eThe взрослый красный дракон [adult red dragon] uses Spellcasting to cast \u003cem\u003eCommand\u003c/em\u003e (level 2 version). The взрослый красный дракон [adult red dragon] Текст описания. \u003c/p\u003e",
+       "$.items[20].system.description.value: было \u003cp\u003e[[lookup @name]] сотворяет заклинание @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplCommand000]{Приказ} (2-й круг) с помощью действия Заклинания. [[lookup @name]] Текст описания. \u003c/p\u003e, стало \u003cp\u003eВзрослый красный дракон [Adult Red Dragon] сотворяет заклинание Приказ (2-й круг) с помощью действия Заклинания. Взрослый красный дракон [Adult Red Dragon] Текст описания. \u003c/p\u003e",
+       "$.items[21].system.description.value: было \u003cp\u003e[[lookup @name]] сотворяет заклинание @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplScorchingR]{Опаляющий луч}. [[lookup @name]] Текст описания. \u003c/p\u003e, стало \u003cp\u003eВзрослый красный дракон [Adult Red Dragon] сотворяет заклинание Опаляющий луч. Взрослый красный дракон [Adult Red Dragon] Текст описания. \u003c/p\u003e",
+       "$.items[22].system.description.value: было \u003cp\u003e\u003cem\u003eИспытание Ловкости:\u003c/em\u003e СЛ [[lookup @save.dc.value activity=bDqgmtLG3zcVuqdi]], каждое существо в [[lookup @target.template.size activity=bDqgmtLG3zcVuqdi]]-футовом Конусе. \u003cem\u003eПровал:\u003c/em\u003e 59 (17d6) урона Огнём. \u003cem\u003eУспех:\u003c/em\u003e половина урона.\u003c/p\u003e, стало \u003cp\u003e\u003cem\u003eИспытание Ловкости:\u003c/em\u003e СЛ , каждое существо в -футовом Конусе. \u003cem\u003eПровал:\u003c/em\u003e 59 (17d6) урона Огнём. \u003cem\u003eУспех:\u003c/em\u003e половина урона.\u003c/p\u003e",
+       "$.items[23].system.description.chat: было \u003cp\u003e[[lookup @name]] проявляет легендарную устойчивость!\u003c/p\u003e, стало \u003cp\u003eВзрослый красный дракон [Adult Red Dragon] проявляет легендарную устойчивость!\u003c/p\u003e",
+       "$.items[23].system.description.value: было \u003cp\u003eЕсли [[lookup @name lowercase]] Текст описания. \u003c/p\u003e, стало \u003cp\u003eЕсли взрослый красный дракон [adult red dragon] Текст описания. \u003c/p\u003e",
+       "$.items[24].system.description.value: было \u003cp\u003e[[lookup @name]] совершает три атаки [[/item mmRend0000000000]]{Раздиранием} Текст описания. @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplScorchingR]{Опаляющий луч}.\u003c/p\u003e, стало \u003cp\u003eВзрослый красный дракон [Adult Red Dragon] совершает три атаки Раздиранием Текст описания. Опаляющий луч.\u003c/p\u003e",
+       "$.items[25].system.description.value: было \u003cp\u003e[[lookup @name]] Текст описания. [[/item .mmRend0000000000]].\u003c/p\u003e, стало \u003cp\u003eВзрослый красный дракон [Adult Red Dragon] Текст описания. .\u003c/p\u003e",
+       "$.items[26].system.description.value: было \u003cp\u003e[[/attack extended]].\u003c/p\u003e\u003cp\u003e[[/damage average extended]].\u003c/p\u003e, стало \u003cp\u003eextended.\u003c/p\u003e\u003cp\u003eextended.\u003c/p\u003e",
+       "$.items[27].system.description.value: было \u003cp class=\"feature\"\u003e[[lookup @name]] Текст описания. [[lookup @attributes.spell.dc]] Текст описания. @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi]{Обнаружение магии}, @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplScorchingR]{Опаляющий луч}, @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplCommand000]{Приказ} (2-й круг) 1 в день: @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplFireball00]{Огненный шар}\u003c/p\u003e, стало \u003cp class=\"feature\"\u003eВзрослый красный дракон [Adult Red Dragon] Текст описания.  Текст описания. \u003ca class=\"catalog-ref\" data-kind=\"spell\" data-name=\"Обнаружение магии [Detect Magic]\"\u003eОбнаружение магии\u003c/a\u003e, Опаляющий луч, Приказ (2-й круг) 1 в день: \u003ca class=\"catalog-ref\" data-kind=\"spell\" data-name=\"Огненный шар [Fireball]\"\u003eОгненный шар\u003c/a\u003e\u003c/p\u003e",
+       "$.prototypeToken.texture.src: было modules/ag-fifthpendium/assets/tokens/adult-red-dragon.webp, стало ",
+       "$.system.details.biography.value: было \u003ch1\u003eКрасные драконы\u003c/h1\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.Rx08X1mW6m5uYldI caption=false cite=false classes=\"no-embed mm\"]\u003c/p\u003e\u003ch2\u003eВзрослый красный дракон\u003c/h2\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.81ihWzHnwzZEfEfa caption=false cite=false classes=\"no-embed mm\"]\u003c/p\u003e\u003ch2\u003eЛогова красных драконов\u003c/h2\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.i7877t4jjZpLevaQ caption=false cite=false]\u003c/p\u003e, стало \u003ch1\u003eКрасные драконы\u003c/h1\u003e\u003cp\u003e\u003c/p\u003e\u003ch2\u003eВзрослый красный дракон\u003c/h2\u003e\u003cp\u003e\u003c/p\u003e\u003ch2\u003eЛогова красных драконов\u003c/h2\u003e\u003cp\u003e\u003c/p\u003e"
+      ],
+      "type": "npc"
+     },
+     {
+      "name": "Гоблин-проклинатель [Goblin Hexer]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium-books/mm/goblins.webp, стало ",
+       "$.items[8].img: было modules/ag-icons/magic/psychic/spiral-light-dark.webp, стало ",
+       "$.items[9].img: было modules/ag-icons/magic/blood/character-cartoon-red.webp, стало ",
+       "$.items[10].img: было modules/ag-icons/creatures/devil/air-substance-floating.webp, стало ",
+       "$.items[11].img: было modules/ag-icons/magic/illusion/playing-purple-card.webp, стало ",
+       "$.items[12].system.description.chat: было \u003cp\u003e[[lookup @name]] проклинает палкой!\u003c/p\u003e, стало \u003cp\u003eГоблин-проклинатель [Goblin Hexer] проклинает палкой!\u003c/p\u003e",
+       "$.items[12].system.description.value: было \u003cp class=\"feature\"\u003e[[/attack extended]].\u003c/p\u003e\u003cp\u003e[[/damage average extended]].\u003c/p\u003e, стало \u003cp class=\"feature\"\u003eextended.\u003c/p\u003e\u003cp\u003eextended.\u003c/p\u003e",
+       "$.items[13].system.description.chat: было \u003cp\u003e[[lookup @name]] насылает невезуху!\u003c/p\u003e, стало \u003cp\u003eГоблин-проклинатель [Goblin Hexer] насылает невезуху!\u003c/p\u003e",
+       "$.items[13].system.description.value: было \u003cp class=\"feature\"\u003e\u003cem\u003eУсловие:\u003c/em\u003e Текст описания. \u003cem\u003e Текст описания. \u003c/em\u003e СЛ [[lookup @save.dc.value activity=02KFzL9fElzyHOIT]] Текст описания. \u003cem\u003eПровал:\u003c/em\u003e атака промахивается.\u003c/p\u003e, стало \u003cp class=\"feature\"\u003e\u003cem\u003eУсловие:\u003c/em\u003e Текст описания. \u003cem\u003e Текст описания. \u003c/em\u003e СЛ  Текст описания. \u003cem\u003eПровал:\u003c/em\u003e атака промахивается.\u003c/p\u003e",
+       "$.items[14].system.description.value: было \u003cp\u003e Текст описания. [[/item .mmHexStick000000]]{Палкой-проклиналкой} Текст описания. \u003c/p\u003e, стало \u003cp\u003e Текст описания. Палкой-проклиналкой Текст описания. \u003c/p\u003e",
+       "$.items[15].system.description.value: было \u003cp class=\"feature\"\u003e Текст описания. @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplMinorIllus]{Малая иллюзия} 1 в день каждое: @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplGrease0000]{Масло}, @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplBlindnessD]{Слепота/глухота}, @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplFaerieFire]{Фейское сияние}\u003c/p\u003e, стало \u003cp class=\"feature\"\u003e Текст описания. Малая иллюзия 1 в день каждое: Масло, Слепота/глухота, Фейское сияние\u003c/p\u003e",
+       "$.prototypeToken.texture.src: было modules/ag-fifthpendium/assets/tokens/goblin-hexer.webp, стало ",
+       "$.system.details.biography.value: было \u003ch1\u003eГоблины\u003c/h1\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.TwMrfWrYo0ZAnWB3 caption=false cite=false classes=\"no-embed mm\"]\u003c/p\u003e\u003ch2\u003eГоблин-проклинатель\u003c/h2\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.145GyIunaaiDfZxI caption=false cite=false classes=\"no-embed mm\"]\u003c/p\u003e, стало \u003ch1\u003eГоблины\u003c/h1\u003e\u003cp\u003e\u003c/p\u003e\u003ch2\u003eГоблин-проклинатель\u003c/h2\u003e\u003cp\u003e\u003c/p\u003e"
+      ],
+      "type": "npc"
+     },
+     {
+      "name": "Гоблин-воитель [Goblin Warrior]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/portraits/goblin-warrior.webp, стало ",
+       "$.items[6].system.description.value: было \u003cp\u003e[[/attack extended]].\u003c/p\u003e\u003cp\u003e[[/damage average extended]].\u003c/p\u003e\u003cp\u003e\u003cem\u003eПлюс:\u003c/em\u003e [[/damage 1d4 slashing average]] Текст описания. \u003c/p\u003e, стало \u003cp\u003eextended.\u003c/p\u003e\u003cp\u003eextended.\u003c/p\u003e\u003cp\u003e\u003cem\u003eПлюс:\u003c/em\u003e 1d4 (рубящий) Текст описания. \u003c/p\u003e",
+       "$.items[7].effects[1].name: было Применить действие \u0026Reference[Hide] к цели, стало Применить действие Hide к цели",
+       "$.items[7].system.description.value: было \u003cp class=\"feature\"\u003e[[lookup @name]] Текст описания. \u003c/p\u003e, стало \u003cp class=\"feature\"\u003eГоблин-воитель [Goblin Warrior] Текст описания. \u003c/p\u003e",
+       "$.items[8].system.description.value: было \u003cp\u003e[[/attack extended]].\u003c/p\u003e\u003cp\u003e[[/damage average extended]].\u003c/p\u003e\u003cp\u003e\u003cem\u003eПлюс:\u003c/em\u003e [[/damage 1d4 slashing average]] Текст описания. \u003c/p\u003e, стало \u003cp\u003eextended.\u003c/p\u003e\u003cp\u003eextended.\u003c/p\u003e\u003cp\u003e\u003cem\u003eПлюс:\u003c/em\u003e 1d4 (рубящий) Текст описания. \u003c/p\u003e",
+       "$.prototypeToken.texture.src: было modules/ag-fifthpendium/assets/tokens/goblin-warrior.webp, стало ",
+       "$.system.details.biography.value: было \u003cdiv class=\"gear\"\u003e\u003cdiv class=\"gear\"\u003e\u003cp\u003e\u003cstrong\u003eСнаряжение:\u003c/strong\u003e @UUID[Compendium.ag-fifthpendium.equipment.Item.phbarmLeatherArm], @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepScimitar00], @UUID[Compendium.ag-fifthpendium.equipment.Item.phbarmShield0000], @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepShortbow00]\u003c/p\u003e\u003c/div\u003e\u003c/div\u003e\u003ch1\u003eГоблины\u003c/h1\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.TwMrfWrYo0ZAnWB3 caption=false cite=false classes=\"no-embed mm\"]\u003c/p\u003e\u003ch2\u003eГоблин-воитель\u003c/h2\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.mm.JournalEntry.mmAppendixMonste.JournalEntryPage.ktLVwvt2KkJVB9eS caption=false cite=false classes=\"no-embed mm\"]\u003c/p\u003e, стало \u003cdiv class=\"gear\"\u003e\u003cdiv class=\"gear\"\u003e\u003cp\u003e\u003cstrong\u003eСнаряжение:\u003c/strong\u003e , , , \u003c/p\u003e\u003c/div\u003e\u003c/div\u003e\u003ch1\u003eГоблины\u003c/h1\u003e\u003cp\u003e\u003c/p\u003e\u003ch2\u003eГоблин-воитель\u003c/h2\u003e\u003cp\u003e\u003c/p\u003e"
+      ],
+      "type": "npc"
+     },
+     {
+      "name": "Старый гоблин",
+      "rewritten": [
+       "$.img: было systems/dnd5e/tokens/humanoid/goblin.webp, стало /uploads/tokens/foundry/ag-fifthpendium/57342266-goblin.webp"
+      ],
+      "type": "npc"
+     },
+     {
+      "name": "Галера [Galley]",
+      "rewritten": [
+       "$.img: было icons/environment/settlement/ship.webp, стало ",
+       "$.prototypeToken.texture.src: было icons/environment/settlement/ship.webp, стало "
+      ],
+      "type": "vehicle"
+     }
+    ],
+    "pregens": [
+     {
+      "name": "Пробный персонаж 1",
+      "rewritten": [
+       "$.img: было modules/ag-goblin-trouble/assets/actors/portraits/player-characters/bobby.webp, стало ",
+       "$.items[0].system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3 data-anchor=\"human-traits\"\u003eОсобенности Людей\u003c/h3\u003e\u003cp\u003e\u003cstrong\u003eТип существа: \u003c/strong\u003eГуманоид\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eРазмер: \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСкорость: \u003c/strong\u003e30 футов\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eНаходчивость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУмелость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУниверсальность\u003c/strong\u003e\u003c/em\u003e. Вы получаете @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbFeats00000000.JournalEntryPage.otAeQs0TLHYIBNuj]{Черту происхождения} Текст описания. @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftSkilled0000]{Умелый}.\u003c/p\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3 data-anchor=\"human-traits\"\u003eОсобенности Людей\u003c/h3\u003e\u003cp\u003e\u003cstrong\u003eТип существа: \u003c/strong\u003eГуманоид\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eРазмер: \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСкорость: \u003c/strong\u003e30 футов\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eНаходчивость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУмелость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУниверсальность\u003c/strong\u003e\u003c/em\u003e. Вы получаете Черту происхождения Текст описания. Умелый.\u003c/p\u003e",
+       "$.items[3].system.description.value: было \u003cp\u003eВы получаете @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbFeats00000000.JournalEntryPage.otAeQs0TLHYIBNuj]{Черту происхождения} Текст описания. @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftSkilled0000]{Умелый}.\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-9E1yve6WHohyBage\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e, стало \u003cp\u003eВы получаете Черту происхождения Текст описания. Умелый.\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-9E1yve6WHohyBage\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e",
+       "$.items[5].system.description.value: было \u003cp\u003e\u003cstrong\u003eЗначения характеристик:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЧерта:\u003c/strong\u003e @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftTough000000]{Живучий}\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках:\u003c/strong\u003e Дрессировка и Природа\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в инструментах:\u003c/strong\u003e Инструменты плотника\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСнаряжение:\u003c/strong\u003e \u003cem\u003eВыберите А или Б:\u003c/em\u003e (A) @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepSickle0000]{Серп}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbtulCarpenters]{Инструменты плотника}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagHealersKit0]{Набор лекаря}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagPotIron0000]{Чугунный котелок}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagShovel00000]{Лопата}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagClothesTrav]{Одежда путешественника}, 30 ЗМ; или (Б) 50 ЗМ\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e, стало \u003cp\u003e\u003cstrong\u003eЗначения характеристик:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЧерта:\u003c/strong\u003e Живучий\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках:\u003c/strong\u003e Дрессировка и Природа\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в инструментах:\u003c/strong\u003e Инструменты плотника\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСнаряжение:\u003c/strong\u003e \u003cem\u003eВыберите А или Б:\u003c/em\u003e (A) Серп, Инструменты плотника, Набор лекаря, Чугунный котелок, Лопата, Одежда путешественника, 30 ЗМ; или (Б) 50 ЗМ\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e",
+       "$.items[7].system.description.value: было \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003ch3\u003eКлючевые атрибуты Варвара\u003c/h3\u003e\u003ctable class=\"core-class-traits\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003eОсновная характеристика\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eКость здоровья\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eD12 за уровень Варвара\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eУмения в испытаниях\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила и Выносливость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите 2:\u003c/em\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eУмения в оружии\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eПростое и Военное оружие\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eОбращение с бронёй\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eНачальное снаряжение\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите A или Б:\u003c/em\u003e (A) @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepGreataxe00]{Секира}, 4 @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepHandaxe000]{Ручных топора}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagExplorersPa]{Комплект первопроходца} и [[/award 15GP]]; или (Б) [[/award 75GP]]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch2\u003eВыбор Варвара…\u003c/h2\u003e\u003ch3\u003eНа 1-м уровне\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003eПолучите \u003cspan style=\"font-family:'Roboto Condensed', sans-serif\"\u003eособенности\u003c/span\u003e Текст описания. \u003c/li\u003e\u003c/ul\u003e\u003ch3\u003eПри мультиклассировании\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003c/ul\u003e, стало \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003ch3\u003eКлючевые атрибуты Варвара\u003c/h3\u003e\u003ctable class=\"core-class-traits\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003eОсновная характеристика\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eКость здоровья\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eD12 за уровень Варвара\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eУмения в испытаниях\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила и Выносливость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите 2:\u003c/em\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eУмения в оружии\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eПростое и Военное оружие\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eОбращение с бронёй\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e\u003cstrong\u003eНачальное снаряжение\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите A или Б:\u003c/em\u003e (A) Секира, 4 Ручных топора, Комплект первопроходца и ; или (Б) \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch2\u003eВыбор Варвара…\u003c/h2\u003e\u003ch3\u003eНа 1-м уровне\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003eПолучите \u003cspan style=\"font-family:'Roboto Condensed', sans-serif\"\u003eособенности\u003c/span\u003e Текст описания. \u003c/li\u003e\u003c/ul\u003e\u003ch3\u003eПри мультиклассировании\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003c/ul\u003e",
+       "$.items[8].system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. [[lookup @scale.barbarian.rages]] Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУстойчивость к урону.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУрон от Ярости.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eПреимущество в Силе.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eДлительность.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003csection class=\"secret\" id=\"secret-o72MSFMdhSQC7kYa\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания.  Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУстойчивость к урону.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУрон от Ярости.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eПреимущество в Силе.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eДлительность.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003csection class=\"secret\" id=\"secret-o72MSFMdhSQC7kYa\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e",
+       "$.items[11].system.description.value: было \u003cp\u003eСм. @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbAppendixDRule.JournalEntryPage.xJjJ4lhymAYXAOvO]{правила} Безоружного удара.\u003c/p\u003e, стало \u003cp\u003eСм. правила Безоружного удара.\u003c/p\u003e",
+       "$.items[12].system.description.value: было \u003cp\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Сила \u003cstrong\u003eВес:\u003c/strong\u003e 6 фунтов\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e заколотить или вскрыть дверь или контейнер (СЛ 20)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИзготовление:\u003c/strong\u003e @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepQuartersta]{Боевой посох}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagBarrel00000]{Бочка}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepGreatclub0]{Дубина}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepClub000000]{Дубинка}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagLadder00000]{Лестница}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagChest000000]{Сундук}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagRamPortable]{Таран ручной}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagTorch000000]{Факел}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagPole0000000]{Шест}.\u003c/p\u003e, стало \u003cp\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Сила \u003cstrong\u003eВес:\u003c/strong\u003e 6 фунтов\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e заколотить или вскрыть дверь или контейнер (СЛ 20)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИзготовление:\u003c/strong\u003e Боевой посох, Бочка, Дубина, Дубинка, Лестница, Сундук, Таран ручной, Факел, Шест.\u003c/p\u003e",
+       "$.items[13].system.description.value: было \u003cp\u003e Текст описания. @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagBackpack000]{Рюкзак}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagBedroll0000]{Спальный мешок}, 2 склянки @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagOil00000000]{Масла}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagRations0000]{Сухой паёк} на 10 дней, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagRope0000000]{Верёвка}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagTinderbox00]{Огниво}, 10 @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagTorch000000]{Факелов} и @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagWaterskin00]{Бурдюк}.\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-HdB34PPncJIGf8OO\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003eВ комплекте есть @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagBackpack000]{Рюкзак} Текст описания. \u003c/p\u003e\u003c/section\u003e, стало \u003cp\u003e Текст описания. \u003ca class=\"catalog-ref\" data-kind=\"item\" data-name=\"Рюкзак [Backpack]\"\u003eРюкзак\u003c/a\u003e, Спальный мешок, 2 склянки Масла, Сухой паёк на 10 дней, Верёвка, Огниво, 10 Факелов и Бурдюк.\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-HdB34PPncJIGf8OO\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003eВ комплекте есть \u003ca class=\"catalog-ref\" data-kind=\"item\" data-name=\"Рюкзак [Backpack]\"\u003eРюкзак\u003c/a\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e",
+       "$.items[16].system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. [[/damage 5 type=fire]]{5 урона Огнём} от горящего масла.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eОбливание области.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eТопливо.\u003c/strong\u003e Текст описания. \u003c/p\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. 5 урона Огнём (5 (огонь)) от горящего масла.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eОбливание области.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eТопливо.\u003c/strong\u003e Текст описания. \u003c/p\u003e",
+       "$.prototypeToken.texture.src: было modules/ag-goblin-trouble/assets/actors/tokens/player-characters/bobby.webp, стало "
+      ],
+      "type": "character"
+     },
+     {
+      "name": "Пробный персонаж 2",
+      "rewritten": [
+       "$.img: было modules/ag-goblin-trouble/assets/actors/portraits/player-characters/diana.webp, стало ",
+       "$.items[0].system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3 data-anchor=\"human-traits\"\u003eОсобенности Людей\u003c/h3\u003e\u003cp\u003e\u003cstrong\u003eТип существа: \u003c/strong\u003eГуманоид\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eРазмер: \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСкорость: \u003c/strong\u003e30 футов\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eНаходчивость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУмелость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУниверсальность\u003c/strong\u003e\u003c/em\u003e. Вы получаете @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbFeats00000000.JournalEntryPage.otAeQs0TLHYIBNuj]{Черту происхождения} Текст описания. @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftSkilled0000]{Умелый}.\u003c/p\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3 data-anchor=\"human-traits\"\u003eОсобенности Людей\u003c/h3\u003e\u003cp\u003e\u003cstrong\u003eТип существа: \u003c/strong\u003eГуманоид\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eРазмер: \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСкорость: \u003c/strong\u003e30 футов\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eНаходчивость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУмелость.\u003c/strong\u003e\u003c/em\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cem\u003e\u003cstrong\u003eУниверсальность\u003c/strong\u003e\u003c/em\u003e. Вы получаете Черту происхождения Текст описания. Умелый.\u003c/p\u003e",
+       "$.items[3].system.description.value: было \u003cp\u003eВы получаете @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbFeats00000000.JournalEntryPage.otAeQs0TLHYIBNuj]{Черту происхождения} Текст описания. @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftSkilled0000]{Умелый}.\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-9E1yve6WHohyBage\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e, стало \u003cp\u003eВы получаете Черту происхождения Текст описания. Умелый.\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-9E1yve6WHohyBage\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e",
+       "$.items[5].system.description.value: было \u003cp\u003e\u003cstrong\u003eЗначения характеристик:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЧерта:\u003c/strong\u003e @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftSkilled0000]{Умелый}\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках:\u003c/strong\u003e Внимание и Расследование\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в инструментах:\u003c/strong\u003e Инструменты каллиграфа\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСнаряжение:\u003c/strong\u003e \u003cem\u003eВыберите А или Б:\u003c/em\u003e (A) @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbtulCalligraph]{Инструменты каллиграфа}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagClothesFine]{Парадная одежда}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagLamp0000000]{Лампа}, @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagOil00000000]{Масло} (3 фляжки), @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagParchment00]{Пергамент} (12 листов), 23 ЗМ; или (Б) 50 ЗМ\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e, стало \u003cp\u003e\u003cstrong\u003eЗначения характеристик:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЧерта:\u003c/strong\u003e Умелый\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках:\u003c/strong\u003e Внимание и Расследование\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в инструментах:\u003c/strong\u003e Инструменты каллиграфа\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСнаряжение:\u003c/strong\u003e \u003cem\u003eВыберите А или Б:\u003c/em\u003e (A) Инструменты каллиграфа, Парадная одежда, Лампа, Масло (3 фляжки), Пергамент (12 листов), 23 ЗМ; или (Б) 50 ЗМ\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e",
+       "$.items[7].system.description.value: было \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003ch3\u003eКлючевые атрибуты Монаха\u003c/h3\u003e\u003ctable class=\"core-class-traits\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003eОсновная характеристика\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eЛовкость и Мудрость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eКость здоровья\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eD8 за уровень Монаха\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в испытаниях\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила и Ловкость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите 2:\u003c/em\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в оружии\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003eУмения в инструментах\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003e Текст описания. \u003c/em\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eОбращение с бронёй\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eНет\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eНачальное снаряжение\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите А или Б:\u003c/em\u003e (А) @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepSpear00000]{Копьё}, 5 @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepDagger0000]{Кинжалов} Текст описания. @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagExplorersPa]{Набор первопроходца} и [[/award 11GP]]; или (Б) [[/award 50GP]]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch2\u003eВыбор Монаха...\u003c/h2\u003e\u003ch3\u003eНа 1-м уровне\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e\u003ch3\u003eПри мультиклассировании\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e, стало \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003ch3\u003eКлючевые атрибуты Монаха\u003c/h3\u003e\u003ctable class=\"core-class-traits\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003eОсновная характеристика\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eЛовкость и Мудрость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eКость здоровья\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eD8 за уровень Монаха\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в испытаниях\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила и Ловкость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите 2:\u003c/em\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в оружии\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003eУмения в инструментах\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003e Текст описания. \u003c/em\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eОбращение с бронёй\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eНет\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth scope=\"row\"\u003e\u003cp\u003e\u003cstrong\u003eНачальное снаряжение\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите А или Б:\u003c/em\u003e (А) Копьё, 5 Кинжалов Текст описания. Набор первопроходца и ; или (Б) \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch2\u003eВыбор Монаха...\u003c/h2\u003e\u003ch3\u003eНа 1-м уровне\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e\u003ch3\u003eПри мультиклассировании\u003c/h3\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e",
+       "$.items[8].system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003c/ul\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eБонусный Безоружный удар.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eКость Боевых искусств.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e [[lookup @scale.monk.die]]\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЛовкие атаки. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003csection class=\"secret\" id=\"secret-krbGYn2lplFe7kOG\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003cstrong\u003eМонашеская атака\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cul\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003cli\u003e Текст описания. \u003c/li\u003e\u003c/ul\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eБонусный Безоружный удар.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eКость Боевых искусств.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЛовкие атаки. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003csection class=\"secret\" id=\"secret-krbGYn2lplFe7kOG\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003cstrong\u003eМонашеская атака\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e",
+       "$.items[10].system.description.value: было \u003cp\u003eСм. @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbAppendixDRule.JournalEntryPage.xJjJ4lhymAYXAOvO]{правила} Безоружного удара.\u003c/p\u003e, стало \u003cp\u003eСм. правила Безоружного удара.\u003c/p\u003e",
+       "$.items[11].system.description.value: было \u003cp\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Мудрость \u003cstrong\u003eВес:\u003c/strong\u003e 6 фунтов\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e сделать набросок карты небольшой области (СЛ 15)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИзготовление:\u003c/strong\u003e @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagMap00000000]{Карта}\u003c/p\u003e, стало \u003cp\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Мудрость \u003cstrong\u003eВес:\u003c/strong\u003e 6 фунтов\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e сделать набросок карты небольшой области (СЛ 15)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИзготовление:\u003c/strong\u003e Карта\u003c/p\u003e",
+       "$.items[12].system.description.value: было \u003cp class=\"phb-meta\"\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Ловкость \u003cstrong\u003eВес:\u003c/strong\u003e 5 фунтов\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИзготовление:\u003c/strong\u003e @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagInk00000000]{Чернила}, \u003cem\u003eСвиток заклинания\u003c/em\u003e\u003c/p\u003e, стало \u003cp class=\"phb-meta\"\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Ловкость \u003cstrong\u003eВес:\u003c/strong\u003e 5 фунтов\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИзготовление:\u003c/strong\u003e Чернила, \u003cem\u003eСвиток заклинания\u003c/em\u003e\u003c/p\u003e",
+       "$.items[13].system.description.value: было \u003cp\u003e@UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagArcaneFocus]{Мистические фокусирующие предметы}\u003cspan style=\"font-family:'Roboto Condensed', sans-serif\"\u003e Текст описания. \u003c/span\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbwepQuartersta]{Боевой посох}\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-wJ4SJVg9unbYSBJb\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e, стало \u003cp\u003eМистические фокусирующие предметы\u003cspan style=\"font-family:'Roboto Condensed', sans-serif\"\u003e Текст описания. \u003c/span\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. Боевой посох\u003c/p\u003e\u003csection class=\"secret\" id=\"secret-wJ4SJVg9unbYSBJb\"\u003e\u003cp\u003e\u003cstrong\u003eЗаметка Foundry\u003c/strong\u003e\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/section\u003e",
+       "$.items[17].system.description.value: было \u003cp\u003eЛампа заправляется @UUID[Compendium.ag-dnd2024.phb-equipment.Item.phbagOil00000000]{Маслом} Текст описания. \u003c/p\u003e, стало \u003cp\u003eЛампа заправляется Маслом Текст описания. \u003c/p\u003e",
+       "$.items[18].system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. [[/damage 5 type=fire]]{5 урона Огнём} от горящего масла.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eОбливание области.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eТопливо.\u003c/strong\u003e Текст описания. \u003c/p\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. 5 урона Огнём (5 (огонь)) от горящего масла.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eОбливание области.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eТопливо.\u003c/strong\u003e Текст описания. \u003c/p\u003e",
+       "$.prototypeToken.texture.src: было modules/ag-goblin-trouble/assets/actors/tokens/player-characters/diana.webp, стало "
+      ],
+      "type": "character"
+     }
+    ],
+    "spells": [
+     {
+      "from": "вложение",
+      "name": "Приказ [Command]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Опаляющий луч [Scorching Ray]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Обнаружение магии [Detect Magic]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Огненный шар [Fireball]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Фейское сияние [Faerie Fire]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Слепота/глухота [Blindness/Deafness]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Масло [Grease]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Малая иллюзия [Minor Illusion]",
+      "type": "spell"
+     },
+     {
+      "from": "вложение",
+      "name": "Огненный снаряд",
+      "type": "spell"
+     }
+    ]
+   },
+   "notes": null,
+   "skipped": 0,
+   "warnings": null
+  },
+  "adventure": {
+   "applied": {
+    "playlists": 1,
+    "scenes": 1
+   },
+   "assets": 3,
+   "assetsMissing": 5,
+   "docs": {
+    "items": [
+     {
+      "from": "вложение",
+      "name": "Зелье исцеления [Potion of Healing]",
+      "type": "consumable"
+     }
+    ],
+    "monsters": [
+     {
+      "from": "вложение",
+      "name": "Гоблин-воитель [Goblin Warrior]",
+      "type": "npc"
+     }
+    ],
+    "pregens": [
+     {
+      "from": "вложение",
+      "name": "Пробный персонаж 1",
+      "type": "character"
+     }
+    ]
+   },
+   "notes": [
+    {
+     "folder": "Фикстуры dnd5e/adventure",
+     "title": "Вход в пещеру",
+     "content": "# Вход в пещеру\n\n## Описание\n\n\u003cp\u003eЗдесь живут \u003ca class=\"catalog-ref\" data-kind=\"monster\" data-name=\"Гоблин-воитель [Goblin Warrior]\"\u003eгоблины\u003c/a\u003e. Спасбросок спасбросок: Лов (СЛ 15), урон 2d6 (огонь), проверка: Мдр (СЛ 12). Сбивает с ног: Лежит. Меч: \u003ca class=\"catalog-ref\" data-kind=\"item\" data-name=\"Длинный меч [Longsword]\"\u003eДлинный меч [Longsword]\u003c/a\u003e. Карта: \u003ca class=\"catalog-ref\" data-kind=\"scene\" data-name=\"Пещера гоблинов\"\u003eПещера гоблинов\u003c/a\u003e. Бросок 1d20+5.\u003c/p\u003e\u003cimg src=\"/uploads/notes/foundry/ag-fifthpendium/2ce14b34-cave.webp\"\u003e\n\n## Карта\n\n![](/uploads/notes/foundry/ag-fifthpendium/2ce14b34-cave.webp)\n"
+    }
+   ],
+   "skipped": 2,
+   "warnings": null
+  },
+  "items": {
+   "applied": {},
+   "assets": 1,
+   "assetsMissing": 7,
+   "docs": {
+    "items": [
+     {
+      "name": "Музыкальный инструмент [Musical Instrument]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/abilities/bard/lute-melody-orange.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Харизма\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e Игра известной вам мелодии (СЛ 10) или импровизация (СЛ 15)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eВариации:\u003c/strong\u003e @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusDrum000000]{барабан}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusViol000000]{виола да гамба}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusBagpipes00]{волынка}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusDulcimer00]{дульцимер}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusLyre000000]{лира}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusLute000000]{лютня}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusHorn000000]{рожок}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusFlute00000]{флейта}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusPanflute00]{флейта Пана}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusShawm00000]{шалмей}.\u003c/p\u003e, стало \u003cp\u003e\u003cstrong\u003eХарактеристика:\u003c/strong\u003e Харизма\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eИспользование:\u003c/strong\u003e Игра известной вам мелодии (СЛ 10) или импровизация (СЛ 15)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eВариации:\u003c/strong\u003e барабан, виола да гамба, волынка, дульцимер, лира, лютня, рожок, флейта, флейта Пана, шалмей.\u003c/p\u003e"
+      ],
+      "type": "tool"
+     },
+     {
+      "name": "Язык пламени [Flame Tongue]",
+      "rewritten": [
+       "$.effects[5].system.changes[1].value: было \u003cp\u003e@Embed[Compendium.ag-fifthpendium.equipment.Item.dmgFlameTongue00 cite=false caption=false]\u003c/p\u003e{}, стало \u003cp\u003e\u003ca class=\"catalog-ref\" data-kind=\"item\" data-name=\"Язык пламени [Flame Tongue]\"\u003eЯзык пламени [Flame Tongue]\u003c/a\u003e\u003c/p\u003e{}",
+       "$.img: было modules/ag-fifthpendium/assets/items/DMG/flame-tongue.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e\u003cem\u003e Текст описания. \u003c/em\u003e\u003c/p\u003e\u003cp\u003e Текст описания. [[/damage 2d6 fire]] Текст описания. \u003c/p\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.dmg.JournalEntry.dmgFoundryRefere.JournalEntryPage.Ok4iCgD25ENgoRxE cite=false caption=false classes=\"hide-in-embed\"]\u003c/p\u003e, стало \u003cp\u003e\u003cem\u003e Текст описания. \u003c/em\u003e\u003c/p\u003e\u003cp\u003e Текст описания. 2d6 (огонь) Текст описания. \u003c/p\u003e\u003cp\u003e\u003c/p\u003e"
+      ],
+      "type": "weapon"
+     },
+     {
+      "name": "Зелье исцеления [Potion of Healing]",
+      "rewritten": [
+       "$.img: было  Текст описания. , стало "
+      ],
+      "type": "consumable"
+     },
+     {
+      "name": "Кольцо защиты [Ring of Protection]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/items/DMG/ring-of-protection.webp, стало "
+      ],
+      "type": "equipment"
+     },
+     {
+      "name": "Рубин [Ruby]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/gems/ruby.webp, стало /uploads/tokens/foundry/ag-fifthpendium/3807dbf2-ruby.webp"
+      ],
+      "type": "loot"
+     },
+     {
+      "name": "Старый длинный меч",
+      "type": "weapon"
+     },
+     {
+      "name": "Старая кольчуга",
+      "type": "equipment"
+     },
+     {
+      "name": "Старое кольцо защиты",
+      "type": "equipment"
+     },
+     {
+      "name": "Старое зелье",
+      "type": "consumable"
+     },
+     {
+      "name": "Рюкзак [Backpack]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/items/PHB/backpack3.webp, стало "
+      ],
+      "type": "container"
+     },
+     {
+      "name": "Кольчуга [Chain Mail]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/armor/chain-mail.webp, стало "
+      ],
+      "type": "equipment"
+     },
+     {
+      "name": "Длинный меч [Longsword]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/weapons/longsword.webp, стало ",
+       "$.system.description.chat: было \u003cp\u003e[[lookup @name]] атакует, используя Длинный меч.\u003c/p\u003e, стало \u003cp\u003eДлинный меч [Longsword] атакует, используя Длинный меч.\u003c/p\u003e"
+      ],
+      "type": "weapon"
+     }
+    ]
+   },
+   "notes": null,
+   "skipped": 0,
+   "warnings": null
+  },
+  "lore": {
+   "applied": {},
+   "assets": 1,
+   "assetsMissing": 0,
+   "docs": {},
+   "notes": [
+    {
+     "folder": "Фикстуры dnd5e/lore/Глава 1",
+     "title": "Вход в пещеру",
+     "content": "# Вход в пещеру\n\n## Описание\n\n\u003cp\u003eЗдесь живут \u003ca class=\"catalog-ref\" data-kind=\"monster\" data-name=\"Гоблин-воитель [Goblin Warrior]\"\u003eгоблины\u003c/a\u003e. Спасбросок спасбросок: Лов (СЛ 15), урон 2d6 (огонь), проверка: Мдр (СЛ 12). Сбивает с ног: Лежит. Меч: \u003ca class=\"catalog-ref\" data-kind=\"item\" data-name=\"Длинный меч [Longsword]\"\u003eДлинный меч [Longsword]\u003c/a\u003e. Карта: \u003ca class=\"catalog-ref\" data-kind=\"scene\" data-name=\"Пещера гоблинов\"\u003eПещера гоблинов\u003c/a\u003e. Бросок 1d20+5.\u003c/p\u003e\u003cimg src=\"/uploads/notes/foundry/ag-fifthpendium/2ce14b34-cave.webp\"\u003e\n\n## Карта\n\n![](/uploads/notes/foundry/ag-fifthpendium/2ce14b34-cave.webp)\n"
+    }
+   ],
+   "skipped": 0,
+   "warnings": null
+  },
+  "macros": {
+   "applied": {},
+   "assets": 0,
+   "assetsMissing": 0,
+   "docs": {},
+   "notes": null,
+   "skipped": 1,
+   "warnings": null
+  },
+  "music": {
+   "applied": {
+    "playlists": 1
+   },
+   "assets": 1,
+   "assetsMissing": 0,
+   "docs": {},
+   "notes": null,
+   "skipped": 0,
+   "warnings": null
+  },
+  "places": {
+   "applied": {
+    "scenes": 1
+   },
+   "assets": 2,
+   "assetsMissing": 0,
+   "docs": {},
+   "notes": null,
+   "skipped": 0,
+   "warnings": null
+  },
+  "references": {
+   "applied": {},
+   "assets": 0,
+   "assetsMissing": 8,
+   "docs": {
+    "references": [
+     {
+      "name": "Высший эльф [High Elf]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/species/elf-high.webp, стало ",
+       "$.system.advancement.wuadysjbdq6pqOOp.hint: было \u003cp\u003e Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbSpells0000000.JournalEntryPage.6AnqLUowgdsqMFvz]{списка заклинаний Волшебника}.\u003c/p\u003e, стало \u003cp\u003e Текст описания. списка заклинаний Волшебника.\u003c/p\u003e",
+       "$.system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003ctable\u003e\u003ccaption\u003e\u003cp\u003eВысший эльф\u003c/p\u003e\u003c/caption\u003e\u003cthead\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e1-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e3-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e5-й уровень\u003c/p\u003e\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eВы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPrestidigi]{Мелкие фокусы}.\u003c/p\u003e\u003cp\u003e Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbSpells0000000.JournalEntryPage.6AnqLUowgdsqMFvz]{списка заклинаний Волшебника}.\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi]{Обнаружение магии}\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplMistyStep0]{Туманный шаг}\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003ctable\u003e\u003ccaption\u003e\u003cp\u003eВысший эльф\u003c/p\u003e\u003c/caption\u003e\u003cthead\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003e1-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e3-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e5-й уровень\u003c/p\u003e\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eВы знаете фокус Мелкие фокусы.\u003c/p\u003e\u003cp\u003e Текст описания. списка заклинаний Волшебника.\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003ca class=\"catalog-ref\" data-kind=\"spell\" data-name=\"Обнаружение магии [Detect Magic]\"\u003eОбнаружение магии\u003c/a\u003e\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eТуманный шаг\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e"
+      ],
+      "type": "feat"
+     },
+     {
+      "name": "Оружейная палата [Armory]",
+      "rewritten": [
+       "$.img: было icons/environment/settlement/target-dummy.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. @UUID[Compendium.ag-fifthpendium.bastions.Item.dmgSmithy0000000]{Кузница [Smithy]} Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. [[/r 1d8]] вместо каждого [[/r 1d6]] Текст описания. \u003c/p\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. Кузница [Smithy] Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. 1d8 вместо каждого 1d6 Текст описания. \u003c/p\u003e"
+      ],
+      "type": "facility"
+     },
+     {
+      "name": "Послушник [Acolyte]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/backgrounds/acolyte.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e\u003cstrong\u003eХарактеристики:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЧерта:\u003c/strong\u003e @UUID[Compendium.ag-fifthpendium.feats.Item.phbftMagicInitia]{Посвящённый в магию} (Жрец).\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в инструментах:\u003c/strong\u003e Инструменты каллиграфа.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЭкипировка:\u003c/strong\u003e Выберите А или Б: (А) @UUID[Compendium.ag-fifthpendium.equipment.Item.phbtulCalligraph]{Инструменты каллиграфа}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagBook0000000]{Книга} (молитвенник), @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagHolySymbolV]{Символ религии}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagParchment00]{Пергамент} (10 листов), @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagRobe0000000]{Мантия}, 8 ЗМ; (Б) 50 ЗМ.\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e, стало \u003cp\u003e\u003cstrong\u003eХарактеристики:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЧерта:\u003c/strong\u003e Посвящённый в магию (Жрец).\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в навыках:\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУмения в инструментах:\u003c/strong\u003e Инструменты каллиграфа.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЭкипировка:\u003c/strong\u003e Выберите А или Б: (А) Инструменты каллиграфа, Книга (молитвенник), Символ религии, Пергамент (10 листов), Мантия, 8 ЗМ; (Б) 50 ЗМ.\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e"
+      ],
+      "type": "background"
+     },
+     {
+      "name": "Варвар",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/classes/barbarian.webp, стало ",
+       "$.system.description.value: было \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003ch3\u003eКлючевые атрибуты Варвара\u003c/h3\u003e\u003ctable\n      class=\"core-class-traits\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003cth scope=\"row\"\n      data-colwidth=\"231\"\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\n      data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eКость здоровья\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eD12\n      за уровень Варвара\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\n      data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в\n      испытаниях\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила и\n      Выносливость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в\n      навыках\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите 2:\u003c/em\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\n      data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в\n      оружии\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eОбращение с\n      бронёй\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите A или Б:\u003c/em\u003e (A)\n      @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepGreataxe00]{Секира},\n      4 @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepHandaxe000]{Ручных\n      топора},\n      @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagExplorersPa]{Комплект\n      первопроходца}, и [[/award 15GP]]; (Б) [[/award\n      75GP]]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch2\u003eВыбор Варвара…\u003c/h2\u003e\u003ch3\u003eНа 1-м\n      уровне\u003c/h3\u003e\u003cul\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e\u003ch3\u003e Текст описания. \u003c/h3\u003e\u003cul\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e, стало \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003ch3\u003eКлючевые атрибуты Варвара\u003c/h3\u003e\u003ctable\n      class=\"core-class-traits\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003cth scope=\"row\"\n      data-colwidth=\"231\"\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\n      data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eКость здоровья\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eD12\n      за уровень Варвара\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\n      data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в\n      испытаниях\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003eСила и\n      Выносливость\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в\n      навыках\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите 2:\u003c/em\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth\n      data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eУмения в\n      оружии\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003eОбращение с\n      бронёй\u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003cth data-colwidth=\"231\"\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e\u003c/p\u003e\u003c/th\u003e\u003ctd\u003e\u003cp\u003e\u003cem\u003eВыберите A или Б:\u003c/em\u003e (A)\n      Секира,\n      4 Ручных\n      топора,\n      Комплект\n      первопроходца, и ; (Б) \u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch2\u003eВыбор Варвара…\u003c/h2\u003e\u003ch3\u003eНа 1-м\n      уровне\u003c/h3\u003e\u003cul\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e\u003ch3\u003e Текст описания. \u003c/h3\u003e\u003cul\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003cli\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/li\u003e\u003c/ul\u003e"
+      ],
+      "type": "class"
+     },
+     {
+      "name": "Бдительный [Alert]",
+      "rewritten": [
+       "$.effects[1].description: было \u003cp\u003e@Embed[Compendium.ag-fifthpendium.feats.Item.phbftAlert000000 inline]\u003c/p\u003e, стало \u003cp\u003e\u003ca class=\"catalog-ref\" data-kind=\"reference\" data-name=\"Бдительный [Alert]\"\u003eБдительный [Alert]\u003c/a\u003e\u003c/p\u003e",
+       "$.img: было modules/ag-icons/debuffs/hearing.webp, стало "
+      ],
+      "type": "feat"
+     },
+     {
+      "name": "Чемпион [Champion]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/subclasses/fighter/champion.webp, стало ",
+       "$.system.description.value: было \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ctable\u003e\u003cthead\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003eУровень Воина\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eОсобенность\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e3\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrImprovedCr]\u003c/p\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrRemarkable]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e7\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrAdditional]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e10\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrHeroicWarr]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e15\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrSuperiorCr]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e18\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrSurvivor00]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e, стало \u003cblockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003c/blockquote\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ctable\u003e\u003cthead\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003eУровень Воина\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eОсобенность\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e3\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e7\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e10\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e15\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp style=\"text-align:center\"\u003e18\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e"
+      ],
+      "type": "subclass"
+     },
+     {
+      "name": "Второе дыхание [Second Wind]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/abilities/fighter/hand-grip-sigil.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e Текст описания. [[/r 1d10]] + ваш уровень Воина.\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbFighter000000.JournalEntryPage.wDELe3k25FQvYdrq#klassovye-osobennosti]{«Особенности Воина»}.\u003c/p\u003e, стало \u003cp\u003e Текст описания. 1d10 + ваш уровень Воина.\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. «Особенности Воина».\u003c/p\u003e"
+      ],
+      "type": "feat"
+     },
+     {
+      "name": "Эльф [Elf]",
+      "rewritten": [
+       "$.img: было modules/ag-fifthpendium/assets/species/elfs.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3\u003eВысшие эльфы\u003c/h3\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3\u003eДроу\u003c/h3\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3\u003eЛесные эльфы\u003c/h3\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e@Embed[Compendium.ag-fifthpendium.phb.JournalEntry.phbCh4ArtHandout.JournalEntryPage.TtvnRE5XYEc7Udiq cite=false]\u003c/p\u003e\u003ch3\u003eОсобенности Эльфов\u003c/h3\u003e\u003cp\u003e\u003cstrong\u003eТип существа: \u003c/strong\u003eГуманоид.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eРазмер: \u003c/strong\u003eСредний (рост от 5 до 6 футов)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСкорость:\u003c/strong\u003e 30 футов.\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eНочное зрение.\u003c/strong\u003e У вас Ночное зрение на расстоянии 60 футов.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЭльфийская родословная.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eНаследие фей. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eОстрое восприятие.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eТранс.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003ctable\u003e\u003ccaption\u003e\u003cp\u003eЭльфийские рода\u003c/p\u003e\u003c/caption\u003e\u003cthead\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003eРод\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e1-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e3-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e5-й уровень\u003c/p\u003e\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eВысший эльф\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eВы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPrestidigi] Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbSpells0000000.JournalEntryPage.6AnqLUowgdsqMFvz]{списка заклинаний Волшебника}.\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi]\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplMistyStep0]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eДроу\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e Текст описания. @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDancingLig].\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplFaerieFire]\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDarkness00]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eЛесной эльф\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eВаша Скорость увеличивается до 35 футов. Вы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDruidcraft].\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplLongstride]\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPasswithou]\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e, стало \u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3\u003eВысшие эльфы\u003c/h3\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3\u003eДроу\u003c/h3\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003ch3\u003eЛесные эльфы\u003c/h3\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003c/p\u003e\u003ch3\u003eОсобенности Эльфов\u003c/h3\u003e\u003cp\u003e\u003cstrong\u003eТип существа: \u003c/strong\u003eГуманоид.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eРазмер: \u003c/strong\u003eСредний (рост от 5 до 6 футов)\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eСкорость:\u003c/strong\u003e 30 футов.\u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eНочное зрение.\u003c/strong\u003e У вас Ночное зрение на расстоянии 60 футов.\u003c/p\u003e\u003cp\u003e\u003cstrong\u003eЭльфийская родословная.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eНаследие фей. \u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eОстрое восприятие.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eТранс.\u003c/strong\u003e Текст описания. \u003c/p\u003e\u003ctable\u003e\u003ccaption\u003e\u003cp\u003eЭльфийские рода\u003c/p\u003e\u003c/caption\u003e\u003cthead\u003e\u003ctr\u003e\u003cth\u003e\u003cp\u003eРод\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e1-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e3-й уровень\u003c/p\u003e\u003c/th\u003e\u003cth\u003e\u003cp\u003e5-й уровень\u003c/p\u003e\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eВысший эльф\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eВы знаете фокус  Текст описания. списка заклинаний Волшебника.\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003ca class=\"catalog-ref\" data-kind=\"spell\" data-name=\"Обнаружение магии [Detect Magic]\"\u003eОбнаружение магии [Detect Magic]\u003c/a\u003e\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eДроу\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e Текст описания. .\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eЛесной эльф\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eВаша Скорость увеличивается до 35 футов. Вы знаете фокус .\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003e\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e"
+      ],
+      "type": "race"
+     }
+    ]
+   },
+   "notes": null,
+   "skipped": 0,
+   "warnings": null
+  },
+  "spells": {
+   "applied": {},
+   "assets": 0,
+   "assetsMissing": 6,
+   "docs": {
+    "spells": [
+     {
+      "name": "Исцеление ран [Cure Wounds]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/abilities/paladin/lesser-healing.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e Текст описания. [[/r 2d8]] Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. [[/r 2d8]] за каждый круг ячейки выше 1-го.\u003c/p\u003e, стало \u003cp\u003e Текст описания. 2d8 Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Текст описания. 2d8 за каждый круг ячейки выше 1-го.\u003c/p\u003e"
+      ],
+      "type": "spell"
+     },
+     {
+      "name": "Обнаружение магии [Detect Magic]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/magic/psychic/star-purple-spiral.webp, стало "
+      ],
+      "type": "spell"
+     },
+     {
+      "name": "Огненный снаряд [Fire Bolt]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/magic/fire/fire-burning-dark.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e Текст описания. [[/damage 1d10 fire]] Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУлучшение фокуса.\u003c/strong\u003e Урон увеличивается на [[/r 1d10]], когда вы достигаете 5-го ([[/r 2d10]]), 11-го ([[/r 3d10]]) и 17-го уровня ([[/r 4d10]]).\u003c/p\u003e, стало \u003cp\u003e Текст описания. 1d10 (огонь) Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003eУлучшение фокуса.\u003c/strong\u003e Урон увеличивается на 1d10, когда вы достигаете 5-го (2d10), 11-го (3d10) и 17-го уровня (4d10).\u003c/p\u003e"
+      ],
+      "type": "spell"
+     },
+     {
+      "name": "Огненный шар [Fireball]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/magic/fire/fireball-dark.webp, стало ",
+       "$.system.description.value: было \u003cp\u003e Текст описания. [[/damage 8d6 fire]] Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Урон увеличивается на [[/r 1d6]] за каждый круг ячейки выше 3-го.\u003c/p\u003e, стало \u003cp\u003e Текст описания. 8d6 (огонь) Текст описания. \u003c/p\u003e\u003cp\u003e Текст описания. \u003c/p\u003e\u003cp\u003e\u003cstrong\u003e Текст описания. \u003c/strong\u003e Урон увеличивается на 1d6 за каждый круг ячейки выше 3-го.\u003c/p\u003e"
+      ],
+      "type": "spell"
+     },
+     {
+      "name": "Паралич чудовища [Hold Monster]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/old/2/skill%2018.webp, стало "
+      ],
+      "type": "spell"
+     },
+     {
+      "name": "Завораживающий узор [Hypnotic Pattern]",
+      "rewritten": [
+       "$.img: было modules/ag-icons/magic/illusion/character-headphone-cart.webp, стало "
+      ],
+      "type": "spell"
+     },
+     {
+      "name": "Старый огненный шар",
+      "type": "spell"
+     },
+     {
+      "name": "Старое удержание",
+      "type": "spell"
+     },
+     {
+      "name": "Старое обнаружение",
+      "type": "spell"
+     }
+    ]
+   },
+   "notes": null,
+   "skipped": 0,
+   "warnings": null
+  },
+  "tables": {
+   "applied": {},
+   "assets": 0,
+   "assetsMissing": 0,
+   "docs": {},
+   "notes": null,
+   "skipped": 1,
+   "warnings": null
+  }
+ },
+ "playlists": [
+  {
+   "CreatedAt": "0001-01-01T00:00:00Z",
+   "ID": "Пещера",
+   "Kind": "",
+   "Name": "Пещера",
+   "Tracks": [
+    {
+     "ID": "",
+     "Loop": true,
+     "Name": "Капли",
+     "PlaylistID": "Пещера",
+     "Position": 0,
+     "URL": "/uploads/audio/foundry/ag-fifthpendium/97f7bbc1-drops.ogg",
+     "Volume": 0.5
+    },
+    {
+     "ID": "",
+     "Loop": true,
+     "Name": "Капли",
+     "PlaylistID": "Пещера",
+     "Position": 0,
+     "URL": "/uploads/audio/foundry/ag-fifthpendium/97f7bbc1-drops.ogg",
+     "Volume": 0.5
+    }
+   ]
+  },
+  {
+   "CreatedAt": "0001-01-01T00:00:00Z",
+   "ID": "Пещера",
+   "Kind": "",
+   "Name": "Пещера",
+   "Tracks": [
+    {
+     "ID": "",
+     "Loop": true,
+     "Name": "Капли",
+     "PlaylistID": "Пещера",
+     "Position": 0,
+     "URL": "/uploads/audio/foundry/ag-fifthpendium/97f7bbc1-drops.ogg",
+     "Volume": 0.5
+    }
+   ]
+  }
+ ],
+ "scenes": [
+  {
+   "ambientVolume": 0.6,
+   "buildings": {},
+   "drawings": {},
+   "fogAreas": {},
+   "fogOfWar": true,
+   "grid": {
+    "lineColor": "#000000",
+    "lineOpacity": 0.5,
+    "offsetX": 0,
+    "offsetY": 0,
+    "size": 100,
+    "unit": "фт",
+    "unitsPerCell": 5,
+    "visible": true
+   },
+   "height": 1500,
+   "id": "\u003cid\u003e",
+   "mapUrl": "/uploads/maps/foundry/ag-fifthpendium/2ce14b34-cave.webp",
+   "name": "Пещера гоблинов",
+   "noteMarkers": [
+    {
+     "foundryEntry": "Вход в пещеру",
+     "foundryFolder": "Фикстуры dnd5e/adventure",
+     "id": "\u003cid\u003e",
+     "label": "Вход в пещеру",
+     "noteId": "",
+     "x": 400,
+     "y": 400
+    }
+   ],
+   "teleports": {},
+   "tokens": [
+    {
+     "color": "#888888",
+     "foundryActorId": "mmGoblinWarrior0",
+     "id": "\u003cid\u003e",
+     "image": "/uploads/tokens/foundry/ag-fifthpendium/e6f720a6-goblin.webp",
+     "label": "Гоблин-воитель",
+     "size": 50,
+     "x": 150,
+     "y": 150
+    },
+    {
+     "color": "#888888",
+     "foundryActorId": "нет-такого",
+     "id": "\u003cid\u003e",
+     "label": "Незнакомец",
+     "size": 50,
+     "x": 250,
+     "y": 150
+    },
+    {
+     "color": "#ffcc66",
+     "id": "\u003cid\u003e",
+     "label": "",
+     "light": {
+      "bright": 10,
+      "color": "#ff9900",
+      "dim": 20,
+      "enabled": true
+     },
+     "lightOnly": true,
+     "size": 50,
+     "x": 300,
+     "y": 300
+    }
+   ],
+   "walls": [
+    {
+     "door": "door",
+     "doorState": "closed",
+     "id": "\u003cid\u003e",
+     "x1": 500,
+     "x2": 500,
+     "y1": 0,
+     "y2": 500
+    },
+    {
+     "id": "\u003cid\u003e",
+     "x1": 0,
+     "x2": 500,
+     "y1": 0,
+     "y2": 0
+    }
+   ],
+   "width": 2000
+  },
+  {
+   "ambientVolume": 0.6,
+   "buildings": {},
+   "drawings": {},
+   "fogAreas": {},
+   "fogOfWar": true,
+   "grid": {
+    "lineColor": "#000000",
+    "lineOpacity": 0.5,
+    "offsetX": 0,
+    "offsetY": 0,
+    "size": 100,
+    "unit": "фт",
+    "unitsPerCell": 5,
+    "visible": true
+   },
+   "height": 1500,
+   "id": "\u003cid\u003e",
+   "mapUrl": "/uploads/notes/foundry/ag-fifthpendium/2ce14b34-cave.webp",
+   "name": "Пещера гоблинов",
+   "noteMarkers": [
+    {
+     "foundryEntry": "Вход в пещеру",
+     "foundryFolder": "Фикстуры dnd5e/adventure",
+     "id": "\u003cid\u003e",
+     "label": "Вход в пещеру",
+     "noteId": "",
+     "x": 400,
+     "y": 400
+    }
+   ],
+   "teleports": {},
+   "tokens": [
+    {
+     "color": "#888888",
+     "foundryActorId": "mmGoblinWarrior0",
+     "id": "\u003cid\u003e",
+     "image": "/uploads/tokens/foundry/ag-fifthpendium/e6f720a6-goblin.webp",
+     "label": "Гоблин-воитель",
+     "size": 50,
+     "x": 150,
+     "y": 150
+    },
+    {
+     "color": "#888888",
+     "foundryActorId": "нет-такого",
+     "id": "\u003cid\u003e",
+     "label": "Незнакомец",
+     "size": 50,
+     "x": 250,
+     "y": 150
+    },
+    {
+     "color": "#ffcc66",
+     "id": "\u003cid\u003e",
+     "label": "",
+     "light": {
+      "bright": 10,
+      "color": "#ff9900",
+      "dim": 20,
+      "enabled": true
+     },
+     "lightOnly": true,
+     "size": 50,
+     "x": 300,
+     "y": 300
+    }
+   ],
+   "walls": [
+    {
+     "door": "door",
+     "doorState": "closed",
+     "id": "\u003cid\u003e",
+     "x1": 500,
+     "x2": 500,
+     "y1": 0,
+     "y2": 500
+    },
+    {
+     "id": "\u003cid\u003e",
+     "x1": 0,
+     "x2": 500,
+     "y1": 0,
+     "y2": 0
+    }
+   ],
+   "width": 2000
+  }
+ ],
+ "uploaded": 6
+}

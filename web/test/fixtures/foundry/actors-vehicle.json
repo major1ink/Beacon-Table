@@ -1,0 +1,402 @@
+[
+ {
+  "_id": "phbmobGalley0000",
+  "_key": "!actors!phbmobGalley0000",
+  "effects": [],
+  "flags": {},
+  "folder": "GYaeKnSKv6FglKRz",
+  "img": "icons/environment/settlement/ship.webp",
+  "items": [],
+  "name": "Галера [Galley]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "PPBFkpN74aZqNqJp": 3,
+   "Rzps8Yf9tuYaNaHm": 3,
+   "SMYa8T6HVuSkTFA7": 3,
+   "default": 0
+  },
+  "prototypeToken": {
+   "actorLink": false,
+   "alpha": 1,
+   "appendNumber": false,
+   "bar1": {
+    "attribute": "attributes.hp"
+   },
+   "bar2": {
+    "attribute": null
+   },
+   "depth": 2,
+   "detectionModes": {},
+   "displayBars": 0,
+   "displayName": 0,
+   "disposition": -1,
+   "flags": {},
+   "height": 2,
+   "light": {
+    "alpha": 0.5,
+    "angle": 360,
+    "animation": {
+     "intensity": 5,
+     "reverse": false,
+     "speed": 5,
+     "type": null
+    },
+    "attenuation": 0.5,
+    "bright": 0,
+    "color": null,
+    "coloration": 1,
+    "contrast": 0,
+    "darkness": {
+     "max": 1,
+     "min": 0
+    },
+    "dim": 0,
+    "luminosity": 0.5,
+    "negative": false,
+    "priority": 0,
+    "saturation": 0,
+    "shadows": 0
+   },
+   "lockRotation": false,
+   "movementAction": null,
+   "name": "Галера",
+   "occludable": {
+    "radius": 0
+   },
+   "prependAdjective": false,
+   "randomImg": false,
+   "ring": {
+    "colors": {
+     "background": null,
+     "ring": null
+    },
+    "effects": 1,
+    "enabled": true,
+    "subject": {
+     "scale": 1,
+     "texture": "icons/environment/settlement/ship.webp"
+    }
+   },
+   "rotation": 0,
+   "sight": {
+    "angle": 360,
+    "attenuation": 0.1,
+    "brightness": 0,
+    "color": null,
+    "contrast": 0,
+    "enabled": false,
+    "range": 0,
+    "saturation": 0,
+    "visionMode": "basic"
+   },
+   "texture": {
+    "alphaThreshold": 0.75,
+    "anchorX": 0.5,
+    "anchorY": 0.5,
+    "fit": "contain",
+    "scaleX": 1,
+    "scaleY": 1,
+    "src": "icons/environment/settlement/ship.webp",
+    "tint": "#ffffff"
+   },
+   "turnMarker": {
+    "animation": null,
+    "disposition": false,
+    "mode": 1,
+    "src": null
+   },
+   "width": 2
+  },
+  "sort": 0,
+  "system": {
+   "abilities": {
+    "cha": {
+     "bonuses": {
+      "check": "",
+      "save": ""
+     },
+     "check": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "max": null,
+     "proficient": 0,
+     "save": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "value": 0
+    },
+    "con": {
+     "bonuses": {
+      "check": "",
+      "save": ""
+     },
+     "check": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "max": null,
+     "proficient": 0,
+     "save": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "value": 10
+    },
+    "dex": {
+     "bonuses": {
+      "check": "",
+      "save": ""
+     },
+     "check": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "max": null,
+     "proficient": 0,
+     "save": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "value": 10
+    },
+    "int": {
+     "bonuses": {
+      "check": "",
+      "save": ""
+     },
+     "check": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "max": null,
+     "proficient": 0,
+     "save": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "value": 0
+    },
+    "str": {
+     "bonuses": {
+      "check": "",
+      "save": ""
+     },
+     "check": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "max": null,
+     "proficient": 0,
+     "save": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "value": 10
+    },
+    "wis": {
+     "bonuses": {
+      "check": "",
+      "save": ""
+     },
+     "check": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "max": null,
+     "proficient": 0,
+     "save": {
+      "roll": {
+       "max": null,
+       "min": null,
+       "mode": 0
+      }
+     },
+     "value": 0
+    }
+   },
+   "attributes": {
+    "ac": {
+     "calc": "default",
+     "flat": 15
+    },
+    "actions": {
+     "max": 0,
+     "spent": 0,
+     "stations": false,
+     "thresholds": {
+      "0": null,
+      "1": null,
+      "2": null
+     }
+    },
+    "capacity": {
+     "cargo": {
+      "units": "tn",
+      "value": 150
+     },
+     "creature": "80"
+    },
+    "hp": {
+     "dt": 20,
+     "max": 500,
+     "mt": null,
+     "temp": 0,
+     "tempmax": 0,
+     "value": 500
+    },
+    "init": {
+     "ability": "",
+     "bonus": "",
+     "roll": {
+      "max": null,
+      "min": null,
+      "mode": 0
+     }
+    },
+    "movement": {
+     "hover": false,
+     "ignoredDifficultTerrain": [],
+     "units": null
+    },
+    "price": {
+     "denomination": "gp",
+     "value": null
+    },
+    "quality": {
+     "value": 4
+    },
+    "travel": {
+     "paces": {},
+     "speeds": {},
+     "time": 24,
+     "units": "mph"
+    }
+   },
+   "cargo": {
+    "crew": [
+     {
+      "name": "",
+      "quantity": 80
+     }
+    ],
+    "passengers": []
+   },
+   "crew": {
+    "value": []
+   },
+   "currency": {
+    "cp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0,
+    "sp": 0
+   },
+   "details": {
+    "biography": {
+     "public": "",
+     "value": ""
+    },
+    "type": "water"
+   },
+   "draft": {
+    "value": []
+   },
+   "passengers": {
+    "value": []
+   },
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "traits": {
+    "beam": {
+     "units": "ft"
+    },
+    "ci": {
+     "custom": "",
+     "value": [
+      "blinded",
+      "charmed",
+      "deafened",
+      "frightened",
+      "paralyzed",
+      "petrified",
+      "poisoned",
+      "stunned",
+      "unconscious"
+     ]
+    },
+    "di": {
+     "bypasses": [],
+     "custom": "",
+     "value": [
+      "poison",
+      "psychic"
+     ]
+    },
+    "dimensions": "",
+    "dm": {
+     "amount": {},
+     "bypasses": []
+    },
+    "dr": {
+     "bypasses": [],
+     "custom": "",
+     "value": []
+    },
+    "dv": {
+     "bypasses": [],
+     "custom": "",
+     "value": []
+    },
+    "keel": {
+     "units": "ft"
+    },
+    "size": "lg",
+    "weight": {
+     "units": "lb"
+    }
+   }
+  },
+  "type": "vehicle"
+ }
+]

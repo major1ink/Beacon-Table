@@ -1,0 +1,70 @@
+{
+ "monsters": [
+  {
+   "name": "Гоблин-воитель [Goblin Warrior]",
+   "imageUrl": "modules/ag-fifthpendium/assets/tokens/goblin-warrior.webp",
+   "anchor": "mmGoblinWarrior0"
+  },
+  {
+   "name": "Гоблин-проклинатель [Goblin Hexer]",
+   "imageUrl": "modules/ag-fifthpendium/assets/tokens/goblin-hexer.webp",
+   "anchor": "mmGoblinHexer000"
+  },
+  {
+   "name": "Взрослый красный дракон [Adult Red Dragon]",
+   "imageUrl": "modules/ag-fifthpendium/assets/tokens/adult-red-dragon.webp",
+   "anchor": "mmAdultRedDragon"
+  },
+  null
+ ],
+ "pregens": [
+  {
+   "name": "Пробный персонаж 1",
+   "avatarUrl": "modules/ag-goblin-trouble/assets/actors/portraits/player-characters/bobby.webp",
+   "imageUrl": "modules/ag-goblin-trouble/assets/actors/portraits/player-characters/bobby.webp"
+  },
+  {
+   "name": "Пробный персонаж 2",
+   "avatarUrl": "modules/ag-goblin-trouble/assets/actors/portraits/player-characters/diana.webp",
+   "imageUrl": "modules/ag-goblin-trouble/assets/actors/portraits/player-characters/diana.webp"
+  }
+ ],
+ "items": [
+  {
+   "name": "Длинный меч [Longsword]",
+   "imageUrl": "modules/ag-fifthpendium/assets/weapons/longsword.webp"
+  },
+  {
+   "name": "Кольчуга [Chain Mail]",
+   "imageUrl": "modules/ag-fifthpendium/assets/armor/chain-mail.webp"
+  },
+  {
+   "name": "Зелье исцеления [Potion of Healing]",
+   "imageUrl": " Текст описания. "
+  },
+  {
+   "name": "Кольцо защиты [Ring of Protection]",
+   "imageUrl": "modules/ag-fifthpendium/assets/items/DMG/ring-of-protection.webp"
+  },
+  {
+   "name": "Рубин [Ruby]",
+   "imageUrl": "modules/ag-fifthpendium/assets/gems/ruby.webp"
+  },
+  {
+   "name": "Рюкзак [Backpack]",
+   "imageUrl": "modules/ag-fifthpendium/assets/items/PHB/backpack3.webp"
+  },
+  {
+   "name": "Язык пламени [Flame Tongue]",
+   "imageUrl": "modules/ag-fifthpendium/assets/items/DMG/flame-tongue.webp"
+  },
+  {
+   "name": "Музыкальный инструмент [Musical Instrument]",
+   "imageUrl": "modules/ag-icons/abilities/bard/lute-melody-orange.webp"
+  }
+ ],
+ "references": 8,
+ "errors": [
+  "Огненный снаряд [Fire Bolt]: Это не существо (type: \"spell\") — экспортируй карточку существа с TTG Club."
+ ]
+}

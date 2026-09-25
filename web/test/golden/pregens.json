@@ -1,0 +1,225 @@
+[
+ {
+  "name": "Пробный персонаж 1",
+  "avatarUrl": "modules/ag-goblin-trouble/assets/actors/portraits/player-characters/bobby.webp",
+  "sheet": {
+   "info": {
+    "class": "Варвар 1",
+    "subclass": "",
+    "species": "Человек",
+    "background": "Фермер [Farmer]",
+    "level": 1,
+    "xp": 0,
+    "playerName": ""
+   },
+   "abilities": {
+    "str": 14,
+    "dex": 14,
+    "con": 14,
+    "int": 10,
+    "wis": 9,
+    "cha": 10
+   },
+   "saveProf": {
+    "str": true,
+    "dex": false,
+    "con": true,
+    "int": false,
+    "wis": false,
+    "cha": false
+   },
+   "skillProf": {
+    "acrobatics": 1,
+    "animalHandling": 1,
+    "athletics": 1,
+    "intimidation": 1,
+    "nature": 1,
+    "persuasion": 1,
+    "perception": 1,
+    "stealth": 1
+   },
+   "armor": {
+    "lightArmor": true,
+    "mediumArmor": true,
+    "heavyArmor": false,
+    "shield": true,
+    "simpleWeapons": true,
+    "martialWeapons": true,
+    "otherWeapons": ""
+   },
+   "toolsLanguages": "Общий, Драконий, Эльфийский",
+   "combat": {
+    "ac": 14,
+    "hpCurrent": 16,
+    "hpTemp": 0,
+    "hpMax": 16,
+    "hitDiceTotal": "1к12",
+    "speed": 30,
+    "darkvision": 0
+   },
+   "weapons": [
+    {
+     "name": "Безоружный удар [Unarmed Strike]",
+     "bonus": "+4",
+     "damage": "",
+     "notes": ""
+    },
+    {
+     "name": "Топорик [Handaxe]",
+     "bonus": "+4",
+     "damage": "1к6 +2 рубящий",
+     "notes": ""
+    },
+    {
+     "name": "Двуручный топор [Greataxe]",
+     "bonus": "+4",
+     "damage": "1к12 +2 рубящий",
+     "notes": ""
+    }
+   ],
+   "features": "Находчивость [Resourceful]. Текст описания.\n\nУмелость [Skillful]. Текст описания. Заметка Foundry\n\n Текст описания.\n\nУниверсальность [Versatile]. Вы получаете @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbFeats00000000.JournalEntryPage.otAeQs0TLHYIBNuj]{Черту происхождения} Текст описания. @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftSkilled0000]{Умелый}.Заметка Foundry\n\n Текст описания.\n\nУмелый [Skilled]. Текст описания. \n\nПовторяемость. Текст описания. Заметка Foundry\n\n Текст описания.\n\nЖивучий [Tough]. Текст описания. Заметка Foundry\n\n Текст описания.\n\nЯрость [Rage]. Текст описания. \n\n Текст описания. [[lookup @scale.barbarian.rages]] Текст описания. \n\n Текст описания. \n\nУстойчивость к урону. Текст описания. \n\nУрон от Ярости. Текст описания. \n\nПреимущество в Силе. Текст описания. \n\n Текст описания.  Текст описания. \n\nДлительность. Текст описания. \n\n Текст описания. \n\n Текст описания. \n\n Текст описания. \n\n Текст описания. Заметка Foundry\n\n Текст описания.\n\nЗащита без брони [Unarmored Defense]. Текст описания.\n\nОружейное мастерство [Weapon Mastery]. Текст описания. \n\n Текст описания.",
+   "feats": "",
+   "spellcasting": {
+    "ability": "",
+    "slotsByLevel": [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ]
+   },
+   "preparedSpells": [],
+   "appearance": "",
+   "background": "",
+   "alignment": "",
+   "equipment": "Безоружный удар [Unarmed Strike], Инструменты плотника [Carpenter's Tools], Комплект первопроходца [Explorer's Pack], Верёвка [Rope], Огниво [Tinderbox], Масло [Oil] ×2, Спальный мешок [Bedroll], Сухой паёк [Rations] ×10, Факел [Torch] ×10, Бурдюк [Waterskin], Вода (пинта) ×4, Рюкзак [Backpack], Топорик [Handaxe] ×4, Двуручный топор [Greataxe], Зелье исцеления [Potion of Healing]",
+   "coins": {
+    "cp": 0,
+    "sp": 0,
+    "gp": 15,
+    "ep": 0,
+    "pp": 0
+   },
+   "personalityTraits": "",
+   "ideals": "",
+   "bonds": "",
+   "flaws": ""
+  }
+ },
+ {
+  "name": "Пробный персонаж 2",
+  "avatarUrl": "modules/ag-goblin-trouble/assets/actors/portraits/player-characters/diana.webp",
+  "sheet": {
+   "info": {
+    "class": "Монах 1",
+    "subclass": "",
+    "species": "Человек",
+    "background": "Писарь [Scribe]",
+    "level": 1,
+    "xp": 0,
+    "playerName": ""
+   },
+   "abilities": {
+    "str": 10,
+    "dex": 15,
+    "con": 14,
+    "int": 10,
+    "wis": 13,
+    "cha": 10
+   },
+   "saveProf": {
+    "str": true,
+    "dex": true,
+    "con": false,
+    "int": false,
+    "wis": false,
+    "cha": false
+   },
+   "skillProf": {
+    "acrobatics": 1,
+    "animalHandling": 1,
+    "insight": 1,
+    "investigation": 1,
+    "nature": 1,
+    "perception": 1,
+    "stealth": 1
+   },
+   "armor": {
+    "lightArmor": false,
+    "mediumArmor": false,
+    "heavyArmor": false,
+    "shield": false,
+    "simpleWeapons": true,
+    "martialWeapons": false,
+    "otherWeapons": ""
+   },
+   "toolsLanguages": "Общий, Драконий, Эльфийский",
+   "combat": {
+    "ac": 13,
+    "hpCurrent": 12,
+    "hpTemp": 0,
+    "hpMax": 12,
+    "hitDiceTotal": "1к8",
+    "speed": 30,
+    "darkvision": 0
+   },
+   "weapons": [
+    {
+     "name": "Безоружный удар [Unarmed Strike]",
+     "bonus": "+4",
+     "damage": "",
+     "notes": ""
+    },
+    {
+     "name": "Посох [Staff]",
+     "bonus": "+2",
+     "damage": "1к6 дробящий",
+     "notes": ""
+    },
+    {
+     "name": "Кинжал [Dagger]",
+     "bonus": "+4",
+     "damage": "1к4 +2 колющий",
+     "notes": ""
+    }
+   ],
+   "features": "Находчивость [Resourceful]. Текст описания.\n\nУмелость [Skillful]. Текст описания. Заметка Foundry\n\n Текст описания.\n\nУниверсальность [Versatile]. Вы получаете @UUID[Compendium.ag-dnd2024.phb-content.JournalEntry.phbFeats00000000.JournalEntryPage.otAeQs0TLHYIBNuj]{Черту происхождения} Текст описания. @UUID[Compendium.ag-dnd2024.phb-feats.Item.phbftSkilled0000]{Умелый}.Заметка Foundry\n\n Текст описания.\n\nЖивучий [Tough]. Текст описания. Заметка Foundry\n\n Текст описания.\n\nУмелый [Skilled]. Текст описания. \n\nПовторяемость. Текст описания. Заметка Foundry\n\n Текст описания.\n\nБоевые искусства [Martial Arts]. Текст описания.  Текст описания.  Текст описания.  Текст описания. \n\nБонусный Безоружный удар. Текст описания. \n\nКость Боевых искусств. Текст описания. \n\n Текст описания.  [[lookup @scale.monk.die]]\n\nЛовкие атаки.  Текст описания. Заметка Foundry\n\n Текст описания. Монашеская атака Текст описания.\n\nЗащита без брони [Unarmored Defense]. Текст описания. Заметка Foundry\n\n Текст описания.",
+   "feats": "",
+   "spellcasting": {
+    "ability": "",
+    "slotsByLevel": [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ]
+   },
+   "preparedSpells": [],
+   "appearance": "",
+   "background": "",
+   "alignment": "",
+   "equipment": "Безоружный удар [Unarmed Strike], Инструменты картографа [Cartographer's Tools], Инструменты каллиграфа [Calligrapher's Supplies], Посох [Staff], Кинжал [Dagger] ×5, Зелье исцеления [Potion of Healing], Парадная одежда [Clothes, Fine], Лампа [Lamp], Масло [Oil] ×2, Пергамент [Parchment], Рюкзак [Backpack], Спальный мешок [Bedroll], Сухой паёк [Rations] ×10, Верёвка [Rope], Огниво [Tinderbox], Бурдюк [Waterskin], Вода (пинта) ×4, Факел [Torch] ×10",
+   "coins": {
+    "cp": 0,
+    "sp": 0,
+    "gp": 10,
+    "ep": 0,
+    "pp": 0
+   },
+   "personalityTraits": "",
+   "ideals": "",
+   "bonds": "",
+   "flaws": ""
+  }
+ }
+]

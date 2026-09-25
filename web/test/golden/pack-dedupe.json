@@ -1,0 +1,9 @@
+{
+ "keyByName": "огненный снаряд",
+ "keyBySlug": "slug:prone",
+ "keyNoSlug": "горение",
+ "sameAsItself": true,
+ "changedField": false,
+ "numberVsString": true,
+ "missingVsEmpty": true
+}

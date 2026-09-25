@@ -29,6 +29,7 @@ import {
 import { openSocket } from "../ws-reconnect.js";
 import { icon } from "../icons.js";
 import { parseLssExport, applyLssImport } from "../lss-import.js";
+import { normalizeSheet } from "../sheet-normalize.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { attachHpDrag, hpColor, hpFillRatios, parseQuickValue } from "../hp-bar.js";
 import { renderStatusChips } from "../status-palette.js";
@@ -221,55 +222,6 @@ let liveStatusesEl = null;
 // internal/domain/character_sheet.go.
 function isClassic() {
   return character && character.system === "dnd5e-2014";
-}
-
-function normalizeSheet(raw) {
-  const s = raw && typeof raw === "object" ? raw : {};
-  s.info = s.info || {};
-  if (!s.info.level) s.info.level = 1;
-  s.abilities = s.abilities || {};
-  for (const a of ABILITIES) if (!s.abilities[a.key]) s.abilities[a.key] = 10;
-  s.saveProf = s.saveProf || {};
-  for (const a of ABILITIES) if (s.saveProf[a.key] === undefined) s.saveProf[a.key] = false;
-  s.skillProf = s.skillProf || {};
-  s.armor = s.armor || {};
-  s.combat = s.combat || {};
-  s.weapons = Array.isArray(s.weapons) ? s.weapons : [];
-  s.notes = Array.isArray(s.notes) && s.notes.length === 6 ? s.notes : ["", "", "", "", "", ""];
-  s.spellcasting = s.spellcasting || {};
-  s.spellcasting.ability = s.spellcasting.ability || "";
-  s.spellcasting.slotsByLevel =
-    Array.isArray(s.spellcasting.slotsByLevel) && s.spellcasting.slotsByLevel.length === 9
-      ? s.spellcasting.slotsByLevel
-      : ["", "", "", "", "", "", "", "", ""];
-  s.preparedSpells = Array.isArray(s.preparedSpells) ? s.preparedSpells : [];
-  s.coins = s.coins || {};
-  for (const k of ["cp", "sp", "gp", "ep", "pp"]) s.coins[k] = Math.max(0, parseInt(s.coins[k], 10) || 0);
-  // personalityTraits/ideals/bonds/flaws — показываются на обеих системах
-  // (см. renderTab1/renderTab4 ниже), просто в разных местах листа;
-  // race/species — только 2014/2024 соответственно, у "чужой" системы
-  // остаются пустой строкой, ничего не отображающей.
-  s.personalityTraits = s.personalityTraits || "";
-  s.ideals = s.ideals || "";
-  s.bonds = s.bonds || "";
-  s.flaws = s.flaws || "";
-  s.info.race = s.info.race || "";
-  s.info.species = s.info.species || "";
-  s.info.playerName = s.info.playerName || "";
-  s.physical = s.physical || {};
-  for (const k of ["age", "height", "weight", "eyes", "skin", "hair"]) s.physical[k] = s.physical[k] || "";
-  s.traits = s.traits || "";
-  s.proficiencyNotes = s.proficiencyNotes || "";
-  s.combat.darkvision = s.combat.darkvision || 0;
-  s.combat.isDying = !!s.combat.isDying;
-  s.resources = Array.isArray(s.resources) ? s.resources : [];
-  // attunementItems — заменяет прежние безымянные 3 чекбокса (см.
-  // internal/domain/character_sheet.go: AttunementItems); дополняем как
-  // минимум до 3 строк при первой загрузке, чтобы сохранить привычный UX
-  // "3 слота", но список динамический — можно добавлять/удалять строки.
-  s.attunementItems = Array.isArray(s.attunementItems) ? s.attunementItems.slice() : [];
-  while (s.attunementItems.length < 3) s.attunementItems.push({ name: "", attuned: false });
-  return s;
 }
 
 // ==================== DOM helpers ====================

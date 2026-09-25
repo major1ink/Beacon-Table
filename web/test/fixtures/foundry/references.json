@@ -1,0 +1,2030 @@
+[
+ {
+  "_id": "phbftrChampion00",
+  "_key": "!items!phbftrChampion00",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "pIt14M7sVhYdmsmF",
+  "img": "modules/ag-fifthpendium/assets/subclasses/fighter/champion.webp",
+  "name": "Чемпион [Champion]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "advancement": {
+    "HTWpVGYr55JdEAxX": {
+     "_id": "HTWpVGYr55JdEAxX",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbftrSuperiorCr"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 15,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "IljnRkkmbH3uRnYr": {
+     "_id": "IljnRkkmbH3uRnYr",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbftrAdditional"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 7,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "Jv0WTgb1VuoGhlMZ": {
+     "_id": "Jv0WTgb1VuoGhlMZ",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbftrSurvivor00"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 18,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "b8dxcKcl7tINIJgU": {
+     "_id": "b8dxcKcl7tINIJgU",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbftrImprovedCr"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbftrRemarkable"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 3,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "iQsuBG3G5w81gH5P": {
+     "_id": "iQsuBG3G5w81gH5P",
+     "configuration": {
+      "allowDrops": true,
+      "choices": {
+       "10": {
+        "count": null,
+        "replacement": true
+       },
+       "11": {
+        "count": null,
+        "replacement": true
+       },
+       "12": {
+        "count": null,
+        "replacement": true
+       },
+       "13": {
+        "count": null,
+        "replacement": true
+       },
+       "14": {
+        "count": null,
+        "replacement": true
+       },
+       "15": {
+        "count": null,
+        "replacement": true
+       },
+       "16": {
+        "count": null,
+        "replacement": true
+       },
+       "17": {
+        "count": null,
+        "replacement": true
+       },
+       "18": {
+        "count": null,
+        "replacement": true
+       },
+       "19": {
+        "count": null,
+        "replacement": true
+       },
+       "20": {
+        "count": null,
+        "replacement": true
+       },
+       "7": {
+        "count": 1,
+        "replacement": false
+       },
+       "8": {
+        "count": null,
+        "replacement": true
+       },
+       "9": {
+        "count": null,
+        "replacement": true
+       }
+      },
+      "pool": [],
+      "restriction": {
+       "list": [],
+       "subtype": "fightingStyle",
+       "type": "feat"
+      },
+      "spell": null,
+      "type": "feat"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/properties/magical.svg",
+     "title": "Дополнительный боевой стиль",
+     "type": "ItemChoice",
+     "value": {
+      "added": {},
+      "replaced": {}
+     }
+    },
+    "mUR5bgu7D2BK7TLr": {
+     "_id": "mUR5bgu7D2BK7TLr",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbftrHeroicWarr"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 10,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    }
+   },
+   "classIdentifier": "fighter",
+   "description": {
+    "chat": "",
+    "value": "<blockquote><p> Текст описания. </p></blockquote><p> Текст описания. </p><table><thead><tr><td><p style=\"text-align:center\">Уровень Воина</p></td><td><p>Особенность</p></td></tr></thead><tbody><tr><td><p style=\"text-align:center\">3</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrImprovedCr]</p><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrRemarkable]</p></td></tr><tr><td><p style=\"text-align:center\">7</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrAdditional]</p></td></tr><tr><td><p style=\"text-align:center\">10</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrHeroicWarr]</p></td></tr><tr><td><p style=\"text-align:center\">15</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrSuperiorCr]</p></td></tr><tr><td><p style=\"text-align:center\">18</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrSurvivor00]</p></td></tr></tbody></table>"
+   },
+   "identifier": "champion",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "spellcasting": {
+    "ability": "",
+    "preparation": {
+     "formula": ""
+    },
+    "progression": "none"
+   }
+  },
+  "type": "subclass"
+ },
+ {
+  "_id": "phbftrSecondWind",
+  "_key": "!items!phbftrSecondWind",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "migratedUses": 2,
+    "riders": {
+     "activity": [],
+     "effect": []
+    }
+   },
+   "midi-qol": {
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "cptOrQUb07AijhBk",
+  "img": "modules/ag-icons/abilities/fighter/hand-grip-sigil.webp",
+  "name": "Второе дыхание [Second Wind]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "activities": {
+    "9SeFR7SI7Wh7nyoh": {
+     "_id": "9SeFR7SI7Wh7nyoh",
+     "activation": {
+      "condition": "",
+      "override": false,
+      "type": "bonus",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": [
+       {
+        "scaling": {},
+        "target": "",
+        "type": "itemUses",
+        "value": "1"
+       }
+      ]
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effects": [],
+     "flags": {},
+     "healing": {
+      "bonus": "@classes.fighter.levels",
+      "custom": {
+       "enabled": false
+      },
+      "denomination": 10,
+      "number": 1,
+      "scaling": {
+       "number": 1
+      },
+      "types": [
+       "healing"
+      ]
+     },
+     "img": null,
+     "name": "",
+     "range": {
+      "override": false,
+      "special": "",
+      "units": "self"
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false,
+       "count": "",
+       "type": "self"
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "type": "",
+       "units": "ft"
+      }
+     },
+     "type": "heal",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "advancement": {},
+   "cover": null,
+   "crewed": false,
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. [[/r 1d10]] + ваш уровень Воина.</p><p> Текст описания. </p><p> Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbFighter000000.JournalEntryPage.wDELe3k25FQvYdrq#klassovye-osobennosti]{«Особенности Воина»}.</p>"
+   },
+   "enchant": {},
+   "identifier": "second-wind",
+   "prerequisites": {
+    "items": [],
+    "level": 1,
+    "repeatable": false
+   },
+   "properties": [],
+   "requirements": "Воин 1",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "subtype": "",
+    "value": "class"
+   },
+   "uses": {
+    "max": "@scale.fighter.second-wind",
+    "recovery": [
+     {
+      "period": "lr",
+      "type": "recoverAll"
+     },
+     {
+      "formula": "1",
+      "period": "sr",
+      "type": "formula"
+     }
+    ],
+    "spent": 0
+   }
+  },
+  "type": "feat"
+ },
+ {
+  "_id": "phbbrbBarbarian0",
+  "_key": "!items!phbbrbBarbarian0",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "E10PvWiRaVZuNR79",
+  "img": "modules/ag-fifthpendium/assets/classes/barbarian.webp",
+  "name": "Варвар",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "advancement": {
+    "3P7dxZqdJCJrJdju": {
+     "_id": "3P7dxZqdJCJrJdju",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [],
+      "grants": [
+       "weapon:sim",
+       "weapon:mar"
+      ],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-weapon-proficiencies.svg",
+     "level": 1,
+     "title": "",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "8DkKoyqd9jeyEVLC": {
+     "_id": "8DkKoyqd9jeyEVLC",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbBrutalStri"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 9,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "8iWCMmcyyrI53M6D": {
+     "_id": "8iWCMmcyyrI53M6D",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbRage000000"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbUnarmoredD"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbWeaponMast"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 1,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "AOwKxjJ1W0lMK8ju": {
+     "_id": "AOwKxjJ1W0lMK8ju",
+     "configuration": {},
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/subclass.svg",
+     "level": 3,
+     "title": "",
+     "type": "Subclass",
+     "value": {
+      "document": null,
+      "uuid": null
+     }
+    },
+    "CfaI64ZcqtLgvhT9": {
+     "_id": "CfaI64ZcqtLgvhT9",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [
+       {
+        "count": 1,
+        "pool": [
+         "skills:ath",
+         "skills:prc",
+         "skills:itm",
+         "skills:nat",
+         "skills:ani"
+        ]
+       }
+      ],
+      "grants": [],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 3,
+     "title": "Первобытное знание",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "HDBuMeJRJJ47unve": {
+     "_id": "HDBuMeJRJJ47unve",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [
+       {
+        "count": 2,
+        "pool": [
+         "weapon:*"
+        ]
+       }
+      ],
+      "grants": [],
+      "mode": "mastery"
+     },
+     "flags": {},
+     "hint": "Выберите оружие, в котором получите мастерство.",
+     "icon": "systems/dnd5e/icons/svg/properties/magical.svg",
+     "level": 1,
+     "title": "Оружейное мастерство",
+     "type": "Trait",
+     "value": {}
+    },
+    "IeDW5VECjxyuSGrx": {
+     "_id": "IeDW5VECjxyuSGrx",
+     "configuration": {},
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/hit-points.svg",
+     "title": "",
+     "type": "HitPoints",
+     "value": {}
+    },
+    "JIoLGLUVnpEssCd6": {
+     "_id": "JIoLGLUVnpEssCd6",
+     "configuration": {
+      "cap": 2,
+      "fixed": {
+       "cha": 0,
+       "con": 0,
+       "dex": 0,
+       "int": 0,
+       "str": 0,
+       "wis": 0
+      },
+      "locked": [],
+      "points": 2,
+      "recommendation": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/ability-score-improvement.svg",
+     "level": 12,
+     "title": "",
+     "type": "AbilityScoreImprovement",
+     "value": {
+      "type": "asi"
+     }
+    },
+    "JuxeR53ADcHLypm4": {
+     "_id": "JuxeR53ADcHLypm4",
+     "configuration": {
+      "distance": {
+       "units": ""
+      },
+      "identifier": "weapon-mastery",
+      "scale": {
+       "1": {
+        "value": 2
+       },
+       "10": {
+        "value": 4
+       },
+       "4": {
+        "value": 3
+       }
+      },
+      "type": "number"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/properties/magical.svg",
+     "title": "Оружейное мастерство",
+     "type": "ScaleValue",
+     "value": {}
+    },
+    "LlDWLYwyVZYODzvo": {
+     "_id": "LlDWLYwyVZYODzvo",
+     "configuration": {
+      "cap": 2,
+      "fixed": {
+       "cha": 0,
+       "con": 0,
+       "dex": 0,
+       "int": 0,
+       "str": 0,
+       "wis": 0
+      },
+      "locked": [],
+      "points": 2,
+      "recommendation": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/ability-score-improvement.svg",
+     "level": 16,
+     "title": "",
+     "type": "AbilityScoreImprovement",
+     "value": {
+      "type": "asi"
+     }
+    },
+    "NJW6CGR2oua1EsS0": {
+     "_id": "NJW6CGR2oua1EsS0",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbPrimalKnow"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 3,
+     "title": "Особенность",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "OEPRT3kMCxvEJSGH": {
+     "_id": "OEPRT3kMCxvEJSGH",
+     "classRestriction": "primary",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [
+       {
+        "count": 2,
+        "pool": [
+         "skills:ath",
+         "skills:prc",
+         "skills:sur",
+         "skills:itm",
+         "skills:nat",
+         "skills:ani"
+        ]
+       }
+      ],
+      "grants": [],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-skills.svg",
+     "level": 1,
+     "title": "Навыки",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "QZCbmmciYmq6JlSr": {
+     "_id": "QZCbmmciYmq6JlSr",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbImp2Brutal"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 17,
+     "title": "Особенность",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "Sgft63bHm6p945zq": {
+     "_id": "Sgft63bHm6p945zq",
+     "classRestriction": "primary",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [],
+      "grants": [
+       "armor:lgt",
+       "armor:med",
+       "armor:shl"
+      ],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-armor-proficiencies.svg",
+     "level": 1,
+     "title": "",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "TO5ng7579ciKJV8D": {
+     "_id": "TO5ng7579ciKJV8D",
+     "configuration": {
+      "distance": {
+       "units": ""
+      },
+      "identifier": "rage-damage",
+      "scale": {
+       "1": {
+        "value": 2
+       },
+       "16": {
+        "value": 4
+       },
+       "9": {
+        "value": 3
+       }
+      },
+      "type": "number"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/damage/necrotic.svg",
+     "title": "Урон от Ярости",
+     "type": "ScaleValue",
+     "value": {}
+    },
+    "VAbZDr3KGEnQ3GZI": {
+     "_id": "VAbZDr3KGEnQ3GZI",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbFastMoveme"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbExtraAttack00"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 5,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "WtDKFyf9KIwzHSYE": {
+     "_id": "WtDKFyf9KIwzHSYE",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbRelentless"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 11,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "XEZVGzjZVnCMVDqB": {
+     "_id": "XEZVGzjZVnCMVDqB",
+     "configuration": {
+      "cap": 2,
+      "fixed": {
+       "cha": 0,
+       "con": 0,
+       "dex": 0,
+       "int": 0,
+       "str": 0,
+       "wis": 0
+      },
+      "locked": [],
+      "max": null,
+      "points": 2,
+      "recommendation": "Compendium.ag-fifthpendium.feats.Item.phbBoonofIrresis"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/ability-score-improvement.svg",
+     "level": 19,
+     "title": "",
+     "type": "AbilityScoreImprovement",
+     "value": {
+      "type": "asi"
+     }
+    },
+    "eW8C4CFqQfRcl47T": {
+     "_id": "eW8C4CFqQfRcl47T",
+     "classRestriction": "primary",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [],
+      "grants": [
+       "saves:str",
+       "saves:con"
+      ],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-saves.svg",
+     "level": 1,
+     "title": "",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "fo601Yy6NOjIxgKm": {
+     "_id": "fo601Yy6NOjIxgKm",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbPrimalCham"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 20,
+     "title": "Особенность",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "g8b4vvWFxlxVSY3m": {
+     "_id": "g8b4vvWFxlxVSY3m",
+     "configuration": {
+      "cap": 2,
+      "fixed": {
+       "cha": 0,
+       "con": 0,
+       "dex": 0,
+       "int": 0,
+       "str": 0,
+       "wis": 0
+      },
+      "locked": [],
+      "points": 2,
+      "recommendation": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/ability-score-improvement.svg",
+     "level": 8,
+     "title": "",
+     "type": "AbilityScoreImprovement",
+     "value": {
+      "type": "asi"
+     }
+    },
+    "gQF5Ac2DAltHEVla": {
+     "_id": "gQF5Ac2DAltHEVla",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbFeralInsti"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbInstinctiv"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 7,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "ma8lQrNmHsQfWQji": {
+     "_id": "ma8lQrNmHsQfWQji",
+     "configuration": {
+      "distance": {
+       "units": ""
+      },
+      "identifier": "rages",
+      "scale": {
+       "1": {
+        "value": 2
+       },
+       "12": {
+        "value": 5
+       },
+       "17": {
+        "value": 6
+       },
+       "3": {
+        "value": 3
+       },
+       "6": {
+        "value": 4
+       }
+      },
+      "type": "number"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/damage/necrotic.svg",
+     "title": "Ярость",
+     "type": "ScaleValue",
+     "value": {}
+    },
+    "pNzObt8CaeZmhLVo": {
+     "_id": "pNzObt8CaeZmhLVo",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbDangerSens"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbRecklessAt"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 2,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "rBa9qWvrnqOOdb66": {
+     "_id": "rBa9qWvrnqOOdb66",
+     "classRestriction": "secondary",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [],
+      "grants": [
+       "armor:shl"
+      ],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-armor-proficiencies.svg",
+     "level": 1,
+     "title": "",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "tLJ6YNTAblB1d4yl": {
+     "_id": "tLJ6YNTAblB1d4yl",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbPersistent"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 15,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "tLXUf6nKqNrJM5q6": {
+     "_id": "tLXUf6nKqNrJM5q6",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [
+       {
+        "count": 1,
+        "pool": [
+         "weapon:*"
+        ]
+       }
+      ],
+      "grants": [],
+      "mode": "mastery"
+     },
+     "flags": {},
+     "hint": "Выберите оружие, в котором получите мастерство.",
+     "icon": "systems/dnd5e/icons/svg/properties/magical.svg",
+     "level": 4,
+     "title": "Оружейное мастерство",
+     "type": "Trait",
+     "value": {}
+    },
+    "u1j1UlTMTQOefbWL": {
+     "_id": "u1j1UlTMTQOefbWL",
+     "configuration": {
+      "cap": 2,
+      "fixed": {
+       "cha": 0,
+       "con": 0,
+       "dex": 0,
+       "int": 0,
+       "str": 0,
+       "wis": 0
+      },
+      "locked": [],
+      "points": 2,
+      "recommendation": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/ability-score-improvement.svg",
+     "level": 4,
+     "title": "",
+     "type": "AbilityScoreImprovement",
+     "value": {
+      "type": "asi"
+     }
+    },
+    "vH7z1tBEn1QCc5MG": {
+     "_id": "vH7z1tBEn1QCc5MG",
+     "configuration": {
+      "distance": {
+       "units": ""
+      },
+      "identifier": "brutal-strike",
+      "scale": {
+       "17": {
+        "faces": 10,
+        "modifiers": [],
+        "number": 2
+       },
+       "9": {
+        "faces": 10,
+        "modifiers": [],
+        "number": 1
+       }
+      },
+      "type": "dice"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/scale-value.svg",
+     "title": "Урон Жестокого удара",
+     "type": "ScaleValue",
+     "value": {}
+    },
+    "vS5sOt9xpDPom9lJ": {
+     "_id": "vS5sOt9xpDPom9lJ",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbIndomitabl"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 18,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "wcPr0MfC0VWWbp5b": {
+     "_id": "wcPr0MfC0VWWbp5b",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [
+       {
+        "count": 1,
+        "pool": [
+         "weapon:*"
+        ]
+       }
+      ],
+      "grants": [],
+      "mode": "mastery"
+     },
+     "flags": {},
+     "hint": "Выберите оружие, в котором получите мастерство.",
+     "icon": "systems/dnd5e/icons/svg/properties/magical.svg",
+     "level": 10,
+     "title": "Оружейное мастерство",
+     "type": "Trait",
+     "value": {}
+    },
+    "zZ7mPkuuIvZAezY8": {
+     "_id": "zZ7mPkuuIvZAezY8",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.classes.Item.phbbrbImpBrutalS"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 13,
+     "title": "Особенности",
+     "type": "ItemGrant",
+     "value": {}
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<blockquote><p> Текст описания. </p></blockquote><h3>Ключевые атрибуты Варвара</h3><table\n      class=\"core-class-traits\"><tbody><tr><th scope=\"row\"\n      data-colwidth=\"231\"><p> Текст описания. </p></th><td><p>Сила</p></td></tr><tr><th\n      data-colwidth=\"231\"><p><strong>Кость здоровья</strong></p></th><td><p>D12\n      за уровень Варвара</p></td></tr><tr><th\n      data-colwidth=\"231\"><p><strong>Умения в\n      испытаниях</strong></p></th><td><p>Сила и\n      Выносливость</p></td></tr><tr><th data-colwidth=\"231\"><p><strong>Умения в\n      навыках</strong></p></th><td><p><em>Выберите 2:</em> Текст описания. </p></td></tr><tr><th\n      data-colwidth=\"231\"><p><strong>Умения в\n      оружии</strong></p></th><td><p> Текст описания. </p></td></tr><tr><th data-colwidth=\"231\"><p><strong>Обращение с\n      бронёй</strong></p></th><td><p> Текст описания. </p></td></tr><tr><th data-colwidth=\"231\"><p><strong> Текст описания. </strong></p></th><td><p><em>Выберите A или Б:</em> (A)\n      @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepGreataxe00]{Секира},\n      4 @UUID[Compendium.ag-fifthpendium.equipment.Item.phbwepHandaxe000]{Ручных\n      топора},\n      @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagExplorersPa]{Комплект\n      первопроходца}, и [[/award 15GP]]; (Б) [[/award\n      75GP]]</p></td></tr></tbody></table><p> Текст описания. </p><p> Текст описания. </p><p> Текст описания. </p><h2>Выбор Варвара…</h2><h3>На 1-м\n      уровне</h3><ul><li><p> Текст описания. </p></li><li><p> Текст описания. </p></li></ul><h3> Текст описания. </h3><ul><li><p> Текст описания. </p></li><li><p> Текст описания. </p></li></ul>"
+   },
+   "hd": {
+    "additional": "",
+    "denomination": "d12",
+    "spent": 0
+   },
+   "identifier": "barbarian",
+   "levels": 1,
+   "primaryAbility": {
+    "all": true,
+    "value": [
+     "str"
+    ]
+   },
+   "properties": [],
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "spellcasting": {
+    "ability": "",
+    "preparation": {
+     "formula": ""
+    },
+    "progression": "none"
+   },
+   "startingEquipment": [
+    {
+     "_id": "ICtMAUdBO3AEmlBk",
+     "group": "",
+     "requiresProficiency": false,
+     "sort": 100000,
+     "type": "AND"
+    },
+    {
+     "_id": "O7U4eWZGWSD9DPsc",
+     "count": null,
+     "group": "ICtMAUdBO3AEmlBk",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbwepGreataxe00",
+     "requiresProficiency": false,
+     "sort": 200000,
+     "type": "linked"
+    },
+    {
+     "_id": "HguFF4cFFc9Boy5P",
+     "count": 4,
+     "group": "ICtMAUdBO3AEmlBk",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbwepHandaxe000",
+     "requiresProficiency": false,
+     "sort": 300000,
+     "type": "linked"
+    },
+    {
+     "_id": "jDspKMT8F07C8Nbh",
+     "count": null,
+     "group": "ICtMAUdBO3AEmlBk",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbagExplorersPa",
+     "requiresProficiency": false,
+     "sort": 400000,
+     "type": "linked"
+    },
+    {
+     "_id": "3GDDiZ4NhRD0yd9t",
+     "count": 15,
+     "group": "ICtMAUdBO3AEmlBk",
+     "key": "gp",
+     "requiresProficiency": false,
+     "sort": 500000,
+     "type": "currency"
+    }
+   ],
+   "wealth": "75"
+  },
+  "type": "class"
+ },
+ {
+  "_id": "phbftAlert000000",
+  "_key": "!items!phbftAlert000000",
+  "effects": [
+   "FdpAK6bUfjvchCgk",
+   {
+    "_id": "FdpAK6bUfjvchCgk",
+    "description": "<p>@Embed[Compendium.ag-fifthpendium.feats.Item.phbftAlert000000 inline]</p>",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": null
+    },
+    "flags": {
+     "ActiveAuras": {
+      "alignment": "",
+      "aura": "None",
+      "customCheck": "",
+      "displayTemp": false,
+      "height": false,
+      "hidden": false,
+      "hostile": false,
+      "ignoreSelf": false,
+      "isAura": false,
+      "nameOverride": "",
+      "onlyOnce": false,
+      "radius": "",
+      "statuses": [],
+      "type": "",
+      "wallsBlock": "system"
+     },
+     "core": {
+      "overlay": false
+     },
+     "dae": {
+      "disableCondition": "",
+      "disableIncapacitated": false,
+      "durationExpression": "",
+      "macroRepeat": "none",
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "multi"
+     },
+     "dnd5e": {
+      "riders": {
+       "statuses": []
+      }
+     }
+    },
+    "folder": null,
+    "img": "modules/ag-icons/debuffs/hearing.webp",
+    "name": "Бдительный [Alert]",
+    "origin": "Compendium.ag-fifthpendium.feats.Item.phbftAlert000000",
+    "showIcon": 1,
+    "sort": 0,
+    "start": null,
+    "statuses": [],
+    "system": {
+     "changes": [
+      {
+       "key": "flags.dnd5e.initiativeAlert",
+       "priority": 20,
+       "type": "override",
+       "value": 1
+      }
+     ]
+    },
+    "tint": "#ffffff",
+    "transfer": true,
+    "type": "base"
+   }
+  ],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   },
+   "midi-qol": {
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "HJ3oDa0VBkQMqGkP",
+  "img": "modules/ag-icons/debuffs/hearing.webp",
+  "name": "Бдительный [Alert]",
+  "ownership": {
+   "SMYa8T6HVuSkTFA7": 3,
+   "UcyrOvVFrpZJSxsP": 3,
+   "default": 0
+  },
+  "sort": 100000,
+  "system": {
+   "activities": {},
+   "advancement": [],
+   "cover": null,
+   "crewed": false,
+   "description": {
+    "chat": "",
+    "value": "<p><strong>Умение в Инициативе.</strong> Текст описания. </p><p><strong>Обмен Инициативой.</strong> Текст описания. </p>"
+   },
+   "enchant": {},
+   "identifier": "alert",
+   "prerequisites": {
+    "level": null,
+    "repeatable": false
+   },
+   "properties": [],
+   "requirements": "",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "subtype": "origin",
+    "value": "feat"
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "feat"
+ },
+ {
+  "_id": "phbbgAcolyte0000",
+  "_key": "!items!phbbgAcolyte0000",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "tn5xePsx4zUJ0Xmr",
+  "img": "modules/ag-fifthpendium/assets/backgrounds/acolyte.webp",
+  "name": "Послушник [Acolyte]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "advancement": {
+    "1IiE4lNHUW0U0n2d": {
+     "_id": "1IiE4lNHUW0U0n2d",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [],
+      "grants": [
+       "skills:ins",
+       "skills:rel"
+      ],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-skills.svg",
+     "level": 0,
+     "title": "",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "3UkMTLws8Fct5lOs": {
+     "_id": "3UkMTLws8Fct5lOs",
+     "configuration": {
+      "cap": 2,
+      "fixed": {
+       "cha": 0,
+       "con": 0,
+       "dex": 0,
+       "int": 0,
+       "str": 0,
+       "wis": 0
+      },
+      "locked": [
+       "str",
+       "dex",
+       "con"
+      ],
+      "max": null,
+      "points": 3,
+      "recommendation": null
+     },
+     "flags": {},
+     "hint": "<p>Увеличьте значение Интеллекта, Мудрости или Харизмы</p>",
+     "icon": "systems/dnd5e/icons/svg/ability-score-improvement.svg",
+     "level": 0,
+     "title": "",
+     "type": "AbilityScoreImprovement",
+     "value": {
+      "type": "asi"
+     }
+    },
+    "BekXJf1C5WJiaBJB": {
+     "_id": "BekXJf1C5WJiaBJB",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [
+       {
+        "count": 2,
+        "pool": [
+         "languages:standard:*"
+        ]
+       }
+      ],
+      "grants": [
+       "languages:standard:common"
+      ],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-languages.svg",
+     "level": 0,
+     "title": "",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "hxguIOTjK2yp7wD6": {
+     "_id": "hxguIOTjK2yp7wD6",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [],
+      "grants": [
+       "tool:art:calligrapher"
+      ],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-tool-proficiencies.svg",
+     "level": 0,
+     "title": "",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "v5ljaVhlwownC1H9": {
+     "_id": "v5ljaVhlwownC1H9",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.feats.Item.fZm3Di2wqEdQcn3E"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 0,
+     "title": "Черта",
+     "type": "ItemGrant",
+     "value": {}
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p><strong>Характеристики:</strong> Текст описания. </p><p><strong>Черта:</strong> @UUID[Compendium.ag-fifthpendium.feats.Item.phbftMagicInitia]{Посвящённый в магию} (Жрец).</p><p><strong>Умения в навыках:</strong> Текст описания. </p><p><strong>Умения в инструментах:</strong> Инструменты каллиграфа.</p><p><strong>Экипировка:</strong> Выберите А или Б: (А) @UUID[Compendium.ag-fifthpendium.equipment.Item.phbtulCalligraph]{Инструменты каллиграфа}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagBook0000000]{Книга} (молитвенник), @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagHolySymbolV]{Символ религии}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagParchment00]{Пергамент} (10 листов), @UUID[Compendium.ag-fifthpendium.equipment.Item.phbagRobe0000000]{Мантия}, 8 ЗМ; (Б) 50 ЗМ.</p><p> Текст описания. </p>"
+   },
+   "identifier": "acolyte",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "startingEquipment": [
+    {
+     "_id": "CDcqMyRJCuoW8YO6",
+     "group": "",
+     "requiresProficiency": false,
+     "sort": 100000,
+     "type": "AND"
+    },
+    {
+     "_id": "gGr7Q3n6AIXaqg9q",
+     "count": null,
+     "group": "CDcqMyRJCuoW8YO6",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbtulCalligraph",
+     "requiresProficiency": false,
+     "sort": 200000,
+     "type": "linked"
+    },
+    {
+     "_id": "vkIGSqPGIsysChNq",
+     "count": null,
+     "group": "CDcqMyRJCuoW8YO6",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbagBook0000000",
+     "requiresProficiency": false,
+     "sort": 300000,
+     "type": "linked"
+    },
+    {
+     "_id": "xyvmetoT8Fcw459q",
+     "count": null,
+     "group": "CDcqMyRJCuoW8YO6",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbagHolySymbolV",
+     "requiresProficiency": false,
+     "sort": 400000,
+     "type": "linked"
+    },
+    {
+     "_id": "ZxxtUBPyQYUH4uov",
+     "count": null,
+     "group": "CDcqMyRJCuoW8YO6",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbagParchment00",
+     "requiresProficiency": false,
+     "sort": 500000,
+     "type": "linked"
+    },
+    {
+     "_id": "cFswFz7Xfo7BvFhE",
+     "count": null,
+     "group": "CDcqMyRJCuoW8YO6",
+     "key": "Compendium.ag-fifthpendium.equipment.Item.phbagRobe0000000",
+     "requiresProficiency": false,
+     "sort": 600000,
+     "type": "linked"
+    },
+    {
+     "_id": "77c8PNMEqv4bnL9g",
+     "count": 8,
+     "group": "CDcqMyRJCuoW8YO6",
+     "key": "gp",
+     "requiresProficiency": false,
+     "sort": 700000,
+     "type": "currency"
+    }
+   ],
+   "wealth": "50"
+  },
+  "type": "background"
+ },
+ {
+  "_id": "phbspElf00000000",
+  "_key": "!items!phbspElf00000000",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "vfjmAQiHf4jT8CrE",
+  "img": "modules/ag-fifthpendium/assets/species/elfs.webp",
+  "name": "Эльф [Elf]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "advancement": {
+    "G0mIq4dX5axHkZBe": {
+     "_id": "G0mIq4dX5axHkZBe",
+     "configuration": {
+      "allowReplacements": false,
+      "choices": [
+       {
+        "count": 1,
+        "pool": [
+         "skills:prc",
+         "skills:sur",
+         "skills:ins"
+        ]
+       }
+      ],
+      "grants": [],
+      "mode": "default"
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait-skills.svg",
+     "level": 0,
+     "title": "Острое восприятие",
+     "type": "Trait",
+     "value": {
+      "chosen": []
+     }
+    },
+    "MW20hxeFtuVZibYY": {
+     "_id": "MW20hxeFtuVZibYY",
+     "configuration": {
+      "sizes": [
+       "med"
+      ]
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/size.svg",
+     "level": 0,
+     "title": "",
+     "type": "Size",
+     "value": {}
+    },
+    "Wb3JJftyqOB5DNk5": {
+     "_id": "Wb3JJftyqOB5DNk5",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.equipment.Item.phbUnarmedStrike"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/damage/slashing.svg",
+     "level": 0,
+     "title": "Безоружный удар",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "ZI4d8LWZ1qkWt7zI": {
+     "_id": "ZI4d8LWZ1qkWt7zI",
+     "configuration": {
+      "allowDrops": false,
+      "choices": {
+       "0": {
+        "count": 1,
+        "replacement": false
+       }
+      },
+      "pool": [
+       {
+        "uuid": "Compendium.ag-fifthpendium.origins.Item.Wt93Vm9OvsDiw3t9"
+       },
+       {
+        "uuid": "Compendium.ag-fifthpendium.origins.Item.JXTcQQTyhjMlZI9w"
+       },
+       {
+        "uuid": "Compendium.ag-fifthpendium.origins.Item.7lPf2GyQ8bmFfXHC"
+       }
+      ],
+      "restriction": {
+       "list": []
+      },
+      "spell": null,
+      "type": null
+     },
+     "flags": {},
+     "hint": "<p> Текст описания. </p>",
+     "icon": "systems/dnd5e/icons/svg/item-choice.svg",
+     "title": "Эльфийская родословная",
+     "type": "ItemChoice",
+     "value": {
+      "added": {},
+      "replaced": {}
+     }
+    },
+    "pT4aa7HWpQc6D7VR": {
+     "_id": "pT4aa7HWpQc6D7VR",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.origins.Item.phbsptFeyAncestr"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.origins.Item.phbsptKeenSenses"
+       },
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.origins.Item.phbsptTrance0000"
+       }
+      ],
+      "optional": false,
+      "spell": null
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/trait.svg",
+     "level": 0,
+     "title": "Особенности вида",
+     "type": "ItemGrant",
+     "value": {}
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p><p> Текст описания. </p><p> Текст описания. </p><p> Текст описания. </p><h3>Высшие эльфы</h3><p> Текст описания. </p><h3>Дроу</h3><p> Текст описания. </p><h3>Лесные эльфы</h3><p> Текст описания. </p><p>@Embed[Compendium.ag-fifthpendium.phb.JournalEntry.phbCh4ArtHandout.JournalEntryPage.TtvnRE5XYEc7Udiq cite=false]</p><h3>Особенности Эльфов</h3><p><strong>Тип существа: </strong>Гуманоид.</p><p><strong>Размер: </strong>Средний (рост от 5 до 6 футов)</p><p><strong>Скорость:</strong> 30 футов.</p><p> Текст описания. </p><p><strong>Ночное зрение.</strong> У вас Ночное зрение на расстоянии 60 футов.</p><p><strong>Эльфийская родословная.</strong> Текст описания. </p><p> Текст описания. </p><p><strong>Наследие фей. </strong> Текст описания. </p><p><strong>Острое восприятие.</strong> Текст описания. </p><p><strong>Транс.</strong> Текст описания. </p><table><caption><p>Эльфийские рода</p></caption><thead><tr><th><p>Род</p></th><th><p>1-й уровень</p></th><th><p>3-й уровень</p></th><th><p>5-й уровень</p></th></tr></thead><tbody><tr><td><p>Высший эльф</p></td><td><p>Вы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPrestidigi] Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbSpells0000000.JournalEntryPage.6AnqLUowgdsqMFvz]{списка заклинаний Волшебника}.</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi]</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplMistyStep0]</p></td></tr><tr><td><p>Дроу</p></td><td><p> Текст описания. @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDancingLig].</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplFaerieFire]</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDarkness00]</p></td></tr><tr><td><p>Лесной эльф</p></td><td><p>Ваша Скорость увеличивается до 35 футов. Вы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDruidcraft].</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplLongstride]</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPasswithou]</p></td></tr></tbody></table>"
+   },
+   "identifier": "elf",
+   "movement": {
+    "hover": false,
+    "ignoredDifficultTerrain": [],
+    "units": null,
+    "walk": "30"
+   },
+   "senses": {
+    "ranges": {
+     "blindsight": null,
+     "darkvision": 60,
+     "tremorsense": null,
+     "truesight": null
+    },
+    "special": "",
+    "units": "ft"
+   },
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "value": "humanoid"
+   }
+  },
+  "type": "race"
+ },
+ {
+  "_id": "Wt93Vm9OvsDiw3t9",
+  "_key": "!items!Wt93Vm9OvsDiw3t9",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "gd3O6z4IwVSR7LDk",
+  "img": "modules/ag-fifthpendium/assets/species/elf-high.webp",
+  "name": "Высший эльф [High Elf]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "activities": {},
+   "advancement": {
+    "hjPNORi8rtElu1Ps": {
+     "_id": "hjPNORi8rtElu1Ps",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.spells.Item.phbsplMistyStep0"
+       }
+      ],
+      "optional": true,
+      "spell": {
+       "ability": [
+        "int",
+        "wis",
+        "cha"
+       ],
+       "method": "spell",
+       "prepared": 2,
+       "uses": {
+        "max": "1",
+        "per": "lr",
+        "requireSlot": false
+       }
+      }
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/item-grant.svg",
+     "level": 5,
+     "title": "Заклинание",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "uKtEpo3HefCjYNjs": {
+     "_id": "uKtEpo3HefCjYNjs",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi"
+       }
+      ],
+      "optional": true,
+      "spell": {
+       "ability": [
+        "int",
+        "wis",
+        "cha"
+       ],
+       "method": "spell",
+       "prepared": 2,
+       "uses": {
+        "max": "1",
+        "per": "lr",
+        "requireSlot": false
+       }
+      }
+     },
+     "flags": {},
+     "hint": "",
+     "icon": "systems/dnd5e/icons/svg/item-grant.svg",
+     "level": 3,
+     "title": "Заклинание",
+     "type": "ItemGrant",
+     "value": {}
+    },
+    "wuadysjbdq6pqOOp": {
+     "_id": "wuadysjbdq6pqOOp",
+     "configuration": {
+      "items": [
+       {
+        "optional": false,
+        "uuid": "Compendium.ag-fifthpendium.spells.Item.phbsplPrestidigi"
+       }
+      ],
+      "optional": true,
+      "spell": {
+       "ability": [
+        "int",
+        "wis",
+        "cha"
+       ],
+       "method": "spell",
+       "prepared": 2,
+       "uses": {
+        "max": "",
+        "per": "",
+        "requireSlot": false
+       }
+      }
+     },
+     "flags": {},
+     "hint": "<p> Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbSpells0000000.JournalEntryPage.6AnqLUowgdsqMFvz]{списка заклинаний Волшебника}.</p>",
+     "icon": "systems/dnd5e/icons/svg/damage/force.svg",
+     "level": 1,
+     "title": "Фокус",
+     "type": "ItemGrant",
+     "value": {}
+    }
+   },
+   "crewed": false,
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p><table><caption><p>Высший эльф</p></caption><thead><tr><th><p>1-й уровень</p></th><th><p>3-й уровень</p></th><th><p>5-й уровень</p></th></tr></thead><tbody><tr><td><p>Вы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPrestidigi]{Мелкие фокусы}.</p><p> Текст описания. @UUID[Compendium.ag-fifthpendium.phb.JournalEntry.phbSpells0000000.JournalEntryPage.6AnqLUowgdsqMFvz]{списка заклинаний Волшебника}.</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi]{Обнаружение магии}</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplMistyStep0]{Туманный шаг}</p></td></tr></tbody></table>"
+   },
+   "enchant": {},
+   "identifier": "high-elf",
+   "prerequisites": {
+    "items": [],
+    "level": null,
+    "repeatable": false
+   },
+   "properties": [],
+   "requirements": "Эльф",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "subtype": "",
+    "value": "race"
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "feat"
+ },
+ {
+  "_id": "dmgArmory0000000",
+  "_key": "!items!dmgArmory0000000",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "c0KO813l3ylxkLRy",
+  "img": "icons/environment/settlement/target-dummy.webp",
+  "name": "Оружейная палата [Armory]",
+  "ownership": {
+   "GUM5RdHYeSIXoAvu": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "activities": {},
+   "craft": null,
+   "defenders": {
+    "max": null,
+    "value": []
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p><p><strong> Текст описания. </strong> Текст описания. @UUID[Compendium.ag-fifthpendium.bastions.Item.dmgSmithy0000000]{Кузница [Smithy]} Текст описания. </p><p> Текст описания. [[/r 1d8]] вместо каждого [[/r 1d6]] Текст описания. </p>"
+   },
+   "free": false,
+   "hirelings": {
+    "max": 1,
+    "value": []
+   },
+   "identifier": "",
+   "level": 5,
+   "order": "trade",
+   "progress": {
+    "max": null,
+    "order": "",
+    "value": 0
+   },
+   "size": "roomy",
+   "source": {
+    "book": "DMG 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "trade": {
+    "creatures": {
+     "max": null,
+     "value": []
+    },
+    "profit": null,
+    "stock": {
+     "max": null,
+     "stocked": false,
+     "value": null
+    }
+   },
+   "type": {
+    "subtype": "armory",
+    "value": "special"
+   },
+   "uses": {
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "facility"
+ }
+]

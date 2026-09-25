@@ -1,0 +1,207 @@
+{
+ "fromSpells": [
+  {
+   "name": "Парализованный",
+   "slug": "paralyzed",
+   "icon": "zap",
+   "color": "#ffffff",
+   "overlay": true,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:paralyzed.svg"
+   ]
+  },
+  {
+   "name": "Обнаружение магии [Detect Magic]",
+   "slug": "detect-magic",
+   "icon": "question",
+   "color": "#ffffff",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:star-purple-spiral.webp"
+   ]
+  },
+  {
+   "name": "Очарованный",
+   "slug": "incapacitated",
+   "icon": "ban",
+   "color": "#ffffff",
+   "overlay": true,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:charmed.svg"
+   ]
+  }
+ ],
+ "fromItems": [
+  {
+   "name": "Кольцо защиты [Ring of Protection]",
+   "slug": "ring-of-protection",
+   "icon": "question",
+   "color": "#ffffff",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "<p>Вы получаете бонус +1 к Классу Защиты и испытаниям.</p>",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:ring-of-protection.webp"
+   ]
+  },
+  {
+   "name": "Горящий клинок",
+   "slug": "",
+   "icon": "question",
+   "color": "#ffffff",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:burning.svg"
+   ]
+  },
+  {
+   "name": "Свет",
+   "slug": "",
+   "icon": "question",
+   "color": "#ffffff",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:burning.svg"
+   ]
+  },
+  {
+   "name": "Язык пламени [Flame Tongue]",
+   "slug": "flame-tongue",
+   "icon": "question",
+   "color": "#ffffff",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "<p><em>Оружие (любое Рукопашное)</em></p>",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:flame-tongue.webp"
+   ]
+  },
+  {
+   "name": "Защита",
+   "slug": "",
+   "icon": "question",
+   "color": "",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "",
+   "modifiers": [
+    {
+     "target": "ac",
+     "mode": "add",
+     "value": "1",
+     "period": "",
+     "note": ""
+    },
+    {
+     "target": "speed",
+     "mode": "set",
+     "value": "0",
+     "period": "",
+     "note": ""
+    }
+   ],
+   "mechanics": "спасброски: прибавить 1",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт"
+   ]
+  }
+ ],
+ "fromLegacy": [
+  {
+   "name": "Паралич",
+   "slug": "paralyzed",
+   "icon": "zap",
+   "color": "",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 10,
+   "description": "",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт"
+   ]
+  },
+  {
+   "name": "Горение",
+   "slug": "burning",
+   "icon": "flame",
+   "color": "",
+   "overlay": false,
+   "levels": 0,
+   "defaultRounds": 3,
+   "description": "<p>Огонь.</p>",
+   "modifiers": [],
+   "mechanics": "system.attributes.hp.value: прибавить -1d6",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт",
+    "foundry:fire.svg"
+   ]
+  },
+  {
+   "name": "Сбит с ног",
+   "slug": "prone",
+   "icon": "prone",
+   "color": "",
+   "overlay": true,
+   "levels": 0,
+   "defaultRounds": 0,
+   "description": "",
+   "modifiers": [],
+   "mechanics": "",
+   "source": "Foundry VTT",
+   "tags": [
+    "импорт"
+   ]
+  }
+ ]
+}

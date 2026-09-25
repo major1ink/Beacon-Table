@@ -1,0 +1,360 @@
+{
+ "to2024": {
+  "result": {
+   "name": "Тестовый изобретатель",
+   "warnings": []
+  },
+  "edition": "2024",
+  "sheet": {
+   "info": {
+    "background": "Ремесленник",
+    "class": "Изобретатель",
+    "subclass": "Алхимик",
+    "species": "Дварф",
+    "race": "",
+    "level": 3,
+    "xp": 900,
+    "playerName": "Игрок"
+   },
+   "abilities": {
+    "str": 10,
+    "dex": 13,
+    "con": 15,
+    "int": 16,
+    "wis": 12,
+    "cha": 8
+   },
+   "saveProf": {
+    "cha": false,
+    "con": true,
+    "dex": false,
+    "int": true,
+    "str": false,
+    "wis": false
+   },
+   "skillProf": {
+    "investigation": 1,
+    "arcana": 1
+   },
+   "armor": {
+    "lightArmor": false,
+    "mediumArmor": false,
+    "heavyArmor": false,
+    "shield": false,
+    "simpleWeapons": false,
+    "martialWeapons": false,
+    "otherWeapons": ""
+   },
+   "toolsLanguages": "",
+   "combat": {
+    "ac": 15,
+    "hpCurrent": 20,
+    "hpTemp": 0,
+    "hpMax": 24,
+    "hitDiceTotal": "",
+    "hitDiceCurrent": "",
+    "deathSaveSuccess": 0,
+    "deathSaveFail": 0,
+    "exhaustion": 0,
+    "inspiration": false,
+    "speed": 25,
+    "darkvision": 60,
+    "isDying": false,
+    "conditions": ""
+   },
+   "weapons": [
+    {
+     "name": "Лёгкий арбалет",
+     "bonus": "+3",
+     "damage": "1к8+1 колющий",
+     "notes": ""
+    }
+   ],
+   "features": "Магическое ремесло.",
+   "attacksSpells": "Арбалет: +3, 1к8+1.",
+   "feats": "",
+   "goals": "Найти учителя.",
+   "allies": "",
+   "additionalFeatures": "",
+   "treasure": "",
+   "notes": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "spellcasting": {
+    "ability": "int",
+    "slotsByLevel": [
+     "3",
+     "0",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ]
+   },
+   "preparedSpells": [
+    {
+     "level": 0,
+     "name": "Мелкие фокусы",
+     "castTime": "",
+     "range": "",
+     "concentration": false,
+     "ritual": false,
+     "material": false,
+     "notes": ""
+    },
+    {
+     "level": 0,
+     "name": "Огненный снаряд",
+     "castTime": "",
+     "range": "",
+     "concentration": false,
+     "ritual": false,
+     "material": false,
+     "notes": ""
+    },
+    {
+     "level": 1,
+     "name": "Лечение ран",
+     "castTime": "",
+     "range": "",
+     "concentration": false,
+     "ritual": false,
+     "material": false,
+     "notes": ""
+    }
+   ],
+   "size": "",
+   "appearance": "",
+   "background": "Вырос в кузне.\n\nУшёл в странствия.",
+   "alignment": "Нейтральный",
+   "equipment": "Рюкзак, верёвка",
+   "coins": {
+    "cp": 0,
+    "sp": 4,
+    "gp": 15,
+    "ep": 0,
+    "pp": 0
+   },
+   "physical": {
+    "age": "",
+    "height": "130 см",
+    "weight": "",
+    "eyes": "серые",
+    "skin": "",
+    "hair": "рыжие"
+   },
+   "traits": "Тёмное зрение 60 футов.",
+   "proficiencyNotes": "Доспехи: лёгкие, средние, щиты.\nИнструменты: воровские.",
+   "resources": [
+    {
+     "name": "Вливания",
+     "current": 2,
+     "max": 2,
+     "recovery": ""
+    }
+   ],
+   "attunementItems": [
+    {
+     "name": "Кольцо проб",
+     "attuned": true
+    },
+    {
+     "name": "",
+     "attuned": false
+    }
+   ],
+   "personalityTraits": "Любопытен.",
+   "ideals": "Знание.",
+   "bonds": "Мастерская.",
+   "flaws": "Упрям."
+  }
+ },
+ "to2014": {
+  "result": {
+   "name": "Тестовый изобретатель",
+   "warnings": [
+    "Файл экспортирован как D&D 2024, лист персонажа — D&D 2014: часть терминологии может не совпадать."
+   ]
+  },
+  "edition": "2024",
+  "sheet": {
+   "info": {
+    "background": "Ремесленник",
+    "class": "Изобретатель",
+    "subclass": "Алхимик",
+    "species": "",
+    "race": "Дварф",
+    "level": 3,
+    "xp": 900,
+    "playerName": "Игрок"
+   },
+   "abilities": {
+    "str": 10,
+    "dex": 13,
+    "con": 15,
+    "int": 16,
+    "wis": 12,
+    "cha": 8
+   },
+   "saveProf": {
+    "cha": false,
+    "con": true,
+    "dex": false,
+    "int": true,
+    "str": false,
+    "wis": false
+   },
+   "skillProf": {
+    "investigation": 1,
+    "arcana": 1
+   },
+   "armor": {
+    "lightArmor": false,
+    "mediumArmor": false,
+    "heavyArmor": false,
+    "shield": false,
+    "simpleWeapons": false,
+    "martialWeapons": false,
+    "otherWeapons": ""
+   },
+   "toolsLanguages": "",
+   "combat": {
+    "ac": 15,
+    "hpCurrent": 20,
+    "hpTemp": 0,
+    "hpMax": 24,
+    "hitDiceTotal": "",
+    "hitDiceCurrent": "",
+    "deathSaveSuccess": 0,
+    "deathSaveFail": 0,
+    "exhaustion": 0,
+    "inspiration": false,
+    "speed": 25,
+    "darkvision": 60,
+    "isDying": false,
+    "conditions": ""
+   },
+   "weapons": [
+    {
+     "name": "Лёгкий арбалет",
+     "bonus": "+3",
+     "damage": "1к8+1 колющий",
+     "notes": ""
+    }
+   ],
+   "features": "Магическое ремесло.",
+   "attacksSpells": "Арбалет: +3, 1к8+1.",
+   "feats": "",
+   "goals": "Найти учителя.",
+   "allies": "",
+   "additionalFeatures": "",
+   "treasure": "",
+   "notes": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "spellcasting": {
+    "ability": "int",
+    "slotsByLevel": [
+     "3",
+     "0",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ]
+   },
+   "preparedSpells": [
+    {
+     "level": 0,
+     "name": "Мелкие фокусы",
+     "castTime": "",
+     "range": "",
+     "concentration": false,
+     "ritual": false,
+     "material": false,
+     "notes": ""
+    },
+    {
+     "level": 0,
+     "name": "Огненный снаряд",
+     "castTime": "",
+     "range": "",
+     "concentration": false,
+     "ritual": false,
+     "material": false,
+     "notes": ""
+    },
+    {
+     "level": 1,
+     "name": "Лечение ран",
+     "castTime": "",
+     "range": "",
+     "concentration": false,
+     "ritual": false,
+     "material": false,
+     "notes": ""
+    }
+   ],
+   "size": "",
+   "appearance": "",
+   "background": "Вырос в кузне.\n\nУшёл в странствия.",
+   "alignment": "Нейтральный",
+   "equipment": "Рюкзак, верёвка",
+   "coins": {
+    "cp": 0,
+    "sp": 4,
+    "gp": 15,
+    "ep": 0,
+    "pp": 0
+   },
+   "physical": {
+    "age": "",
+    "height": "130 см",
+    "weight": "",
+    "eyes": "серые",
+    "skin": "",
+    "hair": "рыжие"
+   },
+   "traits": "Тёмное зрение 60 футов.",
+   "proficiencyNotes": "Доспехи: лёгкие, средние, щиты.\nИнструменты: воровские.",
+   "resources": [
+    {
+     "name": "Вливания",
+     "current": 2,
+     "max": 2,
+     "recovery": ""
+    }
+   ],
+   "attunementItems": [
+    {
+     "name": "Кольцо проб",
+     "attuned": true
+    },
+    {
+     "name": "",
+     "attuned": false
+    }
+   ],
+   "personalityTraits": "Любопытен.",
+   "ideals": "Знание.",
+   "bonds": "Мастерская.",
+   "flaws": "Упрям."
+  }
+ }
+}

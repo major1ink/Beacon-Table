@@ -1,0 +1,1895 @@
+[
+ {
+  "_id": "phbwepLongsword0",
+  "_key": "!items!phbwepLongsword0",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "persistSourceMigration": true,
+    "riders": {
+     "activity": []
+    }
+   },
+   "midi-qol": {
+    "effectCondition": "",
+    "fumbleThreshold": null,
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   },
+   "tidy5e-sheet": {
+    "actionSection": "",
+    "section": ""
+   }
+  },
+  "folder": "krFG7lnogpecGpuf",
+  "img": "modules/ag-fifthpendium/assets/weapons/longsword.webp",
+  "name": "Длинный меч [Longsword]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "GUM5RdHYeSIXoAvu": 3,
+   "RiCwtcd41Wtvo7Tn": 3,
+   "UcyrOvVFrpZJSxsP": 3,
+   "default": 0
+  },
+  "sort": 400000,
+  "system": {
+   "activities": {
+    "dnd5eactivity000": {
+     "_id": "dnd5eactivity000",
+     "activation": {
+      "condition": "",
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "ammunition": "",
+     "attack": {
+      "ability": "",
+      "bonus": "",
+      "critical": {
+       "threshold": null
+      },
+      "flat": false,
+      "type": {
+       "classification": "weapon",
+       "value": "melee"
+      }
+     },
+     "attackMode": "oneHanded",
+     "attackRollPerTarget": "default",
+     "consumption": {
+      "scaling": {
+       "allowed": false,
+       "max": ""
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "damage": {
+      "critical": {
+       "bonus": ""
+      },
+      "includeBase": true,
+      "parts": []
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "special": "",
+      "units": "inst",
+      "value": ""
+     },
+     "effectConditionText": "",
+     "effects": [],
+     "flags": {},
+     "fumbleThreshold": 1,
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": null,
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "otherActivityAsParentType": true,
+     "otherActivityId": "none",
+     "otherActivityUuid": "",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "special": "",
+      "units": "ft"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false,
+       "count": "",
+       "special": "",
+       "type": ""
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "count": "",
+       "height": "",
+       "size": "",
+       "stationary": false,
+       "type": "",
+       "units": "ft",
+       "width": ""
+      }
+     },
+     "type": "attack",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "ammunition": {},
+   "armor": {
+    "value": 10
+   },
+   "attuned": false,
+   "attunement": "",
+   "container": null,
+   "cover": null,
+   "crew": {
+    "value": []
+   },
+   "damage": {
+    "base": {
+     "bonus": "",
+     "custom": {
+      "enabled": false,
+      "formula": ""
+     },
+     "denomination": 8,
+     "number": 1,
+     "scaling": {
+      "formula": "",
+      "mode": "",
+      "number": null
+     },
+     "types": [
+      "slashing"
+     ]
+    },
+    "versatile": {
+     "bonus": "",
+     "custom": {
+      "enabled": false,
+      "formula": ""
+     },
+     "denomination": 10,
+     "number": 1,
+     "scaling": {
+      "formula": "",
+      "mode": "",
+      "number": null
+     },
+     "types": []
+    }
+   },
+   "description": {
+    "chat": "<p>[[lookup @name]] атакует, используя Длинный меч.</p>",
+    "value": "<p><strong>Полуторное (1d10).</strong> Текст описания. </p> <p><strong>Мастерство: <em>Ослабляющее.</em></strong> Текст описания. </p>"
+   },
+   "equipped": false,
+   "hp": {
+    "conditions": "",
+    "dt": null,
+    "max": 0,
+    "value": 0
+   },
+   "identified": true,
+   "identifier": "longsword",
+   "mastery": "sap",
+   "price": {
+    "denomination": "gp",
+    "value": 15
+   },
+   "proficient": null,
+   "properties": [
+    "ver"
+   ],
+   "quantity": 1,
+   "range": {
+    "long": null,
+    "reach": null,
+    "units": "ft",
+    "value": null
+   },
+   "rarity": "",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "baseItem": "longsword",
+    "value": "martialM"
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   },
+   "weight": {
+    "units": "lb",
+    "value": 3
+   }
+  },
+  "type": "weapon"
+ },
+ {
+  "_id": "phbarmChainMail0",
+  "_key": "!items!phbarmChainMail0",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   },
+   "midi-qol": {
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "JrdJatBHc3fHimI0",
+  "img": "modules/ag-fifthpendium/assets/armor/chain-mail.webp",
+  "name": "Кольчуга [Chain Mail]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "GUM5RdHYeSIXoAvu": 3,
+   "UcyrOvVFrpZJSxsP": 3,
+   "XfGBpRnEldwS51r8": 3,
+   "default": 0
+  },
+  "sort": 200000,
+  "system": {
+   "activities": {},
+   "armor": {
+    "dex": 0,
+    "value": 16
+   },
+   "attuned": false,
+   "attunement": "",
+   "container": null,
+   "cover": null,
+   "crew": {
+    "value": []
+   },
+   "description": {
+    "chat": "",
+    "value": ""
+   },
+   "equipped": false,
+   "hp": {
+    "conditions": "",
+    "dt": null,
+    "max": 0,
+    "value": 0
+   },
+   "identified": true,
+   "identifier": "chainmail",
+   "price": {
+    "denomination": "gp",
+    "value": 75
+   },
+   "proficient": null,
+   "properties": [
+    "stealthDisadvantage"
+   ],
+   "quantity": 1,
+   "rarity": "",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "speed": {
+    "conditions": "",
+    "units": "ft",
+    "value": null
+   },
+   "strength": 13,
+   "type": {
+    "baseItem": "chainmail",
+    "value": "heavy"
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   },
+   "weight": {
+    "units": "lb",
+    "value": 55
+   }
+  },
+  "type": "equipment"
+ },
+ {
+  "_id": "dmgPotionOfHeali",
+  "_key": "!items!dmgPotionOfHeali",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "migratedUses": 1,
+    "riders": {
+     "activity": [],
+     "effect": []
+    }
+   },
+   "midi-qol": {
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "1DFzy4AdmTDPLUvx",
+  "img": " Текст описания. ",
+  "name": "Зелье исцеления [Potion of Healing]",
+  "ownership": {
+   "GUM5RdHYeSIXoAvu": 3,
+   "PPBFkpN74aZqNqJp": 3,
+   "SMYa8T6HVuSkTFA7": 3,
+   "UcyrOvVFrpZJSxsP": 3,
+   "XfGBpRnEldwS51r8": 3,
+   "default": 0
+  },
+  "sort": -100000,
+  "system": {
+   "activities": {
+    "ZM9PrEUFivKpHVo0": {
+     "_id": "ZM9PrEUFivKpHVo0",
+     "activation": {
+      "condition": "",
+      "override": false,
+      "type": "bonus",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": [
+       {
+        "scaling": {},
+        "target": "",
+        "type": "itemUses",
+        "value": "1"
+       }
+      ]
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [],
+     "flags": {},
+     "healing": {
+      "bonus": "2",
+      "custom": {
+       "enabled": false
+      },
+      "denomination": 4,
+      "number": 2,
+      "scaling": {
+       "number": 1
+      },
+      "types": [
+       "healing"
+      ]
+     },
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": "systems/dnd5e/icons/svg/items/consumable.svg",
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "Выпить зелье",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "special": "",
+      "units": "touch"
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false,
+       "count": "1",
+       "special": "",
+       "type": "creature"
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "type": "",
+       "units": "ft"
+      }
+     },
+     "type": "heal",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    },
+    "dnd5eactivity000": {
+     "appliedEffects": [],
+     "consumption": {
+      "targets": [
+       {
+        "scaling": {},
+        "target": "",
+        "type": "itemUses",
+        "value": "1"
+       }
+      ]
+     },
+     "duration": {
+      "units": "inst"
+     },
+     "healing": {
+      "bonus": "2",
+      "denomination": "4",
+      "number": 2,
+      "types": [
+       "healing"
+      ]
+     },
+     "img": "",
+     "name": ""
+    }
+   },
+   "attuned": false,
+   "attunement": "",
+   "container": null,
+   "damage": {
+    "base": {
+     "bonus": "2",
+     "custom": {
+      "enabled": false,
+      "formula": ""
+     },
+     "denomination": 4,
+     "number": 2,
+     "scaling": {
+      "formula": "",
+      "mode": "",
+      "number": null
+     },
+     "types": [
+      "healing"
+     ]
+    },
+    "replace": false
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. 2d4 + 2 ПЗ.</p>"
+   },
+   "equipped": false,
+   "identified": true,
+   "identifier": "potion-of-healing",
+   "magicalBonus": null,
+   "price": {
+    "denomination": "gp",
+    "value": 50
+   },
+   "properties": [],
+   "quantity": 1,
+   "rarity": "common",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "subtype": "",
+    "value": "potion"
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "uses": {
+    "autoDestroy": true,
+    "max": "1",
+    "recovery": [],
+    "spent": 0
+   },
+   "weight": {
+    "units": "lb",
+    "value": 0.1
+   }
+  },
+  "type": "consumable"
+ },
+ {
+  "_id": "dmgRingOfProtect",
+  "_key": "!items!dmgRingOfProtect",
+  "effects": [
+   "tKYGqHAEFjPgD2rN",
+   {
+    "_id": "tKYGqHAEFjPgD2rN",
+    "description": "<p>Вы получаете бонус +1 к Классу Защиты и испытаниям.</p>",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": null
+    },
+    "flags": {
+     "core": {
+      "overlay": false
+     },
+     "dae": {
+      "disableCondition": "",
+      "disableIncapacitated": false,
+      "durationExpression": "",
+      "macroRepeat": "none",
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "noneName"
+     },
+     "dnd5e": {
+      "riders": {
+       "statuses": []
+      }
+     }
+    },
+    "folder": null,
+    "img": "modules/ag-fifthpendium/assets/items/DMG/ring-of-protection.webp",
+    "name": "Кольцо защиты [Ring of Protection]",
+    "origin": "Compendium.ag-fifthpendium.equipment.Item.dmgRingOfProtect",
+    "showIcon": 1,
+    "sort": 0,
+    "start": null,
+    "statuses": [],
+    "system": {
+     "changes": [
+      {
+       "key": "system.attributes.ac.bonus",
+       "priority": 20,
+       "type": "add",
+       "value": 1
+      },
+      {
+       "key": "system.bonuses.abilities.save",
+       "priority": 20,
+       "type": "add",
+       "value": 1
+      }
+     ]
+    },
+    "tint": "#ffffff",
+    "transfer": true,
+    "type": "base"
+   }
+  ],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   },
+   "midi-qol": {
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "wQmnyKcKnsr6tFmT",
+  "img": "modules/ag-fifthpendium/assets/items/DMG/ring-of-protection.webp",
+  "name": "Кольцо защиты [Ring of Protection]",
+  "ownership": {
+   "DTxRk4Gdg9x7vTk5": 3,
+   "GUM5RdHYeSIXoAvu": 3,
+   "PPBFkpN74aZqNqJp": 3,
+   "SMYa8T6HVuSkTFA7": 3,
+   "default": 0
+  },
+  "sort": 1300000,
+  "system": {
+   "activities": {},
+   "armor": {
+    "dex": null,
+    "magicalBonus": "",
+    "value": null
+   },
+   "attuned": false,
+   "attunement": "required",
+   "container": null,
+   "cover": null,
+   "crew": {
+    "value": []
+   },
+   "description": {
+    "chat": "",
+    "value": "<p><em> Текст описания. </em></p><p> Текст описания. </p>"
+   },
+   "equipped": false,
+   "hp": {
+    "conditions": "",
+    "dt": null,
+    "max": null,
+    "value": null
+   },
+   "identified": true,
+   "identifier": "ring-of-protection",
+   "price": {
+    "denomination": "gp",
+    "value": 4000
+   },
+   "proficient": null,
+   "properties": [
+    "mgc"
+   ],
+   "quantity": 1,
+   "rarity": "rare",
+   "source": {
+    "book": "DMG 2024",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "strength": null,
+   "type": {
+    "baseItem": "",
+    "value": "ring"
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   },
+   "weight": {
+    "units": "lb",
+    "value": 0
+   }
+  },
+  "type": "equipment"
+ },
+ {
+  "_id": "gemRuby000000000",
+  "_key": "!items!gemRuby000000000",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "IsZBQJEmA6e6aY3w",
+  "img": "modules/ag-fifthpendium/assets/gems/ruby.webp",
+  "name": "Рубин [Ruby]",
+  "ownership": {
+   "GUM5RdHYeSIXoAvu": 3,
+   "PPBFkpN74aZqNqJp": 3,
+   "Rzps8Yf9tuYaNaHm": 3,
+   "SMYa8T6HVuSkTFA7": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "container": null,
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p>"
+   },
+   "identified": true,
+   "identifier": "ruby",
+   "price": {
+    "denomination": "gp",
+    "value": 5000
+   },
+   "properties": [],
+   "quantity": 1,
+   "rarity": "",
+   "source": {
+    "book": "DMG 2024",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "subtype": "",
+    "value": "gem"
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "weight": {
+    "units": "lb",
+    "value": 0
+   }
+  },
+  "type": "loot"
+ },
+ {
+  "_id": "phbagBackpack000",
+  "_key": "!items!phbagBackpack000",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   }
+  },
+  "folder": "40HxBh4R2siuc0Fh",
+  "img": "modules/ag-fifthpendium/assets/items/PHB/backpack3.webp",
+  "name": "Рюкзак [Backpack]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "GUM5RdHYeSIXoAvu": 3,
+   "PPBFkpN74aZqNqJp": 3,
+   "SMYa8T6HVuSkTFA7": 3,
+   "UcyrOvVFrpZJSxsP": 3,
+   "XfGBpRnEldwS51r8": 3,
+   "default": 0
+  },
+  "sort": 2271875,
+  "system": {
+   "attuned": false,
+   "attunement": "",
+   "capacity": {
+    "count": null,
+    "volume": {
+     "units": "cubicFoot",
+     "value": 1
+    },
+    "weight": {
+     "units": "lb",
+     "value": 30
+    }
+   },
+   "container": null,
+   "currency": {
+    "cp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0,
+    "sp": 0
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p>"
+   },
+   "equipped": false,
+   "identified": true,
+   "identifier": "backpack",
+   "price": {
+    "denomination": "gp",
+    "value": 2
+   },
+   "properties": [],
+   "quantity": 1,
+   "rarity": "",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "weight": {
+    "units": "lb",
+    "value": 5
+   }
+  },
+  "type": "container"
+ },
+ {
+  "_id": "dmgFlameTongue00",
+  "_key": "!items!dmgFlameTongue00",
+  "effects": [
+   "VtBOwsAVipxkP2f5",
+   "MHnAqxEXBhUbnjPq",
+   "OlO2gu3r4CKK4CfZ",
+   {
+    "_id": "MHnAqxEXBhUbnjPq",
+    "description": "",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": null
+    },
+    "flags": {
+     "ActiveAuras": {
+      "alignment": "",
+      "aura": "None",
+      "customCheck": "",
+      "displayTemp": false,
+      "height": false,
+      "hidden": false,
+      "hostile": false,
+      "ignoreSelf": false,
+      "isAura": false,
+      "nameOverride": "",
+      "onlyOnce": false,
+      "radius": "",
+      "statuses": [],
+      "type": "",
+      "wallsBlock": "system"
+     },
+     "core": {
+      "overlay": false
+     },
+     "dae": {
+      "disableCondition": "",
+      "durationExpression": "",
+      "enableCondition": "",
+      "macroRepeat": "none",
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "multi"
+     },
+     "dnd5e": {
+      "riders": {
+       "statuses": []
+      }
+     }
+    },
+    "folder": null,
+    "img": "systems/dnd5e/icons/svg/statuses/burning.svg",
+    "name": "Горящий клинок",
+    "origin": null,
+    "showIcon": 1,
+    "sort": 0,
+    "start": null,
+    "statuses": [],
+    "system": {
+     "changes": [
+      {
+       "key": "system.damage.parts",
+       "priority": 20,
+       "type": "add",
+       "value": [
+        [
+         "2d6",
+         "fire"
+        ]
+       ]
+      },
+      {
+       "key": "name",
+       "priority": 50,
+       "type": "override",
+       "value": "{} | Горящий"
+      }
+     ]
+    },
+    "tint": "#ffffff",
+    "transfer": false,
+    "type": "enchantment"
+   },
+   {
+    "_id": "OlO2gu3r4CKK4CfZ",
+    "description": "",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": null
+    },
+    "flags": {
+     "ActiveAuras": {
+      "alignment": "",
+      "aura": "None",
+      "customCheck": "",
+      "displayTemp": false,
+      "height": false,
+      "hidden": false,
+      "hostile": false,
+      "ignoreSelf": false,
+      "isAura": false,
+      "nameOverride": "",
+      "onlyOnce": false,
+      "radius": "",
+      "statuses": [],
+      "type": "",
+      "wallsBlock": "system"
+     },
+     "core": {
+      "overlay": false
+     },
+     "dae": {
+      "disableCondition": "",
+      "disableIncapacitated": false,
+      "dontApply": false,
+      "durationExpression": "",
+      "enableCondition": "",
+      "macroRepeat": "none",
+      "selfTarget": false,
+      "selfTargetAlways": false,
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "multi"
+     },
+     "dnd5e": {
+      "riders": {
+       "statuses": []
+      }
+     }
+    },
+    "folder": null,
+    "img": "systems/dnd5e/icons/svg/statuses/burning.svg",
+    "name": "Свет",
+    "origin": "Compendium.ag-fifthpendium.equipment.Item.dmgFlameTongue00",
+    "showIcon": 1,
+    "sort": 0,
+    "start": null,
+    "statuses": [],
+    "system": {
+     "changes": [
+      {
+       "key": "token.light.bright",
+       "phase": "initial",
+       "priority": 20,
+       "type": "upgrade",
+       "value": 40
+      },
+      {
+       "key": "token.light.dim",
+       "phase": "initial",
+       "priority": 20,
+       "type": "upgrade",
+       "value": 80
+      },
+      {
+       "key": "token.light.color",
+       "phase": "initial",
+       "priority": 20,
+       "type": "override",
+       "value": "#f8c377"
+      },
+      {
+       "key": "token.light.alpha",
+       "phase": "initial",
+       "priority": 20,
+       "type": "override",
+       "value": 0.4
+      },
+      {
+       "key": "token.light.animation",
+       "phase": "initial",
+       "priority": 20,
+       "type": "override",
+       "value": "{type: \"torch\", speed: 2, intensity: 2}"
+      }
+     ]
+    },
+    "tint": "#ffffff",
+    "transfer": false,
+    "type": "base"
+   },
+   {
+    "_id": "VtBOwsAVipxkP2f5",
+    "description": "<p><em>Оружие (любое Рукопашное)</em></p>",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": null
+    },
+    "flags": {
+     "ActiveAuras": {
+      "alignment": "",
+      "aura": "None",
+      "customCheck": "",
+      "displayTemp": false,
+      "height": false,
+      "hidden": false,
+      "hostile": false,
+      "ignoreSelf": false,
+      "isAura": false,
+      "nameOverride": "",
+      "onlyOnce": false,
+      "radius": "",
+      "statuses": [],
+      "type": "",
+      "wallsBlock": "system"
+     },
+     "core": {
+      "overlay": false
+     },
+     "dae": {
+      "disableCondition": "",
+      "durationExpression": "",
+      "enableCondition": "",
+      "macroRepeat": "none",
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "multi"
+     },
+     "dnd5e": {
+      "riders": {
+       "statuses": []
+      }
+     }
+    },
+    "folder": null,
+    "img": "modules/ag-fifthpendium/assets/items/DMG/flame-tongue.webp",
+    "name": "Язык пламени [Flame Tongue]",
+    "origin": null,
+    "showIcon": 1,
+    "sort": 0,
+    "start": null,
+    "statuses": [],
+    "system": {
+     "changes": [
+      {
+       "key": "name",
+       "priority": 50,
+       "type": "override",
+       "value": "Язык пламени ({})"
+      },
+      {
+       "key": "system.description.value",
+       "priority": 50,
+       "type": "override",
+       "value": "<p>@Embed[Compendium.ag-fifthpendium.equipment.Item.dmgFlameTongue00 cite=false caption=false]</p>{}"
+      },
+      {
+       "key": "system.properties",
+       "priority": 20,
+       "type": "add",
+       "value": "mgc"
+      },
+      {
+       "key": "system.attunement",
+       "priority": 50,
+       "type": "override",
+       "value": "required"
+      },
+      {
+       "key": "system.price.value",
+       "priority": 20,
+       "type": "add",
+       "value": 4000
+      },
+      {
+       "key": "system.price.denomination",
+       "priority": 50,
+       "type": "override",
+       "value": "gp"
+      },
+      {
+       "key": "img",
+       "priority": 20,
+       "type": "override",
+       "value": "modules/ag-fifthpendium/assets/items/DMG/flame-tongue.webp"
+      }
+     ]
+    },
+    "tint": "#ffffff",
+    "transfer": false,
+    "type": "enchantment"
+   }
+  ],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": [],
+     "effect": [
+      "OlO2gu3r4CKK4CfZ"
+     ]
+    }
+   },
+   "midi-qol": {
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "kpu3xPWTMxkvN9yY",
+  "img": "modules/ag-fifthpendium/assets/items/DMG/flame-tongue.webp",
+  "name": "Язык пламени [Flame Tongue]",
+  "ownership": {
+   "GUM5RdHYeSIXoAvu": 3,
+   "PPBFkpN74aZqNqJp": 3,
+   "SMYa8T6HVuSkTFA7": 3,
+   "default": 0
+  },
+  "sort": 100004,
+  "system": {
+   "activities": {
+    "FrNZRC1C2HFJxUNu": {
+     "_id": "FrNZRC1C2HFJxUNu",
+     "activation": {
+      "condition": "",
+      "override": false,
+      "type": "bonus",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "disp"
+     },
+     "effectConditionText": "",
+     "effects": [
+      {
+       "_id": "MHnAqxEXBhUbnjPq",
+       "level": {
+        "max": null,
+        "min": null
+       },
+       "riders": {
+        "activity": [],
+        "effect": [
+         "OlO2gu3r4CKK4CfZ"
+        ],
+        "item": []
+       }
+      }
+     ],
+     "enchant": {
+      "self": true
+     },
+     "flags": {},
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "Произнести командное слово",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": true,
+      "special": "",
+      "units": "self"
+     },
+     "restrictions": {
+      "allowMagical": true,
+      "categories": [
+       "simpleM",
+       "martialM"
+      ],
+      "properties": [],
+      "type": "weapon"
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false,
+       "count": "1",
+       "special": "",
+       "type": "object"
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "type": "",
+       "units": "ft"
+      }
+     },
+     "type": "enchant",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    },
+    "QYYI3r1wlDAyKzAv": {
+     "_id": "QYYI3r1wlDAyKzAv",
+     "activation": {
+      "condition": "",
+      "override": false,
+      "type": "",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "perm"
+     },
+     "effectConditionText": "",
+     "effects": [
+      {
+       "_id": "VtBOwsAVipxkP2f5",
+       "level": {
+        "max": null,
+        "min": null
+       },
+       "riders": {
+        "activity": [
+         "FrNZRC1C2HFJxUNu"
+        ],
+        "effect": [],
+        "item": []
+       }
+      }
+     ],
+     "enchant": {
+      "self": false
+     },
+     "flags": {},
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "restrictions": {
+      "allowMagical": true,
+      "categories": [
+       "simpleM",
+       "martialM"
+      ],
+      "properties": [],
+      "type": "weapon"
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false,
+       "count": "",
+       "type": ""
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "type": "",
+       "units": "ft"
+      }
+     },
+     "type": "enchant",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "ammunition": {},
+   "armor": {
+    "value": null
+   },
+   "attuned": false,
+   "attunement": "required",
+   "container": null,
+   "cover": null,
+   "crew": {
+    "value": []
+   },
+   "damage": {
+    "base": {
+     "bonus": "",
+     "custom": {
+      "enabled": false
+     },
+     "denomination": null,
+     "number": null,
+     "scaling": {
+      "number": 1
+     },
+     "types": []
+    },
+    "versatile": {
+     "custom": {
+      "enabled": false
+     },
+     "denomination": null,
+     "number": null,
+     "scaling": {
+      "number": 1
+     },
+     "types": []
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p><em> Текст описания. </em></p><p> Текст описания. [[/damage 2d6 fire]] Текст описания. </p><p>@Embed[Compendium.ag-fifthpendium.dmg.JournalEntry.dmgFoundryRefere.JournalEntryPage.Ok4iCgD25ENgoRxE cite=false caption=false classes=\"hide-in-embed\"]</p>"
+   },
+   "equipped": false,
+   "hp": {
+    "conditions": "",
+    "dt": null,
+    "max": null,
+    "value": null
+   },
+   "identified": true,
+   "identifier": "flame-tongue",
+   "magicalBonus": "",
+   "mastery": "",
+   "price": {
+    "denomination": "gp",
+    "value": 4000
+   },
+   "proficient": null,
+   "properties": [
+    "mgc"
+   ],
+   "quantity": 1,
+   "range": {
+    "long": null,
+    "reach": null,
+    "units": "ft",
+    "value": null
+   },
+   "rarity": "rare",
+   "source": {
+    "book": "DMG 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "baseItem": "",
+    "value": ""
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   },
+   "weight": {
+    "units": "lb",
+    "value": 0
+   }
+  },
+  "type": "weapon"
+ },
+ {
+  "_id": "c0zaBwmlwkrXtp39",
+  "_key": "!items!c0zaBwmlwkrXtp39",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   },
+   "midi-qol": {
+    "AoETargetType": "any",
+    "autoTarget": "default",
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   }
+  },
+  "folder": "hV230hoRuffflb34",
+  "img": "modules/ag-icons/abilities/bard/lute-melody-orange.webp",
+  "name": "Музыкальный инструмент [Musical Instrument]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "GUM5RdHYeSIXoAvu": 3,
+   "UcyrOvVFrpZJSxsP": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "ability": "cha",
+   "activities": {
+    "5YVMngoU2VB97CdY": {
+     "_id": "5YVMngoU2VB97CdY",
+     "activation": {
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "check": {
+      "associated": [],
+      "dc": {}
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "damage": {
+      "critical": {
+       "allow": false
+      },
+      "onSave": "half",
+      "parts": []
+     },
+     "description": {},
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [],
+     "flags": {},
+     "friendlySave": "default",
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": null,
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "otherActivityAsParentType": true,
+     "otherActivityId": "none",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "units": "ft"
+      }
+     },
+     "type": "check",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "attuned": false,
+   "attunement": "",
+   "bonus": "",
+   "chatFlavor": "",
+   "container": null,
+   "description": {
+    "chat": "",
+    "value": "<p><strong>Характеристика:</strong> Харизма</p><p><strong>Использование:</strong> Игра известной вам мелодии (СЛ 10) или импровизация (СЛ 15)</p><p><strong>Вариации:</strong> @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusDrum000000]{барабан}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusViol000000]{виола да гамба}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusBagpipes00]{волынка}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusDulcimer00]{дульцимер}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusLyre000000]{лира}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusLute000000]{лютня}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusHorn000000]{рожок}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusFlute00000]{флейта}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusPanflute00]{флейта Пана}, @UUID[Compendium.ag-fifthpendium.equipment.Item.phbmusShawm00000]{шалмей}.</p>"
+   },
+   "equipped": false,
+   "identified": true,
+   "identifier": "musical-instrument",
+   "price": {
+    "denomination": "gp",
+    "value": 0
+   },
+   "proficient": null,
+   "properties": [],
+   "quantity": 1,
+   "rarity": "",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "type": {
+    "baseItem": "",
+    "value": ""
+   },
+   "unidentified": {
+    "description": ""
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   },
+   "weight": {
+    "units": "lb",
+    "value": 0
+   }
+  },
+  "type": "tool"
+ }
+]

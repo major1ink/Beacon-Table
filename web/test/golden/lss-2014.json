@@ -1,0 +1,166 @@
+{
+ "result": {
+  "name": "Тестовый воин",
+  "warnings": []
+ },
+ "edition": "2014",
+ "sheet": {
+  "info": {
+   "background": "Моряк",
+   "class": "Воин",
+   "subclass": "",
+   "species": "",
+   "race": "Человек",
+   "level": 6,
+   "xp": 0,
+   "playerName": ""
+  },
+  "abilities": {
+   "str": 15,
+   "dex": 18,
+   "con": 14,
+   "int": 10,
+   "wis": 12,
+   "cha": 9
+  },
+  "saveProf": {
+   "cha": false,
+   "con": true,
+   "dex": false,
+   "int": false,
+   "str": true,
+   "wis": false
+  },
+  "skillProf": {
+   "athletics": 1,
+   "acrobatics": 0,
+   "sleightOfHand": 0,
+   "stealth": 0,
+   "investigation": 0,
+   "history": 0,
+   "arcana": 0,
+   "nature": 0,
+   "religion": 0,
+   "perception": 1,
+   "survival": 0,
+   "medicine": 0,
+   "insight": 0,
+   "animalHandling": 0,
+   "performance": 0,
+   "intimidation": 0,
+   "deception": 0,
+   "persuasion": 0
+  },
+  "armor": {
+   "lightArmor": false,
+   "mediumArmor": false,
+   "heavyArmor": false,
+   "shield": false,
+   "simpleWeapons": false,
+   "martialWeapons": false,
+   "otherWeapons": ""
+  },
+  "toolsLanguages": "",
+  "combat": {
+   "ac": 14,
+   "hpCurrent": 0,
+   "hpTemp": 0,
+   "hpMax": 68,
+   "hitDiceTotal": "",
+   "hitDiceCurrent": "",
+   "deathSaveSuccess": 0,
+   "deathSaveFail": 0,
+   "exhaustion": 0,
+   "inspiration": false,
+   "speed": 30,
+   "darkvision": 0,
+   "isDying": true,
+   "conditions": ""
+  },
+  "weapons": [
+   {
+    "name": "Скимитар",
+    "bonus": "+7",
+    "damage": "1к6+4 рубящий",
+    "notes": ""
+   },
+   {
+    "name": "Длинный лук",
+    "bonus": "+7",
+    "damage": "1к8+4 колющий",
+    "notes": ""
+   }
+  ],
+  "features": "Второе дыхание.\nВсплеск действий.",
+  "attacksSpells": "",
+  "feats": "",
+  "goals": "",
+  "allies": "",
+  "additionalFeatures": "",
+  "treasure": "",
+  "notes": [
+   "",
+   "",
+   "",
+   "",
+   "",
+   ""
+  ],
+  "spellcasting": {
+   "ability": "",
+   "slotsByLevel": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ]
+  },
+  "preparedSpells": [],
+  "size": "",
+  "appearance": "",
+  "background": "Служил на корабле.",
+  "alignment": "ХН",
+  "equipment": "Кольчуга",
+  "coins": {
+   "cp": 0,
+   "sp": 0,
+   "gp": 0,
+   "ep": 0,
+   "pp": 0
+  },
+  "physical": {
+   "age": "48",
+   "height": "",
+   "weight": "",
+   "eyes": "",
+   "skin": "",
+   "hair": ""
+  },
+  "traits": "",
+  "proficiencyNotes": "Все доспехи и оружие.",
+  "resources": [],
+  "attunementItems": [
+   {
+    "name": "",
+    "attuned": false
+   },
+   {
+    "name": "",
+    "attuned": false
+   },
+   {
+    "name": "",
+    "attuned": false
+   }
+  ],
+  "personalityTraits": "Шутник.",
+  "ideals": "Свобода.",
+  "bonds": "Экипаж.",
+  "flaws": "Азарт."
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "spellAsMonster": {
+  "error": "Это не существо (type: \"spell\") — экспортируй карточку существа с TTG Club."
+ },
+ "npcAsSpell": {
+  "error": "Это не заклинание (type: \"npc\") — экспортируй карточку заклинания с TTG Club."
+ },
+ "spellAsItem": {
+  "error": "Это не похоже на предмет (type: \"spell\") — нужен экспорт оружия/доспеха/чудесного предмета из Foundry VTT."
+ },
+ "npcAsPregen": {
+  "error": "Это не персонаж (type: \"npc\")."
+ },
+ "mixedReferences": 0
+}
