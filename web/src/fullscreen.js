@@ -14,6 +14,7 @@
 // fullscreenEnabled=false и кнопка убирается. Флаг восстановления там не
 // трогаем: он про страницу верхнего уровня.
 import { icon } from "./icons.js";
+import { inApp } from "./native-app.js";
 
 const KEY = "beacon:fullscreen";
 
@@ -24,7 +25,7 @@ function defaultContent(active) {
 export function initFullscreenButton(btn, renderContent = defaultContent) {
   if (!btn) return;
   const root = document.documentElement;
-  if (!root.requestFullscreen || !document.fullscreenEnabled) {
+  if (inApp || !root.requestFullscreen || !document.fullscreenEnabled) {
     btn.remove();
     return;
   }

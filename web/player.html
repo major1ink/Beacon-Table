@@ -225,6 +225,8 @@
       /* Лоток закрывает низ карты — сжимаем область лога, окно само
          поднимется (см. roll-log.js: place). Высоту меряет player.js. */
       body.dice-open #diceLog { bottom: var(--dice-tray-h, 40dvh); }
+      /* Итог 3D-броска прижат к низу карты (theme.css) — под лотком его не видно. */
+      body.dice-open .dfx-stage.dfx-3d { bottom: calc(var(--dice-tray-h, 40dvh) + 8px); }
 
       /* Модалки во весь экран: 420px на телефоне и так занимают всё. */
       #charsModal, #settingsModal {

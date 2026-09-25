@@ -224,6 +224,8 @@
       /* Лоток закрывает низ карты — сжимаем область лога, окно само
          поднимется (см. roll-log.js: place). Высоту меряет player.js. */
       body.dice-open #diceLog { bottom: var(--dice-tray-h, 40dvh); }
+      /* Итог 3D-броска прижат к низу карты (theme.css) — под лотком его не видно. */
+      body.dice-open .dfx-stage.dfx-3d { bottom: calc(var(--dice-tray-h, 40dvh) + 8px); }
 
       /* Модалки во весь экран: 420px на телефоне и так занимают всё. */
       #charsModal, #settingsModal {
@@ -247,24 +249,25 @@
       body.dice-open #diceDock { right: 0; bottom: var(--mbar-h); padding-bottom: 8px; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/player-BC4n_hOp.js"></script>
+  <script type="module" crossorigin src="/assets/player-ChsiBntQ.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/icons-C_6pssTb.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
   <link rel="modulepreload" crossorigin href="/assets/back-stack-C8cwVhaZ.js">
   <link rel="modulepreload" crossorigin href="/assets/modal-DKhtjNqL.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-Ai0JsaWs.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-DrQOL3XD.js">
+  <link rel="modulepreload" crossorigin href="/assets/native-app-BgGKemc-.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-DBxwdpIO.js">
+  <link rel="modulepreload" crossorigin href="/assets/combatant-card-D2_c08Va.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
   <link rel="modulepreload" crossorigin href="/assets/dice-Bt2DOJg1.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-fx-BVJ9U5gn.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-fx-DfyPIE8M.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-log-gVXwkrAt.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/wake-lock-0DU6CLVg.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-Z3S5GKsM.js">
+  <link rel="modulepreload" crossorigin href="/assets/wake-lock-DV3iJKsr.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-D8F-Vf8x.js">
   <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-26fTNKmZ.js">
   <link rel="modulepreload" crossorigin href="/assets/card-shell-gaUNrZud.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">

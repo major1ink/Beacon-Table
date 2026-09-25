@@ -18,6 +18,7 @@
 import { showConfirm } from "./modal.js";
 import { attachDrag } from "./drag.js";
 import { createBackLayer } from "./back-stack.js";
+import { inApp } from "./native-app.js";
 
 let styleInjected = false;
 function injectStyle() {
@@ -150,7 +151,7 @@ export function openFloatingWindow({
   closeBtn.className = "fw-btn";
   closeBtn.textContent = "✕";
   closeBtn.title = "Закрыть";
-  titlebar.append(titleEl, popoutBtn, closeBtn);
+  titlebar.append(titleEl, ...(inApp ? [] : [popoutBtn]), closeBtn);
 
   const body = document.createElement("div");
   body.className = "fw-body";

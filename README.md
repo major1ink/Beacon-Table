@@ -247,6 +247,12 @@ http://<адрес-компьютера>:8080/broadcast.html
 
 При первом запуске программа спросит, где хранить данные стола. По умолчанию это «Документы/Beacon Table». Папку можно переносить целиком, как хранилище Obsidian.
 
+### Приложение для Android
+
+Для игроков с телефона или планшета есть [приложение для Android](https://github.com/major1ink/beacon-table-android/releases/latest) (Android 10 и новее), `.apk` лежит и на [зеркале](https://beacontable.ru/download.html#android). Сервера внутри нет: оно подключается к столу ведущего. Столы в той же Wi-Fi сети находит само, адрес можно вписать вручную. Стол открывается во весь экран, работает по обычному http в домашней сети, экран не гаснет, пока идёт игра.
+
+Интерфейс приходит со стола, поэтому после обновления сервера приложение обновлять не нужно. Код приложения — в отдельном репозитории [beacon-table-android](https://github.com/major1ink/beacon-table-android).
+
 ### Запуск на VPS
 
 Если у вас уже есть VPS с доменом, можно запустить Beacon Table через Docker.
@@ -397,6 +403,8 @@ Download a prebuilt binary for your OS from [Releases](https://github.com/major1
 No Go installation is required. The frontend and default SRD data are already included in the binary.
 
 There is also a desktop app that runs the table in its own window instead of a browser tab: `beacon-table-desktop_*_windows_amd64.exe` (needs WebView2), `_darwin_universal.zip` (not notarized by Apple; verify it against `checksums.txt`), and `_linux_amd64.deb` / `.rpm`.
+
+Players can join from a phone or tablet with the [Android app](https://github.com/major1ink/beacon-table-android/releases/latest) (Android 10+). It is a client only: it finds tables on the same Wi-Fi network or connects by address, and gets its interface from the table's server.
 
 For source builds:
 
