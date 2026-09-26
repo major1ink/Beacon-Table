@@ -143,6 +143,18 @@ func (m *CompanyManager) resolveModules(company *domain.Company) (found []*modul
 	return found, missing
 }
 
+// combatRules — правила боя мира: из системного модуля его системы, а если
+// система — «Своя», модуля нет на сервере или он правил не задаёт —
+// правила «Своей системы».
+func (m *CompanyManager) combatRules(company *domain.Company) *domain.CombatRules {
+	if company.System != domain.SystemCustom {
+		if mod, err := m.modules.Get(company.System); err == nil && mod.Manifest.Combat != nil {
+			return mod.Manifest.Combat
+		}
+	}
+	return domain.CustomCombatRules()
+}
+
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу
 // ассетов этого мира, и импорту мира из архива.
 func (m *CompanyManager) UploadQuota(company *domain.Company) *quota.World {
@@ -405,7 +417,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	foundryModuleRepo := sqlite.NewFoundryModuleStore(m.db, company.ID)
 	chatRepo := sqlite.NewChatStore(m.db, company.ID)
 
-	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory)
+	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory, m.combatRules(company))
 	if err != nil {
 		return err
 	}

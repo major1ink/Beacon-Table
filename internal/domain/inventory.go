@@ -14,7 +14,7 @@ package domain
 //   - Monster.Inventory — шаблон добычи монстра бестиария, целиком внутри
 //     JSON-карточки монстра.
 //   - Token.Loot — снимок Monster.Inventory, сделанный в момент смерти (см.
-//     service.Room: killMonsterCombatant), целиком внутри JSON-состояния сцены.
+//     service.Room: killCombatant), целиком внутри JSON-состояния сцены.
 //   - LootHub.Entries — хаб ДМ, целиком внутри своего JSON-файла (см.
 //     repository/scenefile).
 type InventoryEntry struct {

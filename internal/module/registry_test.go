@@ -47,15 +47,18 @@ func makeArchive(t *testing.T, files map[string]string) string {
 
 func TestManifestValidate(t *testing.T) {
 	cases := map[string]string{
-		"нет формата":          `{"id":"a","type":"content","title":"A","version":"1.0.0"}`,
-		"чужой формат":         `{"format":"beacon-module/v9","id":"a","type":"content","title":"A","version":"1.0.0"}`,
-		"плохой id":            manifestJSON("Big_ID", "1.0.0"),
-		"двойной дефис":        manifestJSON("a--b", "1.0.0"),
-		"id sys":               manifestJSON("sys", "1.0.0"),
-		"плохая версия":        manifestJSON("a", "1.0"),
-		"плохой тип":           strings.Replace(manifestJSON("a", "1.0.0"), `"content"`, `"theme"`, 1),
-		"плохая зависимость":   manifestJSON("a", "1.0.0", `"requires":[{"id":"B"}]`),
-		"плохая minAppVersion": manifestJSON("a", "1.0.0", `"minAppVersion":"latest"`),
+		"нет формата":            `{"id":"a","type":"content","title":"A","version":"1.0.0"}`,
+		"чужой формат":           `{"format":"beacon-module/v9","id":"a","type":"content","title":"A","version":"1.0.0"}`,
+		"плохой id":              manifestJSON("Big_ID", "1.0.0"),
+		"двойной дефис":          manifestJSON("a--b", "1.0.0"),
+		"id sys":                 manifestJSON("sys", "1.0.0"),
+		"плохая версия":          manifestJSON("a", "1.0"),
+		"плохой тип":             strings.Replace(manifestJSON("a", "1.0.0"), `"content"`, `"theme"`, 1),
+		"плохая зависимость":     manifestJSON("a", "1.0.0", `"requires":[{"id":"B"}]`),
+		"плохая minAppVersion":   manifestJSON("a", "1.0.0", `"minAppVersion":"latest"`),
+		"правила боя у контента": manifestJSON("a", "1.0.0", `"combat":{"zeroHp":{"character":"out","other":"dead"}}`),
+		"плохие правила боя": strings.Replace(manifestJSON("a", "1.0.0", `"combat":{"zeroHp":{"character":"deathSaves","other":"dead"}}`),
+			`"content"`, `"system"`, 1),
 	}
 	for name, raw := range cases {
 		if _, err := ParseManifest([]byte(raw)); err == nil {
@@ -72,6 +75,19 @@ func TestManifestValidate(t *testing.T) {
 	m.LegacyIDs = true
 	if m.IDPrefix() != LegacyIDPrefix {
 		t.Fatalf("legacy-префикс: %q", m.IDPrefix())
+	}
+}
+
+func TestManifestCombatRules(t *testing.T) {
+	raw := strings.Replace(manifestJSON("hack", "1.0.0",
+		`"combat":{"initiative":{"roll":"2d6","bonus":"field:init"},"zeroHp":{"character":"deathSaves","other":"out","deathSaves":{"success":2,"fail":4}},"xp":{"field":"xp"}}`),
+		`"content"`, `"system"`, 1)
+	m, err := ParseManifest([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Combat == nil || m.Combat.Initiative.Roll != "2d6" || m.Combat.ZeroHP.DeathSaves.Fail != 4 {
+		t.Fatalf("правила боя разобраны не так: %+v", m.Combat)
 	}
 }
 

@@ -127,6 +127,9 @@ type Room struct {
 	// справочника (см. room_statuses.go: lookupCondition, snapshotStatus) —
 	// тем же принципом недоверия клиенту, что и items выше.
 	conditions repository.ConditionRepository
+	// rules — правила боя системы мира (инициатива, 0 хитов, опыт), см.
+	// combatRules.
+	rules *domain.CombatRules
 
 	scenes         map[string]*domain.SceneState // все сцены комнаты, ключ — SceneState.ID
 	sceneOrder     []string                      // порядок сцен в переключателе DM
@@ -253,7 +256,7 @@ type Room struct {
 // conditionRepo — см. Room.characters/Room.monsters/Room.items/
 // Room.conditions, только для чтения (кроме точечных мутаций инвентаря
 // персонажа при луте, см. handleHubTakeItem/handleLootTakeItem).
-func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit) (*Room, error) {
+func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit, rules *domain.CombatRules) (*Room, error) {
 	rs, err := sceneRepo.Load(context.Background())
 	if err != nil {
 		return nil, err
@@ -277,6 +280,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		monsters:       monsterRepo,
 		items:          itemRepo,
 		conditions:     conditionRepo,
+		rules:          rules,
 		scenes:         rs.Scenes,
 		sceneOrder:     rs.SceneOrder,
 		currentSceneID: rs.CurrentSceneID,
@@ -316,6 +320,15 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 	}
 	go r.run()
 	return r, nil
+}
+
+// combatRules — правила боя мира; без правил (комнаты из тестов) — правила
+// «Своей системы».
+func (r *Room) combatRules() *domain.CombatRules {
+	if r.rules == nil {
+		return domain.CustomCombatRules()
+	}
+	return r.rules
 }
 
 func (r *Room) Join(c RoomClient)  { r.join <- c }
@@ -1786,14 +1799,6 @@ func (r *Room) uniqueCombatantName(base string) string {
 	return fmt.Sprintf("%s %d", base, maxN+1)
 }
 
-// abilityMod — тот же floor((score-10)/2), что и на клиенте (см.
-// web/src/pages/character-sheet.js: abilityMod) — сервер должен посчитать
-// ровно то же самое число для модификатора инициативы, иначе бросок "1d20 +
-// мод" разъедется с тем, что игрок видит у себя на листе.
-func abilityMod(score int) int {
-	return int(math.Floor(float64(score-10) / 2))
-}
-
 // handleAddCombatant — "add_combatant": источник ОДИН из двух (см.
 // domain.ClientMsg) — TokenID (существующий токен активной сцены, обычный
 // путь через ПКМ-меню токена) либо MonsterID (карточка бестиария напрямую,
@@ -1803,7 +1808,9 @@ func abilityMod(score int) int {
 // недоверия клиенту, что и у handleRollDice).
 func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	var name, image, color, ownerID, characterID, monsterID, tokenID string
-	dexScore := 10
+	// src — лист персонажа или карточка существа: из неё правила системы
+	// берут формулу и прибавку инициативы (см. domain.CombatRules).
+	var src any
 	ac, hpCur, hpMax, hpTemp := 0, 0, 0, 0
 
 	switch {
@@ -1862,7 +1869,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			if ownerID == "" {
 				ownerID = ch.AccountID
 			}
-			dexScore = ch.Sheet.Abilities.Dex
+			src = ch.Sheet
 			ac = ch.Sheet.Combat.AC
 			hpCur = ch.Sheet.Combat.HPCurrent
 			hpMax = ch.Sheet.Combat.HPMax
@@ -1876,7 +1883,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			if image == "" {
 				image = m.ImageURL
 			}
-			dexScore = m.Abilities.Dex
+			src = m
 			ac = m.AC
 			hpCur = m.HP
 			hpMax = m.HP
@@ -1887,24 +1894,28 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	}
 	name = r.uniqueCombatantName(name)
 
-	mod := abilityMod(dexScore)
 	// Модификаторы инициативы от состояний, УЖЕ висящих на токене (ДМ мог
 	// пометить монстра до того, как бросил инициативу) — см.
 	// domain.ModifierTargetInitiative. Задним числом уже брошенную
 	// инициативу ничто не пересчитывает: это разовый бросок, а не
 	// производное число.
+	var mods []domain.Modifier
 	if t, _ := r.findToken(tokenID); t != nil {
-		mods := make([]domain.Modifier, 0, len(t.Statuses))
 		for _, st := range t.Statuses {
 			mods = append(mods, st.Modifiers...)
 		}
-		mod = domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
 	}
-	formula := fmt.Sprintf("1d20%+d", mod)
+	formula := r.combatRules().InitiativeFormula(src, func(mod int) int {
+		return domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
+	})
+	// Пустая формула или та, что не бросается (кривое поле листа), — ручной
+	// ввод: боец встаёт с 0, ДМ вписывает число в трекере.
 	initiative := 0.0
-	if result, err := r.dice.Roll(formula); err == nil {
-		initiative = float64(result.Total)
-		r.relayRoll(nil, "ДМ", formula, "Инициатива: "+name, result, false)
+	if formula != "" {
+		if result, err := r.dice.Roll(formula); err == nil {
+			initiative = float64(result.Total)
+			r.relayRoll(nil, "ДМ", formula, "Инициатива: "+name, result, false)
+		}
 	}
 
 	id := "combatant-" + newID()
@@ -1964,19 +1975,19 @@ func (r *Room) handleSetCombatantAC(id string, ac int) {
 // ДМ по столу, не наше дело валидировать боевую механику (та же философия
 // "умного бланка", что и у CharacterSheet/Monster).
 //
-// Побочные эффекты по правилам (см. план):
+// Побочные эффекты:
 //   - HP поднялось выше нуля — боец стабилизировался/подлечен, отметки
 //     спасбросков от смерти больше не актуальны, сбрасываем их в ноль; если
 //     за ним стоит токен, ранее помеченный Dead (например, ДМ заново
 //     добавил в инициативу уже "умершего" монстра/NPC по его токену и
 //     проставил HP), снимаем метку — кости на карте меняются обратно на
-//     аватарку (см. reviveTokenIfDead).
-//   - HP опустилось до нуля или ниже у бойца БЕЗ CharacterID (монстр или
-//     голый NPC-токен, см. domain.Combatant) — спасбросков от смерти у них
-//     не бывает, умирает сразу (killMonsterCombatant). У бойца С
-//     CharacterID (игровой персонаж) вместо этого просто ждём отметок
-//     "set_combatant_death_save" — из инициативы его уберёт только 3-й
-//     провал (см. handleSetCombatantDeathSave).
+//     аватарку (см. reviveTokenIfDead). Выбывший по правилу ZeroHPOut
+//     приходит в себя — состояние «без сознания» снимается.
+//   - HP опустилось до нуля или ниже — что дальше, решают правила системы
+//     (domain.CombatRules.ZeroHP), отдельно для персонажа (CharacterID) и
+//     остальных: умирает сразу (killCombatant), выбывает (на токен
+//     вешается «без сознания»), ждёт отметок "set_combatant_death_save"
+//     (handleSetCombatantDeathSave) или ничего.
 func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 	cmb, ok := r.combat.Combatants[id]
 	if !ok {
@@ -2021,14 +2032,24 @@ func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 		cur = &next
 	}
 	if cur != nil {
+		wasDown := cmb.HPCurrent <= 0
 		cmb.HPCurrent = *cur
+		zeroHP := r.combatRules().ZeroHPFor(cmb.CharacterID != "")
 		if cmb.HPCurrent > 0 {
 			cmb.DeathSaveSuccess = 0
 			cmb.DeathSaveFail = 0
 			r.reviveTokenIfDead(cmb.TokenID)
-		} else if cmb.CharacterID == "" {
-			r.killMonsterCombatant(cmb)
-			return // combatant уже удалён и разослан внутри killMonsterCombatant
+			if wasDown && zeroHP == domain.ZeroHPOut {
+				r.handleRemoveStatus(domain.ClientMsg{CombatantID: cmb.ID, StatusSlug: domain.ZeroHPOutStatus})
+			}
+		} else {
+			switch zeroHP {
+			case domain.ZeroHPDead:
+				r.killCombatant(cmb)
+				return // combatant уже удалён и разослан внутри killCombatant
+			case domain.ZeroHPOut:
+				r.handleApplyStatus(domain.ClientMsg{CombatantID: cmb.ID, StatusSlug: domain.ZeroHPOutStatus, Source: "0 хитов"})
+			}
 		}
 	}
 	// Хиты игрового персонажа живут ещё и в его листе — держим их одним
@@ -2040,7 +2061,7 @@ func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 
 // markTokenDead — если у бойца есть токен на активной сцене, помечает его
 // Dead и рассылает сцену. Общая часть между "монстр/NPC умер сразу" (см.
-// killMonsterCombatant) и "персонаж провалил 3-й спасбросок от смерти" (см.
+// killCombatant) и "персонаж провалил 3-й спасбросок от смерти" (см.
 // handleSetCombatantDeathSave) — в обоих случаях итог на карте один и тот
 // же: кости вместо арта (web/src/vtt/layers/tokens.js). Токен с карты не
 // убираем, только помечаем — сам токен остаётся двигаемым.
@@ -2077,7 +2098,7 @@ func (r *Room) reviveTokenIfDead(tokenID string) {
 // handleReviveKilledToken — "revive_token" (только ДМ): кнопка
 // "Восстановить" на вкладке "Убитые" трекера инициативы (см. combatPayload:
 // "killed") — в отличие от reviveTokenIfDead выше, это не побочный эффект
-// подлеченного бойца в инициативе (там бойца уже нет, killMonsterCombatant
+// подлеченного бойца в инициативе (там бойца уже нет, killCombatant
 // его убрал), а прямая команда ДМ на уже мёртвом токене без комбатанта.
 // Возвращает токену обычный арт вместо костей и очищает снимки смерти
 // (Loot/XP, см. snapshotTokenSpoils) — они больше не описывают труп,
@@ -2130,18 +2151,18 @@ func (r *Room) handleClearKilledTokens() {
 	r.broadcastCombat()
 }
 
-// snapshotTokenSpoils — вызывается ровно один раз, из killMonsterCombatant, в
+// snapshotTokenSpoils — вызывается ровно один раз, из killCombatant, в
 // момент смерти монстра: КОПИРУЕТ (не ссылается на) текущий
 // Monster.Inventory этого монстра в Token.Loot убитого токена, с новыми ID
-// на каждую запись, и снимает опыт за его CR в Token.XP (см. CRToXP). Копия
+// на каждую запись, и снимает опыт за него в Token.XP по правилам системы
+// (см. domain.CombatRules.XPFor). Копия
 // лута, а не общая ссылка на шаблон — так лутание одного трупа не трогает
 // "склад" шаблона бестиария и других уже стоящих на карте токенов того же
 // монстра (см. план фичи); опыт снят числом по той же причине — карточка
 // монстра может измениться или быть удалена уже после его смерти, а вкладка
 // "Убитые" трекера инициативы должна продолжать показывать то, за что его
 // реально убили. monsterID == "" (голый NPC-токен без карточки бестиария за
-// спиной) — тихо ничего не делает: лутить нечего, опыт по таблице CR не
-// посчитать.
+// спиной) — тихо ничего не делает: лутить нечего, опыт взять неоткуда.
 func (r *Room) snapshotTokenSpoils(tokenID, monsterID string) {
 	if tokenID == "" || monsterID == "" || r.monsters == nil {
 		return
@@ -2162,16 +2183,17 @@ func (r *Room) snapshotTokenSpoils(tokenID, monsterID string) {
 		}
 		t.Loot = loot
 	}
-	t.XP = domain.CRToXP(m.CR)
+	t.XP = r.combatRules().XPFor(m)
 	r.markDirty(r.scene.ID)
 }
 
-// killMonsterCombatant — HP монстра/безликого NPC (нет CharacterID, см.
-// domain.Combatant) опустилось до нуля: по правилам спасбросков от смерти у
-// них не бывает, умирает сразу. Убирает бойца из трекера, как
+// killCombatant — боец умер: HP ушло в ноль по правилу ZeroHPDead или
+// набрались провалы спасбросков. Убирает бойца из трекера, как
 // handleRemoveCombatant, и помечает его токен Dead (markTokenDead) —
-// требование "заменить токен на отображение костей".
-func (r *Room) killMonsterCombatant(cmb *domain.Combatant) {
+// требование "заменить токен на отображение костей". У существа с карточкой
+// снимаются лут и опыт (у персонажа MonsterID пуст — снимок ничего не
+// делает).
+func (r *Room) killCombatant(cmb *domain.Combatant) {
 	id := cmb.ID
 	// Снимок лута и опыта ДО markTokenDead: тот сам шлёт broadcastAll (см.
 	// его комментарий) — если поставить его раньше, Loot/XP уйдут клиентам
@@ -2196,55 +2218,48 @@ func (r *Room) killMonsterCombatant(cmb *domain.Combatant) {
 // handleSetCombatantDeathSave — "set_combatant_death_save": ДМ вручную
 // отмечает чекбоксы спасбросков от смерти прямо в трекере (как в Foundry) —
 // сервер сам кубик не кидает, только хранит отметки и разруливает
-// последствия. value — абсолютное значение 0-3 (см. domain.ClientMsg).
+// последствия. value — абсолютное значение (см. domain.ClientMsg). Сколько
+// нужно успехов и провалов, задают правила системы
+// (domain.DeathSavesRule); если у этого бойца на 0 хитов не спасброски —
+// команда игнорируется.
 //
-//   - 3 успеха — персонаж стабилизируется и приходит в себя с 1 HP (см.
-//     требование), отметки сбрасываются, боец остаётся в инициативе.
-//   - 3 провала — персонаж умирает: убираем его из инициативы (требование
-//     "если у персонажа провалены спасброски на смерть — убрать из
-//     инициативы") и помечаем его токен Dead, как и у монстра (требование
-//     "должны появиться такие же кости, как у монстра" — см. markTokenDead).
+//   - Набраны успехи — боец стабилизируется и приходит в себя с
+//     StabilizeHP хитами, отметки сбрасываются, боец остаётся в инициативе.
+//   - Набраны провалы — боец умирает: уходит из инициативы, токен
+//     становится костями, как у монстра (см. killCombatant).
 func (r *Room) handleSetCombatantDeathSave(id, kind string, value int) {
 	cmb, ok := r.combat.Combatants[id]
 	if !ok {
 		return
 	}
-	if value < 0 {
-		value = 0
-	} else if value > 3 {
-		value = 3
+	rules := r.combatRules()
+	ds := rules.ZeroHP.DeathSaves
+	if ds == nil || rules.ZeroHPFor(cmb.CharacterID != "") != domain.ZeroHPDeathSaves {
+		return
 	}
+	value = max(value, 0)
 	switch kind {
 	case "success":
-		cmb.DeathSaveSuccess = value
+		cmb.DeathSaveSuccess = min(value, ds.Success)
 	case "fail":
-		cmb.DeathSaveFail = value
+		cmb.DeathSaveFail = min(value, ds.Fail)
 	default:
 		return
 	}
-	if cmb.DeathSaveSuccess >= 3 {
-		cmb.HPCurrent = 1
+	if cmb.DeathSaveSuccess >= ds.Success {
+		cmb.HPCurrent = ds.StabilizeHP
 		cmb.DeathSaveSuccess = 0
 		cmb.DeathSaveFail = 0
 		// Стабилизация — тоже правка хитов, лист персонажа должен увидеть
-		// эту единицу (см. room_character_hp.go).
+		// это число (см. room_character_hp.go).
 		r.syncCharacterHP(cmb)
 		r.markCombatDirty()
 		r.broadcastCombat()
 		return
 	}
-	if cmb.DeathSaveFail >= 3 {
-		r.markTokenDead(cmb.TokenID)
-		delete(r.combat.Combatants, id)
-		if r.combat.CurrentID == id {
-			if order := sortedCombatantIDs(r.combat); len(order) > 0 {
-				r.combat.CurrentID = order[0]
-			} else {
-				r.combat.CurrentID = ""
-				r.combat.Active = false
-				r.combat.Round = 0
-			}
-		}
+	if cmb.DeathSaveFail >= ds.Fail {
+		r.killCombatant(cmb)
+		return
 	}
 	r.markCombatDirty()
 	r.broadcastCombat()
@@ -2408,7 +2423,7 @@ func (r *Room) handleTurnStep(dir int) {
 		//
 		// applyPeriodicModifiers может УБИТЬ бойца (тот же путь, что и
 		// ручная правка HP в трекере) — тогда он исчезает из r.combat и
-		// killMonsterCombatant сам переставляет CurrentID; поэтому дальше
+		// killCombatant сам переставляет CurrentID; поэтому дальше
 		// работаем по свежему чтению из map, а не по сохранённому указателю.
 		r.applyPeriodicModifiers(r.combat.Combatants[r.combat.CurrentID], domain.ModifierPeriodTurnStart)
 		if changed, sceneID := r.tickStatuses(r.combat.Combatants[r.combat.CurrentID]); changed {
@@ -2531,6 +2546,9 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		"hidePlayerDrawings":   r.combat.HidePlayerDrawings,
 		"hideBroadcastDice":    r.combat.HideBroadcastDice,
 		"broadcastDice3d":      r.combat.BroadcastDice3D,
+		// zeroHp — правила системы на 0 хитов: трекер по ним решает,
+		// рисовать ли спасброски и сколько в них лампочек.
+		"zeroHp": r.combatRules().ZeroHP,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()

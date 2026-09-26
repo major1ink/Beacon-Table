@@ -21,6 +21,7 @@
 // и «Carpet of Flying (3 ур.)» резалось, под портретом — две строки.
 // Текущий крупнее и в кольце, остальные приглушены. Раскладка одна на все
 // три роли.
+import { deathSavesFor } from "../combat-rules.js";
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "../combatant-card.js";
 import { icon } from "../icons.js";
 import { cssUrl } from "../html.js";
@@ -100,14 +101,14 @@ export function createCombatBar(ctx) {
   // hpBadge — компактная HP-плашка рядом с именем (см. комментарий в шапке
   // файла: сервер вообще не кладёт hpMax в payload, если бойцу его видеть не
   // положено — cmb.hpMax == null именно об этом сигнализирует). При
-  // HPCurrent<=0 у ИГРОВОГО персонажа (characterId — у монстра/безликого
-  // NPC спасбросков от смерти не бывает, сервер убирает его из инициативы
-  // сразу, см. room.go: killMonsterCombatant) вместо числа показываем
-  // отметки спасбросков от смерти — те же, что ДМ проставляет чекбоксами в
-  // панели "Инициатива" (combat-panel.js), тут только read-only индикация.
-  function hpBadge(cmb) {
+  // HPCurrent<=0 у бойца, который по правилам системы бросает спасброски от
+  // смерти (zeroHp из combat_state, см. combat-rules.js), вместо числа
+  // показываем их отметки — те же, что ДМ проставляет чекбоксами в панели
+  // "Инициатива" (combat-panel.js), тут только read-only индикация.
+  function hpBadge(cmb, zeroHp) {
     if (cmb.hpMax == null) return null;
-    if ((cmb.hpCurrent || 0) <= 0 && cmb.characterId) {
+    const saves = deathSavesFor(zeroHp, cmb);
+    if ((cmb.hpCurrent || 0) <= 0 && saves) {
       // Успехи и провалы — два ОТДЕЛЬНЫХ кластера точек с тонким
       // разделителем между ними (та же "палочка", что отбивает раунд от
       // очереди, см. roundLabel выше) — раньше все 6 точек шли одним
@@ -125,15 +126,19 @@ export function createCombatBar(ctx) {
           (filled ? color : "rgba(255,255,255,0.18)") + ";";
         return d;
       };
-      const cluster = (count, color) => {
+      const cluster = (count, total, color) => {
         const c = document.createElement("div");
         c.style.cssText = "display:flex;align-items:center;gap:2px;";
-        for (let i = 0; i < 3; i++) c.appendChild(dot(i < count, color));
+        for (let i = 0; i < total; i++) c.appendChild(dot(i < count, color));
         return c;
       };
       const sep = document.createElement("div");
       sep.style.cssText = "width:1px;height:8px;background:rgba(255,255,255,0.18);";
-      wrap.append(cluster(cmb.deathSaveSuccess || 0, "#5fd08a"), sep, cluster(cmb.deathSaveFail || 0, "#e0645a"));
+      wrap.append(
+        cluster(cmb.deathSaveSuccess || 0, saves.success, "#5fd08a"),
+        sep,
+        cluster(cmb.deathSaveFail || 0, saves.fail, "#e0645a")
+      );
       return wrap;
     }
     const badge = document.createElement("span");
@@ -211,7 +216,7 @@ export function createCombatBar(ctx) {
         (current ? "font-weight:600;" : "");
 
       slot.append(portraitBox, name);
-      const hp = hpBadge(cmb);
+      const hp = hpBadge(cmb, state.zeroHp);
       if (hp) slot.appendChild(hp);
 
       // Клик по столбику — карточка бойца (статблок монстра у ДМ, лист

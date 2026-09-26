@@ -103,7 +103,7 @@ type Monster struct {
 	// целиком в редакторе бестиария (web/src/pages/bestiary.js), как и
 	// остальные поля статблока. Когда экземпляр этого монстра умирает в бою,
 	// содержимое КОПИРУЕТСЯ (не ссылкой) в Token.Loot убитого токена (см.
-	// service.Room.killMonsterCombatant) — лутание одного трупа не трогает
+	// service.Room.killCombatant) — лутание одного трупа не трогает
 	// "склад" шаблона и других уже стоящих на карте токенов того же монстра.
 	Inventory []InventoryEntry `json:"inventory,omitempty"`
 

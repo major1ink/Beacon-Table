@@ -17,6 +17,7 @@
 // от полноценного vtt/net.js (встроенная панель), либо от собственного
 // мини-WS-клиента плавающего окна (см. pages/combat-tracker.js) — оба
 // диспатчат его в одном и том же формате, откуда взято неважно.
+import { deathSavesFor } from "./combat-rules.js";
 import { fetchBestiary, fetchAdminCharacters } from "./api.js";
 import { openActionsPeek, closeActionsPeek } from "./combat-actions-peek.js";
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "./combatant-card.js";
@@ -68,7 +69,7 @@ export function initCombatPanel({ send, els }) {
   // latestKilled — вкладка "Убитые": снимок combat_state.killed (см.
   // internal/service/room.go: killedMonsters) — все Dead-токены активной
   // сцены, кроме игровых персонажей. Отдельный от latestCombat список,
-  // потому что это НЕ бойцы трекера — killMonsterCombatant удаляет их из
+  // потому что это НЕ бойцы трекера — killCombatant удаляет их из
   // Combatants в момент смерти, а эти данные читаются прямо со сцены.
   let latestKilled = [];
 
@@ -335,18 +336,18 @@ export function initCombatPanel({ send, els }) {
       );
       row.appendChild(statusRow);
 
-      // ---- спасброски от смерти — только у игрового персонажа (characterId)
-      // с HP<=0. У монстра/безликого NPC (нет characterId) спасбросков не
-      // бывает — сервер убирает его из инициативы сразу, как только HP
-      // достигает нуля (см. room.go: killMonsterCombatant), так что строка
-      // тут для него просто никогда не появится. ДМ отмечает чекбоксы
-      // руками, как в Foundry (см. bulbRow на бланке персонажа,
-      // character-sheet.js) — клик по крайнему заполненному гасит его,
-      // иначе заполняет по эту включительно; 3 провала сервер сам уберёт
-      // бойца из инициативы (требование "провалены спасброски — убрать из
+      // ---- спасброски от смерти — у бойца с HP<=0, если правила системы
+      // велят ему их бросать (combat_state.zeroHp, см. combat-rules.js):
+      // в D&D — у игрового персонажа, монстра сервер убирает из инициативы
+      // сразу (см. room.go: killCombatant). ДМ отмечает чекбоксы руками,
+      // как в Foundry (см. bulbRow на бланке персонажа, character-sheet.js)
+      // — клик по крайнему заполненному гасит его, иначе заполняет по эту
+      // включительно; набранные провалы сервер сам уберёт бойца из
+      // инициативы (требование "провалены спасброски — убрать из
       // инициативы").
-      if ((cmb.hpCurrent ?? 0) <= 0 && cmb.characterId) {
-        row.appendChild(deathSaveRow(cmb, send));
+      const saves = deathSavesFor(latestCombat.zeroHp, cmb);
+      if ((cmb.hpCurrent ?? 0) <= 0 && saves) {
+        row.appendChild(deathSaveRow(cmb, saves, send));
       }
 
       els.list.appendChild(row);
@@ -357,9 +358,9 @@ export function initCombatPanel({ send, els }) {
   // Отдельная от основного трекера вкладка (см. requirement: "запретить
   // добавлять убитых монстров в инициативу, завести для них отдельную
   // вкладку"): труп сюда попадает сам, как только сервер помечает его токен
-  // Dead (killMonsterCombatant/handleSetCombatantDeathSave), без действий
-  // ДМ. Отсюда же — опыт за убийство (Token.XP, снятый сервером с CR
-  // монстра в момент смерти, см. domain.CRToXP), восстановление
+  // Dead (killCombatant/handleSetCombatantDeathSave), без действий
+  // ДМ. Отсюда же — опыт за убийство (Token.XP, снятый сервером с карточки
+  // в момент смерти по правилам системы, см. domain.CombatRules.XPFor), восстановление
   // (revive_token) и раздача добычи (loot_take_item — тот же WS-путь и та
   // же модалка, что и у "Лутить" в ПКМ-меню токена на карте).
   //
@@ -428,7 +429,7 @@ export function initCombatPanel({ send, els }) {
 
       const meta = document.createElement("p");
       meta.className = "hint killed-meta";
-      meta.textContent = k.xp ? `${k.xp} XP` : "Опыт неизвестен — нет карточки монстра в бестиарии";
+      meta.textContent = k.xp ? `Опыт: ${k.xp}` : "Опыт не указан";
       row.appendChild(meta);
 
       const actions = document.createElement("div");
@@ -774,8 +775,8 @@ function hpBarRow(cmb, send) {
 // вариант тут: там правится sheet.combat.* локально в открытом листе и
 // шлётся save-запросом, здесь — сразу WS-командой на сервер, который и
 // держит истину (cmb.deathSaveSuccess/Fail, domain.Combatant).
-function deathSaveRow(cmb, send) {
-  function bulbGroup(label, kind, value) {
+function deathSaveRow(cmb, saves, send) {
+  function bulbGroup(label, kind, value, total) {
     const wrap = document.createElement("div");
     wrap.className = "combat-death-group";
     const l = document.createElement("span");
@@ -783,7 +784,7 @@ function deathSaveRow(cmb, send) {
     l.textContent = label;
     const bulbs = document.createElement("div");
     bulbs.className = "bulb-row";
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < total; i++) {
       const filled = i < value;
       const b = document.createElement("button");
       b.type = "button";
@@ -809,7 +810,10 @@ function deathSaveRow(cmb, send) {
 
   const groups = document.createElement("div");
   groups.className = "combat-death-groups";
-  groups.append(bulbGroup("успехи", "success", cmb.deathSaveSuccess ?? 0), bulbGroup("провалы", "fail", cmb.deathSaveFail ?? 0));
+  groups.append(
+    bulbGroup("успехи", "success", cmb.deathSaveSuccess ?? 0, saves.success),
+    bulbGroup("провалы", "fail", cmb.deathSaveFail ?? 0, saves.fail)
+  );
 
   const row = document.createElement("div");
   row.className = "combat-death-row";

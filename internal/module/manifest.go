@@ -23,6 +23,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"beacon-table/internal/domain"
 )
 
 // Format — версия СТРУКТУРЫ пакета, которую понимает программа. Не путать с
@@ -91,6 +93,10 @@ type Manifest struct {
 	// Theme — оформление системы (CSS-переменные, шрифты). Формат задаёт
 	// задача «Оформление игровых систем»; здесь хранится как есть.
 	Theme json.RawMessage `json:"theme,omitempty"`
+	// Combat — правила боя системы: инициатива, 0 хитов, опыт. Только у
+	// системного модуля; без раздела мир на этой системе играет по правилам
+	// «Своей системы» (domain.CustomCombatRules).
+	Combat *domain.CombatRules `json:"combat,omitempty"`
 }
 
 var validID = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -140,6 +146,14 @@ func (m *Manifest) Validate() error {
 			if _, err := ParseVersion(d.MinVersion); err != nil {
 				return fmt.Errorf("зависимость %s модуля %s: %w", d.ID, m.ID, err)
 			}
+		}
+	}
+	if m.Combat != nil {
+		if m.Type != TypeSystem {
+			return fmt.Errorf("правила боя (combat) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+		}
+		if err := m.Combat.Validate(); err != nil {
+			return fmt.Errorf("правила боя модуля %s: %w", m.ID, err)
 		}
 	}
 	return nil

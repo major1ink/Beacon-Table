@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"beacon-table/internal/domain"
 	"beacon-table/internal/module"
 )
 
@@ -31,9 +32,35 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 			Description: "Встроенный каталог SRD: существа, заклинания, предметы, справочник и состояния.",
 			License:     "CC-BY-4.0 (SRD 5.2)",
 			LegacyIDs:   true,
+			Combat:      dndCombatRules(),
 		}))
 	}
 	return out
+}
+
+// dndCombatRules — правила боя D&D 5e (одинаковые в 2014 и 2024): инициатива
+// 1d20 + модификатор Ловкости, персонаж на 0 хитов бросает спасброски от
+// смерти (3 успеха — приходит в себя с 1 хитом, 3 провала — смерть),
+// существо умирает сразу, опыт — по уровню опасности (таблица DMG,
+// "Beating Encounters").
+func dndCombatRules() *domain.CombatRules {
+	return &domain.CombatRules{
+		Initiative: domain.InitiativeRule{Roll: "1d20", Bonus: "abilityMod:dex"},
+		ZeroHP: domain.ZeroHPRule{
+			Character:  domain.ZeroHPDeathSaves,
+			Other:      domain.ZeroHPDead,
+			DeathSaves: &domain.DeathSavesRule{Success: 3, Fail: 3, StabilizeHP: 1},
+		},
+		XP: domain.XPRule{Field: "cr", Table: map[string]int{
+			"0": 10, "1/8": 25, "1/4": 50, "1/2": 100,
+			"1": 200, "2": 450, "3": 700, "4": 1100, "5": 1800,
+			"6": 2300, "7": 2900, "8": 3900, "9": 5000, "10": 5900,
+			"11": 7200, "12": 8400, "13": 10000, "14": 11500, "15": 13000,
+			"16": 15000, "17": 18000, "18": 20000, "19": 22000, "20": 25000,
+			"21": 33000, "22": 41000, "23": 50000, "24": 62000, "25": 75000,
+			"26": 90000, "27": 105000, "28": 120000, "29": 135000, "30": 155000,
+		}},
+	}
 }
 
 // moduleAssetsURL — картинки модулей: /module-assets/<id модуля>/<путь в
