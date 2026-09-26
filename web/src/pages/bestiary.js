@@ -28,6 +28,7 @@ import { ABILITIES, fmtMod, crColor, monsterGlyphName, renderAbilityTiles, rende
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
+import { formatWeight, loadSystemProfile } from "../system-profile.js";
 
 // ==================== state ====================
 
@@ -485,7 +486,7 @@ function invSection(readOnly) {
       const avatar = h("div", { class: "av" });
       if (e.imageUrl) avatar.style.backgroundImage = cssUrl(e.imageUrl);
       const name = h("span", { class: "nm", text: e.name });
-      const weight = h("span", { class: "tag", text: (e.weightLb || 0) + " фнт" });
+      const weight = h("span", { class: "tag", text: formatWeight(e.weightLb) });
       const row = [avatar, name, weight];
       if (readOnly) {
         row.push(h("span", { class: "tag", text: "×" + e.quantity }));
@@ -745,6 +746,7 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
+  await loadSystemProfile();
   if (!me) {
     location.href = "/";
     return;

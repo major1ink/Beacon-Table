@@ -231,14 +231,13 @@ type SpellRow struct {
 	Notes         string `json:"notes"`
 }
 
-// Coins — монеты по номиналам (ММ медь/СМ серебро/ЗМ золото/ЭМ электрум/ПМ платина).
-type Coins struct {
-	CP int `json:"cp"`
-	SP int `json:"sp"`
-	GP int `json:"gp"`
-	EP int `json:"ep"`
-	PP int `json:"pp"`
-}
+// Coins — деньги листа: ключ валюты → количество. Какие валюты есть,
+// задаёт система мира (Currency, раздел currencies в module.json: у D&D —
+// cp/sp/ep/gp/pp, у «Своей системы» — одна «money»). Ключи, которых система
+// не знает (лист перенесли из мира на другой системе), хранятся как есть —
+// лист показывает их отдельно. Старые листы с пятью монетами D&D читаются
+// без миграции: это тот же JSON-объект.
+type Coins map[string]int
 
 // abilityKeys — канонический порядок ключей характеристик, используется и
 // для SaveProf, и как источник правды о допустимых ключах.
@@ -256,5 +255,6 @@ func DefaultCharacterSheet() CharacterSheet {
 		SaveProf:  saveProf,
 		SkillProf: map[string]int{},
 		Info:      SheetInfo{Level: 1},
+		Coins:     Coins{},
 	}
 }

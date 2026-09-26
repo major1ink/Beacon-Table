@@ -7,6 +7,7 @@
 import { icon } from "./icons.js";
 import { showAlert } from "./modal.js";
 import { cssUrl } from "./html.js";
+import { formatWeight, loadSystemProfile } from "./system-profile.js";
 
 // showLootTakeModal(opts) — создаёт оверлей поверх всей страницы, возвращает
 // {close, update(entries)} для вызывающей стороны (например, обновить список
@@ -18,6 +19,10 @@ import { cssUrl } from "./html.js";
 //   onTake(entryId, quantity, characterId) — Promise-возвращающий колбэк
 //     фактического запроса (WS-команда) — модалка сама не знает протокол
 export function showLootTakeModal({ title, entries, characters, onTake }) {
+  // Единица веса — от системы мира; до загрузки вес показывается числом,
+  // после — список перерисовывается (render объявлен ниже, вызов — позже).
+  let shown = false;
+  loadSystemProfile().then(() => shown && render());
   let list = (entries || []).map((e) => ({ ...e }));
   let characterId = characters && characters.length ? characters[0].id : "";
 
@@ -93,7 +98,7 @@ export function showLootTakeModal({ title, entries, characters, onTake }) {
       name.textContent = e.name;
       const meta = document.createElement("div");
       meta.className = "loot-modal-meta";
-      const weightPart = e.weightLb ? `${e.weightLb} фнт · ` : "";
+      const weightPart = e.weightLb ? `${formatWeight(e.weightLb)} · ` : "";
       meta.textContent = `${weightPart}доступно: ${e.quantity}`;
       info.append(name, meta);
 
@@ -129,6 +134,7 @@ export function showLootTakeModal({ title, entries, characters, onTake }) {
     }
   }
   render();
+  shown = true;
 
   document.body.appendChild(overlay);
   overlay.addEventListener("click", (e) => {

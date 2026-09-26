@@ -1,7 +1,7 @@
 package domain
 
 // InventoryEntry — один слот инвентаря: ссылка на карточку каталога (Item,
-// см. item.go) + СНИМОК Name/ImageURL/WeightLb на момент добавления (тот же
+// см. item.go) + СНИМОК Name/ImageURL/WeightValue на момент добавления (тот же
 // приём, что и у MonsterSpellRef, см. monster.go — переживает удаление или
 // правку исходной карточки каталога, второй источник правды не образуется,
 // потому что снимок никогда не подтягивается заново, только пишется один
@@ -22,11 +22,13 @@ type InventoryEntry struct {
 	// ItemID — id карточки в общей библиотеке предметов (см. item.go), "" —
 	// карточка с тех пор удалена из каталога, либо запись добавлена вручную
 	// (не через каталог) и никогда не была с ним связана.
-	ItemID   string  `json:"itemId,omitempty"`
-	Name     string  `json:"name"`
-	ImageURL string  `json:"imageUrl,omitempty"`
-	WeightLb float64 `json:"weightLb,omitempty"`
-	Quantity int     `json:"quantity"`
+	ItemID   string `json:"itemId,omitempty"`
+	Name     string `json:"name"`
+	ImageURL string `json:"imageUrl,omitempty"`
+	// WeightValue — вес одной штуки в единицах системы мира (см.
+	// Item.WeightValue — там же про историческое имя ключа "weightLb").
+	WeightValue float64 `json:"weightLb,omitempty"`
+	Quantity    int     `json:"quantity"`
 	// Equipped — "надето/используется" — имеет смысл только в инвентаре
 	// персонажа (Monster.Inventory/Token.Loot/LootHub его не используют, но
 	// поле общее, чтобы не заводить отдельный тип только ради одного флага).

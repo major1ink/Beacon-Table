@@ -117,6 +117,30 @@ func TestManifestModifierTargets(t *testing.T) {
 	}
 }
 
+func TestManifestUnitsAndCurrencies(t *testing.T) {
+	system := func(extra string) string {
+		return strings.Replace(manifestJSON("sys-x", "1.0.0", extra), `"content"`, `"system"`, 1)
+	}
+	bad := map[string]string{
+		"у контента":         manifestJSON("a", "1.0.0", `"currencies":[{"key":"gp","label":"ЗМ"}]`),
+		"единицы у контента": manifestJSON("a", "1.0.0", `"units":{"weight":"кг"}`),
+		"валюта дважды":      system(`"currencies":[{"key":"gp","label":"ЗМ"},{"key":"gp","label":"ЗМ"}]`),
+		"кривой ключ":        system(`"currencies":[{"key":"Gold","label":"ЗМ"}]`),
+	}
+	for name, raw := range bad {
+		if _, err := ParseManifest([]byte(raw)); err == nil {
+			t.Errorf("%s: ожидали ошибку", name)
+		}
+	}
+	m, err := ParseManifest([]byte(system(`"units":{"weight":" фнт "},"currencies":[{"key":"gp","label":"ЗМ","title":"золото"}]`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Units.Weight != "фнт" || len(m.Currencies) != 1 {
+		t.Fatalf("разобрано: %+v %+v", m.Units, m.Currencies)
+	}
+}
+
 func TestVersionCompare(t *testing.T) {
 	a, _ := ParseVersion("0.9.0")
 	b, _ := ParseVersion("0.10.0")

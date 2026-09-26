@@ -246,6 +246,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/references/{id}", a.handleReferenceDelete)
 
 	mux.HandleFunc("GET /api/modifier-targets", a.handleModifierTargets)
+	mux.HandleFunc("GET /api/system", a.handleSystemProfile)
 
 	// Импорт компендиумов Foundry VTT по ссылке на манифест — только ДМ,
 	// см. foundry_handlers.go.

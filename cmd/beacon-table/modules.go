@@ -34,6 +34,8 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 			LegacyIDs:       true,
 			Combat:          dndCombatRules(),
 			ModifierTargets: dndModifierTargets(),
+			Units:           &domain.SystemUnits{Weight: "фнт"},
+			Currencies:      dndCurrencies(),
 		}))
 	}
 	return out
@@ -75,6 +77,18 @@ func dndModifierTargets() []domain.ModifierTargetInfo {
 		{Target: "abilities.int", Label: "Интеллект", System: true},
 		{Target: "abilities.wis", Label: "Мудрость", System: true},
 		{Target: "abilities.cha", Label: "Харизма", System: true},
+	}
+}
+
+// dndCurrencies — монеты D&D в порядке показа на листе, от дорогих к
+// дешёвым.
+func dndCurrencies() []domain.Currency {
+	return []domain.Currency{
+		{Key: "pp", Label: "ПМ", Title: "платина"},
+		{Key: "gp", Label: "ЗМ", Title: "золото"},
+		{Key: "ep", Label: "ЭМ", Title: "электрум"},
+		{Key: "sp", Label: "СМ", Title: "серебро"},
+		{Key: "cp", Label: "ММ", Title: "медь"},
 	}
 }
 

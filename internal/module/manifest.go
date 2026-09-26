@@ -101,6 +101,11 @@ type Manifest struct {
 	// сверх целей ядра и свободных характеристик (у D&D — abilities.*).
 	// Только у системного модуля.
 	ModifierTargets []domain.ModifierTargetInfo `json:"modifierTargets,omitempty"`
+	// Units — единицы системы (вес); Currencies — валюты листа в порядке
+	// показа. Только у системного модуля; без них — умолчания «Своей
+	// системы» (domain.CustomUnits/CustomCurrencies).
+	Units      *domain.SystemUnits `json:"units,omitempty"`
+	Currencies []domain.Currency   `json:"currencies,omitempty"`
 }
 
 // maxModifierTargets — сколько целей модификаторов может объявить система.
@@ -163,7 +168,29 @@ func (m *Manifest) Validate() error {
 			return fmt.Errorf("правила боя модуля %s: %w", m.ID, err)
 		}
 	}
-	return m.validateModifierTargets()
+	if err := m.validateModifierTargets(); err != nil {
+		return err
+	}
+	return m.validateUnitsAndCurrencies()
+}
+
+// validateUnitsAndCurrencies — единицы и валюты: только у системного модуля.
+func (m *Manifest) validateUnitsAndCurrencies() error {
+	if m.Units == nil && len(m.Currencies) == 0 {
+		return nil
+	}
+	if m.Type != TypeSystem {
+		return fmt.Errorf("единицы и валюты (units, currencies) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	if m.Units != nil {
+		if err := domain.ValidateUnits(m.Units); err != nil {
+			return fmt.Errorf("модуль %s: %w", m.ID, err)
+		}
+	}
+	if err := domain.ValidateCurrencies(m.Currencies); err != nil {
+		return fmt.Errorf("модуль %s: %w", m.ID, err)
+	}
+	return nil
 }
 
 // validateModifierTargets — цели системы: синтаксис, подпись, без повторов

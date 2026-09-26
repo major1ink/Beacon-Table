@@ -44,6 +44,7 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
+import { coinRows, formatWeight, loadSystemProfile } from "../system-profile.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -1189,15 +1190,17 @@ function renderTab4() {
     }
   }
   renderAttunement();
+  // Валюты — от системы мира (system-profile.js); ключи, которых система не
+  // знает, — отдельной строкой «Другие деньги», чтобы не потерять их.
+  const coinLabel = (c) => (c.other || c.title === c.label ? c.label : `${c.label} (${c.title})`);
+  const coinField = (c) => field(coinLabel(c), numberInput(() => sheet.coins[c.key] || 0, (v) => (sheet.coins[c.key] = v), { min: 0 }));
+  const coinList = coinRows(sheet.coins);
+  const otherCoins = coinList.filter((c) => c.other);
   const coinsSection = h("div", { class: "section" }, [
-    h("h3", { text: "Монеты" }),
-    h("div", { class: "row" }, [
-      field("ММ (медь)", numberInput(() => sheet.coins.cp, (v) => (sheet.coins.cp = v), { min: 0 })),
-      field("СМ (серебро)", numberInput(() => sheet.coins.sp, (v) => (sheet.coins.sp = v), { min: 0 })),
-      field("ЗМ (золото)", numberInput(() => sheet.coins.gp, (v) => (sheet.coins.gp = v), { min: 0 })),
-      field("ЭМ (электрум)", numberInput(() => sheet.coins.ep, (v) => (sheet.coins.ep = v), { min: 0 })),
-      field("ПМ (платина)", numberInput(() => sheet.coins.pp, (v) => (sheet.coins.pp = v), { min: 0 })),
-    ]),
+    h("h3", { text: "Деньги" }),
+    h("div", { class: "row" }, coinList.filter((c) => !c.other).map(coinField)),
+    otherCoins.length ? h("h4", { text: "Другие деньги" }) : null,
+    otherCoins.length ? h("div", { class: "row" }, otherCoins.map(coinField)) : null,
   ]);
 
   root.appendChild(
@@ -1288,7 +1291,7 @@ function renderTab5() {
 
   const listSection = h("div", { class: "section" }, [
     h("h3", { text: "Инвентарь" }),
-    h("p", { class: "inv-total-weight" }, ["Общий вес: ", h("b", { text: String(totalWeight()) }), " фнт."]),
+    h("p", { class: "inv-total-weight" }, ["Общий вес: ", h("b", { text: formatWeight(totalWeight()) })]),
   ]);
 
   const table = h("table", { class: "dyn-table" }, [
@@ -1351,7 +1354,7 @@ function renderTab5() {
       h("tr", {}, [
         h("td", {}, [avatar]),
         h("td", {}, [nameBtn]),
-        h("td", { text: (e.weightLb || 0) + " фнт" }),
+        h("td", { text: formatWeight(e.weightLb) }),
         h("td", {}, [qtyInput]),
         h("td", {}, [equippedInput]),
         h("td", {}, [notesInput]),
@@ -2164,20 +2167,12 @@ function vSpellsCard() {
 
 // ---------- деньги, настройка, инвентарь ----------
 
-const COIN_FIELDS = [
-  { key: "pp", label: "ПМ" },
-  { key: "gp", label: "ЗМ" },
-  { key: "ep", label: "ЭМ" },
-  { key: "sp", label: "СМ" },
-  { key: "cp", label: "ММ" },
-];
-
 function vMoneyCard() {
   const grid = h("div", { class: "v-money" });
-  for (const c of COIN_FIELDS) {
+  for (const c of coinRows(sheet.coins)) {
     const value = h("b", { text: String(sheet.coins[c.key] || 0) });
     vRefresh.push(() => (value.textContent = String(sheet.coins[c.key] || 0)));
-    const cell = h("div", { class: "v-money-cell" }, [value, h("span", { text: c.label })]);
+    const cell = h("div", { class: "v-money-cell" + (c.other ? " other" : ""), title: c.other ? "Валюта другой системы" : c.title }, [value, h("span", { text: c.label })]);
     cell.appendChild(
       quickInput(
         () => sheet.coins[c.key] || 0,
@@ -2187,9 +2182,9 @@ function vMoneyCard() {
     );
     grid.appendChild(cell);
   }
-  // Кошелёк показываем всегда, даже из пяти нулей: игроку нужно место, куда
+  // Кошелёк показываем всегда, даже из одних нулей: игроку нужно место, куда
   // вписать первую добычу, не переключаясь в режим правки.
-  return vCard("Монеты", grid);
+  return vCard("Деньги", grid);
 }
 
 function vAttunementCard() {
@@ -2236,7 +2231,7 @@ function itemReadInfoGrid(it) {
   };
   add("Настройка:", itemAttunementText(it));
   add("Стоимость:", it.cost);
-  add("Вес:", it.weight || (it.weightLb ? it.weightLb + " фнт" : ""));
+  add("Вес:", it.weight || (it.weightLb ? formatWeight(it.weightLb) : ""));
   add("Активация:", it.activation);
   add("Урон:", it.damage);
   add("Класс доспеха:", it.armorClass);
@@ -2413,7 +2408,7 @@ function vInventoryCard() {
       h(
         "button",
         { type: "button", class: "v-inv-name", title: "Открыть карточку предмета", onclick: (ev) => openItemPeek(e, ev.currentTarget) },
-        [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + e.weightLb + " фнт" }) : null]
+        [h("span", { text: e.name }), e.weightLb ? h("small", { text: " · " + formatWeight(e.weightLb) }) : null]
       ),
       qty,
       // Только "потратить" — набрать себе лишнего игрок не может (см.
@@ -2438,7 +2433,7 @@ function vInventoryCard() {
       eq,
     ]);
   });
-  return vCard("Инвентарь", rows, totalWeight() + " фнт");
+  return vCard("Инвентарь", rows, formatWeight(totalWeight()));
 }
 
 // ---------- сборка ----------
@@ -2752,6 +2747,7 @@ function currentPregenId() {
 
 (async function boot() {
   me = await fetchMe();
+  await loadSystemProfile(); // единица веса и валюты мира
   if (!me || (!isPlayer(me.role) && !isGM(me.role))) {
     location.href = "/";
     return;

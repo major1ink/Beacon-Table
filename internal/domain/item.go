@@ -47,11 +47,15 @@ type Item struct {
 
 	Cost   string `json:"cost,omitempty"`   // "50 зм."
 	Weight string `json:"weight,omitempty"` // "1 фунт" — свободный текст для отображения в карточке
-	// WeightLb — тот же вес, но числом (в фунтах), для расчёта суммарного веса
+	// WeightValue — тот же вес, но числом, для расчёта суммарного веса
 	// инвентаря (см. domain.InventoryEntry) — сервер их не синхронизирует,
 	// оба поля правятся в редакторе предмета независимо, как Weight выше.
-	WeightLb   float64 `json:"weightLb,omitempty"`
-	Activation string  `json:"activation,omitempty"` // "1 действие", "Особое (см. описание)" — как использовать предмет
+	// Число — в единицах системы мира (SystemUnits.Weight: «фнт» у D&D, «кг»
+	// у «Своей системы»), без пересчёта. JSON-ключ "weightLb" — историческое
+	// имя формата (когда вес был только в фунтах D&D); его не переименовываем,
+	// чтобы не мигрировать базы, файлы миров, архивы и каталоги модулей.
+	WeightValue float64 `json:"weightLb,omitempty"`
+	Activation  string  `json:"activation,omitempty"` // "1 действие", "Особое (см. описание)" — как использовать предмет
 
 	Damage     string `json:"damage,omitempty"`     // "1к8 рубящий" — для оружия, пусто у прочего
 	ArmorClass string `json:"armorClass,omitempty"` // "14 + Лов (макс 2)" — для доспехов

@@ -27,8 +27,11 @@ export function normalizeSheet(raw) {
       ? s.spellcasting.slotsByLevel
       : ["", "", "", "", "", "", "", "", ""];
   s.preparedSpells = Array.isArray(s.preparedSpells) ? s.preparedSpells : [];
-  s.coins = s.coins || {};
-  for (const k of ["cp", "sp", "gp", "ep", "pp"]) s.coins[k] = Math.max(0, parseInt(s.coins[k], 10) || 0);
+  // Деньги — словарь «ключ валюты → сумма» (domain.Coins): какие валюты,
+  // решает система мира, поэтому ключи не выбрасываем и не дописываем —
+  // только приводим суммы к целым не меньше нуля.
+  s.coins = s.coins && typeof s.coins === "object" && !Array.isArray(s.coins) ? s.coins : {};
+  for (const k of Object.keys(s.coins)) s.coins[k] = Math.max(0, parseInt(s.coins[k], 10) || 0);
   // personalityTraits/ideals/bonds/flaws — показываются на обеих системах
   // (см. renderTab1/renderTab4 ниже), просто в разных местах листа;
   // race/species — только 2014/2024 соответственно, у "чужой" системы

@@ -20,7 +20,7 @@ const inventoryColumns = `id, item_id, name, image_url, weight_lb, quantity, equ
 func scanInventoryEntry(row interface{ Scan(...any) error }) (*domain.InventoryEntry, error) {
 	var e domain.InventoryEntry
 	var equipped int
-	if err := row.Scan(&e.ID, &e.ItemID, &e.Name, &e.ImageURL, &e.WeightLb, &e.Quantity, &equipped, &e.Notes); err != nil {
+	if err := row.Scan(&e.ID, &e.ItemID, &e.Name, &e.ImageURL, &e.WeightValue, &e.Quantity, &equipped, &e.Notes); err != nil {
 		return nil, err
 	}
 	e.Equipped = equipped != 0
@@ -101,7 +101,7 @@ func (s *CharacterStore) AddInventoryEntry(ctx context.Context, characterID, acc
 
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO inventory_items (id, character_id, account_id, company_id, item_id, name, image_url, weight_lb, quantity, equipped, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		entry.ID, characterID, accountID, s.companyID, entry.ItemID, entry.Name, entry.ImageURL, entry.WeightLb, entry.Quantity, boolToInt(entry.Equipped), entry.Notes, time.Now().Format(timeLayout),
+		entry.ID, characterID, accountID, s.companyID, entry.ItemID, entry.Name, entry.ImageURL, entry.WeightValue, entry.Quantity, boolToInt(entry.Equipped), entry.Notes, time.Now().Format(timeLayout),
 	)
 	if err != nil {
 		return nil, err

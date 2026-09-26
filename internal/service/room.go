@@ -2664,7 +2664,7 @@ func (r *Room) handleHubAddItem(msg domain.ClientMsg) {
 	id := "hub-" + newID()
 	r.hub.Entries[id] = &domain.InventoryEntry{
 		ID: id, ItemID: item.ID, Name: item.Name, ImageURL: item.ImageURL,
-		WeightLb: item.WeightLb, Quantity: qty, Notes: note,
+		WeightValue: item.WeightValue, Quantity: qty, Notes: note,
 	}
 	r.markHubDirty()
 	r.broadcastHub()

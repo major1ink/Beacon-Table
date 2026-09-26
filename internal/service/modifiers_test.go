@@ -348,3 +348,15 @@ func TestApplyModifiersDiv(t *testing.T) {
 		t.Errorf("делитель 1: %d", got)
 	}
 }
+
+// Деньги листа — словарь валют системы: незнакомая этой системе валюта
+// (лист из мира на другой системе) сохраняется, отрицательная сумма
+// поджимается, негодный ключ выбрасывается.
+func TestSanitizeSheetKeepsForeignCurrencies(t *testing.T) {
+	sheet := domain.DefaultCharacterSheet()
+	sheet.Coins = domain.Coins{"gp": 12, "shells": 4, "money": -3, "Not A Key": 1}
+	got := sanitizeSheet(sheet).Coins
+	if got["gp"] != 12 || got["shells"] != 4 || got["money"] != 0 || len(got) != 3 {
+		t.Fatalf("деньги после проверки: %v", got)
+	}
+}

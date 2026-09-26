@@ -112,6 +112,7 @@ func sanitizeSheet(sheet domain.CharacterSheet) domain.CharacterSheet {
 	} else if sheet.Combat.DeathSaveFail > 3 {
 		sheet.Combat.DeathSaveFail = 3
 	}
+	sheet.Coins = domain.SanitizeCoins(sheet.Coins)
 	if sheet.Combat.Exhaustion < 0 {
 		sheet.Combat.Exhaustion = 0
 	} else if sheet.Combat.Exhaustion > 6 {

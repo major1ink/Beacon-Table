@@ -70,8 +70,8 @@ func sanitizeItem(it domain.Item) domain.Item {
 	// Modifiers — что предмет даёт, пока надет (см. domain.Modifier); тот же
 	// санитайзер, что и у карточки состояния.
 	it.Modifiers = sanitizeModifiers(it.Modifiers)
-	if it.WeightLb < 0 {
-		it.WeightLb = 0
+	if it.WeightValue < 0 {
+		it.WeightValue = 0
 	}
 	if len(it.Tags) > maxItemTags {
 		it.Tags = it.Tags[:maxItemTags]

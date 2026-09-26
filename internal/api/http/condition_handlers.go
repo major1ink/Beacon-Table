@@ -24,6 +24,21 @@ import (
 // подписи не разъезжались между доменом и конструкторами состояний/
 // предметов. Свободные характеристики (stat.<ключ>) в список не входят —
 // их конструктор заводит по названию. Мир не запущен — только цели ядра.
+// handleSystemProfile — система запущенного мира для клиента: единица веса и
+// валюты (см. app.CompanyManager.SystemProfile). Нужна листу, инвентарю,
+// окну лута и конструктору предмета, чтобы не зашивать фунты и монеты D&D.
+// Мир не запущен — умолчания «Своей системы».
+func (a *API) handleSystemProfile(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireAccount(w, r); !ok {
+		return
+	}
+	var company *domain.Company
+	if world := a.Companies.Current(); world != nil {
+		company = world.Company
+	}
+	writeJSON(w, http.StatusOK, a.Companies.SystemProfile(company))
+}
+
 func (a *API) handleModifierTargets(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireAccount(w, r); !ok {
 		return

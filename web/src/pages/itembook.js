@@ -30,6 +30,7 @@ import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
+import { loadSystemProfile, weightUnit } from "../system-profile.js";
 
 // ==================== state ====================
 
@@ -100,9 +101,10 @@ function kvRows() {
   return [
     { label: "Стоимость", get: () => item.cost, set: (v) => (item.cost = v), placeholder: "50 зм.", mono: true },
     { label: "Вес", get: () => item.weight, set: (v) => (item.weight = v), placeholder: "1 фунт.", mono: true },
-    // weightLb — тот же вес числом (см. domain.Item.WeightLb) для суммы
-    // инвентаря на листе; с текстовым «Вес» не синхронизируется.
-    { label: "Вес числом, фнт", get: () => item.weightLb, set: (v) => (item.weightLb = v), placeholder: "0", mono: true, type: "number", min: "0", step: "any", unit: " фнт" },
+    // weightLb — тот же вес числом (см. domain.Item.WeightValue) в единицах
+    // системы мира для суммы инвентаря на листе; с текстовым «Вес» не
+    // синхронизируется.
+    { label: weightUnit() ? `Вес числом, ${weightUnit()}` : "Вес числом", get: () => item.weightLb, set: (v) => (item.weightLb = v), placeholder: "0", mono: true, type: "number", min: "0", step: "any", unit: weightUnit() ? " " + weightUnit() : "" },
     { label: "Активация", get: () => item.activation, set: (v) => (item.activation = v), placeholder: "1 действие" },
     { label: "Урон", get: () => item.damage, set: (v) => (item.damage = v), placeholder: "1к8 рубящий", mono: true },
     { label: "Класс доспеха", get: () => item.armorClass, set: (v) => (item.armorClass = v), placeholder: "14 + Лов (макс 2)", mono: true },
@@ -512,6 +514,7 @@ function currentId() {
     return;
   }
   await loadTargets(); // подписи целей для статблока
+  await loadSystemProfile(); // единица веса
   standEntries = await loadStand();
   try {
     item = normalizeItem(await fetchItem(itemId));

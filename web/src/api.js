@@ -587,6 +587,11 @@ export async function fetchConditions() {
 // цели ядра (internal/domain/modifier.go: CoreModifierTargets) и цели
 // системы мира (system: true). Свободные характеристики (stat.<ключ>) сюда не
 // входят — конструктор заводит их по названию (см. modifiers.js: statTarget).
+// fetchSystemProfile — система запущенного мира: единица веса и валюты
+// (см. internal/domain/system_profile.go, web/src/system-profile.js).
+export async function fetchSystemProfile() {
+  return apiFetch("/api/system");
+}
 export async function fetchModifierTargets() {
   return apiFetch("/api/modifier-targets");
 }

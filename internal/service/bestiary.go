@@ -117,8 +117,8 @@ func sanitizeMonster(m domain.Monster) domain.Monster {
 		if m.Inventory[i].Quantity < 0 {
 			m.Inventory[i].Quantity = 0
 		}
-		if m.Inventory[i].WeightLb < 0 {
-			m.Inventory[i].WeightLb = 0
+		if m.Inventory[i].WeightValue < 0 {
+			m.Inventory[i].WeightValue = 0
 		}
 	}
 	return m

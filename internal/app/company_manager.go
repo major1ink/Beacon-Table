@@ -168,6 +168,32 @@ func (m *CompanyManager) ModifierTargets(company *domain.Company) []domain.Modif
 	return out
 }
 
+// SystemProfile — система мира company для клиента: название, единица
+// веса и валюты. Единицы и валюты — из модуля системы; «Своя система»,
+// модуль не установлен или их не задаёт — умолчания «Своей системы».
+func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemProfile {
+	p := domain.SystemProfile{
+		ID: domain.SystemCustom, Title: "Своя система (без правил)",
+		Units: domain.CustomUnits(), Currencies: domain.CustomCurrencies(),
+	}
+	if company == nil || company.System == domain.SystemCustom {
+		return p
+	}
+	p.ID, p.Title = company.System, company.System
+	mod, err := m.modules.Get(company.System)
+	if err != nil {
+		return p
+	}
+	p.Title = mod.Manifest.Title
+	if mod.Manifest.Units != nil {
+		p.Units = *mod.Manifest.Units
+	}
+	if len(mod.Manifest.Currencies) > 0 {
+		p.Currencies = mod.Manifest.Currencies
+	}
+	return p
+}
+
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу
 // ассетов этого мира, и импорту мира из архива.
 func (m *CompanyManager) UploadQuota(company *domain.Company) *quota.World {
