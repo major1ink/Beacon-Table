@@ -91,6 +91,32 @@ func TestManifestCombatRules(t *testing.T) {
 	}
 }
 
+func TestManifestModifierTargets(t *testing.T) {
+	system := func(targets string) string {
+		return strings.Replace(manifestJSON("sys-x", "1.0.0", `"modifierTargets":`+targets), `"content"`, `"system"`, 1)
+	}
+	bad := map[string]string{
+		"у контента":  manifestJSON("a", "1.0.0", `"modifierTargets":[{"target":"luck","label":"Удача"}]`),
+		"цель ядра":   system(`[{"target":"ac","label":"КД"}]`),
+		"свободная":   system(`[{"target":"stat.сила","label":"Сила"}]`),
+		"дважды":      system(`[{"target":"luck","label":"Удача"},{"target":"luck","label":"Удача"}]`),
+		"без подписи": system(`[{"target":"luck","label":" "}]`),
+		"кривая цель": system(`[{"target":"luck points","label":"Удача"}]`),
+	}
+	for name, raw := range bad {
+		if _, err := ParseManifest([]byte(raw)); err == nil {
+			t.Errorf("%s: ожидали ошибку", name)
+		}
+	}
+	m, err := ParseManifest([]byte(system(`[{"target":"luck","label":"Удача","periodic":true}]`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.ModifierTargets[0]; !got.System || got.Periodic {
+		t.Fatalf("цель системы: System=%v Periodic=%v, ожидали true/false", got.System, got.Periodic)
+	}
+}
+
 func TestVersionCompare(t *testing.T) {
 	a, _ := ParseVersion("0.9.0")
 	b, _ := ParseVersion("0.10.0")

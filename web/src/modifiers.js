@@ -40,6 +40,51 @@ export const ABILITY_TARGETS = {
   cha: "abilities.cha",
 };
 
+// Свободные характеристики листа: цель "stat.<ключ>", ключ — statKey от
+// названия (зеркало domain.StatKey). Так «Сила −2» из карточки состояния
+// попадает в характеристику «Сила» любого листа.
+export const STAT_PREFIX = "stat.";
+const MAX_STAT_KEY = 32;
+
+// statKey — ключ по названию: нижний регистр, пробелы → "_", остаются буквы
+// любого алфавита, цифры, "_" и "-", не длиннее 32. "" — ключа не вышло.
+export function statKey(name) {
+  let out = "";
+  let n = 0;
+  let pendingSep = false;
+  for (const ch of String(name ?? "").trim().toLowerCase()) {
+    if (n >= MAX_STAT_KEY) break;
+    if (/\s/u.test(ch)) {
+      pendingSep = true;
+      continue;
+    }
+    if (!/[\p{L}\p{N}_-]/u.test(ch)) continue;
+    if (pendingSep && n > 0 && n < MAX_STAT_KEY - 1) {
+      out += "_";
+      n++;
+    }
+    pendingSep = false;
+    out += ch;
+    n++;
+  }
+  return out;
+}
+
+// statTarget — цель для характеристики с таким названием; "" — не вышло.
+export function statTarget(name) {
+  const key = statKey(name);
+  return key ? STAT_PREFIX + key : "";
+}
+
+export const isStatTarget = (target) => String(target || "").startsWith(STAT_PREFIX);
+
+// statLabel — подпись характеристики по цели: "stat.удача_ночью" →
+// "Удача ночью" (исходное написание названия в модификаторе не хранится).
+export function statLabel(target) {
+  const words = String(target || "").slice(STAT_PREFIX.length).replace(/_/g, " ");
+  return words ? words[0].toUpperCase() + words.slice(1) : "";
+}
+
 // parseValue — Value как целое число; null у формулы кубов и у мусора
 // (зеркало domain.ParseModifierValue).
 export function parseValue(value) {

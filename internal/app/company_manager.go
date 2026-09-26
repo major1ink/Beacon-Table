@@ -155,6 +155,19 @@ func (m *CompanyManager) combatRules(company *domain.Company) *domain.CombatRule
 	return domain.CustomCombatRules()
 }
 
+// ModifierTargets — цели модификаторов мира company: цели ядра и цели,
+// которые объявляет модуль его системы (если он есть на сервере).
+func (m *CompanyManager) ModifierTargets(company *domain.Company) []domain.ModifierTargetInfo {
+	out := append([]domain.ModifierTargetInfo(nil), domain.CoreModifierTargets...)
+	if company == nil || company.System == domain.SystemCustom {
+		return out
+	}
+	if mod, err := m.modules.Get(company.System); err == nil {
+		out = append(out, mod.Manifest.ModifierTargets...)
+	}
+	return out
+}
+
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу
 // ассетов этого мира, и импорту мира из архива.
 func (m *CompanyManager) UploadQuota(company *domain.Company) *quota.World {

@@ -97,7 +97,14 @@ type Manifest struct {
 	// системного модуля; без раздела мир на этой системе играет по правилам
 	// «Своей системы» (domain.CustomCombatRules).
 	Combat *domain.CombatRules `json:"combat,omitempty"`
+	// ModifierTargets — цели модификаторов, которые объявляет система
+	// сверх целей ядра и свободных характеристик (у D&D — abilities.*).
+	// Только у системного модуля.
+	ModifierTargets []domain.ModifierTargetInfo `json:"modifierTargets,omitempty"`
 }
+
+// maxModifierTargets — сколько целей модификаторов может объявить система.
+const maxModifierTargets = 64
 
 var validID = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
@@ -155,6 +162,39 @@ func (m *Manifest) Validate() error {
 		if err := m.Combat.Validate(); err != nil {
 			return fmt.Errorf("правила боя модуля %s: %w", m.ID, err)
 		}
+	}
+	return m.validateModifierTargets()
+}
+
+// validateModifierTargets — цели системы: синтаксис, подпись, без повторов
+// и без пересечения с целями ядра и свободными характеристиками. Период
+// у целей системы не бывает — он осмыслен только у текущих хитов.
+func (m *Manifest) validateModifierTargets() error {
+	if len(m.ModifierTargets) == 0 {
+		return nil
+	}
+	if m.Type != TypeSystem {
+		return fmt.Errorf("цели модификаторов (modifierTargets) объявляет только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	if len(m.ModifierTargets) > maxModifierTargets {
+		return fmt.Errorf("модуль %s: целей модификаторов больше %d", m.ID, maxModifierTargets)
+	}
+	seen := map[string]bool{}
+	for i := range m.ModifierTargets {
+		t := &m.ModifierTargets[i]
+		switch {
+		case !domain.ValidModifierTarget(t.Target):
+			return fmt.Errorf("модуль %s: неверная цель модификатора %q", m.ID, t.Target)
+		case domain.IsCoreModifierTarget(t.Target) || strings.HasPrefix(t.Target, domain.StatTargetPrefix):
+			return fmt.Errorf("модуль %s: цель %q уже есть в ядре", m.ID, t.Target)
+		case seen[t.Target]:
+			return fmt.Errorf("модуль %s: цель %q объявлена дважды", m.ID, t.Target)
+		case strings.TrimSpace(t.Label) == "":
+			return fmt.Errorf("модуль %s: у цели %q нет подписи", m.ID, t.Target)
+		}
+		seen[t.Target] = true
+		t.Periodic = false
+		t.System = true
 	}
 	return nil
 }

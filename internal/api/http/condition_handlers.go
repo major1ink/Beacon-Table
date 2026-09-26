@@ -17,17 +17,22 @@ import (
 // WS-команды "apply_status"/"remove_status" и они только для ДМ (см.
 // service.Room.authorize). ----
 
-// handleModifierTargets — закрытый список того, что модификатор умеет
-// менять (см. domain.ModifierTargetLabels): цели + русские подписи +
-// признак «можно задать период». Отдаётся эндпоинтом, а не дублируется
-// константой в JS, чтобы список целей и подписи не разъезжались между
-// доменом и конструкторами состояний/предметов. Не привязан к миру и
-// вообще ни к каким данным — это описание формата, а не содержимое стола.
+// handleModifierTargets — что модификатор умеет менять в запущенном мире:
+// цели ядра (domain.CoreModifierTargets) и цели системы мира из её модуля —
+// с русскими подписями и признаком «можно задать период». Отдаётся
+// эндпоинтом, а не дублируется константой в JS, чтобы список целей и
+// подписи не разъезжались между доменом и конструкторами состояний/
+// предметов. Свободные характеристики (stat.<ключ>) в список не входят —
+// их конструктор заводит по названию. Мир не запущен — только цели ядра.
 func (a *API) handleModifierTargets(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireAccount(w, r); !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, domain.ModifierTargetLabels)
+	var company *domain.Company
+	if world := a.Companies.Current(); world != nil {
+		company = world.Company
+	}
+	writeJSON(w, http.StatusOK, a.Companies.ModifierTargets(company))
 }
 
 func (a *API) handleConditionsList(w http.ResponseWriter, r *http.Request) {

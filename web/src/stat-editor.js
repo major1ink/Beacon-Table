@@ -1,6 +1,8 @@
 // stat-editor.js — редактор модификаторов (domain.Modifier) в виде
-// статблока: «Показатель · База · Изменение · Итог» для КД, скорости, хитов,
-// инициативы и шести характеристик. Изменение пишется формулой в ячейку:
+// статблока: «Показатель · База · Изменение · Итог» для КД, скорости, хитов
+// и инициативы (цели ядра), ниже — цели системы мира (у D&D — шесть
+// характеристик) и свободные характеристики листа (stat.<ключ>), которые ДМ
+// заводит по названию. Изменение пишется формулой в ячейку:
 // «10» — поставить, «−2»/«+2» — прибавить, «>=10» — не ниже, «<=5» — не
 // выше, «/2» — вдвое (округление вниз); несколько через «;». Кубы («−1к6») — только в строке «Хиты в ход»,
 // это периодический модификатор по текущим хитам. База берётся со стенда
@@ -10,7 +12,7 @@
 // держит его по ссылке и сливает ответ автосейва туда же (см.
 // pages/conditions.js: mergeArrayInPlace).
 import { el, labeled } from "./card-shell.js";
-import { applyModifiers, parseValue, MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, MODE_DIV, PERIOD_NONE, PERIOD_TURN_START, PERIOD_TURN_END, TARGET_HP_CURRENT } from "./modifiers.js";
+import { applyModifiers, parseValue, MODE_ADD, MODE_SET, MODE_MIN, MODE_MAX, MODE_DIV, PERIOD_NONE, PERIOD_TURN_START, PERIOD_TURN_END, TARGET_HP_CURRENT, isStatTarget, statLabel, statTarget } from "./modifiers.js";
 import { fetchModifierTargets } from "./api.js";
 
 const ROWS = [
@@ -19,21 +21,14 @@ const ROWS = [
   ["hp.max", "Макс. хиты"],
   ["initiative", "Инициатива"],
 ];
-const ABILITIES = [
-  ["abilities.str", "Сил"],
-  ["abilities.dex", "Лов"],
-  ["abilities.con", "Тел"],
-  ["abilities.int", "Инт"],
-  ["abilities.wis", "Мдр"],
-  ["abilities.cha", "Хар"],
-];
 const PERIODS = [
   [PERIOD_TURN_START, "в начале хода"],
   [PERIOD_TURN_END, "в конце хода"],
 ];
 
-// Подписи целей — с сервера (см. GET /api/modifier-targets), чтобы список и
-// подписи не разъезжались с domain.ModifierTargetLabels.
+// Цели и подписи — с сервера (см. GET /api/modifier-targets): цели ядра и
+// цели системы мира (system: true), чтобы список и подписи не разъезжались с
+// domain.CoreModifierTargets и module.json системы.
 let targetsCache = null;
 export async function loadTargets() {
   if (targetsCache) return targetsCache;
@@ -47,9 +42,11 @@ export async function loadTargets() {
 export function targetLabel(target) {
   const t = (targetsCache || []).find((x) => x.target === target);
   if (t) return t.label;
-  const row = ROWS.concat(ABILITIES).find((r) => r[0] === target);
+  if (isStatTarget(target)) return statLabel(target);
+  const row = ROWS.find((r) => r[0] === target);
   return row ? row[1] : target;
 }
+const systemTargets = () => (targetsCache || []).filter((t) => t.system);
 
 // parseCell — одна запись формулы. null — пусто; {bad, why} — не понял;
 // иначе {mode, value, perLevel}. Кубы разрешены только при opts.dice;
@@ -126,7 +123,15 @@ const cellsText = (mods) => mods.map(cellText).join("; ");
 // opts.readOnly — режим чтения: формула текстом, только тронутые строки.
 export function renderStatEditor(list, onChange, { stand, periodic = true, readOnly = false } = {}) {
   const permanent = (target) => list.filter((m) => m.target === target && !m.period);
-  const base = (target) => (stand && stand.current() ? stand.current().stats[target] ?? 0 : 0);
+  // База свободной характеристики — только если она есть у записи на
+  // стенде; иначе null, и итог показывает одно изменение. У цели другой
+  // системы базы нет вовсе: стенд этого мира её не считает.
+  const coreOrSystem = new Set([...ROWS.map(([t]) => t), ...systemTargets().map((t) => t.target)]);
+  const base = (target) => {
+    if (!coreOrSystem.has(target) && !isStatTarget(target)) return null;
+    const v = stand && stand.current() ? stand.current().stats[target] : undefined;
+    return v ?? (isStatTarget(target) ? null : 0);
+  };
   const bad = new Set();
   const results = new Map();
 
@@ -141,6 +146,13 @@ export function renderStatEditor(list, onChange, { stand, periodic = true, readO
       return;
     }
     const mods = permanent(target).filter((m) => parseValue(m.value) !== null);
+    if (b === null) {
+      // Без базы итог — само изменение; в режиме чтения оно уже написано
+      // формулой рядом, второй раз не повторяем.
+      node.className = node.className.replace(/ (down|up|same|bad)/g, "") + " same";
+      if (!readOnly) node.appendChild(el("b", { text: mods.length ? cellsText(mods) : "—" }));
+      return;
+    }
     const a = applyModifiers(b, target, list);
     const cls = mods.length === 0 ? "same" : a < b ? "down" : a > b ? "up" : "same";
     node.className = node.className.replace(/ (down|up|same|bad)/g, "") + " " + cls;
@@ -298,7 +310,53 @@ export function renderStatEditor(list, onChange, { stand, periodic = true, readO
     const hp = hpRow();
     if (hp) rows.push(hp);
   }
-  if (readOnly && rows.length === 0 && !ABILITIES.some(([t]) => shown(t))) {
+  // Компактные сетки под таблицей: цели системы мира, свободные
+  // характеристики и цели, которых этот мир не знает (карточку клонировали
+  // из мира на другой системе) — их тоже видно и можно поправить.
+  const known = new Set([...ROWS.map(([t]) => t), TARGET_HP_CURRENT, ...systemTargets().map((t) => t.target)]);
+  const listed = (pred) => [...new Set(list.filter((m) => !m.period && pred(m.target)).map((m) => m.target))];
+  const gridCell = (target, label) => el("div", {}, [el("span", { class: "card-lbl", text: label }), cellInput(target, true), resCell(target, "div")]);
+  const systemGrid = el(
+    "div",
+    { class: "stat-ab" },
+    systemTargets()
+      .filter((t) => shown(t.target))
+      .map((t) => gridCell(t.target, t.label))
+  );
+  const statsGrid = el("div", { class: "stat-ab" }, listed(isStatTarget).map((t) => gridCell(t, statLabel(t))));
+  const otherGrid = el(
+    "div",
+    { class: "stat-ab" },
+    listed((t) => !known.has(t) && !isStatTarget(t)).map((t) => gridCell(t, t))
+  );
+  const statsBlock = el("div", { class: "stat-free" }, [el("span", { class: "card-lbl", text: "Характеристики" }), statsGrid]);
+  if (!readOnly) {
+    // Свободная характеристика заводится по названию — тем же, что на листе.
+    const name = el("input", { type: "text", placeholder: "Название, как на листе: Сила, Удача…", "aria-label": "Новая характеристика", autocomplete: "off" });
+    const add = () => {
+      const target = statTarget(name.value);
+      if (!target) return;
+      name.value = "";
+      if (results.has(target)) {
+        results.get(target).parentElement.querySelector("input")?.focus();
+        return;
+      }
+      const cell = gridCell(target, statLabel(target));
+      statsGrid.appendChild(cell);
+      cell.querySelector("input")?.focus();
+    };
+    name.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        add();
+      }
+    });
+    statsBlock.appendChild(el("div", { class: "stat-free-add" }, [name, el("button", { type: "button", class: "btn", text: "Добавить", onclick: add })]));
+  }
+  const otherBlock = otherGrid.children.length ? el("div", { class: "stat-free" }, [el("span", { class: "card-lbl", text: "Цели другой системы" }), otherGrid]) : null;
+  const hasGrids = systemGrid.children.length || statsGrid.children.length || otherGrid.children.length;
+
+  if (readOnly && rows.length === 0 && !hasGrids) {
     return el("div", { class: "stat-editor readonly" }, [el("p", { class: "card-note stat-none", text: "Ничего не меняет в числах — только значок на токене и правила." })]);
   }
   const table = el("table", { class: "stat-table" }, [
@@ -306,18 +364,25 @@ export function renderStatEditor(list, onChange, { stand, periodic = true, readO
     el("thead", {}, [el("tr", {}, ["Показатель", "База", "Изменение", "Итог"].map((t) => el("th", { scope: "col", text: t })))]),
     el("tbody", {}, rows),
   ]);
-  const abilities = el("div", { class: "stat-ab" }, ABILITIES.filter(([t]) => shown(t)).map(([target, label]) => el("div", {}, [el("span", { class: "card-lbl", text: label }), cellInput(target, true), resCell(target, "div")])));
 
   const legend = el("p", {
     class: "card-note stat-legend",
     html:
       "В ячейку: <code>10</code> поставить · <code>−2</code> / <code>+2</code> прибавить · <code>/2</code> вдвое · <code>&gt;=10</code> не ниже · <code>&lt;=5</code> не выше · <code>−5/ур</code> за каждый уровень — действует, пока метка висит; несколько — через «;»." +
       (periodic ? " «Хиты в ход» — раз в ход: <code>−1к6</code> урон, <code>+5</code> лечение." : "") +
+      " Характеристика попадёт в ту, что называется так же на листе." +
       " Пусто — не меняет.",
   });
 
   const head = stand ? el("div", { class: "stat-stand" }, [labeled("Примерить на", stand)]) : null;
-  const root = el("div", { class: "stat-editor" + (readOnly ? " readonly" : "") }, [head, rows.length ? el("div", { class: "stat-sb" }, [table]) : null, abilities.children.length ? abilities : null, readOnly ? null : legend]);
+  const root = el("div", { class: "stat-editor" + (readOnly ? " readonly" : "") }, [
+    head,
+    rows.length ? el("div", { class: "stat-sb" }, [table]) : null,
+    systemGrid.children.length ? systemGrid : null,
+    !readOnly || statsGrid.children.length ? statsBlock : null,
+    otherBlock,
+    readOnly ? null : legend,
+  ]);
 
   // refresh — база сменилась (другое существо на стенде): перекрасить итоги.
   root.refresh = () => {

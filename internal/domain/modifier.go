@@ -2,8 +2,11 @@ package domain
 
 import (
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Modifier — ОДНО изменение числа: «−2 к КД», «скорость 0», «1к6 огнём в
@@ -27,13 +30,15 @@ import (
 //
 // Отличие от ActiveEffect.changes в Foundry — не в идее (она та же), а в
 // объёме: там ключом может быть ЛЮБОЕ поле модели актёра, потому что модель
-// принадлежит системе правил; у нас ключи — закрытый список ModifierTargets
-// ниже, ровно те числа, которые приложение реально показывает. Незнакомая
-// цель молча игнорируется, а не роняет карточку.
+// принадлежит системе правил; у нас цели трёх видов (см. CoreModifierTargets):
+// числа ядра, свободные характеристики листа (stat.<ключ>) и цели, которые
+// объявляет системный модуль. Незнакомая цель молча игнорируется при
+// расчёте, а не роняет и не теряется из карточки.
 type Modifier struct {
-	// Target — что меняем, значение из ModifierTargets. Незнакомое —
-	// игнорируется при применении (карточка при этом остаётся валидной:
-	// каталог мог быть собран новой версией приложения).
+	// Target — что меняем: цель ядра, stat.<ключ> или цель системы (см.
+	// CoreModifierTargets). Незнакомая — игнорируется при применении, но
+	// хранится: карточку могли клонировать из мира на другой системе или
+	// собрать новой версией приложения.
 	Target string `json:"target"`
 	// Mode — как меняем: ModifierAdd/Set/Div/Min/Max. Порядок применения
 	// внутри одной цели фиксированный и не зависит от порядка записей:
@@ -84,9 +89,11 @@ func ScaleModifiers(mods []Modifier, level int) []Modifier {
 	return out
 }
 
-// Цели модификаторов — закрытый список: ровно те числа, которые приложение
-// умеет показать изменёнными. Расширять его — значит дописать применение в
-// конкретном месте UI, поэтому список короткий и осознанный.
+// Цели модификаторов ядра — числа, которые есть у бойца и листа в любой
+// системе. Кроме них модификатор может менять свободную характеристику листа
+// (StatTargetPrefix + ключ, см. StatKey) и цели, которые объявляет системный
+// модуль (раздел modifierTargets в module.json — у D&D это шесть
+// характеристик abilities.*).
 const (
 	// ModifierTargetHPCurrent — текущие хиты. Единственная цель, у которой
 	// осмыслен Period: «1к6 огнём в начале хода». Постоянный модификатор на
@@ -101,16 +108,33 @@ const (
 	// handleAddCombatant) — задним числом уже брошенную инициативу не
 	// пересчитывает.
 	ModifierTargetInitiative = "initiative"
-	// Характеристики — правят и сам счёт, и всё, что фронт считает от него
-	// (модификатор, спасброски, навыки), потому что считает он это по
-	// формулам PHB на месте (см. web/src/pages/character-sheet.js).
-	ModifierTargetStr = "abilities.str"
-	ModifierTargetDex = "abilities.dex"
-	ModifierTargetCon = "abilities.con"
-	ModifierTargetInt = "abilities.int"
-	ModifierTargetWis = "abilities.wis"
-	ModifierTargetCha = "abilities.cha"
 )
+
+// StatTargetPrefix — префикс цели свободной характеристики листа:
+// "stat.сила", "stat.удача". Ключ — StatKey от названия характеристики.
+const StatTargetPrefix = "stat."
+
+// ModifierTargetInfo — цель с человекочитаемой подписью для конструктора.
+type ModifierTargetInfo struct {
+	Target string `json:"target"`
+	Label  string `json:"label"`
+	// Periodic — можно ли у этой цели задать период (см. Modifier.Period).
+	Periodic bool `json:"periodic,omitempty"`
+	// System — цель объявлена системным модулем, а не ядром.
+	System bool `json:"system,omitempty"`
+}
+
+// CoreModifierTargets — цели ядра с подписями. Держим их здесь, а не на
+// клиенте, чтобы список и подписи не разъезжались: клиент получает его
+// вместе с целями системы мира (см. GET /api/modifier-targets в
+// internal/api/http/condition_handlers.go).
+var CoreModifierTargets = []ModifierTargetInfo{
+	{Target: ModifierTargetHPCurrent, Label: "Текущие хиты", Periodic: true},
+	{Target: ModifierTargetHPMax, Label: "Максимум хитов"},
+	{Target: ModifierTargetAC, Label: "КД"},
+	{Target: ModifierTargetSpeed, Label: "Скорость"},
+	{Target: ModifierTargetInitiative, Label: "Инициатива"},
+}
 
 // Режимы (см. Modifier.Mode).
 const (
@@ -130,32 +154,28 @@ const (
 	ModifierPeriodTurnEnd   = "turn-end"
 )
 
-// ModifierTargetLabels — человекочитаемые подписи целей для выпадашки
-// конструктора. Держим их здесь, а не на клиенте, чтобы список целей и его
-// подписи не разъезжались: клиент получает его как есть (см.
-// GET /api/modifier-targets в internal/api/http/condition_handlers.go).
-var ModifierTargetLabels = []struct {
-	Target string `json:"target"`
-	Label  string `json:"label"`
-	// Periodic — можно ли у этой цели задать период (см. Modifier.Period).
-	Periodic bool `json:"periodic,omitempty"`
-}{
-	{ModifierTargetHPCurrent, "Текущие хиты", true},
-	{ModifierTargetHPMax, "Максимум хитов", false},
-	{ModifierTargetAC, "КД", false},
-	{ModifierTargetSpeed, "Скорость", false},
-	{ModifierTargetInitiative, "Инициатива", false},
-	{ModifierTargetStr, "Сила", false},
-	{ModifierTargetDex, "Ловкость", false},
-	{ModifierTargetCon, "Телосложение", false},
-	{ModifierTargetInt, "Интеллект", false},
-	{ModifierTargetWis, "Мудрость", false},
-	{ModifierTargetCha, "Харизма", false},
+// maxTargetLen / maxStatKeyLen — санитарные пределы длины цели и ключа
+// свободной характеристики.
+const (
+	maxTargetLen  = 64
+	maxStatKeyLen = 32
+)
+
+// targetRe — синтаксис цели: сегменты из букв любого алфавита, цифр, _ и -,
+// через точку.
+var targetRe = regexp.MustCompile(`^[\p{L}\p{N}_-]+(\.[\p{L}\p{N}_-]+)*$`)
+
+// ValidModifierTarget — годится ли строка в цель модификатора. Проверяется
+// только синтаксис: цель, которую эта версия или система мира не знает,
+// хранится и просто не применяется.
+func ValidModifierTarget(target string) bool {
+	return target != "" && utf8.RuneCountInString(target) <= maxTargetLen && targetRe.MatchString(target)
 }
 
-// ValidModifierTarget — есть ли такая цель в закрытом списке.
-func ValidModifierTarget(target string) bool {
-	for _, t := range ModifierTargetLabels {
+// IsCoreModifierTarget — цель ядра (не свободная характеристика и не цель
+// системы).
+func IsCoreModifierTarget(target string) bool {
+	for _, t := range CoreModifierTargets {
 		if t.Target == target {
 			return true
 		}
@@ -166,12 +186,55 @@ func ValidModifierTarget(target string) bool {
 // TargetSupportsPeriod — осмыслен ли период у этой цели (см.
 // Modifier.Period): сейчас только у текущих хитов.
 func TargetSupportsPeriod(target string) bool {
-	for _, t := range ModifierTargetLabels {
+	for _, t := range CoreModifierTargets {
 		if t.Target == target {
 			return t.Periodic
 		}
 	}
 	return false
+}
+
+// StatKey — ключ свободной характеристики по её названию: нижний регистр,
+// пробелы → "_", остаются буквы любого алфавита, цифры, "_" и "-", не
+// длиннее maxStatKeyLen. Так «Отравлен: Сила −2» из карточки состояния
+// попадает в характеристику «сила» любого листа без ручного ввода ключей.
+// Пустая строка — из названия ключа не получилось. Зеркало на клиенте —
+// web/src/modifiers.js: statKey.
+func StatKey(name string) string {
+	var b strings.Builder
+	n := 0
+	pendingSep := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if n >= maxStatKeyLen {
+			break
+		}
+		switch {
+		case unicode.IsSpace(r):
+			pendingSep = true
+			continue
+		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-':
+		default:
+			continue
+		}
+		if pendingSep && n > 0 && n < maxStatKeyLen-1 {
+			b.WriteRune('_')
+			n++
+		}
+		pendingSep = false
+		b.WriteRune(r)
+		n++
+	}
+	return b.String()
+}
+
+// StatTarget — цель модификатора для свободной характеристики с таким
+// названием; "" — если ключа из названия не получилось.
+func StatTarget(name string) string {
+	key := StatKey(name)
+	if key == "" {
+		return ""
+	}
+	return StatTargetPrefix + key
 }
 
 // ValidModifierMode — известен ли режим.

@@ -23,16 +23,17 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 	out := make([]*module.Module, 0, len(systems))
 	for _, s := range systems {
 		out = append(out, module.Builtin(systemFS, "systemdata", s.id, &module.Manifest{
-			Format:      module.Format,
-			ID:          s.id,
-			Type:        module.TypeSystem,
-			Title:       s.title,
-			Version:     "1.0.0",
-			Systems:     []string{s.id},
-			Description: "Встроенный каталог SRD: существа, заклинания, предметы, справочник и состояния.",
-			License:     "CC-BY-4.0 (SRD 5.2)",
-			LegacyIDs:   true,
-			Combat:      dndCombatRules(),
+			Format:          module.Format,
+			ID:              s.id,
+			Type:            module.TypeSystem,
+			Title:           s.title,
+			Version:         "1.0.0",
+			Systems:         []string{s.id},
+			Description:     "Встроенный каталог SRD: существа, заклинания, предметы, справочник и состояния.",
+			License:         "CC-BY-4.0 (SRD 5.2)",
+			LegacyIDs:       true,
+			Combat:          dndCombatRules(),
+			ModifierTargets: dndModifierTargets(),
 		}))
 	}
 	return out
@@ -60,6 +61,20 @@ func dndCombatRules() *domain.CombatRules {
 			"21": 33000, "22": 41000, "23": 50000, "24": 62000, "25": 75000,
 			"26": 90000, "27": 105000, "28": 120000, "29": 135000, "30": 155000,
 		}},
+	}
+}
+
+// dndModifierTargets — шесть характеристик D&D как цели модификаторов: их
+// правит лист D&D (web/src/pages/character-sheet.js) и импорт состояний из
+// Foundry (web/src/condition-import.js).
+func dndModifierTargets() []domain.ModifierTargetInfo {
+	return []domain.ModifierTargetInfo{
+		{Target: "abilities.str", Label: "Сила", System: true},
+		{Target: "abilities.dex", Label: "Ловкость", System: true},
+		{Target: "abilities.con", Label: "Телосложение", System: true},
+		{Target: "abilities.int", Label: "Интеллект", System: true},
+		{Target: "abilities.wis", Label: "Мудрость", System: true},
+		{Target: "abilities.cha", Label: "Харизма", System: true},
 	}
 }
 

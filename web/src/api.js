@@ -583,10 +583,10 @@ export async function deleteReference(id) {
 export async function fetchConditions() {
   return apiFetch("/api/conditions");
 }
-// fetchModifierTargets — закрытый список того, что модификатор умеет менять
-// (см. internal/domain/modifier.go: ModifierTargetLabels). Не содержимое
-// стола, а описание формата — нужен конструкторам состояний и предметов,
-// чтобы список целей не дублировался константой в JS.
+// fetchModifierTargets — что модификатор умеет менять в запущенном мире:
+// цели ядра (internal/domain/modifier.go: CoreModifierTargets) и цели
+// системы мира (system: true). Свободные характеристики (stat.<ключ>) сюда не
+// входят — конструктор заводит их по названию (см. modifiers.js: statTarget).
 export async function fetchModifierTargets() {
   return apiFetch("/api/modifier-targets");
 }

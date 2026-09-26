@@ -168,6 +168,11 @@
 .stat-ab .stat-err { text-align: left; }
 .stat-editor.readonly .stat-ab { display: flex; flex-wrap: wrap; }
 .stat-editor.readonly .stat-ab > div { min-width: 90px; }
+/* Свободные характеристики (stat.<ключ>) и цели другой системы — подпись над сеткой. */
+.stat-free { display: grid; gap: 6px; }
+.stat-free > .card-lbl { font-size: 11px; }
+.stat-free-add { display: flex; gap: 6px; }
+.stat-free-add input { flex: 1; min-width: 0; }
 .stat-legend code { font-family: ui-monospace, Menlo, monospace; color: var(--gold); background: rgba(181, 137, 31, 0.1); padding: 1px 5px; border-radius: 4px; font-variant-ligatures: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 

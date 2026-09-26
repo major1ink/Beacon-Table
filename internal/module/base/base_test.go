@@ -3,7 +3,6 @@ package base
 import (
 	"encoding/json"
 	"io/fs"
-	"strings"
 	"testing"
 
 	"beacon-table/internal/domain"
@@ -36,7 +35,7 @@ func TestBaseConditions(t *testing.T) {
 			t.Errorf("%s: slug/имя/значок/описание: %+v", e.Name(), c)
 		}
 		for _, mod := range c.Modifiers {
-			if !domain.ValidModifierTarget(mod.Target) || strings.HasPrefix(mod.Target, "abilities.") {
+			if !domain.IsCoreModifierTarget(mod.Target) {
 				t.Errorf("%s: цель модификатора %q не из ядра", e.Name(), mod.Target)
 			}
 		}
