@@ -126,6 +126,8 @@ func TestManifestUnitsAndCurrencies(t *testing.T) {
 		"единицы у контента": manifestJSON("a", "1.0.0", `"units":{"weight":"кг"}`),
 		"валюта дважды":      system(`"currencies":[{"key":"gp","label":"ЗМ"},{"key":"gp","label":"ЗМ"}]`),
 		"кривой ключ":        system(`"currencies":[{"key":"Gold","label":"ЗМ"}]`),
+		"лист у контента":    manifestJSON("a", "1.0.0", `"sheet":"universal"`),
+		"кривой вид листа":   system(`"sheet":"Big Sheet"`),
 	}
 	for name, raw := range bad {
 		if _, err := ParseManifest([]byte(raw)); err == nil {
@@ -138,6 +140,9 @@ func TestManifestUnitsAndCurrencies(t *testing.T) {
 	}
 	if m.Units.Weight != "фнт" || len(m.Currencies) != 1 {
 		t.Fatalf("разобрано: %+v %+v", m.Units, m.Currencies)
+	}
+	if m, err := ParseManifest([]byte(system(`"sheet":"pathfinder-2e"`))); err != nil || m.Sheet != "pathfinder-2e" {
+		t.Fatalf("вид листа: %v %+v", err, m)
 	}
 }
 

@@ -106,6 +106,9 @@ type Manifest struct {
 	// системы» (domain.CustomUnits/CustomCurrencies).
 	Units      *domain.SystemUnits `json:"units,omitempty"`
 	Currencies []domain.Currency   `json:"currencies,omitempty"`
+	// Sheet — вид листа персонажа (см. domain.SheetUniversal). Только у
+	// системного модуля; без него — универсальный лист.
+	Sheet string `json:"sheet,omitempty"`
 }
 
 // maxModifierTargets — сколько целей модификаторов может объявить система.
@@ -174,13 +177,17 @@ func (m *Manifest) Validate() error {
 	return m.validateUnitsAndCurrencies()
 }
 
-// validateUnitsAndCurrencies — единицы и валюты: только у системного модуля.
+// validateUnitsAndCurrencies — вид листа, единицы и валюты: только у
+// системного модуля.
 func (m *Manifest) validateUnitsAndCurrencies() error {
-	if m.Units == nil && len(m.Currencies) == 0 {
+	if m.Units == nil && len(m.Currencies) == 0 && m.Sheet == "" {
 		return nil
 	}
 	if m.Type != TypeSystem {
-		return fmt.Errorf("единицы и валюты (units, currencies) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+		return fmt.Errorf("вид листа, единицы и валюты (sheet, units, currencies) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	if m.Sheet != "" && !domain.ValidSheetKind(m.Sheet) {
+		return fmt.Errorf("модуль %s: неверный вид листа %q", m.ID, m.Sheet)
 	}
 	if m.Units != nil {
 		if err := domain.ValidateUnits(m.Units); err != nil {

@@ -99,6 +99,21 @@ type CharacterSheet struct {
 	Bonds             string `json:"bonds"`
 	Flaws             string `json:"flaws"`
 
+	// Общие поля универсального листа (вид листа SheetUniversal — «Своя
+	// система» и системы без своего бланка). У листов D&D их нет, поэтому
+	// omitempty: формат старых листов не меняется.
+	//
+	// Initiative — формула броска инициативы или число: «1d20+2», «2d6»,
+	// «3». Её бросает трекер по правилам «Своей системы» (CombatRules,
+	// rollField "initiative"); пусто — ДМ вписывает инициативу вручную.
+	Initiative string `json:"initiative,omitempty"`
+	// Stats — свободные характеристики: название, значение, модификатор.
+	// Модификаторы состояний и предметов меняют значение через цель
+	// stat.<StatKey(название)>.
+	Stats []FreeStat `json:"stats,omitempty"`
+	// Rolls — броски из листа: название и формула («Меч», «1d8+3»).
+	Rolls []SheetRoll `json:"rolls,omitempty"`
+
 	// Extra — ключи JSON, которых эта структура не знает (поля схемы
 	// игровой системы и т.п.): хранятся и отдаются как есть, см. domain.Extra.
 	Extra Extra `json:"-"`
@@ -124,6 +139,21 @@ type ResourceRow struct {
 	Current  int    `json:"current"`
 	Max      int    `json:"max"`
 	Recovery string `json:"recovery"`
+}
+
+// FreeStat — свободная характеристика универсального листа. Mod —
+// необязательный модификатор (nil — не задан), просто число рядом со
+// значением: как он получается, решает игрок или система.
+type FreeStat struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+	Mod   *int   `json:"mod,omitempty"`
+}
+
+// SheetRoll — бросок из универсального листа: подпись и формула кубов.
+type SheetRoll struct {
+	Name    string `json:"name"`
+	Formula string `json:"formula"`
 }
 
 // AttunementItem — строка таблицы "Настройка на магические предметы" (см.

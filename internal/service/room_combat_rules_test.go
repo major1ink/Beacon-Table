@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/repository/memory"
 )
 
 // Правила боя приходят от системы мира (domain.CombatRules): комната без
@@ -141,5 +143,25 @@ func TestInitiativeFollowsRules(t *testing.T) {
 	r.handleAddCombatant(domain.ClientMsg{MonsterID: "gob"})
 	if len(roller.formulas) != 1 || roller.formulas[0] != "1d20+2" {
 		t.Fatalf("D&D, Лов 14: формулы %v", roller.formulas)
+	}
+}
+
+// Персонаж универсального листа: трекер «Своей системы» бросает формулу из
+// поля листа initiative (CharacterSheet.Initiative).
+func TestCustomRulesRollInitiativeFromSheet(t *testing.T) {
+	r := testRoom()
+	roller := &fixedRoller{total: 9}
+	r.dice = roller
+	chars := memory.NewCharacterStore()
+	sheet := domain.DefaultCharacterSheet()
+	sheet.Initiative = "1к6+2"
+	if err := chars.Create(context.Background(), &domain.Character{ID: "char-1", Name: "Герой", Sheet: sheet}); err != nil {
+		t.Fatal(err)
+	}
+	r.characters = chars
+
+	r.handleAddCombatant(domain.ClientMsg{CharacterID: "char-1"})
+	if len(roller.formulas) != 1 || roller.formulas[0] != "1d6+2" {
+		t.Fatalf("формулы: %v, ожидали 1d6+2 из листа", roller.formulas)
 	}
 }

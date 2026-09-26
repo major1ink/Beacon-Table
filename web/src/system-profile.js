@@ -9,7 +9,7 @@
 // без единицы, без валют.
 import { fetchSystemProfile } from "./api.js";
 
-let profile = { id: "", title: "", units: { weight: "" }, currencies: [] };
+let profile = { id: "", title: "", sheet: "", units: { weight: "" }, currencies: [] };
 let loading = null;
 
 export function loadSystemProfile() {
@@ -20,6 +20,7 @@ export function loadSystemProfile() {
           profile = {
             id: p.id || "",
             title: p.title || "",
+            sheet: p.sheet || "",
             units: { weight: (p.units && p.units.weight) || "" },
             currencies: Array.isArray(p.currencies) ? p.currencies : [],
           };
@@ -32,6 +33,17 @@ export function loadSystemProfile() {
 }
 
 export const weightUnit = () => profile.units.weight;
+
+// Виды листа, которые клиент умеет рисовать поимённо (бланки встроенного
+// D&D); всё остальное — универсальный лист (domain.SheetUniversal).
+const SHEET_KINDS = new Set(["dnd5e-2014", "dnd5e-2024"]);
+export const SHEET_UNIVERSAL = "universal";
+
+// sheetKindOf — вид листа по значению из профиля системы.
+export const sheetKindOf = (kind) => (SHEET_KINDS.has(kind) ? kind : SHEET_UNIVERSAL);
+
+// sheetKind — вид листа системы мира.
+export const sheetKind = () => sheetKindOf(profile.sheet);
 
 // formatWeight — «2.5 фнт» / «2.5 кг»; без единицы — просто число.
 export function formatWeight(value) {

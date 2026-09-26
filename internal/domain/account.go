@@ -100,12 +100,11 @@ type Character struct {
 	AccountID string
 	// CompanyID/System — проставляются один раз при создании персонажа
 	// (репозиторием, из компании, активной на тот момент, см.
-	// sqlite.CharacterStore), дальше неизменны. System определяет, какие
-	// поля CharacterSheet показывает фронт (см. character_sheet.go: поля
-	// Race/PersonalityTraits/Ideals/Bonds/Flaws — только 2014,
-	// Info.Species/Background — только 2024).
+	// sqlite.CharacterStore), дальше неизменны. Какой лист рисует фронт,
+	// решает не System, а вид листа системы мира (SystemProfile.Sheet, см.
+	// GET /api/system): универсальный или бланк D&D 2014/2024.
 	CompanyID string
-	System    string // domain.SystemDnD5e2014 | SystemDnD5e2024
+	System    string // id системы мира: SystemCustom или id системного модуля
 	Name      string
 	AvatarURL string
 	Sheet     CharacterSheet

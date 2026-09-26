@@ -3,6 +3,7 @@
 // stat-editor.js). База — реальные числа из бестиария и листов персонажей,
 // расчёт — applyModifiers (modifiers.js); ничего не пишет, только читает.
 import { fetchCharacters, fetchCharacter, fetchBestiary } from "./api.js";
+import { initiativeBase, standStats } from "./universal-stats.js";
 
 const STORAGE_KEY = "beacon.stand";
 // Без мира с существами стенд всё равно должен что-то показывать.
@@ -23,10 +24,15 @@ const speedOf = (s) => {
   return m ? parseInt(m[0], 10) : 30;
 };
 
+// fromSheet — основы персонажа. У универсального листа инициатива — поле
+// листа (число; формулу кубов стенд не бросает), свободные характеристики —
+// основы целей stat.<ключ>; у бланка D&D — модификатор Ловкости и шесть
+// характеристик.
 function fromSheet(c) {
   const sheet = c.sheet || {};
   const ab = sheet.abilities || {};
   const combat = sheet.combat || {};
+  const universalInit = String(sheet.initiative || "").trim() !== "";
   return {
     id: c.id,
     name: c.name,
@@ -36,7 +42,8 @@ function fromSheet(c) {
       speed: combat.speed || 30,
       "hp.max": combat.hpMax || 0,
       "hp.current": combat.hpCurrent || 0,
-      initiative: abilityMod(ab.dex),
+      initiative: universalInit ? initiativeBase(sheet) : abilityMod(ab.dex),
+      ...standStats(sheet),
       "abilities.str": ab.str || 10,
       "abilities.dex": ab.dex || 10,
       "abilities.con": ab.con || 10,

@@ -44,7 +44,8 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { coinRows, formatWeight, loadSystemProfile } from "../system-profile.js";
+import { coinRows, formatWeight, loadSystemProfile, sheetKind, SHEET_UNIVERSAL } from "../system-profile.js";
+import { renderUniversalEdit, renderUniversalView } from "../sheet-universal.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -213,16 +214,35 @@ let liveStatuses = [];
 let itemCatalog = new Map();
 let liveStatusesEl = null;
 
-// isClassic — система ЭТОГО персонажа (Character.System, см.
-// internal/domain/company.go: SystemDnD5e2014/2024, проставляется один раз
-// при создании персонажа из компании игрока) — D&D 5e 2014, а не 2024.
-// Влияет только на то, какие поля бланка показываем: "Раса" вместо "Вид" и
-// 4 отдельные графы (Черты/Идеалы/Привязанности/Слабости) бланка 2014
-// вместо единого текста "Предыстория и личные качества" бланка 2024 — сами
-// данные (sheet) хранятся в одном и том же формате на обе системы, см.
+// isClassic — вид листа системы мира (раздел sheet в module.json, см.
+// system-profile.js: sheetKind) — бланк D&D 5e 2014, а не 2024. Влияет
+// только на то, какие поля бланка показываем: "Раса" вместо "Вид" и 4
+// отдельные графы (Черты/Идеалы/Привязанности/Слабости) бланка 2014 вместо
+// единого текста "Предыстория и личные качества" бланка 2024 — сами данные
+// (sheet) хранятся в одном и том же формате на обе системы, см.
 // internal/domain/character_sheet.go.
 function isClassic() {
-  return character && character.system === "dnd5e-2014";
+  return sheetKind() === "dnd5e-2014";
+}
+
+// isUniversal — универсальный лист (см. sheet-universal.js): «Своя
+// система» и системы без своего бланка. Бланк D&D тогда не рисуется вовсе.
+function isUniversal() {
+  return sheetKind() === SHEET_UNIVERSAL;
+}
+
+// universalCtx — то, что универсальный лист берёт у этой страницы, а не
+// копирует: сохранение, поля ввода, портрет, хиты, инвентарь, деньги,
+// ресурсы, состояния, броски. Собирается на каждую отрисовку: sheet
+// меняется при перезагрузке листа (см. reloadSheet).
+function universalCtx() {
+  return {
+    h, sheet, readOnly,
+    field, textInput, numberInput, textareaInput, identitySection,
+    scheduleSave, sendRoll,
+    activeModifiers, effectiveAC, effectiveSpeed, modifierHint,
+    vCard, vTile, vText, vHero, vHpCard, liveStatusesHost, vResourcesCard, vInventoryCard, vMoneyCard,
+  };
 }
 
 // ==================== DOM helpers ====================
@@ -349,6 +369,17 @@ function refreshComputed() {
 // новые числа).
 function renderEditTabs() {
   computedRefs.length = 0;
+  // Заметки D&D (tab3) и заклинания (tab4) — только у бланка D&D.
+  const universal = isUniversal();
+  for (const n of ["3", "4"]) {
+    const btn = document.querySelector(`.tab-btn[data-tab="${n}"]`);
+    if (btn) btn.style.display = universal ? "none" : "";
+    if (universal && btn && btn.classList.contains("active")) switchTab(1);
+  }
+  if (universal) {
+    renderUniversalEdit(universalCtx());
+    return;
+  }
   renderTab1();
   renderTab2();
   renderTab3();
@@ -1561,14 +1592,19 @@ function vHero() {
         h("span", { class: "v-hero-portrait-edit", html: icon("upload", { size: 12 }) }),
       ]);
 
+  // Класс, уровень, вид и опыт — бланк D&D; у универсального листа в шапке
+  // только портрет и имя.
+  const universal = isUniversal();
   const bits = [];
-  const cls = [sheet.info.class, sheet.info.subclass].filter(Boolean).join(" · ");
-  if (cls) bits.push(cls);
-  bits.push((sheet.info.level || 1) + " ур.");
-  const kind = isClassic() ? sheet.info.race : sheet.info.species;
-  if (kind) bits.push(kind);
-  if (sheet.info.background) bits.push(sheet.info.background);
-  if (sheet.alignment) bits.push(sheet.alignment);
+  if (!universal) {
+    const cls = [sheet.info.class, sheet.info.subclass].filter(Boolean).join(" · ");
+    if (cls) bits.push(cls);
+    bits.push((sheet.info.level || 1) + " ур.");
+    const kind = isClassic() ? sheet.info.race : sheet.info.species;
+    if (kind) bits.push(kind);
+    if (sheet.info.background) bits.push(sheet.info.background);
+    if (sheet.alignment) bits.push(sheet.alignment);
+  }
 
   const xpValue = h("b", { text: String(sheet.info.xp || 0) });
   vRefresh.push(() => (xpValue.textContent = String(sheet.info.xp || 0)));
@@ -1592,7 +1628,7 @@ function vHero() {
         h("div", { class: "v-hero-sub", text: bits.join(" · ") }),
       ]),
     ]),
-    h("div", { class: "v-quick", style: "margin-top:10px;" }, [
+    universal ? null : h("div", { class: "v-quick", style: "margin-top:10px;" }, [
       h("span", { class: "v-track-name" }, [h("small", { text: "Опыт" }), xpValue]),
       stepBtn("−100", "minus", () => bumpXp(-100)),
       quickInput(
@@ -2442,6 +2478,10 @@ function renderView() {
   const root = document.getElementById("viewPanel");
   vRefresh = [];
   root.innerHTML = "";
+  if (isUniversal()) {
+    root.appendChild(renderUniversalView(universalCtx()));
+    return;
+  }
 
   // Порядок карточек — под УЗКУЮ колонку (боковой док, см. sheet-dock.js): при
   // одной колонке они лягут сверху вниз ровно в этом порядке, и первым должно
