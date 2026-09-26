@@ -89,8 +89,8 @@ func (s *pregenService) Update(ctx context.Context, id, name, avatarURL, source 
 	if err != nil {
 		return nil, err
 	}
-	avatarURL = clampRunes(strings.TrimSpace(avatarURL), maxSheetShortText)
-	source = clampRunes(strings.TrimSpace(source), maxSheetShortText)
+	avatarURL = clampRunes(strings.TrimSpace(avatarURL), maxText)
+	source = clampRunes(strings.TrimSpace(source), maxText)
 	sheet = sanitizeSheet(sheet)
 	found, err := s.pregens.Update(ctx, id, name, avatarURL, source, sheet)
 	if err != nil {

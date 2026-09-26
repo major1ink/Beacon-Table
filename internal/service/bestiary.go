@@ -12,14 +12,6 @@ import (
 // maxMonsterLongText/maxMonsterShortText — те же санитарные пределы, что и у
 // CharacterSheet (см. validate.go): не игровое правило, а защита от
 // случайно вставленного гигантского текста/бинарника в поле статблока.
-const (
-	maxMonsterLongText  = 20000 // блоки способностей (Traits/Actions/.../Description) — статблоки с логовом бывают длинными
-	maxMonsterShortText = 300   // размер/тип/скорость/сопротивления и т.п.
-	maxMonsterTags      = 30
-	maxMonsterSpells    = 100
-	maxMonsterInventory = 200
-)
-
 // BestiaryService — библиотека карточек монстров ДМ (см. domain.Monster,
 // internal/repository/monsterfile) — тот же use case, что и NoteService, но
 // для структурированных статблоков вместо markdown-заметок.
@@ -52,74 +44,24 @@ func validateMonsterName(name string) (string, error) {
 	return name, nil
 }
 
-// sanitizeMonster — клампит текстовые поля/теги так же, как sanitizeSheet
-// клампит лист персонажа: молча, без ошибки — обычный клиент никогда
-// специально не бьёт по этим лимитам.
+// sanitizeMonster — общие пределы карточки (строки, списки, теги, незнакомые ключи — см. cardlimits.go) и
+// правила ядра: КД, хиты, количество и вес добычи не меньше нуля. Молча, без
+// ошибки — обычный клиент никогда специально не бьёт по этим лимитам.
 func sanitizeMonster(m domain.Monster) domain.Monster {
-	m.ImageURL = clampRunes(m.ImageURL, maxMonsterShortText)
-	m.Size = clampRunes(m.Size, maxMonsterShortText)
-	m.Type = clampRunes(m.Type, maxMonsterShortText)
-	m.Alignment = clampRunes(m.Alignment, maxMonsterShortText)
-	m.ACNote = clampRunes(m.ACNote, maxMonsterShortText)
-	m.HitDice = clampRunes(m.HitDice, maxMonsterShortText)
-	m.Speed = clampRunes(m.Speed, maxMonsterShortText)
-	m.SavingThrows = clampRunes(m.SavingThrows, maxMonsterLongText)
-	m.Skills = clampRunes(m.Skills, maxMonsterLongText)
-	m.DamageVulnerabilities = clampRunes(m.DamageVulnerabilities, maxMonsterLongText)
-	m.DamageResistances = clampRunes(m.DamageResistances, maxMonsterLongText)
-	m.DamageImmunities = clampRunes(m.DamageImmunities, maxMonsterLongText)
-	m.ConditionImmunities = clampRunes(m.ConditionImmunities, maxMonsterLongText)
-	m.Senses = clampRunes(m.Senses, maxMonsterLongText)
-	m.Languages = clampRunes(m.Languages, maxMonsterLongText)
-	m.CR = clampRunes(m.CR, maxMonsterShortText)
-	m.Traits = clampRunes(m.Traits, maxMonsterLongText)
-	m.Actions = clampRunes(m.Actions, maxMonsterLongText)
-	m.BonusActions = clampRunes(m.BonusActions, maxMonsterLongText)
-	m.Reactions = clampRunes(m.Reactions, maxMonsterLongText)
-	m.LegendaryActionsIntro = clampRunes(m.LegendaryActionsIntro, maxMonsterLongText)
-	m.LegendaryActions = clampRunes(m.LegendaryActions, maxMonsterLongText)
-	m.LairActions = clampRunes(m.LairActions, maxMonsterLongText)
-	m.Description = clampRunes(m.Description, maxMonsterLongText)
-	if len(m.Tags) > maxMonsterTags {
-		m.Tags = m.Tags[:maxMonsterTags]
-	}
-	for i := range m.Tags {
-		m.Tags[i] = clampRunes(strings.TrimSpace(m.Tags[i]), 60)
-	}
-	if len(m.Spells) > maxMonsterSpells {
-		m.Spells = m.Spells[:maxMonsterSpells]
-	}
+	clampCard(&m)
+	m.Tags = sanitizeTags(m.Tags)
+	m.Extra = clampExtra(m.Extra)
 	for i := range m.Spells {
-		m.Spells[i].Name = clampRunes(strings.TrimSpace(m.Spells[i].Name), 120)
-		if m.Spells[i].Level < 0 {
-			m.Spells[i].Level = 0
-		}
-		if m.Spells[i].Level > 9 {
-			m.Spells[i].Level = 9
-		}
+		m.Spells[i].Name = strings.TrimSpace(m.Spells[i].Name)
+		m.Spells[i].Level = clampCount(m.Spells[i].Level, maxLevel)
 	}
-	if m.AC < 0 {
-		m.AC = 0
-	}
-	if m.HP < 0 {
-		m.HP = 0
-	}
-	if m.ProficiencyBonus < 0 {
-		m.ProficiencyBonus = 0
-	}
-	if len(m.Inventory) > maxMonsterInventory {
-		m.Inventory = m.Inventory[:maxMonsterInventory]
-	}
+	m.AC = max(m.AC, 0)
+	m.HP = max(m.HP, 0)
+	m.ProficiencyBonus = max(m.ProficiencyBonus, 0)
 	for i := range m.Inventory {
-		m.Inventory[i].Name = clampRunes(strings.TrimSpace(m.Inventory[i].Name), 120)
-		m.Inventory[i].ImageURL = clampRunes(m.Inventory[i].ImageURL, maxMonsterShortText)
-		m.Inventory[i].Notes = clampRunes(m.Inventory[i].Notes, maxMonsterLongText)
-		if m.Inventory[i].Quantity < 0 {
-			m.Inventory[i].Quantity = 0
-		}
-		if m.Inventory[i].WeightValue < 0 {
-			m.Inventory[i].WeightValue = 0
-		}
+		m.Inventory[i].Name = strings.TrimSpace(m.Inventory[i].Name)
+		m.Inventory[i].Quantity = max(m.Inventory[i].Quantity, 0)
+		m.Inventory[i].WeightValue = max(m.Inventory[i].WeightValue, 0)
 	}
 	return m
 }

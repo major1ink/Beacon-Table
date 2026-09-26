@@ -55,19 +55,15 @@ func clampVolume(v float64) float64 {
 	return v
 }
 
-// Границы для CharacterSheet.UpdateSheet — не бизнес-правила D&D (лист
-// "умный бланк", формулы считает и так фронт), а чисто защита от
-// злонамеренного/кривого клиента, который прислал бы гигабайтный JSON:
-// каждое текстовое поле и число строк в динамических таблицах клампится
-// молча, без ошибки — клиент никогда специально не бьёт по этим лимитам в
-// нормальном использовании.
+// Границы листа (CharacterSheet.UpdateSheet) — не правила игры, а защита
+// от кривого клиента: строки и списки режет общий clampCard (см.
+// cardlimits.go). maxSheetDeathSaves/maxSheetExhaustion — санитарный
+// потолок счётчиков: сколько их на самом деле, решает система (у D&D — 3 и
+// 6); здесь тот же потолок, что у счётчика спасбросков в правилах боя и у
+// уровней состояния.
 const (
-	maxSheetLongText   = 10000 // большие текстовые поля (заметки, снаряжение, черты и т.п.)
-	maxSheetShortText  = 300   // название/бонус/дистанция и т.п. в строках таблиц
-	maxWeaponRows      = 50
-	maxSpellRows       = 100
-	maxResourceRows    = 20
-	maxAttunementItems = 20
+	maxSheetDeathSaves = 10
+	maxSheetExhaustion = 20
 )
 
 func clampRunes(s string, max int) string {
@@ -80,105 +76,11 @@ func clampRunes(s string, max int) string {
 
 // sanitizeSheet — see maxSheet* выше.
 func sanitizeSheet(sheet domain.CharacterSheet) domain.CharacterSheet {
-	sheet.Info.Background = clampRunes(sheet.Info.Background, maxSheetShortText)
-	sheet.Info.Class = clampRunes(sheet.Info.Class, maxSheetShortText)
-	sheet.Info.Subclass = clampRunes(sheet.Info.Subclass, maxSheetShortText)
-	sheet.Info.Species = clampRunes(sheet.Info.Species, maxSheetShortText)
-	sheet.Info.Race = clampRunes(sheet.Info.Race, maxSheetShortText)
-	sheet.Info.PlayerName = clampRunes(sheet.Info.PlayerName, maxSheetShortText)
-
-	sheet.Physical.Age = clampRunes(sheet.Physical.Age, maxSheetShortText)
-	sheet.Physical.Height = clampRunes(sheet.Physical.Height, maxSheetShortText)
-	sheet.Physical.Weight = clampRunes(sheet.Physical.Weight, maxSheetShortText)
-	sheet.Physical.Eyes = clampRunes(sheet.Physical.Eyes, maxSheetShortText)
-	sheet.Physical.Skin = clampRunes(sheet.Physical.Skin, maxSheetShortText)
-	sheet.Physical.Hair = clampRunes(sheet.Physical.Hair, maxSheetShortText)
-
-	sheet.Armor.OtherWeapons = clampRunes(sheet.Armor.OtherWeapons, maxSheetLongText)
-	sheet.ToolsLanguages = clampRunes(sheet.ToolsLanguages, maxSheetLongText)
-	sheet.Traits = clampRunes(sheet.Traits, maxSheetLongText)
-	sheet.ProficiencyNotes = clampRunes(sheet.ProficiencyNotes, maxSheetLongText)
-
-	sheet.Combat.HitDiceTotal = clampRunes(sheet.Combat.HitDiceTotal, maxSheetShortText)
-	sheet.Combat.HitDiceCurrent = clampRunes(sheet.Combat.HitDiceCurrent, maxSheetShortText)
-	sheet.Combat.Conditions = clampRunes(sheet.Combat.Conditions, maxSheetLongText)
-	if sheet.Combat.DeathSaveSuccess < 0 {
-		sheet.Combat.DeathSaveSuccess = 0
-	} else if sheet.Combat.DeathSaveSuccess > 3 {
-		sheet.Combat.DeathSaveSuccess = 3
-	}
-	if sheet.Combat.DeathSaveFail < 0 {
-		sheet.Combat.DeathSaveFail = 0
-	} else if sheet.Combat.DeathSaveFail > 3 {
-		sheet.Combat.DeathSaveFail = 3
-	}
+	clampCard(&sheet)
+	sheet.Extra = clampExtra(sheet.Extra)
 	sheet.Coins = domain.SanitizeCoins(sheet.Coins)
-	if sheet.Combat.Exhaustion < 0 {
-		sheet.Combat.Exhaustion = 0
-	} else if sheet.Combat.Exhaustion > 6 {
-		sheet.Combat.Exhaustion = 6
-	}
-
-	if len(sheet.Weapons) > maxWeaponRows {
-		sheet.Weapons = sheet.Weapons[:maxWeaponRows]
-	}
-	for i := range sheet.Weapons {
-		sheet.Weapons[i].Name = clampRunes(sheet.Weapons[i].Name, maxSheetShortText)
-		sheet.Weapons[i].Bonus = clampRunes(sheet.Weapons[i].Bonus, maxSheetShortText)
-		sheet.Weapons[i].Damage = clampRunes(sheet.Weapons[i].Damage, maxSheetShortText)
-		sheet.Weapons[i].Notes = clampRunes(sheet.Weapons[i].Notes, maxSheetLongText)
-	}
-
-	if len(sheet.Resources) > maxResourceRows {
-		sheet.Resources = sheet.Resources[:maxResourceRows]
-	}
-	for i := range sheet.Resources {
-		sheet.Resources[i].Name = clampRunes(sheet.Resources[i].Name, maxSheetShortText)
-		sheet.Resources[i].Recovery = clampRunes(sheet.Resources[i].Recovery, maxSheetShortText)
-	}
-
-	if len(sheet.AttunementItems) > maxAttunementItems {
-		sheet.AttunementItems = sheet.AttunementItems[:maxAttunementItems]
-	}
-	for i := range sheet.AttunementItems {
-		sheet.AttunementItems[i].Name = clampRunes(sheet.AttunementItems[i].Name, maxSheetShortText)
-	}
-
-	sheet.Features = clampRunes(sheet.Features, maxSheetLongText)
-	sheet.AttacksSpells = clampRunes(sheet.AttacksSpells, maxSheetLongText)
-	sheet.Feats = clampRunes(sheet.Feats, maxSheetLongText)
-
-	sheet.Goals = clampRunes(sheet.Goals, maxSheetLongText)
-	sheet.Allies = clampRunes(sheet.Allies, maxSheetLongText)
-	sheet.AdditionalFeatures = clampRunes(sheet.AdditionalFeatures, maxSheetLongText)
-	sheet.Treasure = clampRunes(sheet.Treasure, maxSheetLongText)
-	for i := range sheet.Notes {
-		sheet.Notes[i] = clampRunes(sheet.Notes[i], maxSheetLongText)
-	}
-
-	for i := range sheet.Spellcasting.SlotsByLevel {
-		sheet.Spellcasting.SlotsByLevel[i] = clampRunes(sheet.Spellcasting.SlotsByLevel[i], maxSheetShortText)
-	}
-	if len(sheet.PreparedSpells) > maxSpellRows {
-		sheet.PreparedSpells = sheet.PreparedSpells[:maxSpellRows]
-	}
-	for i := range sheet.PreparedSpells {
-		sheet.PreparedSpells[i].Name = clampRunes(sheet.PreparedSpells[i].Name, maxSheetShortText)
-		sheet.PreparedSpells[i].CastTime = clampRunes(sheet.PreparedSpells[i].CastTime, maxSheetShortText)
-		sheet.PreparedSpells[i].Range = clampRunes(sheet.PreparedSpells[i].Range, maxSheetShortText)
-		sheet.PreparedSpells[i].Notes = clampRunes(sheet.PreparedSpells[i].Notes, maxSheetLongText)
-	}
-
-	sheet.Size = clampRunes(sheet.Size, maxSheetShortText)
-	sheet.Appearance = clampRunes(sheet.Appearance, maxSheetLongText)
-	sheet.Background = clampRunes(sheet.Background, maxSheetLongText)
-	sheet.Alignment = clampRunes(sheet.Alignment, maxSheetShortText)
-	sheet.Equipment = clampRunes(sheet.Equipment, maxSheetLongText)
-
-	sheet.PersonalityTraits = clampRunes(sheet.PersonalityTraits, maxSheetLongText)
-	sheet.Ideals = clampRunes(sheet.Ideals, maxSheetLongText)
-	sheet.Bonds = clampRunes(sheet.Bonds, maxSheetLongText)
-	sheet.Flaws = clampRunes(sheet.Flaws, maxSheetLongText)
-
+	sheet.Combat.DeathSaveSuccess = clampCount(sheet.Combat.DeathSaveSuccess, maxSheetDeathSaves)
+	sheet.Combat.DeathSaveFail = clampCount(sheet.Combat.DeathSaveFail, maxSheetDeathSaves)
+	sheet.Combat.Exhaustion = clampCount(sheet.Combat.Exhaustion, maxSheetExhaustion)
 	return sheet
 }

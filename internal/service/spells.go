@@ -12,15 +12,10 @@ import (
 // maxSpellLongText/maxSpellShortText — те же санитарные пределы, что и у
 // Monster (см. bestiary.go): не игровое правило, а защита от случайно
 // вставленного гигантского текста в поле карточки.
-const (
-	maxSpellLongText  = 20000 // описание — импортированный HTML бывает длинным
-	maxSpellShortText = 300   // время накладывания/дистанция/спасбросок и т.п.
-	maxSpellTags      = 30
-	// maxSpellStatuses — сколько состояний максимум может накладывать одно
-	// заклинание (см. domain.SpellStatusRef). Не правило, а тот же санитарный
-	// предел, что и у тегов: в реальном экспорте Foundry их единицы.
-	maxSpellStatuses = 12
-)
+// maxSpellStatuses — сколько состояний максимум может накладывать одно
+// заклинание (см. domain.SpellStatusRef). Не правило, а тот же санитарный
+// предел, что и у тегов: в реальном экспорте Foundry их единицы.
+const maxSpellStatuses = 12
 
 // SpellService — общая на весь стол библиотека карточек заклинаний (см.
 // domain.Spell, internal/repository/spellfile) — тот же use case, что и
@@ -54,36 +49,17 @@ func validateSpellName(name string) (string, error) {
 	return name, nil
 }
 
-// sanitizeSpell — клампит текстовые поля/теги так же, как sanitizeMonster
-// клампит статблок: молча, без ошибки — обычный клиент/импорт никогда
-// специально не бьёт по этим лимитам.
+// sanitizeSpell — общие пределы карточки (строки, списки, теги, незнакомые ключи — см. cardlimits.go), вид
+// атаки и состояния, которые заклинание накладывает. Молча, без ошибки.
 func sanitizeSpell(s domain.Spell) domain.Spell {
-	s.Source = clampRunes(s.Source, maxSpellShortText)
-	s.School = clampRunes(s.School, maxSpellShortText)
-	s.CastTime = clampRunes(s.CastTime, maxSpellShortText)
-	s.Range = clampRunes(s.Range, maxSpellShortText)
-	s.MaterialNote = clampRunes(s.MaterialNote, maxSpellLongText)
-	s.Duration = clampRunes(s.Duration, maxSpellShortText)
-	s.SavingThrow = clampRunes(s.SavingThrow, maxSpellShortText)
+	clampCard(&s)
+	s.Tags = sanitizeTags(s.Tags)
+	s.Extra = clampExtra(s.Extra)
 	if !domain.ValidSpellAttack(s.Attack) {
 		s.Attack = ""
 	}
-	s.Damage = clampRunes(s.Damage, maxSpellLongText)
-	s.Upcast = clampRunes(strings.TrimSpace(s.Upcast), maxSpellShortText)
-	s.Classes = clampRunes(s.Classes, maxSpellLongText)
-	s.Description = clampRunes(s.Description, maxSpellLongText)
-	if len(s.Tags) > maxSpellTags {
-		s.Tags = s.Tags[:maxSpellTags]
-	}
-	for i := range s.Tags {
-		s.Tags[i] = clampRunes(strings.TrimSpace(s.Tags[i]), 60)
-	}
-	if s.Level < 0 {
-		s.Level = 0
-	}
-	if s.Level > 9 {
-		s.Level = 9
-	}
+	s.Upcast = strings.TrimSpace(s.Upcast)
+	s.Level = clampCount(s.Level, maxLevel)
 	// Statuses (см. domain.SpellStatusRef) — список «что накладывает».
 	// Slug приводим к каноничному виду тем же нормализатором, что и карточка
 	// состояния (см. conditions.go: NormalizeConditionSlug): иначе "Prone",
@@ -98,14 +74,9 @@ func sanitizeSpell(s domain.Spell) domain.Spell {
 		if ref.Slug == "" {
 			continue
 		}
-		ref.Name = clampRunes(strings.TrimSpace(ref.Name), maxSpellShortText)
-		ref.Note = clampRunes(strings.TrimSpace(ref.Note), maxSpellShortText)
-		if ref.Rounds < 0 {
-			ref.Rounds = 0
-		}
-		if ref.Rounds > maxStatusRounds {
-			ref.Rounds = maxStatusRounds
-		}
+		ref.Name = strings.TrimSpace(ref.Name)
+		ref.Note = strings.TrimSpace(ref.Note)
+		ref.Rounds = clampCount(ref.Rounds, maxStatusRounds)
 		refs = append(refs, ref)
 	}
 	s.Statuses = refs

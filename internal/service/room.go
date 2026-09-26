@@ -2597,7 +2597,7 @@ func (r *Room) broadcastCombat() {
 // содержимое хаба не секрет ни от кого (в отличие от AC/HP в combatPayload).
 
 // maxHubNote/maxHubEntries — те же санитарные пределы, что и у остальных
-// сервисов (см. maxMonsterLongText в bestiary.go) — защита от гигантского
+// сервисов (см. cardlimits.go) — защита от гигантского
 // текста/бесконечного разрастания хаба, не игровое правило.
 const (
 	maxHubNote    = 300

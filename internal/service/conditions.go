@@ -14,11 +14,7 @@ import (
 // Item/Monster/Reference (см. references.go): не игровое правило, а защита
 // от случайно вставленного гигантского текста в поле карточки.
 const (
-	maxConditionLongText  = 20000 // Description
-	maxConditionText      = 2000  // Mechanics — расшифровка changes[] из Foundry бывает длинной
-	maxConditionShortText = 300   // Source/ImageURL
-	maxConditionTags      = 30
-	maxConditionRiders    = 12
+	maxConditionRiders = 12
 	// maxConditionLevels — потолок уровней многоуровневого состояния.
 	// Истощение по правилам 6, запас — на самодельные шкалы ДМ; смысл
 	// ограничения тот же, что у остальных клампов, — не пустить в UI
@@ -96,36 +92,26 @@ func NormalizeConditionSlug(slug string) string {
 	return clampRunes(s, 60)
 }
 
-// sanitizeCondition — клампит текстовые поля/теги/уровни так же, как
-// sanitizeReference клампит карточку справочника: молча, без ошибки.
+// sanitizeCondition — общие пределы карточки (строки, списки, теги, незнакомые ключи — см. cardlimits.go),
+// slug, значок, модификаторы, уровни, длительность и зависимые состояния.
+// Молча, без ошибки.
 func sanitizeCondition(c domain.Condition) domain.Condition {
+	clampCard(&c)
+	c.Tags = sanitizeTags(c.Tags)
+	c.Extra = clampExtra(c.Extra)
 	c.Slug = NormalizeConditionSlug(c.Slug)
 	if c.Slug == "" {
 		c.Slug = defaultConditionSlug(c.ID)
 	}
-	c.Source = clampRunes(c.Source, maxConditionShortText)
-	c.ImageURL = clampRunes(c.ImageURL, maxConditionShortText)
 	c.Color = clampRunes(c.Color, 32)
 	// Icon — имя SVG-глифа или эмодзи (см. domain.Condition.Icon). Режем по
 	// рунам, а не по байтам: эмодзи многобайтовый, составные (ZWJ-склейки
 	// вроде 🧝‍♀️) занимают несколько рун; 32 хватает и им, и самому длинному
 	// имени глифа, но отсекает вставленный целиком абзац.
 	c.Icon = clampRunes(strings.TrimSpace(c.Icon), 32)
-	c.Description = clampRunes(c.Description, maxConditionLongText)
-	c.Mechanics = clampRunes(c.Mechanics, maxConditionText)
 	c.Modifiers = sanitizeModifiers(c.Modifiers)
-	if c.Levels < 0 {
-		c.Levels = 0
-	}
-	if c.Levels > maxConditionLevels {
-		c.Levels = maxConditionLevels
-	}
-	if c.DefaultRounds < 0 {
-		c.DefaultRounds = 0
-	}
-	if c.DefaultRounds > maxStatusRounds {
-		c.DefaultRounds = maxStatusRounds
-	}
+	c.Levels = clampCount(c.Levels, maxConditionLevels)
+	c.DefaultRounds = clampCount(c.DefaultRounds, maxStatusRounds)
 	if len(c.Riders) > maxConditionRiders {
 		c.Riders = c.Riders[:maxConditionRiders]
 	}
@@ -143,12 +129,6 @@ func sanitizeCondition(c domain.Condition) domain.Condition {
 		riders = append(riders, r)
 	}
 	c.Riders = riders
-	if len(c.Tags) > maxConditionTags {
-		c.Tags = c.Tags[:maxConditionTags]
-	}
-	for i := range c.Tags {
-		c.Tags[i] = clampRunes(strings.TrimSpace(c.Tags[i]), 60)
-	}
 	return c
 }
 

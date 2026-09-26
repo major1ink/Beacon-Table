@@ -12,12 +12,6 @@ import (
 // maxItemLongText/maxItemShortText — те же санитарные пределы, что и у
 // Spell/Monster (см. spells.go/bestiary.go): не игровое правило, а защита от
 // случайно вставленного гигантского текста в поле карточки.
-const (
-	maxItemLongText  = 20000 // описание — импортированный HTML бывает длинным
-	maxItemShortText = 300   // тип/редкость/стоимость/вес и т.п.
-	maxItemTags      = 30
-)
-
 // ItemService — общая на весь стол библиотека карточек предметов (см.
 // domain.Item, internal/repository/itemfile) — тот же use case, что и
 // SpellService: доступна не только ДМ, и ДМ, и игроки создают/импортируют/
@@ -50,35 +44,16 @@ func validateItemName(name string) (string, error) {
 	return name, nil
 }
 
-// sanitizeItem — клампит текстовые поля/теги так же, как sanitizeSpell
-// клампит карточку заклинания: молча, без ошибки — обычный клиент/импорт
-// никогда специально не бьёт по этим лимитам.
+// sanitizeItem — общие пределы карточки (строки, списки, теги, незнакомые ключи — см. cardlimits.go),
+// модификаторы и неотрицательный вес. Молча, без ошибки.
 func sanitizeItem(it domain.Item) domain.Item {
-	it.ImageURL = clampRunes(it.ImageURL, maxItemShortText)
-	it.Source = clampRunes(it.Source, maxItemShortText)
-	it.Type = clampRunes(it.Type, maxItemShortText)
-	it.Rarity = clampRunes(it.Rarity, maxItemShortText)
-	it.AttunementNote = clampRunes(it.AttunementNote, maxItemShortText)
-	it.Cost = clampRunes(it.Cost, maxItemShortText)
-	it.Weight = clampRunes(it.Weight, maxItemShortText)
-	it.Activation = clampRunes(it.Activation, maxItemShortText)
-	it.Damage = clampRunes(it.Damage, maxItemShortText)
-	it.ArmorClass = clampRunes(it.ArmorClass, maxItemShortText)
-	it.Properties = clampRunes(it.Properties, maxItemLongText)
-	it.Charges = clampRunes(it.Charges, maxItemShortText)
-	it.Description = clampRunes(it.Description, maxItemLongText)
+	clampCard(&it)
+	it.Tags = sanitizeTags(it.Tags)
+	it.Extra = clampExtra(it.Extra)
 	// Modifiers — что предмет даёт, пока надет (см. domain.Modifier); тот же
 	// санитайзер, что и у карточки состояния.
 	it.Modifiers = sanitizeModifiers(it.Modifiers)
-	if it.WeightValue < 0 {
-		it.WeightValue = 0
-	}
-	if len(it.Tags) > maxItemTags {
-		it.Tags = it.Tags[:maxItemTags]
-	}
-	for i := range it.Tags {
-		it.Tags[i] = clampRunes(strings.TrimSpace(it.Tags[i]), 60)
-	}
+	it.WeightValue = max(it.WeightValue, 0)
 	return it
 }
 
