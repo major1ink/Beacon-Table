@@ -1,0 +1,19 @@
+{
+  "format": "beacon-schema/v1",
+  "kind": "item",
+  "fields": {
+    "cost": { "type": "text", "path": "cost", "label": "Стоимость" },
+    "weight": { "type": "number", "path": "weightLb", "label": "Вес" },
+    "damage": { "type": "dice", "path": "damage", "label": "Урон", "placeholder": "1d8+1" },
+    "charges": { "type": "text", "path": "charges", "label": "Заряды" }
+  },
+  "layout": [
+    { "title": "Параметры", "fields": ["cost", "weight", "damage", "charges"] },
+    { "title": "Пока надет", "widget": "modifiers" }
+  ],
+  "list": {
+    "subtitle": "{cost}",
+    "sort": ["name"],
+    "search": ["name", "tags"]
+  }
+}

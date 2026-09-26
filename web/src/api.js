@@ -589,6 +589,10 @@ export async function fetchConditions() {
 // входят — конструктор заводит их по названию (см. modifiers.js: statTarget).
 // fetchSystemProfile — система запущенного мира: единица веса и валюты
 // (см. internal/domain/system_profile.go, web/src/system-profile.js).
+export async function fetchSchemas() {
+  return apiFetch("/api/schemas");
+}
+// fetchSchemas (выше) — схемы листа и карточек мира (web/src/schemas.js).
 export async function fetchSystemProfile() {
   return apiFetch("/api/system");
 }

@@ -194,3 +194,23 @@ func TestCardExtraKeysThroughAPI(t *testing.T) {
 		t.Fatalf("незнакомое поле потерялось: %v", got)
 	}
 }
+
+// Схемы мира «Своей системы» приходят клиенту по всем видам — встроенные,
+// JSON как есть.
+func TestSchemasAPI(t *testing.T) {
+	e := newModuleEnv(t)
+	code, got := e.do(t, http.MethodGet, "/api/schemas", nil, "", e.player)
+	if code != http.StatusOK {
+		t.Fatalf("статус %d", code)
+	}
+	for _, kind := range []string{"sheet", "monster", "spell", "item", "reference"} {
+		s, ok := got[kind].(map[string]any)
+		if !ok || s["kind"] != kind || s["format"] != "beacon-schema/v1" {
+			t.Errorf("%s: %v", kind, got[kind])
+		}
+	}
+	sheet := got["sheet"].(map[string]any)
+	if core, _ := sheet["core"].(map[string]any); core["hp.current"] != "hp_current" {
+		t.Errorf("core листа: %v", sheet["core"])
+	}
+}

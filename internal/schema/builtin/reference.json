@@ -1,0 +1,17 @@
+{
+  "format": "beacon-schema/v1",
+  "kind": "reference",
+  "fields": {
+    "kind": { "type": "text", "path": "kind", "label": "Вид", "placeholder": "Народ, Черта, Школа…" },
+    "parent": { "type": "text", "path": "parentName", "label": "Относится к" }
+  },
+  "layout": [
+    { "title": "Параметры", "fields": ["kind", "parent"] }
+  ],
+  "list": {
+    "subtitle": "{kind}",
+    "sort": ["kind", "name"],
+    "filters": ["kind"],
+    "search": ["name", "tags"]
+  }
+}

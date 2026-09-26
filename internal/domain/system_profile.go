@@ -38,6 +38,14 @@ type SystemProfile struct {
 // схема листа из модуля (задача «Схемы листа и карточек»).
 const SheetUniversal = "universal"
 
+// LegacySheetKind — вид листа, который клиент рисует старым кодом, а не по
+// схеме: бланки встроенного D&D. Пока система с таким видом листа не несёт
+// своих схем, лист и карточки её мира рисуются по-старому (переезд — задача
+// «Модуль D&D на схемах»).
+func LegacySheetKind(kind string) bool {
+	return kind == "dnd5e-2014" || kind == "dnd5e-2024"
+}
+
 var sheetKindRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // ValidSheetKind — годится ли строка в вид листа (раздел sheet в

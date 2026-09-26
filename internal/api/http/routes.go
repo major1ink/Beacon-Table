@@ -247,6 +247,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/modifier-targets", a.handleModifierTargets)
 	mux.HandleFunc("GET /api/system", a.handleSystemProfile)
+	mux.HandleFunc("GET /api/schemas", a.handleSchemas)
 
 	// Импорт компендиумов Foundry VTT по ссылке на манифест — только ДМ,
 	// см. foundry_handlers.go.

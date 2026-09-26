@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -35,6 +36,7 @@ import (
 	"beacon-table/internal/repository/scenefile"
 	"beacon-table/internal/repository/spellfile"
 	"beacon-table/internal/repository/sqlite"
+	"beacon-table/internal/schema"
 	"beacon-table/internal/service"
 )
 
@@ -196,6 +198,38 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 		p.Currencies = mod.Manifest.Currencies
 	}
 	return p
+}
+
+// Schemas — схемы листа и карточек мира company по видам (см.
+// internal/schema), JSON как есть — его рисует клиент. Для каждого вида —
+// схема из модуля системы мира, если она там есть, иначе встроенная схема
+// «Своей системы». Исключение — система со старым бланком (D&D) без своих
+// схем: у неё все виды nil, и клиент рисует лист и карточки старым кодом.
+func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMessage, error) {
+	var mod *module.Module
+	if company != nil && company.System != domain.SystemCustom {
+		mod, _ = m.modules.Get(company.System)
+	}
+	out := make(map[string]json.RawMessage, len(schema.Kinds))
+	legacy := mod != nil && len(mod.Schemas) == 0 && domain.LegacySheetKind(mod.Manifest.Sheet)
+	for _, kind := range schema.Kinds {
+		if legacy {
+			out[kind] = nil
+			continue
+		}
+		if mod != nil {
+			if s, ok := mod.Schemas[kind]; ok {
+				out[kind] = s.Raw
+				continue
+			}
+		}
+		s, err := schema.Builtin(kind)
+		if err != nil {
+			return nil, err
+		}
+		out[kind] = s.Raw
+	}
+	return out, nil
 }
 
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу

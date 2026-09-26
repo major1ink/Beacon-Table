@@ -39,6 +39,26 @@ func (a *API) handleSystemProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.Companies.SystemProfile(company))
 }
 
+// handleSchemas — схемы листа и карточек запущенного мира (см.
+// app.CompanyManager.Schemas): по виду — JSON схемы или null, если лист и
+// карточки этой системы рисуются старым кодом. Мир не запущен — встроенные
+// схемы «Своей системы».
+func (a *API) handleSchemas(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireAccount(w, r); !ok {
+		return
+	}
+	var company *domain.Company
+	if world := a.Companies.Current(); world != nil {
+		company = world.Company
+	}
+	schemas, err := a.Companies.Schemas(company)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
+		return
+	}
+	writeJSON(w, http.StatusOK, schemas)
+}
+
 func (a *API) handleModifierTargets(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireAccount(w, r); !ok {
 		return

@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/schema"
 )
 
 // Источники модуля.
@@ -39,6 +40,9 @@ type Module struct {
 	FS fs.FS
 	// Dir — папка на диске; пусто у встроенного.
 	Dir string
+	// Schemas — схемы листа и карточек по видам (schemas/<вид>.json, см.
+	// internal/schema); nil — своих схем у модуля нет.
+	Schemas map[string]*schema.Schema
 
 	// kindDir/assetsDir — раскладка, отличная от стандартной. Нужна только
 	// встроенному каталогу D&D, у которого исторически
@@ -192,7 +196,12 @@ func openDir(dir, source string) (*Module, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Module{Manifest: man, Source: source, FS: os.DirFS(dir), Dir: dir}, nil
+	fsys := os.DirFS(dir)
+	schemas, err := loadSchemas(fsys, man)
+	if err != nil {
+		return nil, err
+	}
+	return &Module{Manifest: man, Source: source, FS: fsys, Dir: dir, Schemas: schemas}, nil
 }
 
 // Install ставит (или обновляет) модуль из архива .btmod. Архив сначала
@@ -222,6 +231,12 @@ func (r *Registry) Install(archive string) (*Module, error) {
 	}
 	tmp := filepath.Join(r.root, ".install-"+man.ID+"-"+randomSuffix())
 	if err := extract(&zr.Reader, prefix, tmp); err != nil {
+		_ = os.RemoveAll(tmp)
+		return nil, &domain.ValidationError{Msg: err.Error()}
+	}
+	// Схемы проверяются до подмены прежней версии: модуль с битой схемой не
+	// ставится, а старая версия остаётся.
+	if _, err := loadSchemas(os.DirFS(tmp), man); err != nil {
 		_ = os.RemoveAll(tmp)
 		return nil, &domain.ValidationError{Msg: err.Error()}
 	}

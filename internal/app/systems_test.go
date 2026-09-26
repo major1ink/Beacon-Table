@@ -6,6 +6,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/module"
+	"beacon-table/internal/schema"
 )
 
 // Цели модификаторов и правила боя мира берутся из модуля его системы;
@@ -64,5 +65,53 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 	// Система без units/currencies в module.json — умолчания «Своей системы».
 	if p := m.SystemProfile(&domain.Company{System: domain.SystemDnD5e2024}); p.Sheet != domain.SheetUniversal || p.Units.Weight != "кг" || p.Currencies[0].Key != "money" {
 		t.Errorf("система без единиц: %+v", p)
+	}
+}
+
+// Схемы мира: у «Своей системы» и мира без модуля — встроенные; у системы
+// со своей схемой — её, недостающие виды — встроенные; у системы со старым
+// бланком D&D без схем — nil по всем видам (клиент рисует старым кодом).
+func TestWorldSchemas(t *testing.T) {
+	m, _ := newTestManager(t)
+	own, err := schema.Parse([]byte(`{"format":"beacon-schema/v1","kind":"sheet",
+		"fields":{"luck":{"type":"number","path":"luck","label":"Удача"}},"layout":[{"fields":["luck"]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	luck := module.Builtin(fstest.MapFS{}, "systemdata", "luckworld", &module.Manifest{
+		Format: module.Format, ID: "luckworld", Type: module.TypeSystem, Title: "Удача", Version: "1.0.0",
+	})
+	luck.Schemas = map[string]*schema.Schema{schema.KindSheet: own}
+	legacy := module.Builtin(fstest.MapFS{}, "systemdata", "oldsys", &module.Manifest{
+		Format: module.Format, ID: "oldsys", Type: module.TypeSystem, Title: "D&D", Version: "1.0.0", Sheet: "dnd5e-2024",
+	})
+	m.modules = module.NewRegistry("", append(testSystems(), luck, legacy), nil, "")
+
+	builtinSheet, _ := schema.Builtin(schema.KindSheet)
+	builtinSpell, _ := schema.Builtin(schema.KindSpell)
+	for name, c := range map[string]*domain.Company{"своя": {System: domain.SystemCustom}, "без модуля": {System: "gone"}, "мир не запущен": nil} {
+		got, err := m.Schemas(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != len(schema.Kinds) || string(got[schema.KindSheet]) != string(builtinSheet.Raw) {
+			t.Errorf("%s: ожидали встроенные схемы всех видов", name)
+		}
+	}
+	got, err := m.Schemas(&domain.Company{System: "luckworld"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got[schema.KindSheet]) != string(own.Raw) || string(got[schema.KindSpell]) != string(builtinSpell.Raw) {
+		t.Error("система со своей схемой листа: лист — её, заклинание — встроенное")
+	}
+	got, err = m.Schemas(&domain.Company{System: "oldsys"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range schema.Kinds {
+		if got[kind] != nil {
+			t.Errorf("старый бланк без схем: %s должен быть nil", kind)
+		}
 	}
 }

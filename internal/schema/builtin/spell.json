@@ -1,0 +1,21 @@
+{
+  "format": "beacon-schema/v1",
+  "kind": "spell",
+  "fields": {
+    "level": { "type": "number", "path": "level", "label": "Круг" },
+    "cast_time": { "type": "text", "path": "castTime", "label": "Время" },
+    "range": { "type": "text", "path": "range", "label": "Дистанция" },
+    "duration": { "type": "text", "path": "duration", "label": "Длительность" },
+    "damage": { "type": "dice", "path": "damage", "label": "Урон или эффект", "placeholder": "2d6" }
+  },
+  "layout": [
+    { "title": "Параметры", "fields": ["level", "cast_time", "range", "duration", "damage"] },
+    { "title": "Накладывает", "widget": "applies" }
+  ],
+  "list": {
+    "subtitle": "{level} круг",
+    "sort": ["level", "name"],
+    "filters": ["level"],
+    "search": ["name", "tags"]
+  }
+}
