@@ -1,4 +1,4 @@
-import{i as N,g as M}from"./icons-DsdpjbfO.js";import{l as _,d as $}from"./stat-editor-CDkb_MTW.js";import{g as j}from"./condition-glyphs--FpfEy0z.js";import{a as B}from"./a11y-BN9NYDBm.js";const H=`
+import{i as N,g as M}from"./icons-DsdpjbfO.js";import{l as _,d as $}from"./stat-editor-DCSImGsd.js";import{g as j}from"./condition-glyphs--FpfEy0z.js";import{a as B}from"./a11y-BN9NYDBm.js";const H=`
 .status-palette {
   position: fixed; z-index: 60; width: 296px; max-height: 72vh; overflow: auto;
   display: flex; flex-direction: column; gap: 8px; padding: 10px;
