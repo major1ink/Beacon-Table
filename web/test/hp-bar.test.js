@@ -17,8 +17,17 @@ test("типографский минус и пробелы из чата пон
   assert.deepEqual(parseQuickValue("–4", 10), { delta: -4, value: 6 });
 });
 
+test("выражение: знак — изменение, без знака — значение, дробь вниз", () => {
+  assert.deepEqual(parseQuickValue("-12/2", 20), { delta: -6, value: 14 });
+  assert.deepEqual(parseQuickValue("+3*2", 20), { delta: 6, value: 26 });
+  assert.deepEqual(parseQuickValue("17-3", 20), { delta: null, value: 14 });
+  assert.deepEqual(parseQuickValue("=4", 20), { delta: null, value: 4 });
+  assert.deepEqual(parseQuickValue("-7/2", 20), { delta: -4, value: 16 });
+  assert.deepEqual(parseQuickValue("1.5", 20), { delta: null, value: 1 });
+});
+
 test("мусор и пустое поле не применяются", () => {
-  for (const raw of ["", "  ", "abc", "+", "-", "5к6", "1.5"]) {
+  for (const raw of ["", "  ", "abc", "+", "-", "5к6", "1/0", "@hp"]) {
     assert.equal(parseQuickValue(raw, 10), null, `«${raw}» не должно применяться`);
   }
 });

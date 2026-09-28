@@ -1891,7 +1891,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 				ownerID = ch.AccountID
 			}
 			src, kind = ch.Sheet, schema.KindSheet
-			ac = ch.Sheet.Combat.AC
+			ac = coreInt(r.schemaFor(kind), src, domain.ModifierTargetAC, ch.Sheet.Combat.AC)
 			hpCur = ch.Sheet.Combat.HPCurrent
 			hpMax = ch.Sheet.Combat.HPMax
 			hpTemp = ch.Sheet.Combat.HPTemp
@@ -1905,9 +1905,9 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 				image = m.ImageURL
 			}
 			src, kind = m, schema.KindMonster
-			ac = m.AC
-			hpCur = m.HP
-			hpMax = m.HP
+			ac = coreInt(r.schemaFor(kind), src, domain.ModifierTargetAC, m.AC)
+			hpMax = coreInt(r.schemaFor(kind), src, domain.ModifierTargetHPMax, m.HP)
+			hpCur = hpMax
 		}
 	}
 	if name == "" {
@@ -1965,6 +1965,20 @@ func (r *Room) rollInitiative(name, kind string, src any, mods []domain.Modifier
 	}
 	r.relayRoll(nil, "ДМ", roll.Formula, "Инициатива: "+name, result, false)
 	return float64(result.Total)
+}
+
+// coreInt — общее поле ядра target листа или карточки src по схеме s (КД
+// может быть формулой — «10 + @dex_mod»); без схемы или без привязки —
+// fallback. Основа, без модификаторов: состояния трекер накладывает сам
+// (см. effectiveStat).
+func coreInt(s *schema.Schema, src any, target string, fallback int) int {
+	if s == nil {
+		return fallback
+	}
+	if v, ok := schema.NewEvaluator(s, src, nil).Core(target); ok {
+		return int(math.Floor(v))
+	}
+	return fallback
 }
 
 // equippedModifiers — модификаторы надетых предметов персонажа: карточки

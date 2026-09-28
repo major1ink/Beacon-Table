@@ -652,7 +652,9 @@ export function toNumber(v) {
 //   dice(src)        → { formula, dice, const, error } — бросок по формуле;
 //   rollField(id)    → то же для поля-броска (roll) или поля с формулой
 //                      кубов, которую вписал человек (dice);
-//   row(table, i)    → { value(col), dice(col) } — строка таблицы.
+//   row(table, i)    → { value(col), dice(col) } — строка таблицы;
+//   stat(name)       → свободная характеристика с таким названием (с
+//                      модификаторами), как @stat.<ключ>.
 export function createEvaluator(compiled, data, mods) {
   const c = compiled || { schema: null, formulas: new Map(), columns: new Map() };
   const fields = (c.schema && c.schema.fields) || {};
@@ -790,6 +792,7 @@ export function createEvaluator(compiled, data, mods) {
       }
     },
     dice: (src) => roll(src, sheetResolve),
+    stat: (name) => stat(statKey(name)),
     rollField: (id) => rollOf(fields, data, (fid) => c.formulas.get(fid), sheetResolve, id),
     row(tableId, index) {
       const key = tableId + "\u0000" + index;

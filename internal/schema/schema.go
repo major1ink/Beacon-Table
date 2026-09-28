@@ -79,6 +79,15 @@ var coreTargets = map[string]bool{
 	domain.ModifierTargetAC: true, domain.ModifierTargetSpeed: true, domain.ModifierTargetInitiative: true,
 }
 
+// storedCore — общие поля, которые сервер не только читает, но и пишет
+// (хиты персонажа из трекера боя, см. repository.CharacterRepository:
+// UpdateSheetHP): такое поле схемы — хранимое число ровно по этому пути,
+// не формула. Остальные общие поля (КД, скорость) могут быть формулой —
+// сервер их только читает (Evaluator.Core).
+var storedCore = map[string]map[string]string{
+	KindSheet: {domain.ModifierTargetHPCurrent: "combat.hpCurrent", domain.ModifierTargetHPMax: "combat.hpMax"},
+}
+
 // widgets — готовые блоки страницы для сложных общих вещей и виды, где они
 // есть.
 var widgets = map[string][]string{
@@ -139,17 +148,20 @@ type StatRows struct {
 	Value string `json:"value"`
 }
 
-// Section — секция раскладки: заголовок, поля или виджет, колонка режима
-// чтения (1–3), вкладка режима правки и режим, в котором секция видна
-// ("" — в обоих, "view" — только в чтении, "edit" — только в правке:
-// хиты в чтении — виджет, в правке — поля).
+// Section — секция раскладки: заголовок, поля или виджет, колонка (1–3),
+// вкладка режима правки и режим, в котором секция видна ("" — в обоих,
+// "view" — только в чтении, "edit" — только в правке: хиты в чтении —
+// виджет, в правке — поля). Вкладки листа: "sheet" (по умолчанию),
+// "inventory" — инвентарь страницы, любая другая — своя вкладка с подписью
+// TabTitle (берётся у первой секции вкладки, где она задана).
 type Section struct {
-	Title  string   `json:"title,omitempty"`
-	Fields []string `json:"fields,omitempty"`
-	Widget string   `json:"widget,omitempty"`
-	Column int      `json:"column,omitempty"`
-	Tab    string   `json:"tab,omitempty"`
-	Mode   string   `json:"mode,omitempty"`
+	Title    string   `json:"title,omitempty"`
+	Fields   []string `json:"fields,omitempty"`
+	Widget   string   `json:"widget,omitempty"`
+	Column   int      `json:"column,omitempty"`
+	Tab      string   `json:"tab,omitempty"`
+	TabTitle string   `json:"tabTitle,omitempty"`
+	Mode     string   `json:"mode,omitempty"`
 }
 
 // List — как карточка выглядит в каталоге: подпись-шаблон («{level} круг ·
@@ -221,8 +233,12 @@ func (s *Schema) Validate() error {
 		if !coreTargets[target] {
 			return fmt.Errorf("схема %s: core.%s — такого общего поля в ядре нет", s.Kind, target)
 		}
-		if _, ok := s.Fields[id]; !ok {
+		f, ok := s.Fields[id]
+		if !ok {
 			return fmt.Errorf("схема %s: core.%s ссылается на неизвестное поле %q", s.Kind, target, id)
+		}
+		if want, ok := storedCore[s.Kind][target]; ok && (f.Type != TypeNumber || f.Path != want) {
+			return fmt.Errorf("схема %s: core.%s — число по пути %s (его пишет трекер боя), а не %s %q", s.Kind, target, want, f.Type, f.Path)
 		}
 	}
 	if len(s.Layout) == 0 {
@@ -371,6 +387,9 @@ func (s *Schema) checkSection(sec Section) error {
 	}
 	if sec.Tab != "" && !idRe.MatchString(sec.Tab) {
 		return fmt.Errorf("id вкладки %q — латиница в нижнем регистре, цифры и _", sec.Tab)
+	}
+	if len([]rune(sec.Title)) > maxLabelLen || len([]rune(sec.TabTitle)) > maxLabelLen {
+		return fmt.Errorf("заголовок секции или вкладки длиннее %d символов", maxLabelLen)
 	}
 	return nil
 }

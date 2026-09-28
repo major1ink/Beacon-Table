@@ -1,11 +1,17 @@
-// Универсальный лист (sheet-universal.js / universal-stats.js): свободные
-// характеристики с модификаторами stat.<ключ>, инициатива-формула, основы
-// для стенда конструктора и выбор вида листа по системе.
+// Лист по схеме «Своей системы»: свободные характеристики с модификаторами
+// stat.<ключ> (schema-formula.js), основы для стенда конструктора
+// (universal-stats.js) и выбор вида листа по системе.
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { initiativeBase, initiativeFormula, standStats, statValue } from "../src/universal-stats.js";
+import { readFileSync } from "node:fs";
+
+import { initiativeBase, standStats } from "../src/universal-stats.js";
+import { compileSchema, createEvaluator } from "../src/schema-formula.js";
 import { sheetKindOf } from "../src/system-profile.js";
+
+const sheetSchema = compileSchema(JSON.parse(readFileSync(new URL("../../internal/schema/builtin/sheet.json", import.meta.url), "utf8")));
+const statValue = (stat, mods) => createEvaluator(sheetSchema, { stats: [stat] }, mods).stat(stat.name);
 
 const cursed = [{ target: "stat.удача_ночью", mode: "add", value: "-2" }];
 
@@ -25,11 +31,11 @@ test("основы характеристик для стенда", () => {
 });
 
 test("инициатива из поля листа", () => {
-  assert.equal(initiativeFormula({ initiative: " 1к20 + 2 " }), "1d20+2");
-  assert.equal(initiativeFormula({}), "");
   assert.equal(initiativeBase({ initiative: "3" }), 3);
   assert.equal(initiativeBase({ initiative: "-1" }), -1);
   assert.equal(initiativeBase({ initiative: "2d6" }), 0);
+  assert.equal(initiativeBase({ initiative: "1d20 + @stat.ловкость" }), 0);
+  assert.equal(initiativeBase({}), 0);
 });
 
 test("вид листа: D&D знаем поимённо, остальное — универсальный", () => {

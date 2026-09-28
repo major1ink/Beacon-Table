@@ -44,8 +44,8 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { coinRows, formatWeight, loadSystemProfile, sheetKind, SHEET_UNIVERSAL } from "../system-profile.js";
-import { renderUniversalEdit, renderUniversalView } from "../sheet-universal.js";
+import { coinRows, formatWeight, loadSystemProfile, sheetKind } from "../system-profile.js";
+import { renderSchemaEdit, renderSchemaView } from "../schema-sheet.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema, createEvaluator } from "../schema-formula.js";
 
@@ -227,24 +227,51 @@ function isClassic() {
   return sheetKind() === "dnd5e-2014";
 }
 
-// isUniversal — универсальный лист (см. sheet-universal.js): «Своя
-// система» и системы без своего бланка. Бланк D&D тогда не рисуется вовсе.
+// isUniversal — лист по схеме системы (см. schema-sheet.js): «Своя
+// система» и системы со схемой листа. Бланк D&D тогда не рисуется вовсе;
+// у системы со старым бланком схемы нет (schemas.js: null).
 function isUniversal() {
-  return sheetKind() === SHEET_UNIVERSAL;
+  return !!schemaFor("sheet");
 }
 
-// universalCtx — то, что универсальный лист берёт у этой страницы, а не
-// копирует: сохранение, поля ввода, портрет, хиты, инвентарь, деньги,
-// ресурсы, состояния, броски. Собирается на каждую отрисовку: sheet
+// schemaCtx — то, что лист по схеме берёт у этой страницы, а не копирует:
+// сохранение, поля ввода, портрет, хиты, инвентарь, деньги, ресурсы,
+// состояния, броски, вкладки. Собирается на каждую отрисовку: sheet
 // меняется при перезагрузке листа (см. reloadSheet).
-function universalCtx() {
+function schemaCtx() {
+  sheetEvaluator(); // разобрать схему, если ещё не
   return {
-    h, sheet, readOnly,
-    field, textInput, numberInput, textareaInput, identitySection,
-    scheduleSave, sendRoll, rollText,
-    activeModifiers, effectiveAC, effectiveSpeed, modifierHint,
-    vCard, vTile, vText, vHero, vHpCard, liveStatusesHost, vResourcesCard, vInventoryCard, vMoneyCard,
+    h, sheet, readOnly, compiled: compiledSheet,
+    field, textareaInput, identitySection,
+    scheduleSave, sendResolvedRoll, activeModifiers,
+    onRefresh: (fn) => vRefresh.push(fn),
+    tabPanel,
+    vCard, vText, vHero, vHpCard, liveStatusesHost, vResourcesCard, vInventoryCard, vMoneyCard,
   };
+}
+
+// tabPanel — панель вкладки правки по id вкладки схемы: "sheet" — «Лист»,
+// "portrait" — «Портрет», остальные создаются кнопкой в шапке (см.
+// clearSchemaTabs) с подписью title или id.
+const PAGE_TABS = { sheet: "1", portrait: "2", inventory: "5" };
+function tabPanel(id, title) {
+  const n = PAGE_TABS[id] || "x-" + id;
+  let panel = document.getElementById("tab" + n);
+  if (!panel) {
+    panel = h("div", { class: "tab-panel", id: "tab" + n, "data-schema-tab": "" });
+    document.getElementById("app").appendChild(panel);
+    const btn = h("button", { type: "button", class: "tab-btn", "data-tab": n, "data-schema-tab": "", text: title || id, onclick: () => switchTab(n) });
+    document.querySelector("#topBar .tabs").appendChild(btn);
+  }
+  return panel;
+}
+
+// clearSchemaTabs — убрать свои вкладки схемы перед пересборкой правки (и
+// вернуться на «Лист», если была открыта одна из них).
+function clearSchemaTabs() {
+  const active = document.querySelector('.tab-btn.active[data-schema-tab]');
+  document.querySelectorAll("[data-schema-tab]").forEach((el) => el.remove());
+  if (active) switchTab(1);
 }
 
 // ==================== DOM helpers ====================
@@ -378,8 +405,9 @@ function renderEditTabs() {
     if (btn) btn.style.display = universal ? "none" : "";
     if (universal && btn && btn.classList.contains("active")) switchTab(1);
   }
+  clearSchemaTabs();
   if (universal) {
-    renderUniversalEdit(universalCtx());
+    renderSchemaEdit(schemaCtx());
     return;
   }
   renderTab1();
@@ -2481,7 +2509,7 @@ function renderView() {
   vRefresh = [];
   root.innerHTML = "";
   if (isUniversal()) {
-    root.appendChild(renderUniversalView(universalCtx()));
+    root.appendChild(renderSchemaView(schemaCtx()));
     return;
   }
 
@@ -2751,11 +2779,10 @@ function sheetEvaluator() {
   return createEvaluator(compiledSheet, sheet, activeModifiers());
 }
 
-// rollText — бросок формулы, которую вписал человек («1к20 + @stat.ловкость»):
-// ссылки считаются здесь, на сервер уходит готовая «1d20+4» — ту же формулу
-// сервер посчитал бы сам для инициативы в трекере.
-function rollText(text, label) {
-  const r = sheetEvaluator().dice(text);
+// sendResolvedRoll — бросок, уже сведённый к формуле сервера
+// (schema-formula.js: dice / rollField): ошибка формулы — сообщение, а не
+// битый бросок; формула без кубов — просто значение.
+function sendResolvedRoll(r, label) {
   if (r.error) {
     showAlert(`«${label}»: ${r.error.message}`);
     return;

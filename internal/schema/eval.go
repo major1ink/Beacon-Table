@@ -366,6 +366,18 @@ func (e *Evaluator) stat(key string) float64 {
 	return 0
 }
 
+// Core — значение общего поля ядра target (domain.ModifierTargetAC, …) по
+// разделу core схемы; false — схемы нет, поле не привязано или не
+// считается. Модификаторы — те, с которыми создан Evaluator: трекер боя
+// берёт основу (без модификаторов) и накладывает состояния сам.
+func (e *Evaluator) Core(target string) (float64, bool) {
+	if e.s == nil || e.s.Core[target] == "" {
+		return 0, false
+	}
+	v, err := e.Value(e.s.Core[target])
+	return v, err == nil
+}
+
 // Dice сводит формулу броска src к формуле сервера по этому листу или
 // карточке.
 func (e *Evaluator) Dice(src string) (formula.Roll, error) {

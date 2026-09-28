@@ -97,6 +97,12 @@ func TestParseGood(t *testing.T) {
 	if err != nil || !strings.Contains(string(s.Raw), `"placeholder":"10"`) {
 		t.Errorf("Raw без незнакомого ключа: %v %s", err, s.Raw)
 	}
+	// КД и скорость сервер только читает — им можно быть формулой.
+	computedAC := good()
+	computedAC["core"] = map[string]any{"ac": "str_mod"}
+	if _, err := Parse(encode(t, computedAC)); err != nil {
+		t.Errorf("КД формулой: %v", err)
+	}
 }
 
 func TestParseRejects(t *testing.T) {
@@ -133,6 +139,8 @@ func TestParseRejects(t *testing.T) {
 		"кривая цель":        func(m map[string]any) { field(m, "str")["modifierTarget"] = "Сила + 2" },
 		"core не ядра":       func(m map[string]any) { m["core"] = map[string]any{"abilities.str": "str"} },
 		"core в пустоту":     func(m map[string]any) { m["core"] = map[string]any{"ac": "nope"} },
+		"хиты формулой":      func(m map[string]any) { m["core"] = map[string]any{"hp.current": "str_mod"} },
+		"хиты мимо трекера":  func(m map[string]any) { m["core"] = map[string]any{"hp.max": "luck"} },
 		"нет раскладки":      func(m map[string]any) { m["layout"] = []any{} },
 		"секция в пустоту":   func(m map[string]any) { m["layout"] = []any{map[string]any{"fields": []any{"nope"}}} },
 		"поля и виджет":      func(m map[string]any) { m["layout"] = []any{map[string]any{"fields": []any{"ac"}, "widget": "hp"}} },

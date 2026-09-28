@@ -265,3 +265,67 @@ func TestInitiativeFormulaEdgeCases(t *testing.T) {
 		t.Fatalf("без схемы: броски %v", roller.formulas)
 	}
 }
+
+// Общие поля ядра — по схеме системы: КД формулой приходит в трекер уже
+// посчитанной (основа, без модификаторов — их трекер накладывает сам).
+func TestCombatantCoreFromSchema(t *testing.T) {
+	sheetSchema, err := schema.Parse([]byte(`{
+		"format": "beacon-schema/v1", "kind": "sheet",
+		"core": {"ac": "defense", "hp.current": "hp", "hp.max": "hp_max"},
+		"fields": {
+			"hp": {"type": "number", "path": "combat.hpCurrent", "label": "Хиты"},
+			"hp_max": {"type": "number", "path": "combat.hpMax", "label": "Макс."},
+			"defense": {"type": "computed", "formula": "10 + @stat.ловкость", "label": "Защита", "modifierTarget": "ac"},
+			"stats": {"type": "table", "path": "stats", "label": "Х", "statRows": {"name": "name", "value": "value"}, "columns": [
+				{"id": "name", "type": "text", "path": "name", "label": "Н"},
+				{"id": "value", "type": "number", "path": "value", "label": "З"}
+			]}
+		},
+		"layout": [{"fields": ["defense"]}]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	monsterSchema, err := schema.Parse([]byte(`{
+		"format": "beacon-schema/v1", "kind": "monster",
+		"core": {"ac": "armor", "hp.max": "vitality"},
+		"fields": {
+			"armor": {"type": "computed", "formula": "@base_ac + 2", "label": "Защита"},
+			"vitality": {"type": "computed", "formula": "@level * 6", "label": "Хиты"}
+		},
+		"layout": [{"fields": ["armor", "vitality"]}]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := testRoom()
+	r.dice = &fixedRoller{total: 5}
+	r.schemas = map[string]*schema.Schema{schema.KindSheet: sheetSchema, schema.KindMonster: monsterSchema}
+	chars := memory.NewCharacterStore()
+	sheet := domain.DefaultCharacterSheet()
+	sheet.Combat.AC = 99
+	sheet.Combat.HPCurrent, sheet.Combat.HPMax = 7, 12
+	sheet.Stats = []domain.FreeStat{{Name: "Ловкость", Value: 3}}
+	if err := chars.Create(context.Background(), &domain.Character{ID: "char-1", Name: "Герой", Sheet: sheet}); err != nil {
+		t.Fatal(err)
+	}
+	r.characters = chars
+	var m domain.Monster
+	if err := json.Unmarshal([]byte(`{"id":"ogre","name":"Огр","ac":1,"hp":1,"base_ac":11,"level":4}`), &m); err != nil {
+		t.Fatal(err)
+	}
+	r.monsters = &fakeMonsters{list: []*domain.Monster{&m}}
+
+	r.handleAddCombatant(domain.ClientMsg{CharacterID: "char-1"})
+	r.handleAddCombatant(domain.ClientMsg{MonsterID: "ogre"})
+	byName := map[string]*domain.Combatant{}
+	for _, c := range r.combat.Combatants {
+		byName[c.Name] = c
+	}
+	if c := byName["Герой"]; c == nil || c.AC != 13 || c.HPCurrent != 7 || c.HPMax != 12 {
+		t.Fatalf("герой: %+v, ждали КД 13 из формулы и хиты 7/12", c)
+	}
+	if c := byName["Огр"]; c == nil || c.AC != 13 || c.HPMax != 24 || c.HPCurrent != 24 {
+		t.Fatalf("огр: %+v, ждали КД 13 и хиты 24 из формул", c)
+	}
+}
