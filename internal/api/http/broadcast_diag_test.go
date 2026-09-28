@@ -3,6 +3,7 @@ package http_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -46,7 +47,15 @@ func diagServer(t *testing.T) (*httptest.Server, *http.Cookie) {
 	return srv, &http.Cookie{Name: domain.SessionCookieName, Value: "sess-dm"}
 }
 
-func do(t *testing.T, srv *httptest.Server, method, path, ua, body string, cookies ...*http.Cookie) *http.Response {
+// reply — прочитанный ответ: тело забираем и закрываем сразу, тестам нужны
+// только статус, заголовки и байты.
+type reply struct {
+	StatusCode int
+	Header     http.Header
+	Body       []byte
+}
+
+func do(t *testing.T, srv *httptest.Server, method, path, ua, body string, cookies ...*http.Cookie) reply {
 	t.Helper()
 	req, err := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
 	if err != nil {
@@ -67,8 +76,12 @@ func do(t *testing.T, srv *httptest.Server, method, path, ua, body string, cooki
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
-	t.Cleanup(func() { _ = resp.Body.Close() })
-	return resp
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("%s %s: тело: %v", method, path, err)
+	}
+	return reply{StatusCode: resp.StatusCode, Header: resp.Header, Body: data}
 }
 
 type diagScreen struct {
@@ -101,7 +114,7 @@ func TestBroadcastDiagCollectsScreen(t *testing.T) {
 		t.Fatalf("журнал у ДМ: статус %d", resp.StatusCode)
 	}
 	var screens []diagScreen
-	if err := json.NewDecoder(resp.Body).Decode(&screens); err != nil {
+	if err := json.Unmarshal(resp.Body, &screens); err != nil {
 		t.Fatalf("разбор журнала: %v", err)
 	}
 	if len(screens) != 1 {
@@ -132,7 +145,7 @@ func TestBroadcastDiagBounded(t *testing.T) {
 	}
 
 	var screens []diagScreen
-	if err := json.NewDecoder(do(t, srv, http.MethodGet, "/api/broadcast/diag", "", "", dm).Body).Decode(&screens); err != nil {
+	if err := json.Unmarshal(do(t, srv, http.MethodGet, "/api/broadcast/diag", "", "", dm).Body, &screens); err != nil {
 		t.Fatalf("разбор журнала: %v", err)
 	}
 	if len(screens) > 8 {
@@ -179,7 +192,7 @@ func TestBroadcastLinkLANOrigins(t *testing.T) {
 		ShortPath  string   `json:"shortPath"`
 		LANOrigins []string `json:"lanOrigins"`
 	}
-	if err := json.NewDecoder(do(t, srv, http.MethodGet, "/api/broadcast/link", "", "", dm).Body).Decode(&link); err != nil {
+	if err := json.Unmarshal(do(t, srv, http.MethodGet, "/api/broadcast/link", "", "", dm).Body, &link); err != nil {
 		t.Fatalf("разбор ссылки: %v", err)
 	}
 	if link.ShortPath != "/tv" || len(link.LANOrigins) != 1 || link.LANOrigins[0] != "http://192.168.1.5:8080" {
