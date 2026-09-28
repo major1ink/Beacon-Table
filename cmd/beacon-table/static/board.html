@@ -140,7 +140,9 @@
     .board-card-abilities {
       display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; text-align: center;
     }
-    .board-card-ability { display: flex; flex-direction: column; white-space: nowrap; }
+    .board-card-abilities-free { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
+    .board-card-ability { display: flex; flex-direction: column; white-space: nowrap; min-width: 0; }
+    .board-card-abilities-free .board-card-ability-label { overflow: hidden; text-overflow: ellipsis; }
     .board-card-foot { display: flex; gap: 12px; color: var(--text-dim); font-size: 11px; }
     .board-card-icon { display: inline-flex; align-items: center; flex: 0 0 auto; }
     .board-card-audio .board-card-head > .board-card-icon { width: 28px; height: 28px; justify-content: center; }
@@ -186,17 +188,23 @@
       .image-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 46dvh; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/board-CBIVmPLj.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-D_7v_quZ.js">
+  <script type="module" crossorigin src="/assets/board-BKCe8c6B.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-CggMeEDf.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-CgzC8Bmf.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-fpQr7-o6.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-CUPI_iM0.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-c8x08emo.js">
   <link rel="modulepreload" crossorigin href="/assets/back-stack-C8cwVhaZ.js">
   <link rel="modulepreload" crossorigin href="/assets/native-app-BgGKemc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-BeuIQAb3.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-C2eYOY4t.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-Dp43xbUc.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-BuAIuyng.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifiers-DWE3CZ-n.js">
+  <link rel="modulepreload" crossorigin href="/assets/schema-formula-ClI-_yAR.js">
+  <link rel="modulepreload" crossorigin href="/assets/schema-layout-CnaQiWd_.js">
+  <link rel="modulepreload" crossorigin href="/assets/schema-list-B_supIx3.js">
+  <link rel="modulepreload" crossorigin href="/assets/schema-summary-DuapQZmy.js">
+  <link rel="modulepreload" crossorigin href="/assets/schemas-BCuaP13b.js">
   <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
   <link rel="stylesheet" crossorigin href="/assets/board-BcAUh2Nm.css">
 </head>
