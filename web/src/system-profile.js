@@ -4,12 +4,15 @@
 // веса и какие валюты, задаёт система (у D&D — «фнт» и пять монет, у «Своей
 // системы» — «кг» и «Деньги»).
 //
+// Куб проверки (rolls.check) — чем бросается голый модификатор в тексте.
+//
 // Загрузка одна на страницу (loadSystemProfile в boot страницы); функции
 // форматирования синхронные и до загрузки отдают нейтральный вид — число
 // без единицы, без валют.
 import { fetchSystemProfile } from "./api.js";
 
-let profile = { id: "", title: "", sheet: "", units: { weight: "" }, currencies: [] };
+// До загрузки куб проверки — «1d20», как у «Своей системы» (domain.CustomRolls).
+let profile = { id: "", title: "", sheet: "", units: { weight: "" }, currencies: [], rolls: { check: "1d20" } };
 let loading = null;
 
 export function loadSystemProfile() {
@@ -23,6 +26,7 @@ export function loadSystemProfile() {
             sheet: p.sheet || "",
             units: { weight: (p.units && p.units.weight) || "" },
             currencies: Array.isArray(p.currencies) ? p.currencies : [],
+            rolls: { check: p.rolls && typeof p.rolls.check === "string" ? p.rolls.check : "1d20" },
           };
         }
         return profile;
@@ -33,6 +37,10 @@ export function loadSystemProfile() {
 }
 
 export const weightUnit = () => profile.units.weight;
+
+// checkDie — куб проверки системы («1d20», «2d6»; "" — голый модификатор в
+// тексте не бросается), см. inline-rolls.js.
+export const checkDie = () => profile.rolls.check;
 
 // Виды листа, которые клиент умеет рисовать поимённо (бланки встроенного
 // D&D); всё остальное — универсальный лист (domain.SheetUniversal).

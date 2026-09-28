@@ -22,7 +22,7 @@ import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { renderKvTable } from "../kv-table.js";
-import { renderSpellPreview } from "../spell-preview.js";
+import { renderSpellPreview, statusChip } from "../spell-preview.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { SCHOOLS, schoolInfo } from "../spell-school.js";
 import { withRollMode } from "../roll-mode.js";
@@ -236,19 +236,15 @@ function descFold(readOnly) {
 }
 
 // appliesFold — виджет схемы «Накладывает»: в правке — выбор состояний, в
-// чтении — их список (пустой не показывается).
+// чтении — чипы, как в превью D&D (пустой не показывается). У ДМ внутри
+// окна стола чип накладывает метку на токен (spell-preview.js: statusChip).
 function appliesFold(readOnly, title) {
   if (!readOnly) return fold({ title, body: [statusesField(() => {})], open: true });
   if (!spell.statuses.length) return null;
-  const chips = spell.statuses.map((ref) => {
-    const cond = allConditions.find((c) => c.slug === ref.slug);
-    const extra = [ref.rounds ? ref.rounds + " раунд." : "", ref.note || ""].filter(Boolean).join(", ");
-    return h("span", { class: "card-chip" }, [
-      h("span", { class: "spp-chip-g", style: cond && cond.color ? "color:" + cond.color : "" }, [glyphNode(cond ? cond.icon : "question", "")]),
-      (ref.name || ref.slug) + (extra ? ` (${extra})` : ""),
-    ]);
-  });
-  return fold({ title, body: [h("div", { class: "card-chips" }, chips)], open: true });
+  const canApply = isAdminView && window.parent !== window;
+  const chips = spell.statuses.map((ref) => statusChip(ref, { conditions: allConditions, canApply, spellName: spell.name }));
+  const note = canApply ? h("span", { class: "card-aside-note", text: "Клик по чипу — наложить метку на токен на карте." }) : null;
+  return fold({ title, body: [h("div", { class: "card-chips" }, chips), note], open: true });
 }
 
 // renderSchemaView — карточка по схеме системы (schema-card.js): шапка без

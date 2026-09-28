@@ -41,6 +41,10 @@ import { openFloatingWindow } from "../floating-window.js";
 import { icon } from "../icons.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardSubtitle } from "../schema-list.js";
+import { compactStats, coreSummary } from "../schema-summary.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
 
 const editorRoot = document.getElementById("editorRoot");
 const statusEl = document.getElementById("status");
@@ -181,6 +185,39 @@ function abilitiesRow(abilities) {
   );
 }
 
+// compiledSchema — схема вида kind системы мира, разобранная один раз; null
+// — у системы старые лист и статблок D&D.
+const compiledSchemas = new Map();
+function compiledSchema(kind) {
+  const s = schemaFor(kind);
+  if (!s) return null;
+  const got = compiledSchemas.get(kind);
+  if (got && got.schema === s) return got;
+  const c = compileSchema(s);
+  compiledSchemas.set(kind, c);
+  return c;
+}
+
+// MAX_TILES — сколько плиток характеристик помещается на карточку доски.
+const MAX_TILES = 12;
+
+// schemaTiles — плитки характеристик по схеме (schema-summary.js:
+// compactStats): свободные характеристики и поля с коротким названием.
+function schemaTiles(compiled, data) {
+  const tiles = compactStats(compiled, data, []).slice(0, MAX_TILES);
+  if (!tiles.length) return null;
+  return createElement(
+    "div",
+    { className: "board-card-abilities board-card-abilities-free", key: "ab" },
+    tiles.map((t, i) =>
+      createElement("div", { className: "board-card-ability", key: i }, [
+        createElement("span", { className: "board-card-ability-label", key: "l", title: t.label }, t.label),
+        createElement("span", { key: "v" }, t.note ? t.value + " (" + t.note + ")" : t.value),
+      ])
+    )
+  );
+}
+
 function statCell(label, value, key) {
   return createElement("div", { className: "board-card-stat", key }, [
     createElement("span", { className: "board-card-stat-label", key: "l" }, label),
@@ -256,6 +293,8 @@ function renderMonsterCard(card) {
   }
   if (got.error) return cardMessage("monster", "Монстр недоступен: " + got.error);
   const m = got.data;
+  const compiled = compiledSchema("monster");
+  if (compiled) return renderSchemaMonsterCard(card, m, compiled);
   const subtitle = [m.size, m.type].filter(Boolean).join(" ") + (m.alignment ? ", " + m.alignment : "");
   const hp = m.hp ? String(m.hp) + (m.hitDice ? " (" + m.hitDice + ")" : "") : "—";
   const ac = m.ac ? String(m.ac) + (m.acNote ? " (" + m.acNote + ")" : "") : "—";
@@ -277,6 +316,29 @@ function renderMonsterCard(card) {
       createElement("span", { key: "cr" }, "Опасность " + (m.cr || "—")),
       m.proficiencyBonus ? createElement("span", { key: "pb" }, "Мастерство +" + m.proficiencyBonus) : null,
     ]),
+    monsterControls(card, m),
+  ]);
+}
+
+// renderSchemaMonsterCard — существо по схеме системы: подпись из
+// list.subtitle, защита/хиты/скорость — общие поля ядра, плитки —
+// характеристики схемы.
+function renderSchemaMonsterCard(card, m, compiled) {
+  const core = coreSummary(compiled, m, []);
+  return cardShell("monster", [
+    cardHead({
+      image: m.imageUrl,
+      name: m.name,
+      subtitle: cardSubtitle(compiled, m),
+      onOpen: () => openMonster(card.id, m.name),
+      openTitle: "Открыть карточку",
+    }),
+    createElement("div", { className: "board-card-stats", key: "stats" }, [
+      statCell("Защита", core.ac || "—", "ac"),
+      statCell("Хиты", core.hpMax || "—", "hp"),
+      statCell("Скорость", core.speed || "—", "spd"),
+    ]),
+    schemaTiles(compiled, m),
     monsterControls(card, m),
   ]);
 }
@@ -305,6 +367,8 @@ function renderCharacterCard(card) {
   if (got.error) return cardMessage("character", "Лист недоступен: " + got.error);
   const c = got.data;
   const sheet = c.sheet || {};
+  const compiled = compiledSchema("sheet");
+  if (compiled) return renderSchemaCharacterCard(card, c, sheet, compiled);
   const info = sheet.info || {};
   const combat = sheet.combat || {};
   const who = [info.class, info.level ? info.level + " ур." : ""].filter(Boolean).join(" ");
@@ -327,6 +391,33 @@ function renderCharacterCard(card) {
       statCell("Скорость", combat.speed ? combat.speed + " фт." : "—", "spd"),
     ]),
     abilitiesRow(sheet.abilities),
+  ]);
+}
+
+// renderSchemaCharacterCard — персонаж по схеме листа: подпись из
+// list.subtitle листа и имя игрока, хиты «сейчас / макс.», защита и
+// скорость — общие поля ядра (без модификаторов предметов и состояний —
+// их доска не знает), плитки — характеристики схемы.
+function renderSchemaCharacterCard(card, c, sheet, compiled) {
+  const core = coreSummary(compiled, sheet, []);
+  const player = (sheet.info && sheet.info.playerName) || c.accountUsername || "";
+  const sub = cardSubtitle(compiled, sheet);
+  const subtitle = sub + (player ? (sub ? " — " : "") + player : "");
+  const hp = core.hpMax ? (core.hp || "0") + " / " + core.hpMax : core.hp || "—";
+  return cardShell("character", [
+    cardHead({
+      image: c.avatarUrl,
+      name: c.name,
+      subtitle,
+      onOpen: () => openCharacter(card.id, c.name),
+      openTitle: "Открыть лист персонажа",
+    }),
+    createElement("div", { className: "board-card-stats", key: "stats" }, [
+      statCell("Защита", core.ac || "—", "ac"),
+      statCell("Хиты", hp, "hp"),
+      statCell("Скорость", core.speed || "—", "spd"),
+    ]),
+    schemaTiles(compiled, sheet),
   ]);
 }
 
@@ -582,13 +673,16 @@ function pickRowText(row, main, meta) {
 
 async function pickMonster() {
   const list = await fetchBestiary().catch(() => []);
+  // Подпись строки — по схеме существа (list.subtitle), без неё — тип и
+  // опасность статблока D&D.
+  const compiled = compiledSchema("monster");
+  const sub = (m) => (compiled ? cardSubtitle(compiled, m) : [m.type, m.cr ? "опасность " + m.cr : ""].filter(Boolean).join(" · "));
   const picked = await pickFromList({
     title: "Монстр на доску",
     okLabel: "Вставить",
     items: list,
     empty: "Бестиарий пуст — заведи монстра или импортируй модуль.",
-    render: (row, m) =>
-      pickRowText(row, m.name, [m.type, m.cr ? "опасность " + m.cr : ""].filter(Boolean).join(" · ")),
+    render: (row, m) => pickRowText(row, m.name, sub(m)),
   });
   return picked ? { link: monsterLink(picked.id), ...CARD_SIZE.monster } : null;
 }
@@ -897,6 +991,9 @@ async function pickImage() {
   // Журнал нужен и на чтение ссылок, и на их раздачу. Не приехал — ссылки
   // просто не разрешатся по названию, доска от этого не ломается.
   entries = await fetchJournal().catch(() => []);
+  // Схемы системы мира: по ним рисуются карточки существ и персонажей (без
+  // схем — старый вид D&D). Ошибка загрузки — тоже старый вид.
+  await loadSchemas();
 
   statusEl.style.display = "none";
   editor = mountBoardEditor(editorRoot, {

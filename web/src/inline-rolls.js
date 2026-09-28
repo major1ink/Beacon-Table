@@ -12,12 +12,19 @@
 //     и латинская "d" (см. Monster.HitDice — "8d8+16"), и кириллическая "к"
 //     (см. плейсхолдер WeaponRow.Damage — "1к8 рубящий"), поддерживаем обе;
 //   - "+4" / "-1" — голый модификатор без кубика (спасброски/навыки в тексте
-//     статблока, "к попаданию" и т.п.) — трактуется как проверка/атака 1d20+N.
+//     статблока, "к попаданию" и т.п.) — трактуется как проверка/атака кубом
+//     проверки системы + N (у D&D — 1d20+N, см. rollFormula).
 //
 // Подпись броска в общем логе (см. sendRoll у бестиария/пика действий) берётся
 // из текста вокруг формулы: "+4 к попаданию" уходит в лог как "попадание",
 // блок урона из "Попадание: 5 (1к6 + 2)" — как "урон" (см. rollContextLabel).
 // Если по тексту не понять — подписью, как и раньше, остаётся сама формула.
+// Формула сразу за названием характеристики («Лов +5») подписывается полным
+// названием из схемы системы (short у поля, см. statNames).
+
+import { diceRoll, parse } from "./schema-formula.js";
+import { SCHEMA_KINDS, loadSchemas, schemaFor } from "./schemas.js";
+import { checkDie, loadSystemProfile } from "./system-profile.js";
 
 // diceOrModRe — группа 1: символ перед совпадением (или начало строки), не
 // часть замены, нужен только чтобы не проверять вручную границу слова без
@@ -36,14 +43,56 @@
 // Открывающая остаётся: "5 (1к6 + 2)" кликается целиком.
 const diceOrModRe = /(^|[^\w)])(\d{0,3}[dк]\d{1,4}(?:\s*[+-]\s*\d{1,3})?|[+-]\d{1,3})(?!\w)/g;
 
-// normalizeFormula — под серверный парсер (internal/service/dice.go:
+// rollFormula — под серверный парсер (internal/service/dice.go:
 // diceFormulaRe): латинская "d", без пробелов. Больше одного блока кубиков
 // в одной формуле сервер теперь принимает, но из прозы мы их и не собираем —
-// diceOrModRe выше распознаёт по одному блоку за раз. Голый
-// модификатор ("+4") трактуется как бросок 1d20+модификатор (проверка/атака).
-function normalizeFormula(raw) {
-  const compact = raw.replace(/к/g, "d").replace(/\s+/g, "");
-  return /^[+-]/.test(compact) ? "1d20" + compact : compact;
+// diceOrModRe выше распознаёт по одному блоку за раз. Голый модификатор
+// ("+4") бросается кубом проверки системы (check, GET /api/system: rolls.check
+// — у D&D и «Своей системы» «1d20»): «1d20+4», «2d6+4». Пустой check — голый
+// модификатор не бросается (null).
+export function rollFormula(raw, check) {
+  const compact = String(raw).replace(/к/g, "d").replace(/\s+/g, "");
+  if (!/^[+-]/.test(compact)) return compact;
+  if (!check) return null;
+  try {
+    return diceRoll(parse(`${check} ${compact}`, true), () => 0).formula;
+  } catch {
+    return null;
+  }
+}
+
+// statNames — словарь «короткое или полное название поля (строчными) →
+// полное название» из схем системы мира: у полей с short («Лов» →
+// «Ловкость»). По нему «Лов +5» в тексте уходит в лог подписью «Ловкость»,
+// а не «+5».
+export function statNames(schemas) {
+  const out = new Map();
+  const add = (f) => {
+    if (!f || !f.short || !f.label) return;
+    out.set(String(f.short).trim().toLowerCase(), f.label);
+    out.set(String(f.label).trim().toLowerCase(), f.label);
+  };
+  for (const schema of schemas) {
+    for (const f of Object.values((schema && schema.fields) || {})) {
+      add(f);
+      for (const c of (f && f.columns) || []) add(c);
+    }
+  }
+  return out;
+}
+
+// namedLabel — полное название характеристики, если формула идёт сразу за
+// её названием («Спасброски: Лов +5» → «Ловкость»); "" — нет. Название
+// бывает из нескольких слов («Ловкость рук»), точка сокращения («Лов.»)
+// не мешает.
+export function namedLabel(before, names) {
+  if (!names || !names.size) return "";
+  const words = String(before).replace(/[.:]?\s*$/, "").split(/[\s,;:(]+/);
+  for (let n = Math.min(3, words.length); n >= 1; n--) {
+    const key = words.slice(-n).join(" ").replace(/\.$/, "").toLowerCase();
+    if (key && names.has(key)) return names.get(key);
+  }
+  return "";
 }
 
 // rollContextLabel — по тексту вокруг формулы понимает, ЧТО это за бросок,
@@ -75,6 +124,9 @@ export function rollContextLabel(before, after) {
 // уже вызывают кнопки 🎲 (см. bestiary.js/spellbook.js: sendRoll).
 export function enhanceRolls(containerEl, sendRoll) {
   if (!containerEl) return;
+  loadSystemProfile();
+  loadSchemas();
+  const bareMods = checkDie() !== "";
   const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const tag = node.parentElement && node.parentElement.tagName;
@@ -97,17 +149,25 @@ export function enhanceRolls(containerEl, sendRoll) {
     while ((m = diceOrModRe.exec(text))) {
       const start = m.index + m[1].length; // после ведущего пограничного символа (он остаётся текстом)
       const matched = m[2];
+      // Система без куба проверки: голый модификатор остаётся текстом.
+      if (!bareMods && /^[+-]/.test(matched)) continue;
       if (start > last) frag.appendChild(document.createTextNode(text.slice(last, start)));
       const a = document.createElement("a");
       a.className = "inline-roll";
       a.href = "#";
       a.title = "Бросить " + matched;
       a.textContent = matched;
-      const formula = normalizeFormula(matched);
-      const label = rollContextLabel(text.slice(0, start), text.slice(start + matched.length)) || matched;
-      a.addEventListener("click", (e) => {
+      const before = text.slice(0, start);
+      const after = text.slice(start + matched.length);
+      // Куб проверки и названия полей — из профиля и схем системы мира:
+      // загружаются один раз на страницу, к клику они уже есть.
+      a.addEventListener("click", async (e) => {
         e.preventDefault();
-        sendRoll(formula, label);
+        await Promise.all([loadSystemProfile(), loadSchemas()]);
+        const formula = rollFormula(matched, checkDie());
+        if (!formula) return;
+        const names = statNames(SCHEMA_KINDS.map(schemaFor));
+        sendRoll(formula, namedLabel(before, names) || rollContextLabel(before, after) || matched);
       });
       frag.appendChild(a);
       last = start + matched.length;

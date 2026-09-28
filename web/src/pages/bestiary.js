@@ -32,6 +32,7 @@ import { formatWeight, loadSystemProfile } from "../system-profile.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardSubtitle, renderSchemaCard } from "../schema-card.js";
+import { coreSummary } from "../schema-summary.js";
 
 // ==================== state ====================
 
@@ -251,7 +252,8 @@ function compatFold(readOnly, onPills) {
 
 // renderSchemaView — карточка по схеме системы (schema-card.js): шапка без
 // полей D&D, середина — из схемы, «Описание» и «Совместимость» — как
-// обычно. Превью и импорт Foundry — только у статблока D&D.
+// обычно. Превью «На карте и в трекере» — по общим полям ядра схемы;
+// импорт Foundry — только у статблока D&D.
 function renderSchemaView(root, compiled) {
   const readOnly = !editMode;
   const pills = () => [monster.source ? pill(monster.source, "gold") : null, ...monster.tags.map((t) => pill(t))];
@@ -265,26 +267,37 @@ function renderSchemaView(root, compiled) {
     pills: pills(),
     subtitle,
     readOnly,
-    controls: readOnly ? undefined : [artField(() => hero.setGlyph(monsterGlyph(), monster.imageUrl))],
+    controls: readOnly ? undefined : [artField(() => { hero.setGlyph(monsterGlyph(), monster.imageUrl); preview.update(); })],
     onName: (v) => {
       monster.name = v;
       document.getElementById("monsterTitle").textContent = v || "Без имени";
       scheduleSave();
+      preview.update();
     },
   });
   root.appendChild(hero.el);
   root.appendChild(ornament());
+  const preview = renderMonsterPreview(monster, {
+    glyphNode,
+    numbers: () => {
+      const c = coreSummary(compiled, monster, []);
+      return { ini: c.initiative, ac: c.ac || "—", hp: c.hpMax || "—" };
+    },
+  });
   const middle = renderSchemaCard({
     compiled,
     data: monster,
     readOnly,
     scheduleSave,
-    onChange: () => (subtitle.textContent = cardSubtitle(compiled, monster)),
+    onChange: () => {
+      subtitle.textContent = cardSubtitle(compiled, monster);
+      preview.update();
+    },
     sendRoll,
     widgets: { inventory: () => invSection(readOnly), spells: () => spellsSection(readOnly) },
   });
   const desc = textBlock("Описание", "description", readOnly ? { readOnly: true, open: false } : {});
-  root.appendChild(renderBody(cardBody([...middle, desc, compatFold(readOnly, () => hero.setPills(pills()))]), null));
+  root.appendChild(renderBody(cardBody([...middle, desc, compatFold(readOnly, () => hero.setPills(pills()))]), [preview]));
 }
 
 function renderEditView(root) {

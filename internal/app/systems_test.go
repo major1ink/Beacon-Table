@@ -24,6 +24,7 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 		Units:           &domain.SystemUnits{Weight: "камн"},
 		Sheet:           "luck-sheet",
 		Currencies:      []domain.Currency{{Key: "shells", Label: "Ракушки"}},
+		Rolls:           &domain.SystemRolls{Check: "2d6"},
 	})), nil, "")
 
 	custom := &domain.Company{System: domain.SystemCustom}
@@ -53,17 +54,17 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 
 	// Единицы и валюты: у системы — свои, у «Своей системы» и мира без
 	// модуля — «кг» и «Деньги».
-	if p := m.SystemProfile(luck); p.Title != "Удача" || p.Sheet != "luck-sheet" || p.Units.Weight != "камн" || len(p.Currencies) != 1 || p.Currencies[0].Key != "shells" {
+	if p := m.SystemProfile(luck); p.Title != "Удача" || p.Sheet != "luck-sheet" || p.Units.Weight != "камн" || len(p.Currencies) != 1 || p.Currencies[0].Key != "shells" || p.Rolls.Check != "2d6" {
 		t.Errorf("профиль системы: %+v", p)
 	}
 	for name, c := range map[string]*domain.Company{"своя": custom, "без модуля": gone, "мир не запущен": nil} {
 		p := m.SystemProfile(c)
-		if p.Sheet != domain.SheetUniversal || p.Units.Weight != "кг" || len(p.Currencies) != 1 || p.Currencies[0].Key != "money" {
+		if p.Sheet != domain.SheetUniversal || p.Units.Weight != "кг" || len(p.Currencies) != 1 || p.Currencies[0].Key != "money" || p.Rolls.Check != "1d20" {
 			t.Errorf("%s: профиль %+v", name, p)
 		}
 	}
 	// Система без units/currencies в module.json — умолчания «Своей системы».
-	if p := m.SystemProfile(&domain.Company{System: domain.SystemDnD5e2024}); p.Sheet != domain.SheetUniversal || p.Units.Weight != "кг" || p.Currencies[0].Key != "money" {
+	if p := m.SystemProfile(&domain.Company{System: domain.SystemDnD5e2024}); p.Sheet != domain.SheetUniversal || p.Units.Weight != "кг" || p.Currencies[0].Key != "money" || p.Rolls.Check != "1d20" {
 		t.Errorf("система без единиц: %+v", p)
 	}
 }

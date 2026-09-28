@@ -171,13 +171,13 @@ func (m *CompanyManager) ModifierTargets(company *domain.Company) []domain.Modif
 }
 
 // SystemProfile — система мира company для клиента: название, вид листа,
-// единица веса и валюты. Всё это — из модуля системы; «Своя система»,
+// единица веса, валюты и куб проверки. Всё это — из модуля системы; «Своя система»,
 // модуль не установлен или раздела нет — умолчания «Своей системы»
 // (универсальный лист, «кг», «Деньги»).
 func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemProfile {
 	p := domain.SystemProfile{
 		ID: domain.SystemCustom, Title: "Своя система (без правил)", Sheet: domain.SheetUniversal,
-		Units: domain.CustomUnits(), Currencies: domain.CustomCurrencies(),
+		Units: domain.CustomUnits(), Currencies: domain.CustomCurrencies(), Rolls: domain.CustomRolls(),
 	}
 	if company == nil || company.System == domain.SystemCustom {
 		return p
@@ -196,6 +196,9 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 	}
 	if len(mod.Manifest.Currencies) > 0 {
 		p.Currencies = mod.Manifest.Currencies
+	}
+	if mod.Manifest.Rolls != nil {
+		p.Rolls = *mod.Manifest.Rolls
 	}
 	return p
 }

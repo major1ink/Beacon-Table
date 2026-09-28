@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"beacon-table/internal/formula"
 )
 
 // SystemUnits — единицы игровой системы для чисел, которые ядро хранит без
@@ -21,14 +23,23 @@ type Currency struct {
 	Title string `json:"title,omitempty"`
 }
 
+// SystemRolls — броски системы, которые ядро делает само. Check — куб
+// проверки: голый модификатор в тексте карточки («+4») бросается как
+// Check + модификатор («1d20+4»); пустая строка — голый модификатор не
+// бросается.
+type SystemRolls struct {
+	Check string `json:"check"`
+}
+
 // SystemProfile — то, что клиенту нужно знать о системе мира, чтобы
-// показать лист, вес и деньги (см. GET /api/system).
+// показать лист, вес и деньги и бросать кубы (см. GET /api/system).
 type SystemProfile struct {
 	ID         string      `json:"id"`
 	Title      string      `json:"title"`
 	Sheet      string      `json:"sheet"`
 	Units      SystemUnits `json:"units"`
 	Currencies []Currency  `json:"currencies"`
+	Rolls      SystemRolls `json:"rolls"`
 }
 
 // SheetUniversal — вид листа по умолчанию: универсальный лист (хиты,
@@ -61,6 +72,35 @@ func CustomUnits() SystemUnits { return SystemUnits{Weight: "кг"} }
 
 func CustomCurrencies() []Currency {
 	return []Currency{{Key: "money", Label: "Деньги"}}
+}
+
+// CustomRolls — броски «Своей системы» и системы без раздела rolls:
+// проверка — 1d20.
+func CustomRolls() SystemRolls { return SystemRolls{Check: "1d20"} }
+
+// ValidateRolls — броски из module.json: куб проверки — формула из одних
+// кубов и чисел без ссылок («1d20», «2d6», «1d20+1»), хотя бы с одним
+// кубом; пустая — голый модификатор не бросается.
+func ValidateRolls(r *SystemRolls) error {
+	r.Check = strings.TrimSpace(r.Check)
+	if r.Check == "" {
+		return nil
+	}
+	expr, err := formula.Parse(r.Check, true)
+	if err != nil {
+		return fmt.Errorf("куб проверки %q: %w", r.Check, err)
+	}
+	if len(expr.Refs()) > 0 {
+		return fmt.Errorf("куб проверки %q: ссылки на поля здесь не бывают", r.Check)
+	}
+	roll, err := expr.Dice(nil)
+	if err != nil {
+		return fmt.Errorf("куб проверки %q: %w", r.Check, err)
+	}
+	if roll.Dice == 0 {
+		return fmt.Errorf("куб проверки %q: нет ни одного куба", r.Check)
+	}
+	return nil
 }
 
 // MaxCurrencies — сколько валют может быть у системы и в Coins листа;

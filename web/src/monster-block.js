@@ -80,21 +80,29 @@ export function renderAbilityTiles(monster, { readOnly, onChange, sendRoll }) {
   return grid;
 }
 
+// legacyNumbers — числа бойца у статблока D&D: инициатива — модификатор
+// Ловкости, КД и хиты — поля статблока.
+const legacyNumbers = (monster) => ({ ini: fmtMod(abilityMod(monster.abilities.dex)), ac: monster.ac || 0, hp: monster.hp || 0 });
+
 // renderMonsterPreview — «На карте и в трекере»: токен с артом/глифом и чип
 // бойца с инициативой, КД и хитами — те числа, с которыми существо появится
-// на карте (см. pages/dm.js: перетаскивание из списка существ).
-export function renderMonsterPreview(monster, { glyphNode }) {
+// на карте (см. pages/dm.js: перетаскивание из списка существ). numbers() →
+// { ini, ac, hp } текстом; по умолчанию — статблок D&D, у существа по схеме
+// — общие поля ядра (schema-summary.js: coreSummary). Пустая ini — схема
+// инициативу не задаёт (её бросает сервер по правилам боя системы), в чипе
+// её нет.
+export function renderMonsterPreview(monster, { glyphNode, numbers = () => legacyNumbers(monster) }) {
   const root = el("div", { class: "mp" });
   root.update = () => {
     root.innerHTML = "";
     const art = monster.imageUrl ? el("img", { src: monster.imageUrl, alt: "" }) : glyphNode(monsterGlyphName(monster), "");
-    const ini = fmtMod(abilityMod(monster.abilities.dex));
+    const { ini, ac, hp } = numbers();
     root.append(
       el("span", { class: "card-lbl", text: "На карте и в трекере" }),
       el("div", { class: "mp-token", role: "img", "aria-label": "Токен" }, [art]),
       el("div", { class: "mp-chip" }, [
         el("span", { class: "mp-av" }, [monster.imageUrl ? el("img", { src: monster.imageUrl, alt: "" }) : glyphNode(monsterGlyphName(monster), "")]),
-        el("span", {}, [el("div", { text: monster.name || "Без имени" }), el("div", { class: "mp-nums", html: `ини <b>${escapeHtml(ini)}</b> · КД <b>${escapeHtml(monster.ac || 0)}</b> · <b>${escapeHtml(monster.hp || 0)}/${escapeHtml(monster.hp || 0)}</b>` })]),
+        el("span", {}, [el("div", { text: monster.name || "Без имени" }), el("div", { class: "mp-nums", html: (ini ? `ини <b>${escapeHtml(ini)}</b> · ` : "") + `КД <b>${escapeHtml(ac)}</b> · <b>${escapeHtml(hp)}/${escapeHtml(hp)}</b>` })]),
       ]),
       el("span", { class: "card-aside-note", html: "Перетащи существо из списка на карту — токен и боец в трекере появятся с этими числами. " + icon("creature", { size: 12 }) })
     );

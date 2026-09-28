@@ -122,12 +122,16 @@ func TestManifestUnitsAndCurrencies(t *testing.T) {
 		return strings.Replace(manifestJSON("sys-x", "1.0.0", extra), `"content"`, `"system"`, 1)
 	}
 	bad := map[string]string{
-		"у контента":         manifestJSON("a", "1.0.0", `"currencies":[{"key":"gp","label":"ЗМ"}]`),
-		"единицы у контента": manifestJSON("a", "1.0.0", `"units":{"weight":"кг"}`),
-		"валюта дважды":      system(`"currencies":[{"key":"gp","label":"ЗМ"},{"key":"gp","label":"ЗМ"}]`),
-		"кривой ключ":        system(`"currencies":[{"key":"Gold","label":"ЗМ"}]`),
-		"лист у контента":    manifestJSON("a", "1.0.0", `"sheet":"universal"`),
-		"кривой вид листа":   system(`"sheet":"Big Sheet"`),
+		"у контента":          manifestJSON("a", "1.0.0", `"currencies":[{"key":"gp","label":"ЗМ"}]`),
+		"единицы у контента":  manifestJSON("a", "1.0.0", `"units":{"weight":"кг"}`),
+		"валюта дважды":       system(`"currencies":[{"key":"gp","label":"ЗМ"},{"key":"gp","label":"ЗМ"}]`),
+		"кривой ключ":         system(`"currencies":[{"key":"Gold","label":"ЗМ"}]`),
+		"лист у контента":     manifestJSON("a", "1.0.0", `"sheet":"universal"`),
+		"кривой вид листа":    system(`"sheet":"Big Sheet"`),
+		"броски у контента":   manifestJSON("a", "1.0.0", `"rolls":{"check":"1d20"}`),
+		"проверка без куба":   system(`"rolls":{"check":"5"}`),
+		"проверка со ссылкой": system(`"rolls":{"check":"1d20 + @dex"}`),
+		"кривая проверка":     system(`"rolls":{"check":"1d20 +"}`),
 	}
 	for name, raw := range bad {
 		if _, err := ParseManifest([]byte(raw)); err == nil {
@@ -143,6 +147,11 @@ func TestManifestUnitsAndCurrencies(t *testing.T) {
 	}
 	if m, err := ParseManifest([]byte(system(`"sheet":"pathfinder-2e"`))); err != nil || m.Sheet != "pathfinder-2e" {
 		t.Fatalf("вид листа: %v %+v", err, m)
+	}
+	for _, check := range []string{" 2к6 ", "1d20+1", ""} {
+		if _, err := ParseManifest([]byte(system(`"rolls":{"check":"` + check + `"}`))); err != nil {
+			t.Errorf("куб проверки %q: %v", check, err)
+		}
 	}
 }
 
