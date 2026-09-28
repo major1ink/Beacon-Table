@@ -75,3 +75,25 @@ export function formatNumber(v) {
 }
 
 export const formatSigned = (v) => (v >= 0 ? "+" : "") + formatNumber(v);
+
+// formatSubtitle — подпись карточки по шаблону схемы (list.subtitle, «Хиты
+// {hp} · Защита {ac}»): value(id) — текст поля ("" — пусто). Части между
+// «·», в которых все подстановки пустые, выпадают целиком — «Хиты  ·
+// Защита 13» не остаётся висеть.
+export function formatSubtitle(template, value) {
+  return String(template || "")
+    .split("·")
+    .map((part) => {
+      let placeholders = 0;
+      let filled = 0;
+      const text = part.replace(/\{([^{}]*)\}/g, (_, id) => {
+        placeholders++;
+        const v = String(value(id) ?? "").trim();
+        if (v) filled++;
+        return v;
+      });
+      return placeholders && !filled ? "" : text.trim();
+    })
+    .filter(Boolean)
+    .join(" · ");
+}

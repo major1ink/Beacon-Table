@@ -1,0 +1,402 @@
+// schema-fields.js — поля схемы по типам (задача «Схемы листа и карточек»):
+// плитки и таблицы режима чтения, поля ввода режима правки, таблицы строк.
+// Общие для листа персонажа (schema-sheet.js) и карточек библиотеки
+// (schema-card.js) — каждый из них раскладывает поля по-своему.
+//
+// ctx — то, что даёт вызывающий:
+//   h, compiled (schema-formula.js: compileSchema), data (лист или
+//   карточка — объект, от которого считаются пути полей), readOnly,
+//   activeModifiers() (у карточек — пусто), onRefresh(fn) — пересчитать
+//   при изменении, refresh() — пересчитать сейчас, scheduleSave(),
+//   sendResolvedRoll(результат броска, подпись), vCard(заголовок, дети).
+import { icon } from "./icons.js";
+import { explainModifiers, statTarget } from "./modifiers.js";
+import { applyInput, createEvaluator } from "./schema-formula.js";
+import { deletePath, formatNumber, formatSigned, getPath, setPath } from "./schema-layout.js";
+
+export const SCALARS = new Set(["number", "computed", "text", "bool", "select", "dice", "roll", "resource"]);
+
+// evaluatorOf — свежий расчёт по текущему состоянию листа или карточки:
+// значения и модификаторы меняются прямо во время просмотра (надел кольцо,
+// повесили метку), поэтому не кэшируется.
+export const evaluatorOf = (ctx) => createEvaluator(ctx.compiled, ctx.data, ctx.activeModifiers());
+
+// firstTextColumn — колонка-название строки таблицы (подпись броска).
+export const firstTextColumn = (f) => (f.columns || []).find((c) => c.type === "text");
+export const rollColumn = (f) => (f.columns || []).find((c) => c.type === "dice" || c.type === "roll");
+
+// liveTile — плитка, которая пересчитывается вместе с листом: read() →
+// { text, error, hint }. Ошибка формулы красит плитку и уходит в подсказку.
+export function liveTile(ctx, label, read, onclick) {
+  const { h } = ctx;
+  const value = h("b", {});
+  const node = h(onclick ? "button" : "div", { type: onclick ? "button" : undefined, class: "v-tile", onclick }, [value, h("span", { text: label })]);
+  const update = () => {
+    const r = read();
+    value.textContent = r.text;
+    node.classList.toggle("formula-error", !!r.error);
+    const title = r.error ? r.error.message : r.hint || "";
+    if (title) node.title = title;
+    else node.removeAttribute("title");
+  };
+  update();
+  ctx.onRefresh(update);
+  return node;
+}
+
+export function viewTile(ctx, id, f) {
+  const raw = () => getPath(ctx.data, f.path);
+  switch (f.type) {
+    case "number":
+    case "computed":
+      return liveTile(ctx, f.label, () => {
+        const r = evaluatorOf(ctx).value(id);
+        if (r.error) return { text: "!", error: r.error };
+        const hint = f.modifierTarget ? modifierHint(ctx, f.modifierTarget, f.type === "number" ? raw() : null) : "";
+        return { text: formatNumber(r.value), hint };
+      });
+    case "text":
+      return String(raw() ?? "").trim() ? liveTile(ctx, f.label, () => ({ text: String(raw() ?? "") })) : null;
+    case "bool":
+      return liveTile(ctx, f.label, () => ({ text: raw() ? "✓" : "—" }));
+    case "select":
+      return selectTile(ctx, f, raw());
+    case "resource": {
+      const cur = () => formatNumber(Number(getPath(ctx.data, f.path + ".current")) || 0);
+      const max = () => formatNumber(Number(getPath(ctx.data, f.path + ".max")) || 0);
+      return liveTile(ctx, f.label, () => ({ text: `${cur()} / ${max()}` }));
+    }
+    case "dice": {
+      const text = String(raw() ?? "").trim();
+      return liveTile(ctx, f.label, () => ({ text: text || "—" }), text ? () => ctx.sendResolvedRoll(evaluatorOf(ctx).rollField(id), f.label) : null);
+    }
+    case "roll":
+      return liveTile(
+        ctx,
+        f.label,
+        () => {
+          const r = evaluatorOf(ctx).rollField(id);
+          return r.error ? { text: "!", error: r.error } : { text: r.formula };
+        },
+        () => ctx.sendResolvedRoll(evaluatorOf(ctx).rollField(id), f.label)
+      );
+    default:
+      return null;
+  }
+}
+
+export function modifierHint(ctx, target, base) {
+  const parts = explainModifiers(target, ctx.activeModifiers());
+  if (!parts.length) return "";
+  return base === null || base === undefined ? parts.join("; ") : `база ${formatNumber(Number(base) || 0)}; ${parts.join("; ")}`;
+}
+
+export function selectTile(ctx, f, value) {
+  if (value === undefined || value === null || value === "") return null;
+  const opt = (f.options || []).find((o) => o.value === String(value));
+  const { h } = ctx;
+  const text = opt ? opt.label : String(value);
+  return h("div", { class: "v-tile" }, [h("b", { text, style: opt && opt.color ? `color:${opt.color}` : undefined }), h("span", { text: f.label })]);
+}
+
+export function rowsOf(ctx, f) {
+  const rows = getPath(ctx.data, f.path);
+  return Array.isArray(rows) ? rows : [];
+}
+
+// viewTable — таблица в чтении отдельной карточкой с заголовком title
+// (по умолчанию — подпись поля).
+export function viewTable(ctx, id, f, title) {
+  const { h } = ctx;
+  const heading = title || f.label;
+  const rows = rowsOf(ctx, f);
+  // Свободные характеристики: плитки «название — значение с модификаторами».
+  if (f.statRows) {
+    const nameCol = (f.columns || []).find((c) => c.id === f.statRows.name);
+    const valueCol = (f.columns || []).find((c) => c.id === f.statRows.value);
+    const extra = (f.columns || []).filter((c) => c !== nameCol && c !== valueCol && c.type === "number");
+    const named = rows.filter((row) => String(getPath(row, nameCol.path) || "").trim());
+    if (!named.length) return null;
+    return ctx.vCard(
+      heading,
+      h(
+        "div",
+        { class: "v-tiles" },
+        named.map((row) => {
+          const name = String(getPath(row, nameCol.path));
+          const notes = extra.map((c) => getPath(row, c.path)).filter((v) => v !== undefined && v !== null && v !== "");
+          const label = notes.length ? `${name} (${notes.map((v) => formatSigned(Number(v) || 0)).join(", ")})` : name;
+          return liveTile(ctx, label, () => ({
+            text: formatNumber(evaluatorOf(ctx).stat(name)),
+            hint: modifierHint(ctx, statTarget(name), getPath(row, valueCol.path)),
+          }));
+        })
+      )
+    );
+  }
+  // Таблица бросков: кнопка на строку с формулой.
+  const dice = rollColumn(f);
+  if (dice) {
+    const title = firstTextColumn(f);
+    const buttons = rows
+      .map((row, i) => ({ row, i }))
+      .filter(({ row }) => dice.type === "roll" || String(getPath(row, dice.path) || "").trim())
+      .map(({ row, i }) => {
+        const name = (title && String(getPath(row, title.path) || "").trim()) || f.label;
+        // Бросок схемы (roll) — показываем уже посчитанную формулу строки.
+        const resolved = dice.type === "roll" ? evaluatorOf(ctx).row(id, i).dice(dice.id) : null;
+        const text = resolved ? (resolved.error ? "!" : resolved.formula) : String(getPath(row, dice.path)).trim();
+        return h("button", { type: "button", class: "v-tile", title: "Бросить: " + text, onclick: () => ctx.sendResolvedRoll(evaluatorOf(ctx).row(id, i).dice(dice.id), name) }, [
+          h("b", { text }),
+          h("span", { text: name }),
+        ]);
+      });
+    return buttons.length ? ctx.vCard(heading, h("div", { class: "v-tiles" }, buttons)) : null;
+  }
+  if (!rows.length) return null;
+  const cols = (f.columns || []).filter((c) => c.type !== "roll");
+  return ctx.vCard(
+    heading,
+    h("table", { class: "dyn-table" }, [
+      h("thead", {}, [h("tr", {}, cols.map((c) => h("th", { text: c.label })))]),
+      h(
+        "tbody",
+        {},
+        rows.map((row, i) =>
+          h(
+            "tr",
+            {},
+            cols.map((c) => {
+              if (c.type === "computed") {
+                const r = evaluatorOf(ctx).row(id, i).value(c.id);
+                return h("td", { class: r.error ? "formula-error" : undefined, title: r.error ? r.error.message : undefined, text: r.error ? "!" : formatNumber(r.value) });
+              }
+              if (c.type === "bool") return h("td", { text: getPath(row, c.path) ? "✓" : "" });
+              return h("td", { text: String(getPath(row, c.path) ?? "") });
+            })
+          )
+        )
+      ),
+    ])
+  );
+}
+
+// changed — общее после любой правки: сохранить и пересчитать формулы.
+export function changed(e) {
+  e.scheduleSave();
+  e.refresh();
+}
+
+// editInput — поле ввода по типу. target — объект, от которого считается
+// f.path (лист или строка таблицы); valueOf — вычисленное значение
+// (у computed).
+export function editInput(e, id, f, target, valueOf) {
+  const { h } = e;
+  const get = () => getPath(target, f.path);
+  const set = (v) => setPath(target, f.path, v);
+  switch (f.type) {
+    case "number":
+      return exprInput(e, f, get, set);
+    case "text":
+    case "dice":
+      return plainInput(e, h("input", { type: "text", placeholder: f.placeholder }), get, set);
+    case "longtext":
+      return plainInput(e, h("textarea", { rows: 4, placeholder: f.placeholder }), get, set);
+    case "bool": {
+      const c = h("input", { type: "checkbox" });
+      c.checked = !!get();
+      if (e.readOnly) c.disabled = true;
+      else
+        c.addEventListener("change", () => {
+          set(c.checked);
+          changed(e);
+        });
+      return c;
+    }
+    case "select": {
+      const sel = h("select", {}, [h("option", { value: "", text: "—" }), ...(f.options || []).map((o) => h("option", { value: o.value, text: o.label }))]);
+      sel.value = String(get() ?? "");
+      if (e.readOnly) sel.disabled = true;
+      else
+        sel.addEventListener("change", () => {
+          if (sel.value) set(sel.value);
+          else deletePath(target, f.path);
+          changed(e);
+        });
+      return sel;
+    }
+    case "resource":
+      return h("span", { class: "schema-resource" }, [
+        exprInput(e, f, () => getPath(target, f.path + ".current"), (v) => setPath(target, f.path + ".current", v)),
+        h("span", { text: "/" }),
+        exprInput(e, f, () => getPath(target, f.path + ".max"), (v) => setPath(target, f.path + ".max", v)),
+      ]);
+    case "computed":
+      return computedOutput(e, valueOf || (() => evaluatorOf(e).value(id)));
+    default:
+      return null;
+  }
+}
+
+export function plainInput(e, inp, get, set) {
+  inp.value = get() ?? "";
+  if (e.readOnly) inp.disabled = true;
+  else
+    inp.addEventListener("input", () => {
+      set(inp.value);
+      changed(e);
+    });
+  return inp;
+}
+
+// exprInput — числовое поле, которое понимает выражение (schema-formula.js:
+// applyInput): «-5» и «+3» — от текущего, «12» и «=12» — новое значение,
+// «12-3» — посчитать. Применяется по Enter и при уходе из поля; ошибка
+// красит поле и уходит в подсказку, значение не меняется. Пустое
+// необязательное поле (optional) убирает ключ.
+export function exprInput(e, f, get, set) {
+  const inp = e.h("input", { type: "text", inputmode: "decimal", class: "schema-num", placeholder: f.optional ? "—" : "0", title: "«-5»/«+3» — от текущего, «12» — новое значение, «12-3» — посчитать" });
+  const show = () => {
+    const v = get();
+    inp.value = v === undefined || v === null || v === "" ? (f.optional ? "" : "0") : String(v);
+  };
+  show();
+  if (e.readOnly) {
+    inp.disabled = true;
+    return inp;
+  }
+  const commit = () => {
+    const text = inp.value.trim().replace(/[‒–—―−]/g, "-");
+    if (text === "" && f.optional) {
+      if (get() === undefined) return;
+      set(undefined);
+      changed(e);
+      return;
+    }
+    const current = Number(get()) || 0;
+    if (text === String(get() ?? "")) return;
+    const r = applyInput(current, text);
+    inp.classList.toggle("formula-error", !!r.error);
+    if (r.error) {
+      inp.title = r.error.message;
+      return;
+    }
+    inp.removeAttribute("title");
+    set(r.value);
+    show();
+    changed(e);
+  };
+  inp.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      commit();
+    }
+  });
+  inp.addEventListener("blur", commit);
+  return inp;
+}
+
+export function computedOutput(e, read) {
+  const span = e.h("span", { class: "computed" });
+  const update = () => {
+    const r = read();
+    span.textContent = r.error ? "!" : typeof r.value === "string" ? r.value : formatNumber(r.value);
+    span.classList.toggle("formula-error", !!r.error);
+    if (r.error) span.title = r.error.message;
+    else span.removeAttribute("title");
+  };
+  update();
+  e.onRefresh(update);
+  return span;
+}
+
+// rowsTable — таблица строк с «+ строка» и удалением. cells(row, i) —
+// ячейки строки; blank() — новая строка.
+export function rowsTable(e, { title, list, ensure, headers, cells, blank, bare }) {
+  const { h } = e;
+  const section = h("div", { class: bare ? "" : "section" }, [title ? h("h3", { text: title }) : null]);
+  const wrap = h("div", {});
+  section.appendChild(wrap);
+  const render = () => {
+    wrap.innerHTML = "";
+    const rows = list() || [];
+    const tbody = h("tbody", {});
+    rows.forEach((row, i) => {
+      tbody.appendChild(
+        h("tr", {}, [
+          ...cells(row, i).map((c) => h("td", {}, [c])),
+          e.readOnly
+            ? null
+            : h("td", {}, [
+                h("button", {
+                  type: "button",
+                  class: "row-del",
+                  title: "Удалить строку",
+                  html: icon("close", { size: 11 }),
+                  onclick: () => {
+                    rows.splice(i, 1);
+                    changed(e);
+                    render();
+                  },
+                }),
+              ]),
+        ])
+      );
+    });
+    wrap.appendChild(h("table", { class: "dyn-table" }, [h("thead", {}, [h("tr", {}, [...headers.map((t) => h("th", { text: t })), e.readOnly ? null : h("th", {})])]), tbody]));
+    if (!e.readOnly) {
+      wrap.appendChild(
+        h("button", {
+          type: "button",
+          class: "add-row-btn",
+          text: "+ строка",
+          onclick: () => {
+            ensure().push(blank());
+            changed(e);
+            render();
+          },
+        })
+      );
+    }
+  };
+  render();
+  return section;
+}
+
+export function blankValue(c) {
+  switch (c.type) {
+    case "number":
+      return c.optional ? undefined : 0;
+    case "bool":
+      return false;
+    case "text":
+    case "longtext":
+    case "dice":
+      return "";
+    default:
+      return undefined;
+  }
+}
+
+export function editTable(e, id, f, withTitle) {
+  const cols = (f.columns || []).filter((c) => c.type !== "roll");
+  return rowsTable(e, {
+    title: withTitle ? f.label : "",
+    bare: true,
+    list: () => rowsOf(e, f),
+    ensure: () => {
+      if (!Array.isArray(getPath(e.data, f.path))) setPath(e.data, f.path, []);
+      return getPath(e.data, f.path);
+    },
+    headers: cols.map((c) => c.label),
+    blank: () => {
+      const row = {};
+      for (const c of cols) {
+        const v = blankValue(c);
+        if (v !== undefined) setPath(row, c.path, v);
+      }
+      return row;
+    },
+    cells: (row, i) => cols.map((c) => editInput(e, c.id, c, row, c.type === "computed" ? () => evaluatorOf(e).row(id, i).value(c.id) : null)),
+  });
+}

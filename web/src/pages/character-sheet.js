@@ -241,7 +241,7 @@ function isUniversal() {
 function schemaCtx() {
   sheetEvaluator(); // разобрать схему, если ещё не
   return {
-    h, sheet, readOnly, compiled: compiledSheet,
+    h, data: sheet, readOnly, compiled: compiledSheet,
     field, textareaInput, identitySection,
     scheduleSave, sendResolvedRoll, activeModifiers,
     onRefresh: (fn) => vRefresh.push(fn),

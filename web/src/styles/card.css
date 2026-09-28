@@ -364,3 +364,16 @@
   .mb-tile input { min-height: 40px; }
   .mb-block { padding-inline: 14px; }
 }
+
+/* Карточка по схеме (schema-card.js): строка-бросок и ошибка формулы. */
+.kvt-roll { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
+.kvt-roll:hover { text-decoration: underline; }
+.kvt .formula-error, .card-fold .formula-error { color: var(--danger); outline: 1px solid var(--danger); outline-offset: 1px; }
+/* Плитки таблиц схемы на карточке (schema-fields.js: характеристики,
+   кнопки бросков) — те же классы, что на листе, своё оформление. */
+.card-fold .v-tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+.card-fold .v-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+.card-fold .v-tile b { font-size: 17px; font-weight: 600; }
+.card-fold .v-tile span { font-size: 11px; color: var(--text-dim); }
+.card-fold button.v-tile { cursor: pointer; }
+.card-fold button.v-tile:hover { background: var(--surface-hover); }

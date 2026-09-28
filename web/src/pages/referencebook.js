@@ -22,6 +22,9 @@ import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from 
 import { glyphNode } from "../condition-glyphs.js";
 import { REFERENCE_KINDS, kindInfo, kindLabel } from "../reference-kind.js";
 import { announceOwnHeader } from "../embed.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardBody, cardSubtitle, renderSchemaCard } from "../schema-card.js";
 
 // ==================== state ====================
 
@@ -97,11 +100,25 @@ function sheetPreview() {
 function renderApp() {
   const root = document.getElementById("app");
   root.innerHTML = "";
-  if (editMode) renderEditView(root);
+  const compiled = referenceSchema();
+  if (compiled) renderSchemaView(root, compiled);
+  else if (editMode) renderEditView(root);
   else renderReadView(root);
 }
 
-function renderEditView(root) {
+// compiledReference — схема записи справочника системы мира, разобранная
+// один раз; null — у системы старая карточка D&D (см. schemas.js).
+let compiledReference = null;
+function referenceSchema() {
+  const s = schemaFor("reference");
+  if (!s) return null;
+  if (!compiledReference || compiledReference.schema !== s) compiledReference = compileSchema(s);
+  return compiledReference;
+}
+
+// artField — «Арт»: загрузить свою иконку или убрать её; onArt() — после
+// смены (обновить шапку).
+function artField(onArt) {
   const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
@@ -110,8 +127,8 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       reference.imageUrl = url;
       scheduleSave();
-      hero.setGlyph(refGlyph(), reference.imageUrl);
       artBtn.textContent = "Убрать арт";
+      onArt();
     } catch (err) {
       showAlert("Не удалось загрузить иконку: " + err.message);
     }
@@ -123,11 +140,86 @@ function renderEditView(root) {
       if (reference.imageUrl) {
         reference.imageUrl = "";
         scheduleSave();
-        hero.setGlyph(refGlyph(), "");
         artBtn.textContent = "Загрузить свой…";
+        onArt();
       } else upload.click();
     },
   });
+  return h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload]);
+}
+
+// compatFold — «Совместимость и источник» (см. bestiary.js: compatFold).
+function compatFold(readOnly, onPills) {
+  const compatSummary = () => [reference.source, reference.foundryModuleId].filter(Boolean).join(" · ");
+  if (readOnly) {
+    const compat = compatSummary();
+    return compat ? fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }) : null;
+  }
+  const empty = "источник, теги, модуль Foundry";
+  const f = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary() || empty,
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => reference.source, (v) => { reference.source = v; onPills(); f.setSummary(compatSummary() || empty); }, { placeholder: "PHB'24" })),
+        labeled("Модуль Foundry", textInput(() => reference.foundryModuleId, (v) => { reference.foundryModuleId = v; f.setSummary(compatSummary() || empty); }, { placeholder: "dnd5e.classes" }), "Откуда импортирована — чтобы повторный импорт нашёл запись."),
+      ]),
+      tagsField(onPills),
+    ],
+  });
+  return f;
+}
+
+// renderSchemaView — запись по схеме системы (schema-card.js): шапка без
+// видов записей D&D, поля — из схемы, описание — как обычно. Превью «На
+// листе персонажа» и импорт — только у карточки D&D.
+function renderSchemaView(root, compiled) {
+  const readOnly = !editMode;
+  const pills = () => [reference.source ? pill(reference.source, "gold") : null, ...reference.tags.map((t) => pill(t))];
+  const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, reference) });
+  const glyph = () => glyphNode("scroll", "");
+  const hero = renderHero({
+    glyph: glyph(),
+    imageUrl: reference.imageUrl,
+    color: "",
+    name: reference.name,
+    namePlaceholder: "Название записи",
+    pills: pills(),
+    square: true,
+    subtitle,
+    readOnly,
+    controls: readOnly ? undefined : [artField(() => hero.setGlyph(glyph(), reference.imageUrl))],
+    onName: (v) => {
+      reference.name = v;
+      document.getElementById("refTitle").textContent = v || "Без имени";
+      scheduleSave();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+  const middle = renderSchemaCard({
+    compiled,
+    data: reference,
+    readOnly,
+    scheduleSave,
+    onChange: () => (subtitle.textContent = cardSubtitle(compiled, reference)),
+    sendRoll: null,
+    widgets: {},
+  });
+  let desc;
+  if (readOnly) {
+    desc = h("div", { class: "card-prose card-desc" });
+    if (reference.description && reference.description.trim()) {
+      desc.innerHTML = renderNoteHtml(reference.description);
+      wireCatalogLinks(desc);
+    } else desc.appendChild(h("p", { class: "card-note", text: "Описания пока нет." }));
+  } else {
+    desc = h("div", { class: "card-desc" }, [mdBlock("Описание", () => reference.description, (v) => (reference.description = v))]);
+  }
+  root.appendChild(renderBody(cardBody([...middle, desc, compatFold(readOnly, () => hero.setPills(pills()))]), null));
+}
+
+function renderEditView(root) {
 
   // Вид записи — известные списком, чужое значение остаётся как есть.
   const kindSel = h("select", { "aria-label": "Вид записи" });
@@ -154,7 +246,7 @@ function renderEditView(root) {
     pills: heroPills(),
     square: true,
     subtitle,
-    controls: [h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    controls: [artField(() => hero.setGlyph(refGlyph(), reference.imageUrl))],
     onName: (v) => {
       reference.name = v;
       document.getElementById("refTitle").textContent = v || "Без имени";
@@ -411,6 +503,7 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
+  await loadSchemas();
   if (!me) {
     location.href = "/";
     return;

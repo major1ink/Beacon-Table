@@ -29,6 +29,9 @@ import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
 import { formatWeight, loadSystemProfile } from "../system-profile.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardBody, cardSubtitle, renderSchemaCard } from "../schema-card.js";
 
 // ==================== state ====================
 
@@ -174,11 +177,25 @@ function kvBottomRows(onChange) {
 function renderApp() {
   const root = document.getElementById("app");
   root.innerHTML = "";
-  if (editMode) renderEditView(root);
+  const compiled = monsterSchema();
+  if (compiled) renderSchemaView(root, compiled);
+  else if (editMode) renderEditView(root);
   else renderReadView(root);
 }
 
-function renderEditView(root) {
+// compiledMonster — схема существа системы мира, разобранная один раз; null
+// — у системы старый статблок D&D (см. schemas.js).
+let compiledMonster = null;
+function monsterSchema() {
+  const s = schemaFor("monster");
+  if (!s) return null;
+  if (!compiledMonster || compiledMonster.schema !== s) compiledMonster = compileSchema(s);
+  return compiledMonster;
+}
+
+// artField — «Арт»: загрузить токен-арт или убрать его; onArt() — после
+// смены (обновить шапку и превью).
+function artField(onArt) {
   const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
@@ -187,9 +204,8 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       monster.imageUrl = url;
       scheduleSave();
-      hero.setGlyph(monsterGlyph(), monster.imageUrl);
       artBtn.textContent = "Убрать арт";
-      preview.update();
+      onArt();
     } catch (err) {
       showAlert("Не удалось загрузить арт: " + err.message);
     }
@@ -201,12 +217,77 @@ function renderEditView(root) {
       if (monster.imageUrl) {
         monster.imageUrl = "";
         scheduleSave();
-        hero.setGlyph(monsterGlyph(), "");
         artBtn.textContent = "Загрузить токен-арт…";
-        preview.update();
+        onArt();
       } else upload.click();
     },
   });
+  return h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload]);
+}
+
+// compatFold — «Совместимость и источник»: в правке — источник, модуль
+// Foundry, теги и «можно призывать»; в чтении — строка, если есть что
+// показать. onPills() — теги или источник поменялись.
+function compatFold(readOnly, onPills) {
+  const compatSummary = () => [monster.source, monster.foundryModuleId].filter(Boolean).join(" · ");
+  if (readOnly) {
+    const compat = compatSummary();
+    return compat ? fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }) : null;
+  }
+  const f = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary() || "источник, теги, модуль Foundry",
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => monster.source, (v) => { monster.source = v; onPills(); f.setSummary(compatSummary() || "источник, теги, модуль Foundry"); }, { placeholder: "MM'24" })),
+        labeled("Модуль Foundry", textInput(() => monster.foundryModuleId, (v) => { monster.foundryModuleId = v; f.setSummary(compatSummary() || "источник, теги, модуль Foundry"); }, { placeholder: "dnd5e.monsters" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
+      ]),
+      tagsField(onPills),
+      summonableField(),
+    ],
+  });
+  return f;
+}
+
+// renderSchemaView — карточка по схеме системы (schema-card.js): шапка без
+// полей D&D, середина — из схемы, «Описание» и «Совместимость» — как
+// обычно. Превью и импорт Foundry — только у статблока D&D.
+function renderSchemaView(root, compiled) {
+  const readOnly = !editMode;
+  const pills = () => [monster.source ? pill(monster.source, "gold") : null, ...monster.tags.map((t) => pill(t))];
+  const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, monster) });
+  const hero = renderHero({
+    glyph: monsterGlyph(),
+    imageUrl: monster.imageUrl,
+    color: "",
+    name: monster.name,
+    namePlaceholder: "Имя существа",
+    pills: pills(),
+    subtitle,
+    readOnly,
+    controls: readOnly ? undefined : [artField(() => hero.setGlyph(monsterGlyph(), monster.imageUrl))],
+    onName: (v) => {
+      monster.name = v;
+      document.getElementById("monsterTitle").textContent = v || "Без имени";
+      scheduleSave();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+  const middle = renderSchemaCard({
+    compiled,
+    data: monster,
+    readOnly,
+    scheduleSave,
+    onChange: () => (subtitle.textContent = cardSubtitle(compiled, monster)),
+    sendRoll,
+    widgets: { inventory: () => invSection(readOnly), spells: () => spellsSection(readOnly) },
+  });
+  const desc = textBlock("Описание", "description", readOnly ? { readOnly: true, open: false } : {});
+  root.appendChild(renderBody(cardBody([...middle, desc, compatFold(readOnly, () => hero.setPills(pills()))]), null));
+}
+
+function renderEditView(root) {
 
   // Книжный подзаголовок: размер, тип и мировоззрение правятся в нём.
   const subInput = (key, ph, size) => {
@@ -224,7 +305,7 @@ function renderEditView(root) {
     namePlaceholder: "Имя существа",
     pills: heroPills(),
     subtitle,
-    controls: [h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    controls: [artField(() => { hero.setGlyph(monsterGlyph(), monster.imageUrl); preview.update(); })],
     onName: (v) => {
       monster.name = v;
       document.getElementById("monsterTitle").textContent = v || "Без имени";
@@ -746,7 +827,7 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
-  await loadSystemProfile();
+  await Promise.all([loadSystemProfile(), loadSchemas()]);
   if (!me) {
     location.href = "/";
     return;

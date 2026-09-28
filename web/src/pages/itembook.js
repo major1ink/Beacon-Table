@@ -31,6 +31,9 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
 import { loadSystemProfile, weightUnit } from "../system-profile.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardBody, cardSubtitle, renderSchemaCard } from "../schema-card.js";
 
 // ==================== state ====================
 
@@ -118,11 +121,25 @@ function kvRows() {
 function renderApp() {
   const root = document.getElementById("app");
   root.innerHTML = "";
-  if (editMode) renderEditView(root);
+  const compiled = itemSchema();
+  if (compiled) renderSchemaView(root, compiled);
+  else if (editMode) renderEditView(root);
   else renderReadView(root);
 }
 
-function renderEditView(root) {
+// compiledItem — схема предмета системы мира, разобранная один раз; null —
+// у системы старая карточка D&D (см. schemas.js).
+let compiledItem = null;
+function itemSchema() {
+  const s = schemaFor("item");
+  if (!s) return null;
+  if (!compiledItem || compiledItem.schema !== s) compiledItem = compileSchema(s);
+  return compiledItem;
+}
+
+// artField — «Арт»: загрузить свою иконку или убрать её; onArt() — после
+// смены (обновить шапку и превью).
+function artField(onArt) {
   const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
@@ -131,9 +148,8 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       item.imageUrl = url;
       scheduleSave();
-      hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl);
       artBtn.textContent = "Убрать арт";
-      preview.update();
+      onArt();
     } catch (err) {
       showAlert("Не удалось загрузить иконку: " + err.message);
     }
@@ -145,12 +161,109 @@ function renderEditView(root) {
       if (item.imageUrl) {
         item.imageUrl = "";
         scheduleSave();
-        hero.setGlyph(glyphNode(itemGlyphName(item), ""), "");
         artBtn.textContent = "Загрузить свой…";
-        preview.update();
+        onArt();
       } else upload.click();
     },
   });
+  return h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload]);
+}
+
+// compatFold — «Совместимость и источник» (см. bestiary.js: compatFold).
+function compatFold(readOnly, onPills) {
+  const compatSummary = () => [item.source, item.foundryModuleId].filter(Boolean).join(" · ");
+  if (readOnly) {
+    const compat = compatSummary();
+    return compat ? fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }) : null;
+  }
+  const empty = "источник, теги, модуль Foundry";
+  const f = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary() || empty,
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => item.source, (v) => { item.source = v; onPills(); f.setSummary(compatSummary() || empty); }, { placeholder: "DMG'24" })),
+        labeled("Модуль Foundry", textInput(() => item.foundryModuleId, (v) => { item.foundryModuleId = v; f.setSummary(compatSummary() || empty); }, { placeholder: "dnd5e.items" }), "Откуда импортирован — чтобы повторный импорт нашёл карточку."),
+      ]),
+      tagsField(onPills),
+    ],
+  });
+  return f;
+}
+
+// descFold — «Описание»: в правке — markdown с живым рендером, в чтении —
+// текст с кликабельными формулами (пустой не показывается).
+function descFold(readOnly) {
+  if (!readOnly) {
+    const f = fold({ title: "Описание", summary: item.description || "что это и как выглядит", body: [mdBlock("Описание", () => item.description, (v) => { item.description = v; f.setSummary(v || "что это и как выглядит"); })] });
+    return f;
+  }
+  if (!(item.description && item.description.trim())) return null;
+  const body = h("div", { class: "card-prose" });
+  body.innerHTML = renderNoteHtml(item.description);
+  enhanceRolls(body, sendRoll);
+  wireCatalogLinks(body);
+  return fold({ title: "Описание", body: [body], open: true });
+}
+
+// renderSchemaView — карточка по схеме системы (schema-card.js): шапка без
+// редкости и настройки D&D, середина — из схемы; превью «как в инвентаре» и
+// стенд модификаторов — как у карточки D&D, импорт — только у неё.
+function renderSchemaView(root, compiled) {
+  const readOnly = !editMode;
+  const pills = () => [item.source ? pill(item.source, "gold") : null, ...item.tags.map((t) => pill(t))];
+  const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, item) });
+  const stand = renderStandSelect(standEntries);
+  const preview = renderInventoryPreview(item, { stand, sendRoll });
+  const hero = renderHero({
+    glyph: glyphNode(itemGlyphName(item), ""),
+    imageUrl: item.imageUrl,
+    color: "",
+    name: item.name,
+    namePlaceholder: "Название предмета",
+    pills: pills(),
+    square: true,
+    subtitle,
+    readOnly,
+    controls: readOnly
+      ? undefined
+      : [
+          artField(() => {
+            hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl);
+            preview.update();
+          }),
+        ],
+    onName: (v) => {
+      item.name = v;
+      document.getElementById("itemTitle").textContent = v || "Без имени";
+      scheduleSave();
+      preview.update();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+  // «Пока надет» — конструктор модификаторов со стендом, как у карточки D&D.
+  const worn = (sec) => {
+    const title = sec.title || "Пока надет";
+    if (readOnly) return item.modifiers.length ? fold({ title, body: [renderStatEditor(item.modifiers, () => {}, { stand, periodic: false, readOnly: true })], open: true }) : null;
+    return fold({ title, body: [renderStatEditor(item.modifiers, () => { scheduleSave(); preview.update(); }, { stand, periodic: false })], open: true });
+  };
+  const middle = renderSchemaCard({
+    compiled,
+    data: item,
+    readOnly,
+    scheduleSave,
+    onChange: () => {
+      subtitle.textContent = cardSubtitle(compiled, item);
+      preview.update();
+    },
+    sendRoll,
+    widgets: { modifiers: worn },
+  });
+  root.appendChild(renderBody(cardBody([...middle, descFold(readOnly), compatFold(readOnly, () => hero.setPills(pills()))]), [preview]));
+}
+
+function renderEditView(root) {
 
   // Редкость — известные значения списком, любое другое остаётся текстом.
   const raritySel = h("select", {});
@@ -195,7 +308,7 @@ function renderEditView(root) {
     pills: heroPills(),
     square: true,
     subtitle,
-    controls: [labeled("Редкость", raritySel), h("div", { class: "field" }, [h("span", { text: "Требует" }), h("label", { class: "card-toggle" }, [attCb, "настройки"])]), attNoteBox, h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    controls: [labeled("Редкость", raritySel), h("div", { class: "field" }, [h("span", { text: "Требует" }), h("label", { class: "card-toggle" }, [attCb, "настройки"])]), attNoteBox, artField(() => { hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl); preview.update(); })],
     onName: (v) => {
       item.name = v;
       document.getElementById("itemTitle").textContent = v || "Без имени";
@@ -514,7 +627,7 @@ function currentId() {
     return;
   }
   await loadTargets(); // подписи целей для статблока
-  await loadSystemProfile(); // единица веса
+  await Promise.all([loadSystemProfile(), loadSchemas()]); // единица веса и схемы мира
   standEntries = await loadStand();
   try {
     item = normalizeItem(await fetchItem(itemId));

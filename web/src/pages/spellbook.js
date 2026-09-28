@@ -27,6 +27,9 @@ import { glyphNode } from "../condition-glyphs.js";
 import { SCHOOLS, schoolInfo } from "../spell-school.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardBody, cardSubtitle, renderSchemaCard } from "../schema-card.js";
 
 const LEVEL_OPTIONS = [
   { value: 0, label: "Заговор" },
@@ -179,8 +182,107 @@ function attackSelect(onChange) {
 function renderApp() {
   const root = document.getElementById("app");
   root.innerHTML = "";
-  if (editMode) renderEditView(root);
+  const compiled = spellSchema();
+  if (compiled) renderSchemaView(root, compiled);
+  else if (editMode) renderEditView(root);
   else renderReadView(root);
+}
+
+// compiledSpell — схема заклинания системы мира, разобранная один раз; null
+// — у системы старая карточка D&D (см. schemas.js).
+let compiledSpell = null;
+function spellSchema() {
+  const s = schemaFor("spell");
+  if (!s) return null;
+  if (!compiledSpell || compiledSpell.schema !== s) compiledSpell = compileSchema(s);
+  return compiledSpell;
+}
+
+// compatFold — «Совместимость и источник» (см. bestiary.js: compatFold).
+function compatFold(readOnly, onPills) {
+  const compatSummary = () => [spell.source, spell.foundryModuleId].filter(Boolean).join(" · ");
+  if (readOnly) {
+    const compat = compatSummary();
+    return compat ? fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }) : null;
+  }
+  const empty = "источник, теги, модуль Foundry";
+  const f = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary() || empty,
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => spell.source, (v) => { spell.source = v; onPills(); f.setSummary(compatSummary() || empty); }, { placeholder: "PHB'24" })),
+        labeled("Модуль Foundry", textInput(() => spell.foundryModuleId, (v) => { spell.foundryModuleId = v; f.setSummary(compatSummary() || empty); }, { placeholder: "dnd5e.spells" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
+      ]),
+      tagsField(onPills),
+    ],
+  });
+  return f;
+}
+
+// descFold — «Описание»: в правке — markdown с живым рендером, в чтении —
+// текст с кликабельными формулами (пустой не показывается).
+function descFold(readOnly) {
+  if (!readOnly) {
+    const f = fold({ title: "Описание", summary: spell.description || "текст заклинания", body: [mdBlock("Описание", () => spell.description, (v) => { spell.description = v; f.setSummary(v || "текст заклинания"); })], open: true });
+    return f;
+  }
+  if (!(spell.description && spell.description.trim())) return null;
+  const body = h("div", { class: "card-prose" });
+  body.innerHTML = renderNoteHtml(spell.description);
+  enhanceRolls(body, sendRoll);
+  wireCatalogLinks(body);
+  return fold({ title: "Описание", body: [body], open: true });
+}
+
+// appliesFold — виджет схемы «Накладывает»: в правке — выбор состояний, в
+// чтении — их список (пустой не показывается).
+function appliesFold(readOnly, title) {
+  if (!readOnly) return fold({ title, body: [statusesField(() => {})], open: true });
+  if (!spell.statuses.length) return null;
+  const chips = spell.statuses.map((ref) => {
+    const cond = allConditions.find((c) => c.slug === ref.slug);
+    const extra = [ref.rounds ? ref.rounds + " раунд." : "", ref.note || ""].filter(Boolean).join(", ");
+    return h("span", { class: "card-chip" }, [
+      h("span", { class: "spp-chip-g", style: cond && cond.color ? "color:" + cond.color : "" }, [glyphNode(cond ? cond.icon : "question", "")]),
+      (ref.name || ref.slug) + (extra ? ` (${extra})` : ""),
+    ]);
+  });
+  return fold({ title, body: [h("div", { class: "card-chips" }, chips)], open: true });
+}
+
+// renderSchemaView — карточка по схеме системы (schema-card.js): шапка без
+// полей D&D, середина — из схемы. Превью и импорт — только у карточки D&D.
+function renderSchemaView(root, compiled) {
+  const readOnly = !editMode;
+  const pills = () => [spell.source ? pill(spell.source, "gold") : null, ...spell.tags.map((t) => pill(t))];
+  const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, spell) });
+  const hero = renderHero({
+    glyph: glyphNode("sparkle", ""),
+    color: "",
+    name: spell.name,
+    namePlaceholder: "Название заклинания",
+    pills: pills(),
+    subtitle,
+    readOnly,
+    onName: (v) => {
+      spell.name = v;
+      document.getElementById("spellTitle").textContent = v || "Без имени";
+      scheduleSave();
+    },
+  });
+  root.appendChild(hero.el);
+  root.appendChild(ornament());
+  const middle = renderSchemaCard({
+    compiled,
+    data: spell,
+    readOnly,
+    scheduleSave,
+    onChange: () => (subtitle.textContent = cardSubtitle(compiled, spell)),
+    sendRoll,
+    widgets: { applies: (sec) => appliesFold(readOnly, sec.title || "Накладывает") },
+  });
+  root.appendChild(renderBody(cardBody([...middle, descFold(readOnly), compatFold(readOnly, () => hero.setPills(pills()))]), null));
 }
 
 function renderEditView(root) {
@@ -568,6 +670,7 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
+  await loadSchemas();
   if (!me) {
     location.href = "/";
     return;
