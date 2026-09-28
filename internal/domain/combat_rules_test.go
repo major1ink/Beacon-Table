@@ -23,8 +23,14 @@ func TestCombatRulesValidate(t *testing.T) {
 	if err := dndRules().Validate(); err != nil {
 		t.Fatalf("правила D&D: %v", err)
 	}
+	withRefs := dndRules()
+	withRefs.Initiative = InitiativeRule{Roll: "1d20 + floor((@abilities.dex - 10) / 2) + @stat.удача"}
+	if err := withRefs.Validate(); err != nil {
+		t.Fatalf("формула со ссылками: %v", err)
+	}
 	bad := map[string]func(r *CombatRules){
 		"формула не из кубов":     func(r *CombatRules) { r.Initiative.Roll = "1d20; drop" },
+		"кубы в умножении":        func(r *CombatRules) { r.Initiative.Roll = "2 * 1d20" },
 		"неизвестная прибавка":    func(r *CombatRules) { r.Initiative.Bonus = "luck:dex" },
 		"прибавка без поля":       func(r *CombatRules) { r.Initiative.Bonus = "field:" },
 		"неизвестный режим":       func(r *CombatRules) { r.ZeroHP.Other = "explode" },
@@ -68,10 +74,10 @@ func TestInitiativeFormula(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"name":"Тень","initiative":"1к6+1"}`), &m); err != nil {
 		t.Fatal(err)
 	}
-	if got := custom.InitiativeFormula(m, nil); got != "1d6+1" {
+	if got := custom.InitiativeFormula(m, nil); got != "1к6+1" {
 		t.Errorf("своя система, поле карточки: %q", got)
 	}
-	if got := custom.InitiativeFormula(m, minus2); got != "1d6+1-2" {
+	if got := custom.InitiativeFormula(m, minus2); got != "1к6+1-2" {
 		t.Errorf("своя система, поле и состояние: %q", got)
 	}
 	if err := json.Unmarshal([]byte(`{"name":"Тень","initiative":12}`), &m); err != nil {

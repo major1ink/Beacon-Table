@@ -7,6 +7,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository/memory"
+	"beacon-table/internal/schema"
 )
 
 // Правила боя приходят от системы мира (domain.CombatRules): комната без
@@ -163,5 +164,104 @@ func TestCustomRulesRollInitiativeFromSheet(t *testing.T) {
 	r.handleAddCombatant(domain.ClientMsg{CharacterID: "char-1"})
 	if len(roller.formulas) != 1 || roller.formulas[0] != "1d6+2" {
 		t.Fatalf("формулы: %v, ожидали 1d6+2 из листа", roller.formulas)
+	}
+}
+
+// itemsByID — библиотека предметов для комнаты: нужен только Get.
+type itemsByID map[string]*domain.Item
+
+func (m itemsByID) List(context.Context) ([]*domain.Item, error) { return nil, nil }
+func (m itemsByID) Get(_ context.Context, id string) (*domain.Item, error) {
+	if it, ok := m[id]; ok {
+		return it, nil
+	}
+	return nil, domain.ErrNotFound
+}
+func (m itemsByID) Create(context.Context, string, *domain.Item) error         { return nil }
+func (m itemsByID) Update(context.Context, string, *domain.Item) (bool, error) { return false, nil }
+func (m itemsByID) Delete(context.Context, string) error                       { return nil }
+
+// Инициатива со ссылками: сервер считает @stat.<ключ> по схеме листа с
+// модификаторами надетых предметов и состояний на токене — то же число,
+// что показывает лист.
+func TestInitiativeFormulaWithRefs(t *testing.T) {
+	r := testRoom()
+	roller := &fixedRoller{total: 11}
+	r.dice = roller
+	ctx := context.Background()
+	chars := memory.NewCharacterStore()
+	sheet := domain.DefaultCharacterSheet()
+	sheet.Initiative = "1к20 + @stat.ловкость"
+	sheet.Stats = []domain.FreeStat{{Name: "Ловкость", Value: 3}}
+	if err := chars.Create(ctx, &domain.Character{ID: "char-1", AccountID: "acc-1", Name: "Герой", Sheet: sheet}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chars.AddInventoryEntry(ctx, "char-1", "acc-1", domain.InventoryEntry{ID: "e1", ItemID: "ring", Name: "Кольцо", Quantity: 1, Equipped: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chars.AddInventoryEntry(ctx, "char-1", "acc-1", domain.InventoryEntry{ID: "e2", ItemID: "boots", Name: "Сапоги", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	r.characters = chars
+	items := itemsByID{}
+	items["ring"] = &domain.Item{ID: "ring", Modifiers: []domain.Modifier{{Target: "stat.ловкость", Mode: domain.ModifierAdd, Value: "1"}}}
+	items["boots"] = &domain.Item{ID: "boots", Modifiers: []domain.Modifier{{Target: "stat.ловкость", Mode: domain.ModifierAdd, Value: "10"}}}
+	r.items = items
+	tok := r.scenes["scene-1"].Tokens["tok-1"]
+	tok.CharacterID = "char-1"
+	tok.Statuses = []domain.AppliedStatus{{Slug: "haste", Level: 2, Modifiers: []domain.Modifier{
+		{Target: "stat.ловкость", Mode: domain.ModifierAdd, Value: "1", PerLevel: true},
+	}}}
+
+	r.handleAddCombatant(domain.ClientMsg{TokenID: "tok-1"})
+	// 3 + кольцо 1 + состояние 1×2; ненадетые сапоги не считаются.
+	if len(roller.formulas) != 1 || roller.formulas[0] != "1d20+6" {
+		t.Fatalf("формулы: %v, ждали 1d20+6", roller.formulas)
+	}
+}
+
+func TestInitiativeFormulaEdgeCases(t *testing.T) {
+	add := func(r *Room, m *domain.Monster) float64 {
+		r.monsters = &fakeMonsters{list: []*domain.Monster{m}}
+		r.combat = domain.NewCombatState()
+		r.handleAddCombatant(domain.ClientMsg{MonsterID: m.ID})
+		for _, cmb := range r.combat.Combatants {
+			return cmb.Initiative
+		}
+		t.Fatal("боец не добавился")
+		return 0
+	}
+	monster := func(raw string) *domain.Monster {
+		var m domain.Monster
+		if err := json.Unmarshal([]byte(raw), &m); err != nil {
+			t.Fatal(err)
+		}
+		return &m
+	}
+
+	r := testRoom()
+	roller := &fixedRoller{total: 9}
+	r.dice = roller
+	// Число без кубов — это и есть инициатива, бросать нечего.
+	if got := add(r, monster(`{"id":"a","name":"Статуя","initiative":"3 + 2"}`)); got != 5 || len(roller.formulas) != 0 {
+		t.Fatalf("число: %v, броски %v", got, roller.formulas)
+	}
+	// Кривая формула — ручной ввод.
+	if got := add(r, monster(`{"id":"b","name":"Тень","initiative":"1d20 +"}`)); got != 0 || len(roller.formulas) != 0 {
+		t.Fatalf("кривая формула: %v, броски %v", got, roller.formulas)
+	}
+	// Ссылка на поле карточки из схемы существа.
+	if got := add(r, monster(`{"id":"c","name":"Волк","initiative":"1d20 + @speed / 10","speed":"30"}`)); got != 9 || len(roller.formulas) != 1 || roller.formulas[0] != "1d20+3" {
+		t.Fatalf("ссылка на поле: %v, броски %v", got, roller.formulas)
+	}
+
+	// Система со старым бланком без схем: ссылки — только пути в JSON.
+	r = testRoom()
+	roller = &fixedRoller{total: 9}
+	r.dice = roller
+	r.schemas = map[string]*schema.Schema{schema.KindMonster: nil}
+	add(r, monster(`{"id":"d","name":"Гоблин","initiative":"1d20 + floor((@abilities.dex - 10) / 2) + @stat.ловкость","abilities":{"dex":14}}`))
+	if len(roller.formulas) != 1 || roller.formulas[0] != "1d20+2" {
+		t.Fatalf("без схемы: броски %v", roller.formulas)
 	}
 }

@@ -1,0 +1,523 @@
+{
+ "_": "Общие случаи формул: их гоняют internal/formula (Go) и web/test/schema-formula.test.js (JS). error — код ошибки, pos — номер символа (если задан). В vars нет имени — ссылка даёт not_number.",
+ "expr": [
+  {
+   "src": "1 + 2 * 3",
+   "value": 7
+  },
+  {
+   "src": "(1 + 2) * 3",
+   "value": 9
+  },
+  {
+   "src": "10 / 4",
+   "value": 2.5
+  },
+  {
+   "src": "1.5 * 2",
+   "value": 3
+  },
+  {
+   "src": "-3 + +2",
+   "value": -1
+  },
+  {
+   "src": "2 - -2",
+   "value": 4
+  },
+  {
+   "src": "8 - 3 - 2",
+   "value": 3
+  },
+  {
+   "src": "12 / 3 / 2",
+   "value": 2
+  },
+  {
+   "src": "floor(7 / 2)",
+   "value": 3
+  },
+  {
+   "src": "floor(-7 / 2)",
+   "value": -4
+  },
+  {
+   "src": "ceil(7 / 2)",
+   "value": 4
+  },
+  {
+   "src": "round(2.5)",
+   "value": 3
+  },
+  {
+   "src": "round(-2.5)",
+   "value": -2
+  },
+  {
+   "src": "round(2.4)",
+   "value": 2
+  },
+  {
+   "src": "abs(-4)",
+   "value": 4
+  },
+  {
+   "src": "min(3, 1, 2)",
+   "value": 1
+  },
+  {
+   "src": "max(3, 1, 2)",
+   "value": 3
+  },
+  {
+   "src": "MAX(1, 2)",
+   "value": 2
+  },
+  {
+   "src": "max(5)",
+   "value": 5
+  },
+  {
+   "src": "if(@x > 2, 10, 20)",
+   "vars": {
+    "x": 3
+   },
+   "value": 10
+  },
+  {
+   "src": "if(@x > 2, 10, 20)",
+   "vars": {
+    "x": 2
+   },
+   "value": 20
+  },
+  {
+   "src": "if(1, 5, 1 / 0)",
+   "value": 5
+  },
+  {
+   "src": "1 < 2",
+   "value": 1
+  },
+  {
+   "src": "2 <= 1",
+   "value": 0
+  },
+  {
+   "src": "3 >= 3",
+   "value": 1
+  },
+  {
+   "src": "3 == 3",
+   "value": 1
+  },
+  {
+   "src": "3 != 3",
+   "value": 0
+  },
+  {
+   "src": "1 + 1 == 2",
+   "value": 1
+  },
+  {
+   "src": "1 and 0",
+   "value": 0
+  },
+  {
+   "src": "2 and 3",
+   "value": 1
+  },
+  {
+   "src": "1 or 0",
+   "value": 1
+  },
+  {
+   "src": "0 or 0",
+   "value": 0
+  },
+  {
+   "src": "not 0",
+   "value": 1
+  },
+  {
+   "src": "not not 5",
+   "value": 1
+  },
+  {
+   "src": "NOT 1 OR 1",
+   "value": 1
+  },
+  {
+   "src": "1 < 2 and 3 > 2",
+   "value": 1
+  },
+  {
+   "src": "0 and 1 / 0",
+   "value": 0
+  },
+  {
+   "src": "1 or 1 / 0",
+   "value": 1
+  },
+  {
+   "src": "@x * 2",
+   "vars": {
+    "x": 4
+   },
+   "value": 8
+  },
+  {
+   "src": "@stat.удача_ночью + 1",
+   "vars": {
+    "stat.удача_ночью": 5
+   },
+   "value": 6
+  },
+  {
+   "src": "@combat.hpMax - 5",
+   "vars": {
+    "combat.hpMax": 21
+   },
+   "value": 16
+  },
+  {
+   "src": "floor((@str - 10) / 2)",
+   "vars": {
+    "str": 15
+   },
+   "value": 2
+  },
+  {
+   "src": "floor((@str - 10) / 2)",
+   "vars": {
+    "str": 8
+   },
+   "value": -1
+  },
+  {
+   "src": "  7  ",
+   "value": 7
+  },
+  {
+   "src": "((((((((((((((((((((1))))))))))))))))))))",
+   "value": 1
+  },
+  {
+   "src": "",
+   "error": "syntax"
+  },
+  {
+   "src": "   ",
+   "error": "syntax"
+  },
+  {
+   "src": "1 +",
+   "error": "syntax",
+   "pos": 4
+  },
+  {
+   "src": "1 + 2)",
+   "error": "syntax",
+   "pos": 6
+  },
+  {
+   "src": "(1 + 2",
+   "error": "syntax",
+   "pos": 7
+  },
+  {
+   "src": "1 2",
+   "error": "syntax",
+   "pos": 3
+  },
+  {
+   "src": "flor(2)",
+   "error": "unknown_func",
+   "pos": 1
+  },
+  {
+   "src": "floor(1, 2)",
+   "error": "arity",
+   "pos": 1
+  },
+  {
+   "src": "if(1, 2)",
+   "error": "arity",
+   "pos": 1
+  },
+  {
+   "src": "min()",
+   "error": "arity",
+   "pos": 1
+  },
+  {
+   "src": "abc",
+   "error": "syntax",
+   "pos": 1
+  },
+  {
+   "src": "abc + 1",
+   "error": "syntax",
+   "pos": 1
+  },
+  {
+   "src": "1 = 2",
+   "error": "syntax",
+   "pos": 3
+  },
+  {
+   "src": "1 ! 2",
+   "error": "syntax",
+   "pos": 3
+  },
+  {
+   "src": "10 ^ 2",
+   "error": "syntax",
+   "pos": 4
+  },
+  {
+   "src": "1.",
+   "error": "syntax",
+   "pos": 2
+  },
+  {
+   "src": "1e3",
+   "error": "syntax",
+   "pos": 2
+  },
+  {
+   "src": "2 + @",
+   "error": "syntax",
+   "pos": 5
+  },
+  {
+   "src": "@a..b",
+   "error": "syntax",
+   "pos": 1
+  },
+  {
+   "src": "@a.",
+   "error": "syntax",
+   "pos": 1
+  },
+  {
+   "src": "1 / 0",
+   "error": "div_zero",
+   "pos": 3
+  },
+  {
+   "src": "1 / (2 - 2)",
+   "error": "div_zero",
+   "pos": 3
+  },
+  {
+   "src": "@missing + 1",
+   "error": "not_number"
+  },
+  {
+   "src": "1d6",
+   "error": "dice_here",
+   "pos": 2
+  },
+  {
+   "src": "((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))",
+   "error": "too_deep"
+  }
+ ],
+ "dice": [
+  {
+   "src": "1d20 + @x",
+   "vars": {
+    "x": 3
+   },
+   "roll": "1d20+3",
+   "dice": 1,
+   "const": 3
+  },
+  {
+   "src": "1к20+2",
+   "roll": "1d20+2",
+   "dice": 1,
+   "const": 2
+  },
+  {
+   "src": "1К20 - 1",
+   "roll": "1d20-1",
+   "dice": 1,
+   "const": -1
+  },
+  {
+   "src": "d20",
+   "roll": "1d20",
+   "dice": 1,
+   "const": 0
+  },
+  {
+   "src": "2D6 - 1d4 + 1",
+   "roll": "2d6-1d4+1",
+   "dice": 3,
+   "const": 1
+  },
+  {
+   "src": "-1d4 + 5",
+   "roll": "-1d4+5",
+   "dice": 1,
+   "const": 5
+  },
+  {
+   "src": "5 - (1d4)",
+   "roll": "-1d4+5",
+   "dice": 1,
+   "const": 5
+  },
+  {
+   "src": "(ceil(@lvl / 2))d6",
+   "vars": {
+    "lvl": 3
+   },
+   "roll": "2d6",
+   "dice": 2,
+   "const": 0
+  },
+  {
+   "src": "@lvl d6",
+   "vars": {
+    "lvl": 2
+   },
+   "roll": "2d6",
+   "dice": 2,
+   "const": 0
+  },
+  {
+   "src": "1d(@die)",
+   "vars": {
+    "die": 8
+   },
+   "roll": "1d8",
+   "dice": 1,
+   "const": 0
+  },
+  {
+   "src": "(@lvl - 1)d6 + 2",
+   "vars": {
+    "lvl": 1
+   },
+   "roll": "2",
+   "dice": 0,
+   "const": 2
+  },
+  {
+   "src": "3",
+   "roll": "3",
+   "dice": 0,
+   "const": 3
+  },
+  {
+   "src": "0",
+   "roll": "0",
+   "dice": 0,
+   "const": 0
+  },
+  {
+   "src": "1d20 + @x / 2",
+   "vars": {
+    "x": 3
+   },
+   "roll": "1d20+1",
+   "dice": 1,
+   "const": 1
+  },
+  {
+   "src": "1d20 - 0.5",
+   "roll": "1d20-1",
+   "dice": 1,
+   "const": -1
+  },
+  {
+   "src": "1d20 + 2 - 2",
+   "roll": "1d20",
+   "dice": 1,
+   "const": 0
+  },
+  {
+   "src": "1d20 + if(@x > 0, @x, 0)",
+   "vars": {
+    "x": -2
+   },
+   "roll": "1d20",
+   "dice": 1,
+   "const": 0
+  },
+  {
+   "src": "1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4",
+   "roll": "1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4",
+   "dice": 20,
+   "const": 0
+  },
+  {
+   "src": "2 * 1d6",
+   "error": "dice_here",
+   "pos": 6
+  },
+  {
+   "src": "max(1d6, 2)",
+   "error": "dice_here",
+   "pos": 6
+  },
+  {
+   "src": "-(1d6 * 2)",
+   "error": "dice_here",
+   "pos": 4
+  },
+  {
+   "src": "1d1",
+   "error": "dice_sides",
+   "pos": 2
+  },
+  {
+   "src": "1d1001",
+   "error": "dice_sides",
+   "pos": 2
+  },
+  {
+   "src": "(0 - 1)d6",
+   "error": "dice_count",
+   "pos": 8
+  },
+  {
+   "src": "101d6",
+   "error": "dice_limit"
+  },
+  {
+   "src": "60d6 + 50d6",
+   "error": "dice_limit"
+  },
+  {
+   "src": "1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4+1",
+   "error": "dice_limit"
+  },
+  {
+   "src": "1d20 + 100000",
+   "error": "too_big"
+  },
+  {
+   "src": "1d",
+   "error": "syntax",
+   "pos": 2
+  },
+  {
+   "src": "1d6d6",
+   "error": "syntax",
+   "pos": 4
+  },
+  {
+   "src": "1d6 + @x",
+   "error": "not_number"
+  },
+  {
+   "src": "1d6 + 1 / 0",
+   "error": "div_zero",
+   "pos": 9
+  }
+ ]
+}

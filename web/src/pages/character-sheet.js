@@ -46,6 +46,8 @@ import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
 import { coinRows, formatWeight, loadSystemProfile, sheetKind, SHEET_UNIVERSAL } from "../system-profile.js";
 import { renderUniversalEdit, renderUniversalView } from "../sheet-universal.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema, createEvaluator } from "../schema-formula.js";
 
 // ==================== PHB 2024 rules ====================
 
@@ -239,7 +241,7 @@ function universalCtx() {
   return {
     h, sheet, readOnly,
     field, textInput, numberInput, textareaInput, identitySection,
-    scheduleSave, sendRoll,
+    scheduleSave, sendRoll, rollText,
     activeModifiers, effectiveAC, effectiveSpeed, modifierHint,
     vCard, vTile, vText, vHero, vHpCard, liveStatusesHost, vResourcesCard, vInventoryCard, vMoneyCard,
   };
@@ -1555,7 +1557,7 @@ function vCard(title, children, note) {
 
 // vTile — плитка производного числа. formula задан — плитка кликабельна и
 // кидает кубик (инициатива, атака заклинанием); иначе просто число.
-function vTile(label, compute, formula, rollLabel, hint) {
+function vTile(label, compute, formula, rollLabel, hint, send) {
   const value = h("b", { text: compute() });
   // hint — «из чего сложилось число» (см. modifierHint): пересчитывается
   // вместе со значением, иначе после смены экипировки подсказка врала бы.
@@ -1573,7 +1575,7 @@ function vTile(label, compute, formula, rollLabel, hint) {
   vRefresh.push(() => (value.textContent = compute()));
   const inner = [value, h("span", { text: label })];
   if (!formula) return applyHint(h("div", { class: "v-tile" }, inner));
-  return h("button", { type: "button", class: "v-tile", title: "Бросить: " + rollLabel, onclick: () => sendRoll(formula(), rollLabel) }, inner);
+  return h("button", { type: "button", class: "v-tile", title: "Бросить: " + rollLabel, onclick: () => (send || sendRoll)(formula(), rollLabel) }, inner);
 }
 
 // ---------- шапка ----------
@@ -2738,6 +2740,33 @@ function sendRoll(formula, label) {
   rollWS.send(withRollMode({ type: "roll_dice", formula, label, characterId: charId }));
 }
 
+// sheetEvaluator — формулы листа по схеме системы (schema-formula.js):
+// значения с модификаторами надетого и висящих состояний. Схема
+// разбирается один раз; у системы со старым бланком схемы нет — ссылки в
+// формулах тогда только пути в JSON листа.
+let compiledSheet = null;
+function sheetEvaluator() {
+  const schema = schemaFor("sheet");
+  if (!compiledSheet || compiledSheet.schema !== schema) compiledSheet = schema ? compileSchema(schema) : null;
+  return createEvaluator(compiledSheet, sheet, activeModifiers());
+}
+
+// rollText — бросок формулы, которую вписал человек («1к20 + @stat.ловкость»):
+// ссылки считаются здесь, на сервер уходит готовая «1d20+4» — ту же формулу
+// сервер посчитал бы сам для инициативы в трекере.
+function rollText(text, label) {
+  const r = sheetEvaluator().dice(text);
+  if (r.error) {
+    showAlert(`«${label}»: ${r.error.message}`);
+    return;
+  }
+  if (r.dice === 0) {
+    showAlert(`«${label}»: кубов в формуле нет, значение — ${r.const}`);
+    return;
+  }
+  sendRoll(r.formula, label);
+}
+
 // isEmbedded — лист открыт ВНУТРИ страницы стола: боковым доком
 // (sheet-dock.js) или плавающим окном (floating-window.js), то есть в
 // iframe, а не отдельной вкладкой/окном браузера.
@@ -2787,7 +2816,7 @@ function currentPregenId() {
 
 (async function boot() {
   me = await fetchMe();
-  await loadSystemProfile(); // единица веса и валюты мира
+  await Promise.all([loadSystemProfile(), loadSchemas()]); // единица веса, валюты и схемы мира
   if (!me || (!isPlayer(me.role) && !isGM(me.role))) {
     location.href = "/";
     return;

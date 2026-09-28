@@ -206,11 +206,30 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 // «Своей системы». Исключение — система со старым бланком (D&D) без своих
 // схем: у неё все виды nil, и клиент рисует лист и карточки старым кодом.
 func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMessage, error) {
+	set, err := m.schemaSet(company)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]json.RawMessage, len(set))
+	for kind, s := range set {
+		if s == nil {
+			out[kind] = nil
+			continue
+		}
+		out[kind] = s.Raw
+	}
+	return out, nil
+}
+
+// schemaSet — схемы мира company по видам: схема модуля системы, иначе
+// встроенная; у системы со старым бланком без схем — nil по всем видам. Их
+// же получает комната мира (формулы инициативы).
+func (m *CompanyManager) schemaSet(company *domain.Company) (map[string]*schema.Schema, error) {
 	var mod *module.Module
 	if company != nil && company.System != domain.SystemCustom {
 		mod, _ = m.modules.Get(company.System)
 	}
-	out := make(map[string]json.RawMessage, len(schema.Kinds))
+	out := make(map[string]*schema.Schema, len(schema.Kinds))
 	legacy := mod != nil && len(mod.Schemas) == 0 && domain.LegacySheetKind(mod.Manifest.Sheet)
 	for _, kind := range schema.Kinds {
 		if legacy {
@@ -219,7 +238,7 @@ func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMe
 		}
 		if mod != nil {
 			if s, ok := mod.Schemas[kind]; ok {
-				out[kind] = s.Raw
+				out[kind] = s
 				continue
 			}
 		}
@@ -227,7 +246,7 @@ func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMe
 		if err != nil {
 			return nil, err
 		}
-		out[kind] = s.Raw
+		out[kind] = s
 	}
 	return out, nil
 }
@@ -494,7 +513,11 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	foundryModuleRepo := sqlite.NewFoundryModuleStore(m.db, company.ID)
 	chatRepo := sqlite.NewChatStore(m.db, company.ID)
 
-	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory, m.combatRules(company))
+	schemas, err := m.schemaSet(company)
+	if err != nil {
+		return err
+	}
+	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory, m.combatRules(company), schemas)
 	if err != nil {
 		return err
 	}

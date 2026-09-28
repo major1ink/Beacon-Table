@@ -64,7 +64,7 @@ func good() map[string]any {
 				map[string]any{"id": "name", "type": "text", "path": "name", "label": "Название"},
 				map[string]any{"id": "max", "type": "number", "path": "max", "label": "Макс."},
 			}},
-			"hit": map[string]any{"type": "roll", "label": "Удар", "roll": "1d20 + @str_mod"},
+			"hit": map[string]any{"type": "roll", "label": "Удар", "roll": "1d20 + @str_mod + @stat.удача + @combat.hpMax + @homebrew"},
 		},
 		"layout": []any{
 			map[string]any{"title": "Бой", "fields": []any{"ac", "str", "str_mod"}, "column": 1, "tab": "sheet"},
@@ -141,6 +141,22 @@ func TestParseRejects(t *testing.T) {
 		"колонка 4":          func(m map[string]any) { m["layout"] = []any{map[string]any{"fields": []any{"ac"}, "column": 4}} },
 		"кривой режим":       func(m map[string]any) { m["layout"] = []any{map[string]any{"fields": []any{"ac"}, "mode": "print"}} },
 		"list у листа":       func(m map[string]any) { m["list"] = map[string]any{"subtitle": "{ac}"} },
+		"битая формула":      func(m map[string]any) { field(m, "str_mod")["formula"] = "floor((@str-10)/2" },
+		"кубы в вычислении":  func(m map[string]any) { field(m, "str_mod")["formula"] = "1d6 + 2" },
+		"кубы в умножении":   func(m map[string]any) { field(m, "hit")["roll"] = "2 * 1d6" },
+		"ссылка в никуда":    func(m map[string]any) { field(m, "str_mod")["formula"] = "@combat.shield" },
+		"цикл": func(m map[string]any) {
+			field(m, "str_mod")["formula"] = "@loop"
+			m["fields"].(map[string]any)["loop"] = map[string]any{"type": "computed", "label": "Цикл", "formula": "@str_mod + 1"}
+		},
+		"цикл колонок": func(m map[string]any) {
+			cols := field(m, "res")["columns"].([]any)
+			field(m, "res")["columns"] = append(cols, map[string]any{"id": "x", "type": "computed", "label": "X", "formula": "@x"})
+		},
+		"колонка ссылается в никуда": func(m map[string]any) {
+			cols := field(m, "res")["columns"].([]any)
+			field(m, "res")["columns"] = append(cols, map[string]any{"id": "x", "type": "computed", "label": "X", "formula": "@max + @shield"})
+		},
 	}
 	for name, fn := range cases {
 		m := good()

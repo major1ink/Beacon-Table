@@ -3,10 +3,11 @@
 // странице. Схему несёт системный модуль (schemas/<вид>.json), у «Своей
 // системы» — встроенные (см. builtin.go).
 //
-// Сервер схему только проверяет и отдаёт клиенту как есть (Raw): рисует и
-// считает формулы клиент (web/src/schema-*.js). Поэтому здесь разобрано ровно
-// то, что нужно проверке, — всё остальное в поле или секции просто уезжает
-// клиенту, и рендерер может расти, не трогая сервер.
+// Сервер схему проверяет (вместе с формулами — синтаксис, ссылки, циклы) и
+// отдаёт клиенту как есть (Raw): рисует лист клиент (web/src/schema-*.js).
+// Поэтому здесь разобрано ровно то, что нужно проверке и расчётам сервера
+// (формулы — eval.go: инициатива из листа), — всё остальное в поле или
+// секции просто уезжает клиенту, и рендерер может расти, не трогая сервер.
 package schema
 
 import (
@@ -16,6 +17,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 
 	"beacon-table/internal/domain"
 )
@@ -170,6 +172,9 @@ type Schema struct {
 	List   *List             `json:"list,omitempty"`
 
 	Raw json.RawMessage `json:"-"`
+
+	compileOnce sync.Once
+	formulas    map[string]compiledFormula
 }
 
 // Parse разбирает и проверяет схему.
@@ -189,7 +194,7 @@ func Parse(data []byte) (*Schema, error) {
 	return &s, nil
 }
 
-// Validate — всё, что сервер может проверить без формул.
+// Validate — структура схемы и её формулы.
 func (s *Schema) Validate() error {
 	if s.Format != Format {
 		return fmt.Errorf("формат схемы %q не поддерживается (нужен %q)", s.Format, Format)
@@ -230,6 +235,9 @@ func (s *Schema) Validate() error {
 		if err := s.checkSection(sec); err != nil {
 			return fmt.Errorf("схема %s, секция %d: %w", s.Kind, i+1, err)
 		}
+	}
+	if err := s.checkFormulas(root); err != nil {
+		return fmt.Errorf("схема %s, %w", s.Kind, err)
 	}
 	if s.List != nil {
 		if s.Kind == KindSheet {

@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"beacon-table/internal/formula"
 )
 
 // CombatRules — правила боя игровой системы: как бросается инициатива, что
@@ -14,9 +16,9 @@ import (
 // само ни одного правила не знает — их задаёт системный модуль (раздел
 // "combat" в module.json), а у «Своей системы» — CustomCombatRules.
 //
-// Намеренно без языка формул: только выбор из фиксированных вариантов и
-// ссылки на поля листа или карточки. Формулы — задача «Схемы листа и
-// карточек».
+// Формула инициативы — на языке формул схем (internal/formula): кубы, числа
+// и ссылки @поле, которые сервер считает по листу или карточке через схему
+// системы (см. service.Room: rollInitiative).
 type CombatRules struct {
 	Initiative InitiativeRule `json:"initiative"`
 	ZeroHP     ZeroHPRule     `json:"zeroHp"`
@@ -26,15 +28,17 @@ type CombatRules struct {
 // InitiativeRule — бросок инициативы при добавлении бойца.
 //
 // Формула броска — значение поля RollField листа персонажа или карточки
-// существа (строка с кубами, "1d20+2"), а если поля нет или оно пустое —
-// Roll. Пустая формула — ручной ввод: боец встаёт с инициативой 0, ДМ
-// вписывает число в трекере. К формуле прибавляется Bonus и модификаторы
+// существа («1d20+2», «1d20 + @stat.ловкость»), а если поля нет или оно
+// пустое — Roll. Пустая формула — ручной ввод: боец встаёт с инициативой 0,
+// ДМ вписывает число в трекере. К формуле прибавляется Bonus и модификаторы
 // инициативы от висящих состояний.
 type InitiativeRule struct {
 	Roll      string `json:"roll,omitempty"`
 	RollField string `json:"rollField,omitempty"`
 	// Bonus — откуда прибавка: "abilityMod:<ключ>" — floor((x−10)/2) от
 	// abilities.<ключ>; "field:<путь>" — число из поля; "" или "none" — нет.
+	// То же пишется формулой в Roll («1d20 + floor((@abilities.dex-10)/2)»);
+	// Bonus остаётся, пока встроенный D&D не переедет на схемы.
 	Bonus string `json:"bonus,omitempty"`
 }
 
@@ -104,16 +108,15 @@ func (r *CombatRules) ZeroHPFor(isCharacter bool) string {
 	return r.ZeroHP.Other
 }
 
-var (
-	rollFormulaRe = regexp.MustCompile(`^[0-9dк+\- ]{1,40}$`)
-	fieldPathRe   = regexp.MustCompile(`^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$`)
-)
+var fieldPathRe = regexp.MustCompile(`^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$`)
 
 // Validate — правила, с которыми можно подключить модуль.
 func (r *CombatRules) Validate() error {
 	in := r.Initiative
-	if in.Roll != "" && !rollFormulaRe.MatchString(strings.ToLower(in.Roll)) {
-		return fmt.Errorf("инициатива: формула %q — только кубы, числа, + и -", in.Roll)
+	if in.Roll != "" {
+		if _, err := formula.Parse(in.Roll, true); err != nil {
+			return fmt.Errorf("инициатива: формула %q: %w", in.Roll, err)
+		}
 	}
 	if in.RollField != "" && !fieldPathRe.MatchString(in.RollField) {
 		return fmt.Errorf("инициатива: неверное поле %q", in.RollField)
@@ -174,17 +177,19 @@ func parseBonus(bonus string) (kind, path string, err error) {
 // карточка — src (любая структура, которая пишется в JSON; nil — голый
 // токен). applyStatus — модификаторы инициативы от висящих состояний
 // поверх прибавки из правил (nil — их нет). Пустая строка — ручной ввод.
+// Формула — как написана (с «к», ссылками @поле): к формуле сервера её
+// сводит schema.Evaluator.Dice.
 func (r *CombatRules) InitiativeFormula(src any, applyStatus func(int) int) string {
 	fields := fieldsOf(src)
-	formula := r.Initiative.Roll
+	roll := r.Initiative.Roll
 	if r.Initiative.RollField != "" {
 		if v, ok := lookupField(fields, r.Initiative.RollField); ok {
 			if s := strings.TrimSpace(scalarString(v)); s != "" {
-				formula = strings.ReplaceAll(strings.ToLower(s), "к", "d")
+				roll = s
 			}
 		}
 	}
-	if formula == "" {
+	if roll == "" {
 		return ""
 	}
 	kind, path, _ := parseBonus(r.Initiative.Bonus)
@@ -208,9 +213,9 @@ func (r *CombatRules) InitiativeFormula(src any, applyStatus func(int) int) stri
 		mod = applyStatus(mod)
 	}
 	if kind == "" && mod == 0 {
-		return formula
+		return roll
 	}
-	return fmt.Sprintf("%s%+d", formula, mod)
+	return fmt.Sprintf("%s%+d", roll, mod)
 }
 
 // XPFor — опыт за существо с карточкой src. 0 — поле не задано, пустое или

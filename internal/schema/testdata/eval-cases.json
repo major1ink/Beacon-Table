@@ -1,0 +1,457 @@
+{
+ "_": "Общие случаи расчёта полей по схеме: их гоняют internal/schema (Go) и web/test/schema-formula.test.js (JS). values — значения полей, errors — коды ошибок полей, rolls — броски по листу, static — первая ошибка проверки формул схемы (без проверки путей). rowValues — только JS (колонки таблиц).",
+ "cases": [
+  {
+   "name": "поля, модификаторы, характеристики, пути",
+   "schema": {
+    "fields": {
+     "str": {
+      "type": "number",
+      "path": "abilities.str",
+      "label": "Сила",
+      "modifierTarget": "abilities.str"
+     },
+     "str_mod": {
+      "type": "computed",
+      "formula": "floor((@str - 10) / 2)",
+      "label": "x"
+     },
+     "hp_max": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты",
+      "modifierTarget": "hp.max"
+     },
+     "half": {
+      "type": "computed",
+      "formula": "@hp_max / 2",
+      "label": "x"
+     },
+     "name": {
+      "type": "text",
+      "path": "name",
+      "label": "Имя"
+     },
+     "lvl": {
+      "type": "text",
+      "path": "level",
+      "label": "Уровень"
+     },
+     "inspired": {
+      "type": "bool",
+      "path": "inspired",
+      "label": "Вдохновение"
+     },
+     "bonus": {
+      "type": "computed",
+      "formula": "@lvl + @inspired",
+      "label": "x"
+     },
+     "empty": {
+      "type": "number",
+      "path": "nothing.here",
+      "label": "Пусто"
+     },
+     "raw": {
+      "type": "computed",
+      "formula": "@combat.hpMax + @luck + @missing.path",
+      "label": "x"
+     },
+     "note0": {
+      "type": "text",
+      "path": "notes.0",
+      "label": "Заметка"
+     },
+     "notes_sum": {
+      "type": "computed",
+      "formula": "@note0 + @notes.1",
+      "label": "x"
+     },
+     "luck2": {
+      "type": "computed",
+      "formula": "@stat.удача_ночью * 2 + @stat.нет_такой",
+      "label": "x"
+     },
+     "stats": {
+      "type": "table",
+      "path": "stats",
+      "label": "Характеристики",
+      "statRows": {
+       "name": "name",
+       "value": "value"
+      },
+      "columns": [
+       {
+        "id": "name",
+        "type": "text",
+        "path": "name",
+        "label": "Название"
+       },
+       {
+        "id": "value",
+        "type": "number",
+        "path": "value",
+        "label": "Значение"
+       }
+      ]
+     },
+     "ac_calc": {
+      "type": "computed",
+      "formula": "10 + @str_mod",
+      "label": "x",
+      "modifierTarget": "ac"
+     },
+     "attack": {
+      "type": "roll",
+      "roll": "1d20 + @str_mod",
+      "label": "Атака"
+     },
+     "bad": {
+      "type": "computed",
+      "formula": "@name + 1",
+      "label": "x"
+     },
+     "uses_bad": {
+      "type": "computed",
+      "formula": "@bad * 2",
+      "label": "x"
+     },
+     "uses_roll": {
+      "type": "computed",
+      "formula": "@attack + 1",
+      "label": "x"
+     },
+     "uses_table": {
+      "type": "computed",
+      "formula": "@stats + 1",
+      "label": "x"
+     },
+     "div0": {
+      "type": "computed",
+      "formula": "1 / (@empty)",
+      "label": "x"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "str": 15
+    },
+    "combat": {
+     "hpMax": 21
+    },
+    "name": "Бор",
+    "level": "3",
+    "inspired": true,
+    "luck": 4,
+    "notes": [
+     "7",
+     "2"
+    ],
+    "stats": [
+     {
+      "name": "Удача ночью",
+      "value": 5
+     },
+     {
+      "name": "удача  ночью",
+      "value": 9
+     },
+     {
+      "name": "Сила",
+      "value": "мусор"
+     }
+    ]
+   },
+   "mods": [
+    {
+     "target": "abilities.str",
+     "mode": "add",
+     "value": "-2"
+    },
+    {
+     "target": "stat.удача_ночью",
+     "mode": "add",
+     "value": "-2"
+    },
+    {
+     "target": "hp.max",
+     "mode": "add",
+     "value": "4",
+     "period": "turn-start"
+    },
+    {
+     "target": "ac",
+     "mode": "add",
+     "value": "1"
+    }
+   ],
+   "values": {
+    "str": 13,
+    "str_mod": 1,
+    "hp_max": 21,
+    "half": 10.5,
+    "lvl": 3,
+    "inspired": 1,
+    "bonus": 4,
+    "empty": 0,
+    "raw": 25,
+    "note0": 7,
+    "notes_sum": 9,
+    "luck2": 6,
+    "ac_calc": 12
+   },
+   "errors": {
+    "name": "not_number",
+    "bad": "not_number",
+    "uses_bad": "ref_error",
+    "attack": "not_number",
+    "uses_roll": "not_number",
+    "uses_table": "not_number",
+    "div0": "div_zero"
+   },
+   "rolls": [
+    {
+     "src": "1d20 + @str_mod",
+     "roll": "1d20+1"
+    },
+    {
+     "src": "1к6 + @stat.удача_ночью",
+     "roll": "1d6+3"
+    },
+    {
+     "src": "1d6 + @stat.сила",
+     "roll": "1d6"
+    },
+    {
+     "src": "1d20 + @bad",
+     "error": "ref_error"
+    },
+    {
+     "src": "1d20 + @name",
+     "error": "not_number"
+    },
+    {
+     "src": "1d20 +",
+     "error": "syntax"
+    }
+   ]
+  },
+  {
+   "name": "цикл",
+   "schema": {
+    "fields": {
+     "a": {
+      "type": "computed",
+      "formula": "@b + 1",
+      "label": "x"
+     },
+     "b": {
+      "type": "computed",
+      "formula": "@a + 1",
+      "label": "x"
+     },
+     "c": {
+      "type": "computed",
+      "formula": "@a * 2",
+      "label": "x"
+     },
+     "d": {
+      "type": "computed",
+      "formula": "5",
+      "label": "x"
+     }
+    }
+   },
+   "data": {},
+   "values": {
+    "d": 5
+   },
+   "errors": {
+    "a": "cycle",
+    "b": "cycle",
+    "c": "ref_error"
+   },
+   "rolls": [
+    {
+     "src": "1d20 + @a",
+     "error": "ref_error"
+    },
+    {
+     "src": "1d20 + @d",
+     "roll": "1d20+5"
+    }
+   ],
+   "static": "cycle"
+  },
+  {
+   "name": "поле ссылается само на себя",
+   "schema": {
+    "fields": {
+     "a": {
+      "type": "computed",
+      "formula": "@a + 1",
+      "label": "x"
+     }
+    }
+   },
+   "data": {},
+   "errors": {
+    "a": "cycle"
+   },
+   "static": "cycle"
+  },
+  {
+   "name": "битая формула",
+   "schema": {
+    "fields": {
+     "a": {
+      "type": "computed",
+      "formula": "floor(",
+      "label": "x"
+     },
+     "b": {
+      "type": "computed",
+      "formula": "@a + 1",
+      "label": "x"
+     },
+     "r": {
+      "type": "roll",
+      "roll": "2 * 1d6",
+      "label": "Бросок"
+     }
+    }
+   },
+   "data": {},
+   "errors": {
+    "a": "syntax",
+    "b": "ref_error"
+   },
+   "static": "syntax"
+  },
+  {
+   "name": "без схемы — только пути",
+   "schema": null,
+   "data": {
+    "abilities": {
+     "dex": 14
+    },
+    "initiative": "1к20"
+   },
+   "rolls": [
+    {
+     "src": "1d20 + floor((@abilities.dex - 10) / 2)",
+     "roll": "1d20+2"
+    },
+    {
+     "src": "1d20 + @stat.ловкость",
+     "roll": "1d20"
+    }
+   ]
+  },
+  {
+   "name": "колонки таблиц",
+   "schema": {
+    "fields": {
+     "prof": {
+      "type": "number",
+      "path": "prof",
+      "label": "Бонус мастерства"
+     },
+     "skills": {
+      "type": "table",
+      "path": "skills",
+      "label": "Навыки",
+      "columns": [
+       {
+        "id": "name",
+        "type": "text",
+        "path": "name",
+        "label": "Навык"
+       },
+       {
+        "id": "base",
+        "type": "number",
+        "path": "base",
+        "label": "Основа"
+       },
+       {
+        "id": "trained",
+        "type": "bool",
+        "path": "trained",
+        "label": "Владение"
+       },
+       {
+        "id": "bonus",
+        "type": "computed",
+        "formula": "@base + if(@trained, @prof, 0)",
+        "label": "Бонус"
+       },
+       {
+        "id": "check",
+        "type": "roll",
+        "roll": "1d20 + @bonus",
+        "label": "Проверка"
+       },
+       {
+        "id": "loop",
+        "type": "computed",
+        "formula": "@loop + 1",
+        "label": "Цикл"
+       }
+      ]
+     }
+    }
+   },
+   "data": {
+    "prof": 2,
+    "skills": [
+     {
+      "name": "Скрытность",
+      "base": 3,
+      "trained": true
+     },
+     {
+      "name": "Атлетика",
+      "base": "1"
+     }
+    ]
+   },
+   "rowValues": [
+    {
+     "table": "skills",
+     "row": 0,
+     "values": {
+      "bonus": 5,
+      "base": 3,
+      "trained": 1
+     },
+     "errors": {
+      "loop": "cycle",
+      "name": "not_number"
+     },
+     "rolls": [
+      {
+       "col": "check",
+       "roll": "1d20+5"
+      }
+     ]
+    },
+    {
+     "table": "skills",
+     "row": 1,
+     "values": {
+      "bonus": 1
+     },
+     "rolls": [
+      {
+       "col": "check",
+       "roll": "1d20+1"
+      }
+     ]
+    }
+   ],
+   "static": "cycle"
+  }
+ ]
+}

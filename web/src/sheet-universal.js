@@ -10,7 +10,7 @@
 // лист отличается от бланка D&D.
 import { icon } from "./icons.js";
 import { explainModifiers } from "./modifiers.js";
-import { initiativeFormula, statTargetOf, statValue } from "./universal-stats.js";
+import { statTargetOf, statValue } from "./universal-stats.js";
 
 const fmtMod = (n) => (n >= 0 ? "+" + n : String(n));
 
@@ -22,13 +22,15 @@ export function renderUniversalView(ctx) {
   const { h, sheet } = ctx;
   const mods = () => ctx.activeModifiers();
 
-  const initiative = initiativeFormula(sheet);
+  // Формула как написана: «к» и ссылки @поле разбирает schema-formula.js
+  // при броске (ctx.rollText).
+  const initiative = String(sheet.initiative || "").trim();
   const combat = ctx.vCard(
     "Бой",
     h("div", { class: "v-tiles" }, [
       ctx.vTile("Защита", () => String(ctx.effectiveAC(sheet)), null, null, () => ctx.modifierHint("ac", sheet.combat.ac || 0)),
       ctx.vTile("Скорость", () => String(ctx.effectiveSpeed(sheet)), null, null, () => ctx.modifierHint("speed", sheet.combat.speed || 0)),
-      ctx.vTile("Инициатива", () => initiative || "—", initiative ? () => initiative : null, "Инициатива"),
+      ctx.vTile("Инициатива", () => initiative || "—", initiative ? () => initiative : null, "Инициатива", null, ctx.rollText),
     ])
   );
 
@@ -62,7 +64,7 @@ export function renderUniversalView(ctx) {
           rolls.map((r) => {
             const name = String(r.name || "").trim() || "Бросок";
             const formula = String(r.formula).trim();
-            return h("button", { type: "button", class: "v-tile", title: "Бросить: " + formula, onclick: () => ctx.sendRoll(formula.replace(/[кК]/g, "d"), name) }, [
+            return h("button", { type: "button", class: "v-tile", title: "Бросить: " + formula, onclick: () => ctx.rollText(formula, name) }, [
               h("b", { text: formula }),
               h("span", { text: name }),
             ]);

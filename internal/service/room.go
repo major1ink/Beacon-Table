@@ -14,6 +14,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/schema"
 )
 
 // RoomClient — то, что Room-актору нужно от подключённого клиента, чтобы не
@@ -130,6 +131,9 @@ type Room struct {
 	// rules — правила боя системы мира (инициатива, 0 хитов, опыт), см.
 	// combatRules.
 	rules *domain.CombatRules
+	// schemas — схемы листа и карточек системы мира по видам (см.
+	// schemaFor): по ним сервер считает ссылки @поле в формуле инициативы.
+	schemas map[string]*schema.Schema
 
 	scenes         map[string]*domain.SceneState // все сцены комнаты, ключ — SceneState.ID
 	sceneOrder     []string                      // порядок сцен в переключателе DM
@@ -256,7 +260,7 @@ type Room struct {
 // conditionRepo — см. Room.characters/Room.monsters/Room.items/
 // Room.conditions, только для чтения (кроме точечных мутаций инвентаря
 // персонажа при луте, см. handleHubTakeItem/handleLootTakeItem).
-func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit, rules *domain.CombatRules) (*Room, error) {
+func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit, rules *domain.CombatRules, schemas map[string]*schema.Schema) (*Room, error) {
 	rs, err := sceneRepo.Load(context.Background())
 	if err != nil {
 		return nil, err
@@ -281,6 +285,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		items:          itemRepo,
 		conditions:     conditionRepo,
 		rules:          rules,
+		schemas:        schemas,
 		scenes:         rs.Scenes,
 		sceneOrder:     rs.SceneOrder,
 		currentSceneID: rs.CurrentSceneID,
@@ -329,6 +334,20 @@ func (r *Room) combatRules() *domain.CombatRules {
 		return domain.CustomCombatRules()
 	}
 	return r.rules
+}
+
+// schemaFor — схема вида kind (schema.KindSheet, KindMonster…) системы мира;
+// nil — у системы старый бланк без схем (ссылки в формулах — только пути в
+// JSON). Комната без схем (тесты) — встроенные схемы «Своей системы».
+func (r *Room) schemaFor(kind string) *schema.Schema {
+	if kind == "" {
+		return nil
+	}
+	if r.schemas == nil {
+		s, _ := schema.Builtin(kind)
+		return s
+	}
+	return r.schemas[kind]
 }
 
 func (r *Room) Join(c RoomClient)  { r.join <- c }
@@ -1809,8 +1828,10 @@ func (r *Room) uniqueCombatantName(base string) string {
 func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	var name, image, color, ownerID, characterID, monsterID, tokenID string
 	// src — лист персонажа или карточка существа: из неё правила системы
-	// берут формулу и прибавку инициативы (см. domain.CombatRules).
+	// берут формулу и прибавку инициативы (см. domain.CombatRules), kind —
+	// вид её схемы.
 	var src any
+	var kind string
 	ac, hpCur, hpMax, hpTemp := 0, 0, 0, 0
 
 	switch {
@@ -1869,7 +1890,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			if ownerID == "" {
 				ownerID = ch.AccountID
 			}
-			src = ch.Sheet
+			src, kind = ch.Sheet, schema.KindSheet
 			ac = ch.Sheet.Combat.AC
 			hpCur = ch.Sheet.Combat.HPCurrent
 			hpMax = ch.Sheet.Combat.HPMax
@@ -1883,7 +1904,7 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			if image == "" {
 				image = m.ImageURL
 			}
-			src = m
+			src, kind = m, schema.KindMonster
 			ac = m.AC
 			hpCur = m.HP
 			hpMax = m.HP
@@ -1894,29 +1915,18 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	}
 	name = r.uniqueCombatantName(name)
 
-	// Модификаторы инициативы от состояний, УЖЕ висящих на токене (ДМ мог
-	// пометить монстра до того, как бросил инициативу) — см.
-	// domain.ModifierTargetInitiative. Задним числом уже брошенную
-	// инициативу ничто не пересчитывает: это разовый бросок, а не
-	// производное число.
-	var mods []domain.Modifier
+	// Модификаторы от состояний, УЖЕ висящих на токене (ДМ мог пометить
+	// монстра до того, как бросил инициативу), и от надетых предметов
+	// персонажа — как на листе (web/src/pages/character-sheet.js:
+	// activeModifiers). Задним числом уже брошенную инициативу ничто не
+	// пересчитывает: это разовый бросок, а не производное число.
+	mods := r.equippedModifiers(ctx, characterID)
 	if t, _ := r.findToken(tokenID); t != nil {
 		for _, st := range t.Statuses {
-			mods = append(mods, st.Modifiers...)
+			mods = append(mods, domain.ScaleModifiers(st.Modifiers, st.Level)...)
 		}
 	}
-	formula := r.combatRules().InitiativeFormula(src, func(mod int) int {
-		return domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
-	})
-	// Пустая формула или та, что не бросается (кривое поле листа), — ручной
-	// ввод: боец встаёт с 0, ДМ вписывает число в трекере.
-	initiative := 0.0
-	if formula != "" {
-		if result, err := r.dice.Roll(formula); err == nil {
-			initiative = float64(result.Total)
-			r.relayRoll(nil, "ДМ", formula, "Инициатива: "+name, result, false)
-		}
-	}
+	initiative := r.rollInitiative(name, kind, src, mods)
 
 	id := "combatant-" + newID()
 	r.combatSeq++
@@ -1927,6 +1937,56 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	}
 	r.markCombatDirty()
 	r.broadcastCombat()
+}
+
+// rollInitiative — инициатива бойца по правилам системы: формула из правил
+// и поля листа или карточки src; ссылки @поле в ней сервер считает по схеме
+// вида kind с модификаторами mods, как их посчитал бы лист. Пустая формула
+// или ошибка в ней (кривое поле листа) — ручной ввод: боец встаёт с 0, ДМ
+// вписывает число в трекере. Формула без кубов («3») — просто число.
+func (r *Room) rollInitiative(name, kind string, src any, mods []domain.Modifier) float64 {
+	text := r.combatRules().InitiativeFormula(src, func(mod int) int {
+		return domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
+	})
+	if text == "" {
+		return 0
+	}
+	roll, err := schema.NewEvaluator(r.schemaFor(kind), src, mods).Dice(text)
+	if err != nil {
+		slog.Debug("Формула инициативы не считается, ручной ввод", "combatant", name, "formula", text, "err", err)
+		return 0
+	}
+	if roll.Dice == 0 {
+		return float64(roll.Const)
+	}
+	result, err := r.dice.Roll(roll.Formula)
+	if err != nil {
+		return 0
+	}
+	r.relayRoll(nil, "ДМ", roll.Formula, "Инициатива: "+name, result, false)
+	return float64(result.Total)
+}
+
+// equippedModifiers — модификаторы надетых предметов персонажа: карточки
+// из библиотеки по ItemID (снимок в инвентаре модификаторов не хранит).
+func (r *Room) equippedModifiers(ctx context.Context, characterID string) []domain.Modifier {
+	if characterID == "" || r.characters == nil || r.items == nil {
+		return nil
+	}
+	inv, err := r.characters.ListInventory(ctx, characterID)
+	if err != nil {
+		return nil
+	}
+	var mods []domain.Modifier
+	for _, e := range inv {
+		if !e.Equipped || e.ItemID == "" {
+			continue
+		}
+		if it, err := r.items.Get(ctx, e.ItemID); err == nil && it != nil {
+			mods = append(mods, it.Modifiers...)
+		}
+	}
+	return mods
 }
 
 func (r *Room) handleRemoveCombatant(id string) {
