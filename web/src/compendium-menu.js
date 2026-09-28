@@ -11,6 +11,7 @@
 import { icon } from "./icons.js";
 import { openFloatingWindow } from "./floating-window.js";
 import { ITEM_SUBCATEGORIES } from "./compendium-taxonomy.js";
+import { loadSchemas, schemaFor } from "./schemas.js";
 
 // FLAT_CATEGORIES — порядок как на референсе (TTG Club): Существа,
 // Заклинания, потом разбор Reference.Kind на 4 узла (см.
@@ -81,13 +82,30 @@ function collapsible(label, { className, startOpen }) {
   return { wrap, body };
 }
 
+// buildRoot — категории одного корня. Подразделы справочника (классы,
+// виды…) и снаряжения (оружие, доспехи…) — разбор полей D&D (см.
+// compendium-taxonomy.js): у системы со схемой справочника или предметов
+// (schemas.js) вместо них один пункт «Справочник» / «Предметы» — группы и
+// фильтры там задаёт схема (см. pages/catalog.js).
 function buildRoot(system, label, role, startOpen) {
   const { wrap, body } = collapsible(label, { className: "compendium-root", startOpen });
+  const refSchema = !!schemaFor("reference");
+  let refDone = false;
   for (const cat of FLAT_CATEGORIES) {
     if (cat.dmOnly && role !== "dm") continue;
+    if (refSchema && cat.type === "reference") {
+      if (refDone) continue;
+      refDone = true;
+      body.appendChild(leafNode("Справочник", () => openCategory({ type: "reference", system, role, label: "Справочник" })));
+      continue;
+    }
     body.appendChild(
       leafNode(cat.label, () => openCategory({ type: cat.type, system, kind: cat.kind, role, label: cat.label }))
     );
+  }
+  if (schemaFor("item")) {
+    body.appendChild(leafNode("Предметы", () => openCategory({ type: "items", system, role, label: "Предметы" })));
+    return wrap;
   }
   const gear = collapsible("Снаряжение", { className: "compendium-group", startOpen: false });
   for (const sub of ITEM_SUBCATEGORIES) {
@@ -150,6 +168,8 @@ export function mountCompendiumMenu(panelEl, { role, canImport = true }) {
     if (role === "dm" && canImport) treeWrap.appendChild(foundryImportNode());
   }
   renderTree();
+  // Схемы системы мира решают, какие подразделы показывать (см. buildRoot).
+  loadSchemas().then(renderTree);
 
   document.addEventListener("vtt:combatState", (e) => {
     const next = !!(e.detail && e.detail.showBuiltinCards);

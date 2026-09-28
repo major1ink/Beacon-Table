@@ -78,11 +78,13 @@ export function mountSummonPanel(panelEl, { send }) {
       name.className = "scene-name";
       name.textContent = m.name;
       row.appendChild(name);
-      if (m.cr) {
-        const cr = document.createElement("span");
-        cr.className = "pill-badge";
-        cr.textContent = "ПО " + m.cr;
-        row.appendChild(cr);
+      // Подпись собирает сервер: по схеме существа системы мира, у
+      // статблока D&D — «ПО 1/2» (см. service.Room: summonableMonsters).
+      if (m.subtitle) {
+        const sub = document.createElement("span");
+        sub.className = "pill-badge";
+        sub.textContent = m.subtitle;
+        row.appendChild(sub);
       }
       row.onclick = () => {
         selectedId = m.id;

@@ -13,7 +13,7 @@ import { wireCatalogLinks } from "./catalog-links.js";
 import { renderNoteHtml } from "./notes/markdown.js";
 import { showAlert } from "./modal.js";
 import { SCALARS, computedOutput, editInput, editTable, evaluatorOf, viewTable } from "./schema-fields.js";
-import { formatNumber, formatSubtitle, getPath, setPath, visibleIn } from "./schema-layout.js";
+import { formatNumber, getPath, setPath, visibleIn } from "./schema-layout.js";
 
 // renderSchemaCard — узлы основной колонки карточки. ctx:
 //   compiled — schema-formula.js: compileSchema(схема вида карточки);
@@ -57,44 +57,9 @@ export function renderSchemaCard(ctx) {
   return out.filter(Boolean);
 }
 
-// cardSubtitle — подзаголовок карточки по шаблону list.subtitle схемы.
-export function cardSubtitle(compiled, data) {
-  const schema = compiled && compiled.schema;
-  const template = schema && schema.list && schema.list.subtitle;
-  if (!template) return "";
-  const ev = createCardEvaluator(compiled, data);
-  return formatSubtitle(template, (id) => displayValue(schema.fields[id], id, data, ev));
-}
-
-const createCardEvaluator = (compiled, data) => evaluatorOf({ compiled, data, activeModifiers: () => [] });
-
-// displayValue — поле или общий ключ карточки (name, tags, source) текстом.
-function displayValue(field, id, data, ev) {
-  if (!field) {
-    const v = data[id];
-    return Array.isArray(v) ? v.join(", ") : String(v ?? "");
-  }
-  const raw = getPath(data, field.path);
-  switch (field.type) {
-    case "number":
-    case "computed": {
-      const r = ev.value(id);
-      return r.error || (field.type === "number" && (raw === undefined || raw === null || raw === "")) ? "" : formatNumber(r.value);
-    }
-    case "select": {
-      const opt = (field.options || []).find((o) => o.value === String(raw ?? ""));
-      return opt ? opt.label : String(raw ?? "");
-    }
-    case "bool":
-      return raw ? field.label : "";
-    case "roll": {
-      const r = ev.rollField(id);
-      return r.error ? "" : r.formula;
-    }
-    default:
-      return typeof raw === "string" || typeof raw === "number" ? String(raw) : "";
-  }
-}
+// cardSubtitle — подзаголовок карточки по шаблону list.subtitle (см.
+// schema-list.js; страницы берут его отсюда вместе с renderSchemaCard).
+export { cardSubtitle } from "./schema-list.js";
 
 function sendResolvedRoll(ctx, r, label) {
   if (!ctx.sendRoll) return;

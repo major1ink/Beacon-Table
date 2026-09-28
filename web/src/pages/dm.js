@@ -3128,7 +3128,7 @@ function pregenPoolRow(p) {
 
   const name = document.createElement("div");
   name.className = "dmchar-name";
-  const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+  const sub = p.subtitle || ""; // по схеме листа или «вид, класс N ур.» (см. api/http: pregenSubtitle)
   // «заготовка» в каждой строке — чтобы её не путали с настоящим персонажем
   // игрока, у которого может быть такое же имя (заготовка — это шаблон листа,
   // персонажа из неё ещё не создали).

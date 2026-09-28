@@ -102,3 +102,37 @@ func TestEvaluatorCycleFromAnyField(t *testing.T) {
 		}
 	}
 }
+
+// Подпись по шаблону — общие случаи с клиентом (schema-list.js).
+func TestSharedSubtitleCases(t *testing.T) {
+	data, err := os.ReadFile("testdata/eval-cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Subtitles []struct {
+			Name   string      `json:"name"`
+			Schema *Schema     `json:"schema"`
+			Data   any         `json:"data"`
+			Cases  [][2]string `json:"cases"`
+		} `json:"subtitles"`
+	}
+	if err := json.Unmarshal(data, &file); err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Subtitles) == 0 {
+		t.Fatal("нет случаев подписи")
+	}
+	for _, c := range file.Subtitles {
+		for _, tc := range c.Cases {
+			s := &Schema{Fields: c.Schema.Fields, List: &List{Subtitle: tc[0]}}
+			if got := s.Subtitle(c.Data); got != tc[1] {
+				t.Errorf("%s: %q → %q, ждали %q", c.Name, tc[0], got, tc[1])
+			}
+		}
+	}
+	var none *Schema
+	if none.Subtitle(map[string]any{"name": "x"}) != "" {
+		t.Error("без схемы подписи нет")
+	}
+}

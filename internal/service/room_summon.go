@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/schema"
 )
 
 // ---- призыв существ игроком ----
@@ -37,7 +38,9 @@ type summonable struct {
 	Name     string `json:"name"`
 	ImageURL string `json:"imageUrl,omitempty"`
 	Size     string `json:"size,omitempty"`
-	CR       string `json:"cr,omitempty"`
+	// Subtitle — короткая подпись: по схеме существа системы мира
+	// (list.subtitle), у старого статблока D&D — «ПО 1/2».
+	Subtitle string `json:"subtitle,omitempty"`
 }
 
 // summonableMonsters — что игроку можно призвать сейчас.
@@ -50,11 +53,16 @@ func (r *Room) summonableMonsters() []summonable {
 		return nil
 	}
 	out := make([]summonable, 0)
+	sch := r.schemaFor(schema.KindMonster)
 	for _, m := range list {
 		if !r.canSummon(m) {
 			continue
 		}
-		out = append(out, summonable{ID: m.ID, Name: m.Name, ImageURL: m.ImageURL, Size: m.Size, CR: m.CR})
+		sub := sch.Subtitle(m)
+		if sch == nil && m.CR != "" {
+			sub = "ПО " + m.CR
+		}
+		out = append(out, summonable{ID: m.ID, Name: m.Name, ImageURL: m.ImageURL, Size: m.Size, Subtitle: sub})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

@@ -25,9 +25,6 @@ var kind = cardcatalog.Kind[domain.Spell]{
 		c.System, c.Module = false, ""
 	},
 	Less: func(a, b *domain.Spell) bool {
-		if a.Level != b.Level {
-			return a.Level < b.Level
-		}
 		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 	},
 }

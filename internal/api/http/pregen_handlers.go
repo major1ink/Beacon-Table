@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/schema"
 )
 
 // «Готовые персонажи» — пул предгенерированных листов мира (см. domain.Pregen,
@@ -14,23 +17,38 @@ import (
 // (/api/admin/pregens).
 
 // pregenSummaryJSON — короткая карточка пре-гена для списков (без полного
-// листа): имя, аватар и сводка «класс N ур.» / вид.
-func pregenSummaryJSON(p *domain.Pregen) map[string]any {
+// листа): имя, аватар и подпись (см. pregenSubtitle). sheet — схема листа
+// системы мира (nil — старый бланк D&D).
+func pregenSummaryJSON(p *domain.Pregen, sheet *schema.Schema) map[string]any {
 	return map[string]any{
 		"id":        p.ID,
 		"name":      p.Name,
 		"avatarUrl": p.AvatarURL,
-		"class":     p.Sheet.Info.Class,
-		"level":     p.Sheet.Info.Level,
-		"species":   pregenSpecies(p.Sheet),
+		"subtitle":  pregenSubtitle(p, sheet),
 	}
 }
 
-func pregenSpecies(s domain.CharacterSheet) string {
-	if s.Info.Species != "" {
-		return s.Info.Species
+// pregenSubtitle — подпись пре-гена: по шаблону list.subtitle схемы листа,
+// у бланка D&D — «вид, класс N ур.».
+func pregenSubtitle(p *domain.Pregen, sheet *schema.Schema) string {
+	if sheet != nil {
+		return sheet.Subtitle(p.Sheet)
 	}
-	return s.Info.Race
+	var parts []string
+	species := p.Sheet.Info.Species
+	if species == "" {
+		species = p.Sheet.Info.Race
+	}
+	if species != "" {
+		parts = append(parts, species)
+	}
+	if c := p.Sheet.Info.Class; c != "" {
+		if p.Sheet.Info.Level > 0 {
+			c += " " + strconv.Itoa(p.Sheet.Info.Level) + " ур."
+		}
+		parts = append(parts, c)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ---- игрок (свои, по сессии) ----
@@ -49,9 +67,10 @@ func (a *API) handlePregensList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
+	sheet := a.Companies.SchemaOf(world.Company, schema.KindSheet)
 	out := make([]map[string]any, 0, len(list))
 	for _, p := range list {
-		out = append(out, pregenSummaryJSON(p))
+		out = append(out, pregenSummaryJSON(p, sheet))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -126,9 +145,10 @@ func (a *API) handleAdminPregensList(w http.ResponseWriter, r *http.Request) {
 			usernames[acc.ID] = acc.Username
 		}
 	}
+	sheet := a.Companies.SchemaOf(world.Company, schema.KindSheet)
 	out := make([]map[string]any, 0, len(list))
 	for _, p := range list {
-		row := pregenSummaryJSON(p)
+		row := pregenSummaryJSON(p, sheet)
 		// Полный лист — чтобы экран импорта Foundry мог сравнить «не
 		// изменилась ли карточка» (см. foundry-import.js: sameCard) и не
 		// показывать конфликт на повторном импорте без правок.

@@ -453,5 +453,201 @@
    ],
    "static": "cycle"
   }
+ ],
+ "_subtitles": "subtitles — подпись по шаблону list.subtitle (internal/schema: Subtitle, web/src/schema-list.js: cardSubtitle).",
+ "subtitles": [
+  {
+   "name": "поля по типам",
+   "schema": {
+    "fields": {
+     "level": {
+      "type": "number",
+      "path": "level",
+      "label": "Уровень"
+     },
+     "hp": {
+      "type": "computed",
+      "formula": "@level * 6",
+      "label": "Хиты"
+     },
+     "half": {
+      "type": "computed",
+      "formula": "@level / 3",
+      "label": "Треть"
+     },
+     "kind": {
+      "type": "select",
+      "path": "kind",
+      "label": "Вид",
+      "options": [
+       {
+        "value": "beast",
+        "label": "Зверь"
+       },
+       {
+        "value": "1",
+        "label": "Первый"
+       }
+      ]
+     },
+     "flying": {
+      "type": "bool",
+      "path": "flying",
+      "label": "Летает"
+     },
+     "bite": {
+      "type": "roll",
+      "roll": "1d20 + @level",
+      "label": "Укус"
+     },
+     "note": {
+      "type": "text",
+      "path": "note",
+      "label": "Заметка"
+     },
+     "broken": {
+      "type": "computed",
+      "formula": "1 / 0",
+      "label": "Сломано"
+     },
+     "empty": {
+      "type": "number",
+      "path": "nothing",
+      "label": "Пусто"
+     }
+    }
+   },
+   "data": {
+    "level": 3,
+    "kind": "beast",
+    "flying": true,
+    "note": "  тень  ",
+    "name": "Гуль",
+    "tags": [
+     "нежить",
+     "ночь"
+    ],
+    "source": "Хоумбрю"
+   },
+   "cases": [
+    [
+     "Хиты {hp} · Уровень {level}",
+     "Хиты 18 · Уровень 3"
+    ],
+    [
+     "{kind} · {flying} · {bite}",
+     "Зверь · Летает · 1d20+3"
+    ],
+    [
+     "{note}",
+     "тень"
+    ],
+    [
+     "{half}",
+     "1"
+    ],
+    [
+     "{name} ({source}) · {tags}",
+     "Гуль (Хоумбрю) · нежить, ночь"
+    ],
+    [
+     "Хиты {broken} · {empty} · Уровень {level}",
+     "Уровень 3"
+    ],
+    [
+     "Без подстановок",
+     "Без подстановок"
+    ],
+    [
+     "{unknown} · x",
+     "x"
+    ]
+   ]
+  },
+  {
+   "name": "пусто и дроби",
+   "schema": {
+    "fields": {
+     "level": {
+      "type": "number",
+      "path": "level",
+      "label": "Уровень"
+     },
+     "hp": {
+      "type": "computed",
+      "formula": "@level * 6",
+      "label": "Хиты"
+     },
+     "half": {
+      "type": "computed",
+      "formula": "@level / 3",
+      "label": "Треть"
+     },
+     "kind": {
+      "type": "select",
+      "path": "kind",
+      "label": "Вид",
+      "options": [
+       {
+        "value": "beast",
+        "label": "Зверь"
+       },
+       {
+        "value": "1",
+        "label": "Первый"
+       }
+      ]
+     },
+     "flying": {
+      "type": "bool",
+      "path": "flying",
+      "label": "Летает"
+     },
+     "bite": {
+      "type": "roll",
+      "roll": "1d20 + @level",
+      "label": "Укус"
+     },
+     "note": {
+      "type": "text",
+      "path": "note",
+      "label": "Заметка"
+     },
+     "broken": {
+      "type": "computed",
+      "formula": "1 / 0",
+      "label": "Сломано"
+     },
+     "empty": {
+      "type": "number",
+      "path": "nothing",
+      "label": "Пусто"
+     }
+    }
+   },
+   "data": {
+    "level": 2,
+    "kind": 1,
+    "flying": false
+   },
+   "cases": [
+    [
+     "{half}",
+     "0.67"
+    ],
+    [
+     "{kind} · {flying}",
+     "Первый"
+    ],
+    [
+     "Уровень {level} · {note}",
+     "Уровень 2"
+    ],
+    [
+     "",
+     ""
+    ]
+   ]
+  }
  ]
 }

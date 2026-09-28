@@ -500,7 +500,7 @@ async function renderPregens() {
     const nameWrap = document.createElement("div");
     nameWrap.className = "char-name";
     nameWrap.textContent = p.name;
-    const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+    const sub = p.subtitle || ""; // по схеме листа или «вид, класс N ур.» (см. api/http: pregenSubtitle)
     if (sub) {
       const subEl = document.createElement("div");
       subEl.className = "char-sub";

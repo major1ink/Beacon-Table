@@ -148,7 +148,7 @@ func TestParseRejects(t *testing.T) {
 		"неизвестный виджет": func(m map[string]any) { m["layout"] = []any{map[string]any{"widget": "radar"}} },
 		"колонка 4":          func(m map[string]any) { m["layout"] = []any{map[string]any{"fields": []any{"ac"}, "column": 4}} },
 		"кривой режим":       func(m map[string]any) { m["layout"] = []any{map[string]any{"fields": []any{"ac"}, "mode": "print"}} },
-		"list у листа":       func(m map[string]any) { m["list"] = map[string]any{"subtitle": "{ac}"} },
+		"list у листа":       func(m map[string]any) { m["list"] = map[string]any{"subtitle": "{ac}", "sort": []any{"ac"}} },
 		"битая формула":      func(m map[string]any) { field(m, "str_mod")["formula"] = "floor((@str-10)/2" },
 		"кубы в вычислении":  func(m map[string]any) { field(m, "str_mod")["formula"] = "1d6 + 2" },
 		"кубы в умножении":   func(m map[string]any) { field(m, "hit")["roll"] = "2 * 1d6" },
@@ -191,5 +191,29 @@ func TestListRefs(t *testing.T) {
 	spell["list"] = map[string]any{"subtitle": "{school}"}
 	if _, err := Parse(encode(t, spell)); err == nil {
 		t.Error("подпись с неизвестным полем должна быть ошибкой")
+	}
+	spell["list"] = map[string]any{"group": "level"}
+	if _, err := Parse(encode(t, spell)); err != nil {
+		t.Errorf("группы по кругу: %v", err)
+	}
+	for _, bad := range []string{"school", "name"} {
+		spell["list"] = map[string]any{"group": bad}
+		if _, err := Parse(encode(t, spell)); err == nil {
+			t.Errorf("группы по %q должны быть ошибкой", bad)
+		}
+	}
+	spell["fields"].(map[string]any)["rolls"] = map[string]any{"type": "table", "path": "rolls", "label": "Броски", "columns": []any{
+		map[string]any{"id": "name", "type": "text", "path": "name", "label": "Название"},
+	}}
+	spell["list"] = map[string]any{"group": "rolls"}
+	if _, err := Parse(encode(t, spell)); err == nil {
+		t.Error("группы по таблице должны быть ошибкой")
+	}
+
+	// У листа — только подпись (готовые персонажи в списках).
+	sheet := good()
+	sheet["list"] = map[string]any{"subtitle": "Удача {luck}"}
+	if _, err := Parse(encode(t, sheet)); err != nil {
+		t.Errorf("подпись листа: %v", err)
 	}
 }

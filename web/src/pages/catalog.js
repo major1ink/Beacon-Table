@@ -44,6 +44,9 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { escapeHtml, cssUrl } from "../html.js";
 import { asButton } from "../a11y.js";
 import { announceOwnHeader } from "../embed.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { catalogConfig } from "../schema-list.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -357,7 +360,19 @@ const CONFIGS = {
     savedMessageType: "beacon:conditionSaved",
   },
 };
-const cfg = CONFIGS[type];
+let cfg = CONFIGS[type];
+
+// SCHEMA_KINDS — вид схемы (schemas.js) у каталогов карточек. Если у системы
+// мира есть схема вида, подпись, поиск, фильтры, группы и сортировка
+// берутся из её раздела list (schema-list.js: catalogConfig), а не из полей
+// D&D; импорт Foundry и «добавить заклинание на лист» — только у D&D.
+const SCHEMA_KINDS = { creatures: "monster", spells: "spell", items: "item", reference: "reference" };
+function applySchemaConfig() {
+  const schema = cfg && SCHEMA_KINDS[type] && schemaFor(SCHEMA_KINDS[type]);
+  if (!schema) return false;
+  cfg = Object.assign({}, cfg, catalogConfig(compileSchema(schema)), { mapOne: null, batchMap: null, extraWidget: null });
+  return true;
+}
 
 // ==================== DOM ====================
 
@@ -430,7 +445,7 @@ function renderSideLists(onScope) {
     for (const x of onScope) for (const v of sec.of(x)) names.add(v);
     const set = sideFilter.get(sec.id);
     for (const v of set) if (!names.has(v)) set.delete(v);
-    const sorted = [...names].sort((a, b) => a.localeCompare(b, "ru"));
+    const sorted = [...names].sort(sec.sort || ((a, b) => a.localeCompare(b, "ru")));
     wrap.style.display = sorted.length ? "" : "none";
     body.innerHTML = "";
     for (const v of sorted) body.appendChild(sideButton(v, set.has(v), (e) => toggleSide(sec, v, e.currentTarget), "side-item"));
@@ -442,7 +457,10 @@ function passesSidebar(x) {
     const set = sideFilter.get(sec.id);
     if (!set.size) continue;
     if (sec.kind === "toggles") {
-      for (const key of set) if (!x[key]) return false;
+      for (const key of set) {
+        const item = sec.items.find((it) => it.key === key);
+        if (!(item && item.test ? item.test(x) : x[key])) return false;
+      }
     } else if (!sec.of(x).some((v) => set.has(v))) return false;
   }
   return true;
@@ -574,8 +592,9 @@ function renderRows() {
     rowsEl.appendChild(empty);
     return;
   }
+  const rowSort = cfg.rowSort || ((a, b) => a.name.localeCompare(b.name, "ru"));
   if (!cfg.groupKey) {
-    for (const x of filtered) rowsEl.appendChild(buildRow(x));
+    for (const x of filtered.sort(rowSort)) rowsEl.appendChild(buildRow(x));
     return;
   }
   const groups = new Map();
@@ -592,12 +611,11 @@ function renderRows() {
     head.className = "catalog-group-title";
     head.textContent = cfg.groupLabel(k);
     group.appendChild(head);
-    for (const x of groups.get(k).sort((a, b) => a.name.localeCompare(b.name, "ru"))) group.appendChild(buildRow(x));
+    for (const x of groups.get(k).sort(rowSort)) group.appendChild(buildRow(x));
     rowsEl.appendChild(group);
   }
 }
 searchEl.oninput = renderRows;
-initSidebar();
 
 // ==================== создание ====================
 
@@ -721,12 +739,15 @@ window.addEventListener("message", (e) => {
     importLabel.style.display = "none";
     return;
   }
+  await loadSchemas();
+  if (applySchemaConfig()) importLabel.style.display = "none";
+  initSidebar();
   if (systemScope) {
     createForm.style.display = "none";
     importLabel.style.display = "none";
     systemHintEl.style.display = "";
   }
-  if (type === "spells") {
+  if (type === "spells" && cfg.extraWidget) {
     try {
       if (role === "dm") {
         const [chars, monsters] = await Promise.all([fetchAdminCharacters(), fetchBestiary()]);

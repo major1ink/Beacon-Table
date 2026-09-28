@@ -221,6 +221,16 @@ func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMe
 	return out, nil
 }
 
+// SchemaOf — схема вида kind мира company (см. schemaSet); nil — у системы
+// старый бланк D&D без схем.
+func (m *CompanyManager) SchemaOf(company *domain.Company, kind string) *schema.Schema {
+	set, err := m.schemaSet(company)
+	if err != nil {
+		return nil
+	}
+	return set[kind]
+}
+
 // schemaSet — схемы мира company по видам: схема модуля системы, иначе
 // встроенная; у системы со старым бланком без схем — nil по всем видам. Их
 // же получает комната мира (формулы инициативы).

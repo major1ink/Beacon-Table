@@ -14,6 +14,7 @@
   ],
   "list": {
     "subtitle": "{level} круг",
+    "group": "level",
     "sort": ["level", "name"],
     "filters": ["level"],
     "search": ["name", "tags"]

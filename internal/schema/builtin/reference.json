@@ -10,6 +10,7 @@
   ],
   "list": {
     "subtitle": "{kind}",
+    "group": "kind",
     "sort": ["kind", "name"],
     "filters": ["kind"],
     "search": ["name", "tags"]

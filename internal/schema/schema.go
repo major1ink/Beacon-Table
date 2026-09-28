@@ -165,9 +165,12 @@ type Section struct {
 }
 
 // List — как карточка выглядит в каталоге: подпись-шаблон («{level} круг ·
-// {school}»), ключи сортировки, фильтры и поля поиска.
+// {school}», см. Subtitle), поле групп с заголовками, ключи сортировки,
+// фильтры и поля поиска. У листа персонажа — только подпись (готовые
+// персонажи в списках).
 type List struct {
 	Subtitle string   `json:"subtitle,omitempty"`
+	Group    string   `json:"group,omitempty"`
 	Sort     []string `json:"sort,omitempty"`
 	Filters  []string `json:"filters,omitempty"`
 	Search   []string `json:"search,omitempty"`
@@ -256,8 +259,9 @@ func (s *Schema) Validate() error {
 		return fmt.Errorf("схема %s, %w", s.Kind, err)
 	}
 	if s.List != nil {
-		if s.Kind == KindSheet {
-			return fmt.Errorf("раздел list — только у карточек, не у листа")
+		l := s.List
+		if s.Kind == KindSheet && (l.Group != "" || len(l.Sort) > 0 || len(l.Filters) > 0 || len(l.Search) > 0) {
+			return fmt.Errorf("у листа в разделе list — только subtitle (подпись готового персонажа)")
 		}
 		if err := s.checkList(); err != nil {
 			return fmt.Errorf("схема %s, list: %w", s.Kind, err)
@@ -417,6 +421,17 @@ func (s *Schema) checkList() error {
 			if !s.listRef(id) {
 				return fmt.Errorf("неизвестное поле %q", id)
 			}
+		}
+	}
+	if g := s.List.Group; g != "" {
+		f := s.Fields[g]
+		if f == nil {
+			return fmt.Errorf("группы по неизвестному полю %q", g)
+		}
+		switch f.Type {
+		case TypeNumber, TypeComputed, TypeText, TypeSelect, TypeBool:
+		default:
+			return fmt.Errorf("группы по полю %q типа %s — нужно число, текст, выбор или флажок", g, f.Type)
 		}
 	}
 	return nil

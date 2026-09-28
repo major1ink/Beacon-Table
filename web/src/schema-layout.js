@@ -68,10 +68,11 @@ export function deletePath(obj, path) {
   if (parent && typeof parent === "object" && !Array.isArray(parent)) delete parent[last];
 }
 
-// formatNumber — число для плитки: целое как есть, дробь — до сотых.
+// formatNumber — число для плитки: целое как есть, дробь — до сотых
+// (floor(x·100 + 0.5) — как на сервере, internal/schema: FormatNumber).
 export function formatNumber(v) {
   if (typeof v !== "number" || !Number.isFinite(v)) return "—";
-  return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+  return Number.isInteger(v) ? String(v) : String(Math.floor(v * 100 + 0.5) / 100);
 }
 
 export const formatSigned = (v) => (v >= 0 ? "+" : "") + formatNumber(v);
