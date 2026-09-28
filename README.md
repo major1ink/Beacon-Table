@@ -224,11 +224,15 @@ Windows — двойной клик по файлу или из PowerShell:
 
 Логин и пароль ведущего уже подставлены в форму входа — достаточно нажать «Войти».
 
-Если телевизор находится в той же сети, откройте на нём:
+Если телевизор находится в той же сети, наберите в его браузере короткий адрес — точный есть у ведущего в «Настройки» → «Трансляция»:
 
 ```text
-http://<адрес-компьютера>:8080/broadcast.html
+<адрес-компьютера>:8080/tv
 ```
+
+На экране появится код из четырёх знаков — ведущий сверяет его и нажимает «Пустить» там же, в «Трансляции». Вводить длинную ссылку с ключом пультом не нужно.
+
+Трансляция работает и во встроенных браузерах старых телевизоров и Android-приставок. Если экран всё же не запустился, он напишет об этом. Сведения о браузере телевизора и его ошибки попадут в «Сообщить о баге» у ведущего.
 
 ### Десктопная версия
 
@@ -405,6 +409,8 @@ No Go installation is required. The frontend and default SRD data are already in
 There is also a desktop app that runs the table in its own window instead of a browser tab: `beacon-table-desktop_*_windows_amd64.exe` (needs WebView2), `_darwin_universal.zip` (not notarized by Apple; verify it against `checksums.txt`), and `_linux_amd64.deb` / `.rpm`.
 
 Players can join from a phone or tablet with the [Android app](https://github.com/major1ink/beacon-table-android/releases/latest) (Android 10+). It is a client only: it finds tables on the same Wi-Fi network or connects by address, and gets its interface from the table's server.
+
+To show the map on a TV in the same network, open `<computer-address>:8080/tv` in its browser and approve the code it shows in the DM's settings, «Трансляция» tab. The broadcast page also runs in older built-in TV and Android TV box browsers.
 
 For source builds:
 

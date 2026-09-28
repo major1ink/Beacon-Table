@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"beacon-table/internal/domain"
@@ -13,6 +14,11 @@ import (
 // неё уводит редирект после обмена ключа на cookie, и брать цель редиректа
 // из запроса значило бы открыть перенаправление на чужой адрес.
 const broadcastPagePath = "/broadcast.html"
+
+// broadcastShortPath — короткий адрес трансляции для набора с пульта:
+// «192.168.1.5:8080/tv» против «/broadcast.html?key=<32 знака>». Ведёт на
+// экран с кодом подтверждения (см. handleBroadcastShortcut).
+const broadcastShortPath = "/tv"
 
 // setBroadcastCookie — выдать этому браузеру право смотреть трансляцию (см.
 // domain.BroadcastCookieName). Значение — сам ключ: он проверяется на каждом
@@ -45,10 +51,29 @@ func broadcastKey(r *http.Request) string {
 	return r.URL.Query().Get(domain.BroadcastKeyParam)
 }
 
-// handleBroadcastLink — GET /api/broadcast/link (только ДМ): текущий ключ и
-// путь, который нужно открыть на телевизоре. Полный адрес собирает фронт из
-// location.origin — сервер за обратным прокси своего внешнего имени не знает
-// и угадывать его по заголовкам не должен.
+// broadcastLinkResponse — ответ ручек ссылки трансляции.
+//
+// Полный адрес собирает фронт из location.origin — сервер за обратным
+// прокси своего внешнего имени не знает и угадывать его по заголовкам не
+// должен. Исключение — lanOrigins: адреса этой машины в локальной сети. Они
+// нужны, когда ДМ сам открыл стол как localhost (десктоп, браузер на том же
+// компьютере): ссылка «http://localhost:8080/…» на телевизоре ведёт в
+// никуда, а именно её ДМ и скопировал бы.
+func (a *API) broadcastLinkResponse(key string) map[string]any {
+	lan := []string{}
+	if a.LANOrigins != nil {
+		lan = append(lan, a.LANOrigins()...)
+	}
+	return map[string]any{
+		"key":        key,
+		"path":       broadcastPagePath + "?" + domain.BroadcastKeyParam + "=" + key,
+		"shortPath":  broadcastShortPath,
+		"lanOrigins": lan,
+	}
+}
+
+// handleBroadcastLink — GET /api/broadcast/link (только ДМ): текущий ключ,
+// путь с ним и короткий адрес для набора с пульта.
 func (a *API) handleBroadcastLink(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireOwner(w, r); !ok {
 		return
@@ -58,10 +83,7 @@ func (a *API) handleBroadcastLink(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"key":  key,
-		"path": broadcastPagePath + "?" + domain.BroadcastKeyParam + "=" + key,
-	})
+	writeJSON(w, http.StatusOK, a.broadcastLinkResponse(key))
 }
 
 // handleBroadcastRotate — POST /api/broadcast/link/rotate (только ДМ):
@@ -77,10 +99,19 @@ func (a *API) handleBroadcastRotate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "ошибка сервера")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"key":  key,
-		"path": broadcastPagePath + "?" + domain.BroadcastKeyParam + "=" + key,
-	})
+	writeJSON(w, http.StatusOK, a.broadcastLinkResponse(key))
+}
+
+// handleBroadcastShortcut — GET /tv и GET /broadcast: короткие адреса
+// трансляции. Ведут на саму страницу; ?key= переносится как есть, так что
+// ссылка с ключом тоже становится короче. Цель редиректа — константа плюс
+// экранированный ключ, чужой адрес сюда не подставить.
+func (a *API) handleBroadcastShortcut(w http.ResponseWriter, r *http.Request) {
+	target := broadcastPagePath
+	if key := r.URL.Query().Get(domain.BroadcastKeyParam); key != "" {
+		target += "?" + domain.BroadcastKeyParam + "=" + url.QueryEscape(key)
+	}
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 // handleBroadcastAccess — GET /api/broadcast/access: пускают ли этот браузер
@@ -112,6 +143,10 @@ func (a *API) BroadcastEntry(next http.Handler) http.Handler {
 			http.Redirect(w, r, broadcastPagePath, http.StatusSeeOther)
 			return
 		}
+		// Браузер экрана виден уже здесь, по заголовку: даже если на
+		// телевизоре потом не выполнится ни строчки, в отчёте о баге будет,
+		// что это был за движок (см. broadcast_diag.go).
+		a.broadcastDiag.pageLoaded(clientAddr(r), r.UserAgent())
 		next.ServeHTTP(w, r)
 	})
 }

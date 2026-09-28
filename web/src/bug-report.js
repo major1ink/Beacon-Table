@@ -6,7 +6,7 @@
 // Сам ничего не отправляет — сервер отчёты не принимает и не хранит: стол
 // живёт в локальной сети, канала «наружу» у него нет.
 import { openModal, showAlert } from "./modal.js";
-import { fetchVersion } from "./api.js";
+import { fetchVersion, fetchBroadcastDiag } from "./api.js";
 import { copyToClipboard } from "./clipboard.js";
 
 const REPO_URL = "https://github.com/major1ink/Beacon-Table";
@@ -89,6 +89,7 @@ async function collectTech() {
     `- Окно: ${window.innerWidth}×${window.innerHeight}, dpr ${window.devicePixelRatio}`,
     `- Время: ${new Date().toLocaleString("ru-RU")}`,
   ];
+  lines.push(...(await broadcastScreens()));
   if (errorLog.length > 0) {
     lines.push("", "Последние ошибки в консоли:", "```");
     for (const e of errorLog) lines.push(`[${timeOf(e.at)}] ${e.kind}: ${e.line}`);
@@ -97,6 +98,46 @@ async function collectTech() {
     lines.push("", "Ошибок в консоли не было.");
   }
   return lines.join("\n");
+}
+
+// INFO_LABELS — подписи к сведениям, что прислал сторож страницы трансляции
+// (web/public/broadcast-guard.js), в порядке вывода.
+const INFO_LABELS = [
+  ["modules", "ES-модули"],
+  ["webgl2", "WebGL2"],
+  ["webgl", "WebGL"],
+  ["gpu", "видеокарта"],
+  ["webglError", "ошибка WebGL"],
+  ["screen", "экран"],
+  ["window", "окно"],
+  ["dpr", "dpr"],
+];
+
+// broadcastScreens — что сервер знает об экранах трансляции: телевизор сам
+// отчёт не отправит (консоли нет, пульт не клавиатура), поэтому его браузер
+// и ошибки приезжают сюда, в отчёт ДМ. Адрес экрана не пишем — отчёт уходит
+// в публичный issue, а разбору он ничего не даёт. У игрока ручка отвечает
+// отказом — блока просто нет.
+async function broadcastScreens() {
+  let screens;
+  try {
+    screens = await fetchBroadcastDiag();
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(screens) || screens.length === 0) return [];
+  const lines = ["", "Экраны трансляции:", "```"];
+  for (const s of screens) {
+    let state = "стол запустился";
+    if (!s.started) state = s.timedOut ? "стол НЕ запустился (не дождались)" : "стол не запустился";
+    lines.push(`${s.userAgent || "браузер не назвался"}`);
+    lines.push(`  загрузок страницы: ${s.loads}, ${state}, последний раз ${new Date(s.lastSeen).toLocaleTimeString("ru-RU")}`);
+    const info = INFO_LABELS.filter(([k]) => s.info && s.info[k]).map(([k, label]) => `${label}: ${s.info[k]}`);
+    if (info.length) lines.push("  " + info.join(", "));
+    for (const e of s.errors || []) lines.push("  ! " + e);
+  }
+  lines.push("```");
+  return lines;
 }
 
 // buildBody — тело issue по разделам .github/ISSUE_TEMPLATE/bug_report.md.
@@ -210,7 +251,7 @@ export async function openBugReport() {
       const techWrap = document.createElement("details");
       const sum = document.createElement("summary");
       sum.style.cssText = "cursor:pointer;font-size:12px;opacity:0.8;";
-      sum.textContent = "Технические данные (версия, браузер, ошибки в консоли)";
+      sum.textContent = "Технические данные (версия, браузер, ошибки в консоли, экраны трансляции)";
       techBox = document.createElement("textarea");
       techBox.className = "bt-modal-textarea";
       techBox.readOnly = true;

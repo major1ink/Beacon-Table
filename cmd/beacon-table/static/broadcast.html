@@ -1,13 +1,21 @@
 <!doctype html>
 <html lang="ru">
 <head>
+  <script type="module" crossorigin src="/assets/polyfills-mtQRlc-4.js"></script>
+
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Трансляция</title>
+  <!-- Сторож: обычный скрипт на ES5 до всех модулей — сообщает серверу, что за
+       браузер у экрана, и объясняет на экране, если стол не запустился (см.
+       public/broadcast-guard.js). -->
+  <script src="/broadcast-guard.js"></script>
   <style>
     html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
-    #canvasWrap { position: fixed; inset: 0; }
+    /* Не inset: 0 — его нет в Chromium до 87, а на этой странице такие и
+       бывают (телевизоры, приставки). */
+    #canvasWrap { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
     canvas { display: block; width: 100%; height: 100%; background: #333; }
 
     /* ---- HUD зума/полноэкранного режима — тот же стиль плавающей
@@ -31,22 +39,10 @@
     #zoomHud button:hover { background: var(--surface-hover); }
     #zoomHud button.active { background: #e74c3c; }
   </style>
-  <script type="module" crossorigin src="/assets/broadcast-eSwWcSc-.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-C_6pssTb.js">
-  <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/back-stack-C8cwVhaZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DKhtjNqL.js">
-  <link rel="modulepreload" crossorigin href="/assets/native-app-BgGKemc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-DBxwdpIO.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-D2_c08Va.js">
-  <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
-  <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
-  <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-Bt2DOJg1.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-fx-DfyPIE8M.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
+  <script type="module" crossorigin src="/assets/broadcast-D02sKwh1.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/broadcast-C6iNpmGJ.css">
+  <script type="module">import.meta.url;import("_").catch(()=>1);(async function*(){})().next();if(location.protocol!="file:"){window.__vite_is_modern_browser=true}</script>
+  <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
 </head>
 <body>
   <div id="canvasWrap">
@@ -57,5 +53,8 @@
       <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
   </div>
+  <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
+  <script nomodule crossorigin id="vite-legacy-polyfill" src="/assets/polyfills-legacy-DlBUznRi.js"></script>
+  <script nomodule crossorigin id="vite-legacy-entry" data-src="/assets/broadcast-legacy-C1yqbTXm.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
 </body>
 </html>

@@ -183,6 +183,7 @@
     .bcast-req-code { font-size: 20px; font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
     .bcast-req-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
     .bcast-req-empty { font-size: 12px; color: var(--text-dim); }
+    .bcast-tv-url { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; user-select: all; word-break: break-all; }
     /* ---- форма настроек сервера ----
        Тринадцать полей подряд читались как простыня, поэтому они собраны в
        группы с заголовками, а под заголовком группы — одно пояснение на всю
@@ -1115,39 +1116,35 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-BbxsMPr1.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-C_6pssTb.js">
+  <script type="module" crossorigin src="/assets/dm-76PxFAHG.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/icons-EEhtOvQG.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
   <link rel="modulepreload" crossorigin href="/assets/back-stack-C8cwVhaZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-DKhtjNqL.js">
-  <link rel="modulepreload" crossorigin href="/assets/native-app-BgGKemc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-DBxwdpIO.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-D2_c08Va.js">
+  <link rel="modulepreload" crossorigin href="/assets/modal-BupxowQC.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DeSbpYTt.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-C8D5KWcr.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-MUzW9dbZ.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
   <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-Bt2DOJg1.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-fx-DfyPIE8M.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-gVXwkrAt.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-CIYUEYXp.js">
   <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/wake-lock-DV3iJKsr.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-1cz-k8V3.js">
+  <link rel="modulepreload" crossorigin href="/assets/wake-lock-BdQBt9HN.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-huSmG2wX.js">
   <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-CImEDDyN.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-D8ZoJHIA.js">
   <link rel="modulepreload" crossorigin href="/assets/hp-bar-BLhQlGnT.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-26fTNKmZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/card-shell-gaUNrZud.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-PbtjGTK9.js">
   <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
-  <link rel="modulepreload" crossorigin href="/assets/stat-editor-mHP3ziUh.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-DBIWC3r7.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-CwDDwXlK.js">
+  <link rel="modulepreload" crossorigin href="/assets/stat-editor-MqqPyBmO.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-BG9jpAIa.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-C6tlurfA.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-D8F-Vf8x.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker-BS9MSVT6.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker--pUmsLin.js">
   <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-BEr6jfie.js">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-CDJCQLWN.js">
   <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
 </head>
 <body>
@@ -1547,6 +1544,14 @@
               </div>
               <p class="hint">Телевизор или проектор подключён к этому компьютеру вторым монитором — окно откроется на нём во весь экран. Если откроется обычным окном — перетащите его на телевизор и нажмите F11; Esc выходит из полноэкранного режима.</p>
             </div>
+            <!-- Короткий адрес — главный путь для телевизора: набрать с пульта,
+                 дальше экран покажет код, и ДМ пустит его ниже. -->
+            <div class="field-block">
+              <span class="field-label">Адрес для телевизора</span>
+              <div class="bcast-tv-url" id="broadcastTvUrl">…</div>
+              <p class="hint">Наберите этот адрес в браузере телевизора или приставки. На экране появится код — сверьте его в списке «Экраны, ожидающие подтверждения» ниже и нажмите «Пустить».</p>
+            </div>
+            <div class="section-divider"></div>
             <div class="field-block">
               <span class="field-label" id="broadcastLinkLabel">Ссылка на трансляцию</span>
               <input type="text" id="broadcastLink" readonly value="…" aria-labelledby="broadcastLinkLabel" />
@@ -1554,13 +1559,13 @@
                 <button id="broadcastCopyBtn" type="button">Копировать</button>
                 <button id="broadcastRotateBtn" type="button">Перевыпустить</button>
               </div>
-              <p class="hint">Откройте её на телевизоре или проекторе — экран получит доступ к столу без аккаунта и запомнит его. Ссылка секретна: кто её открыл, тот видит стол. «Перевыпустить» мгновенно отключает все экраны, которым ссылку уже дали, — тогда её нужно открыть заново на каждом.</p>
+              <p class="hint">Для устройств, куда ссылку можно передать, не набирая: второе окно, ноутбук у проектора, телефон. Экран получит доступ к столу без аккаунта и запомнит его. Ссылка секретна: кто её открыл, тот видит стол. «Перевыпустить» мгновенно отключает все экраны, которым ссылку уже дали, — тогда её нужно открыть заново на каждом.</p>
             </div>
             <div class="section-divider"></div>
             <div class="field-block">
               <span class="field-label">Экраны, ожидающие подтверждения<span id="broadcastRequestsCount"></span></span>
               <div id="broadcastRequests"></div>
-              <p class="hint">Если ссылку вбить некуда (телевизор, приставка) — откройте на нём просто <b>/broadcast.html</b>: экран покажет код и появится здесь. Сверьте код с тем, что горит на экране, и нажмите «Пустить».</p>
+              <p class="hint">Экран, открывший адрес для телевизора, покажет код и появится здесь. Сверьте код с тем, что горит на экране, и нажмите «Пустить».</p>
             </div>
           </div>
 
@@ -1574,7 +1579,7 @@
                 <span class="field-label">Версия <b id="appVersion">…</b></span>
                 <button id="bugReportBtn" type="button">Сообщить о баге</button>
               </div>
-              <p class="hint">Соберём версию, браузер и последние ошибки в консоли в готовый текст и откроем форму нового issue на GitHub или письмо — останется вычитать и отправить. Если не подходит ни то, ни другое, отчёт можно просто скопировать.</p>
+              <p class="hint">Соберём версию, браузер, последние ошибки в консоли и сведения об экранах трансляции (браузер телевизора и его ошибки) в готовый текст и откроем форму нового issue на GitHub или письмо — останется вычитать и отправить. Если не подходит ни то, ни другое, отчёт можно просто скопировать.</p>
               <p class="hint contact-links">Сайт: <a href="https://beacontable.ru/" target="_blank" rel="noopener">beacontable.ru</a> · Почта: <a href="mailto:info@beacontable.ru">info@beacontable.ru</a></p>
             </div>
             <div class="section-divider"></div>

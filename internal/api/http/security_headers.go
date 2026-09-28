@@ -6,7 +6,12 @@ import "net/http"
 // web/src/html.js): пропущенная подстановка в чужом тексте не выполнится,
 // пока исполняются только скрипты с нашего адреса.
 //
-// script-src без 'unsafe-inline' — inline-скриптов в страницах нет; style-src
+// script-src без 'unsafe-inline' — своих inline-скриптов в страницах нет;
+// хеши — четыре служебных скрипта @vitejs/plugin-legacy на странице
+// трансляции (выбор между современной и legacy-сборкой для старых
+// телевизоров, см. web/vite.broadcast.config.js). Содержимое у них
+// неизменное, плагин публикует хеши сам (cspHashes), а
+// TestCSPAllowsBroadcastInlineScripts сверяет их с собранной страницей. style-src
 // с ним — стили модалок ставит JS (modal.js). https: у картинок и звука —
 // текст заметки может ссылаться наружу; blob: — доска и видеокарты сцены;
 // ws:/wss: — за прокси схема сокета отличается от страницы. data: в
@@ -17,13 +22,21 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"object-src 'none'; " +
 	"frame-ancestors 'self'; " +
 	"form-action 'self'; " +
-	"script-src 'self'; " +
+	"script-src 'self' " + legacyScriptHashes + "; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob: https:; " +
 	"media-src 'self' data: blob: https:; " +
 	"font-src 'self' data:; " +
 	"worker-src 'self' blob:; " +
 	"connect-src 'self' data: ws: wss:"
+
+// legacyScriptHashes — см. комментарий к contentSecurityPolicy. Обновлять
+// вместе с версией @vitejs/plugin-legacy: node -e
+// "import('@vitejs/plugin-legacy').then(m=>console.log(m.cspHashes))" в web/.
+const legacyScriptHashes = "'sha256-MS6/3FCg4WjP9gwgaBGwLpRCY6fZBgwmhVCdrPrNf3E=' " +
+	"'sha256-tQjf8gvb2ROOMapIxFvFAYBeUJ0v1HCbOcSmDNXGtDo=' " +
+	"'sha256-VA8O2hAdooB288EpSTrGLl7z3QikbWU9wwoebO/QaYk=' " +
+	"'sha256-+5XkZFazzJo8n0iOP4ti/cLCMUudTf//Mzkb7xNPXIc='"
 
 // SecurityHeaders — ставятся до вызова хендлера: после первого w.Write шапка
 // уже ушла в сеть.

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build -c vite.broadcast.config.js",
     "test": "node scripts/run-tests.mjs",
     "preview": "vite preview",
     "lint": "eslint ."
@@ -29,8 +29,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@vitejs/plugin-legacy": "^6.1.1",
     "eslint": "^9.39.5",
     "globals": "^15.15.0",
+    "terser": "^5.51.2",
     "vite": "^6.0.0"
   }
 }

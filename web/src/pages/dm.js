@@ -2749,12 +2749,22 @@ const broadcastLinkInput = document.getElementById("broadcastLink");
 const broadcastCopyBtn = document.getElementById("broadcastCopyBtn");
 const broadcastRotateBtn = document.getElementById("broadcastRotateBtn");
 
+const broadcastTvUrl = document.getElementById("broadcastTvUrl");
+
+// showBroadcastLinks — ссылка с ключом и короткий адрес для пульта. У
+// короткого срезаем «http://»: браузеры телевизоров подставляют его сами, а
+// набирать на пульте каждый знак — мучение.
+function showBroadcastLinks({ url, tvUrl }) {
+  broadcastLinkInput.value = url;
+  broadcastTvUrl.textContent = tvUrl.replace(/^http:\/\//, "");
+}
+
 async function renderBroadcastLink() {
   try {
-    const { url } = await fetchBroadcastLink();
-    broadcastLinkInput.value = url;
+    showBroadcastLinks(await fetchBroadcastLink());
   } catch {
     broadcastLinkInput.value = "не удалось получить ссылку";
+    broadcastTvUrl.textContent = "—";
   }
 }
 
@@ -2909,8 +2919,7 @@ broadcastRotateBtn.onclick = async () => {
   );
   if (!ok) return;
   try {
-    const { url } = await rotateBroadcastLink();
-    broadcastLinkInput.value = url;
+    showBroadcastLinks(await rotateBroadcastLink());
   } catch (e) {
     showAlert(e.message || "не удалось перевыпустить ссылку");
   }

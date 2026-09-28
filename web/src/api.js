@@ -171,19 +171,41 @@ export async function resetDMPassword() {
 
 // ---- трансляция (ТВ/проектор) ----
 // Ссылка с ключом, по которой экран в комнате получает доступ к столу без
-// аккаунта (см. internal/service/broadcast.go). Сервер отдаёт только путь —
-// origin подставляем здесь: за обратным прокси своего внешнего адреса он не
-// знает.
+// аккаунта (см. internal/service/broadcast.go), и короткий адрес для набора с
+// пульта. Сервер отдаёт только пути — origin подставляем здесь: за обратным
+// прокси своего внешнего адреса он не знает.
+
+// tvOrigin — адрес стола, по которому до него дотянется телевизор. Обычно это
+// адрес, по которому стол открыт у ДМ. Но ДМ, открывший стол на этом же
+// компьютере (десктоп, localhost), получил бы ссылку «http://localhost:…»,
+// а на телевизоре она ведёт в никуда — тогда берём адрес машины в сети,
+// который знает сервер.
+function tvOrigin(lanOrigins) {
+  const host = location.hostname;
+  const loopback = host === "localhost" || host === "::1" || host === "[::1]" || host.startsWith("127.") || host.endsWith(".localhost");
+  if (loopback && lanOrigins && lanOrigins.length) return lanOrigins[0];
+  return location.origin;
+}
+
+function broadcastLinks({ key, path, shortPath, lanOrigins }) {
+  const origin = tvOrigin(lanOrigins);
+  return { key, path, url: origin + path, tvUrl: origin + (shortPath || "/broadcast.html") };
+}
+
 export async function fetchBroadcastLink() {
-  const { key, path } = await apiFetch("/api/broadcast/link");
-  return { key, path, url: location.origin + path };
+  return broadcastLinks(await apiFetch("/api/broadcast/link"));
 }
 
 // rotateBroadcastLink — перевыпуск ключа: прежняя ссылка перестаёт работать
 // сразу у всех экранов, которым её раздали.
 export async function rotateBroadcastLink() {
-  const { key, path } = await apiFetch("/api/broadcast/link/rotate", { method: "POST" });
-  return { key, path, url: location.origin + path };
+  return broadcastLinks(await apiFetch("/api/broadcast/link/rotate", { method: "POST" }));
+}
+
+// fetchBroadcastDiag — журнал экранов трансляции для отчёта о баге (только
+// ДМ, см. internal/api/http/broadcast_diag.go).
+export async function fetchBroadcastDiag() {
+  return apiFetch("/api/broadcast/diag");
 }
 
 // broadcastAccessGranted — пускают ли этот браузер смотреть трансляцию.
