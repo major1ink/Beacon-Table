@@ -62,7 +62,8 @@ export default defineConfig({
         worlds: resolve(__dirname, "worlds.html"),
         dm: resolve(__dirname, "dm.html"),
         player: resolve(__dirname, "player.html"),
-        broadcast: resolve(__dirname, "broadcast.html"),
+        // broadcast.html — отдельной сборкой под старые браузеры телевизоров,
+        // см. vite.broadcast.config.js.
         journal: resolve(__dirname, "journal.html"),
         board: resolve(__dirname, "board.html"),
         characterSheet: resolve(__dirname, "character-sheet.html"),

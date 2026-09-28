@@ -263,6 +263,18 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota, companies.ChatHistory())
 	api.DemoMode = cfg.DemoMode
+	// Адреса в сети — для ссылки на трансляцию, когда ДМ открыл стол как
+	// localhost (см. apihttp: broadcastLinkResponse). Считаются на каждый
+	// запрос: ноутбук за вечер может сменить Wi-Fi.
+	api.LANOrigins = func() []string {
+		var out []string
+		for _, u := range accessURLs(cfg.Addr) {
+			if !strings.Contains(u, "://localhost") {
+				out = append(out, strings.TrimSuffix(u, "/"))
+			}
+		}
+		return out
+	}
 	// Временный пароль ДМ: кладём его туда, где человек найдёт его без
 	// консоли — в файл рядом с настройками и в подсказку на странице входа,
 	// открытой на этом же компьютере (см. firstrun.go).

@@ -1,7 +1,11 @@
 // Перенос inline-скрипта static/tv.html (переименован в broadcast.html —
 // "трансляция" точнее описывает назначение экрана, чем сокращение "tv", см.
-// README). initVTT остаётся async (PIXI.Application.init() в v8 — промис),
-// но результат странице не нужен — вызов "выстрелил и забыл".
+// README). initVTT остаётся async (PIXI.Application.init() в v8 — промис);
+// её провал уходит сторожу страницы (см. public/broadcast-guard.js).
+//
+// legacy-dom — первым: полифилы DOM для старых браузеров телевизоров должны
+// встать до того, как их тронет код ниже.
+import "../legacy-dom.js";
 import { initVTT } from "../vtt/index.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDiceFx } from "../dice-fx.js";
@@ -18,8 +22,16 @@ import { broadcastAccessGranted, requestBroadcastAccess, broadcastRequestState }
 //     затевалось: длинную ссылку с ключом на телевизоре не набрать.
 //
 // Проверка в async-функции, а не через top-level await: сборка идёт под
-// browserslist-цель Vite, где TLA поддержан не везде (см. web/vite.config.js).
-boot();
+// старые браузеры телевизоров, где TLA нет (см. web/vite.broadcast.config.js).
+//
+// guard — сторож из public/broadcast-guard.js. Его может не быть (скрипт не
+// загрузился), поэтому все вызовы через ?.
+const guard = window.__beaconBroadcast;
+guard?.started();
+boot().catch((e) => {
+  console.error(e);
+  guard?.fatal(e);
+});
 
 async function boot() {
   if (await broadcastAccessGranted()) {
@@ -30,7 +42,10 @@ async function boot() {
 }
 
 function startTable() {
-  initVTT({ canvasId: "scene", role: "tv" });
+  initVTT({ canvasId: "scene", role: "tv" }).catch((e) => {
+    console.error("стол не запустился:", e);
+    guard?.fatal(e);
+  });
 
   // Картинка «Показать игрокам» от ДМ — полноэкранный оверлей поверх карты
   // (см. web/src/showcase-overlay.js). На трансляции закрыть нельзя, показом
@@ -135,7 +150,10 @@ function showWaitingScreen() {
   wrap.style.cssText += ";display:flex;align-items:center;justify-content:center;padding:6vmin;text-align:center;";
 
   const box = document.createElement("div");
-  box.style.cssText = "max-width:34ch;color:#e8e8ea;font:400 clamp(16px,2vmin,22px)/1.5 system-ui,sans-serif;";
+  // Перед clamp() — запасное значение: clamp() в Chromium только с 79, и
+  // старый браузер телевизора выкинет объявление целиком.
+  box.style.cssText =
+    "max-width:34ch;color:#e8e8ea;font:400 20px/1.5 sans-serif;font:400 clamp(16px,2vmin,22px)/1.5 system-ui,sans-serif;";
 
   const title = document.createElement("p");
   title.style.cssText = "margin:0 0 .4em;font-size:1.4em;font-weight:600;text-wrap:balance;";
@@ -143,7 +161,7 @@ function showWaitingScreen() {
 
   const code = document.createElement("p");
   code.style.cssText =
-    "margin:.3em 0;font-size:clamp(48px,12vmin,140px);font-weight:700;letter-spacing:.12em;" +
+    "margin:.3em 0;font-size:12vmin;font-size:clamp(48px,12vmin,140px);font-weight:700;letter-spacing:.12em;" +
     "font-variant-numeric:tabular-nums;color:#fff;";
   code.textContent = "····";
 

@@ -1,8 +1,13 @@
 package http_test
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -49,5 +54,37 @@ func TestSecurityHeadersBeforeBody(t *testing.T) {
 
 	if rec.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("после записи тела политика не выставлена")
+	}
+}
+
+// Страница трансляции собирается с @vitejs/plugin-legacy, и его служебные
+// inline-скрипты выбирают, какую сборку грузить старому телевизору. Не
+// пропусти их CSP — телевизор без модулей не запустит вообще ничего, а
+// обновление плагина может поменять их текст.
+func TestCSPAllowsBroadcastInlineScripts(t *testing.T) {
+	page, err := os.ReadFile(filepath.Join("..", "..", "..", "cmd", "beacon-table", "static", "broadcast.html"))
+	if err != nil {
+		t.Skipf("нет собранного фронтенда: %v", err)
+	}
+	h := apihttp.SecurityHeaders(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/broadcast.html", nil))
+	csp := rec.Header().Get("Content-Security-Policy")
+
+	re := regexp.MustCompile(`(?s)<script\b([^>]*)>(.*?)</script>`)
+	inline := 0
+	for _, m := range re.FindAllStringSubmatch(string(page), -1) {
+		if m[2] == "" || strings.Contains(m[1], " src=") {
+			continue
+		}
+		inline++
+		sum := sha256.Sum256([]byte(m[2]))
+		hash := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+		if !strings.Contains(csp, hash) {
+			t.Errorf("inline-скрипт страницы трансляции не разрешён CSP (%s): %.80s", hash, m[2])
+		}
+	}
+	if inline == 0 {
+		t.Fatal("в broadcast.html нет inline-скриптов legacy-плагина — сборка идёт без vite.broadcast.config.js?")
 	}
 }

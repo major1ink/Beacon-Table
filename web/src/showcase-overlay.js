@@ -21,7 +21,9 @@ function injectStyle() {
   // должен перебивать всё.
   s.textContent = `
   .showcase-overlay {
-    position: fixed; inset: 0; z-index: 600;
+    /* Не inset: оверлей показывают и на трансляции, а там бывают Chromium
+       старше 87 (телевизоры), где inset ещё нет. */
+    position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 600;
     display: flex; align-items: center; justify-content: center;
     background: rgba(6, 6, 10, 0.94);
     /* visibility: иначе невидимый «✕» остаётся в порядке табуляции. */
