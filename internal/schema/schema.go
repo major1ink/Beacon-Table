@@ -80,6 +80,12 @@ var storedTypes = map[string]bool{
 // ToneBad — красные деления шкалы (tally).
 const ToneBad = "bad"
 
+// Значения Field.Rollable.
+const (
+	RollableCheck  = "check"
+	RollableInline = "inline"
+)
+
 // keyPlaceholder — ключ строки в пути колонки таблицы со строками.
 const keyPlaceholder = "{key}"
 
@@ -109,6 +115,7 @@ var widgets = map[string][]string{
 	"money":     {KindSheet},
 	"spells":    {KindMonster},
 	"spellbook": {KindSheet},
+	"xp":        {KindSheet},
 	"applies":   {KindSpell},
 	"modifiers": {KindItem},
 }
@@ -138,6 +145,9 @@ type Option struct {
 	Label string `json:"label"`
 	Color string `json:"color,omitempty"`
 	Glyph string `json:"glyph,omitempty"`
+	// Formula — число варианта: ссылка @поле на select даёт формулу
+	// выбранного варианта.
+	Formula string `json:"formula,omitempty"`
 }
 
 // Field — поле схемы (или колонка таблицы).
@@ -150,7 +160,12 @@ type Field struct {
 	// Signed — число со знаком («+3»).
 	Signed  bool   `json:"signed,omitempty"`
 	Formula string `json:"formula,omitempty"`
-	Roll    string `json:"roll,omitempty"`
+	// Roll — у броска (roll) его формула, у числа и вычисляемого поля —
+	// бросок по клику на значение.
+	Roll string `json:"roll,omitempty"`
+	// Rollable — колонка текста, значение которой бросается: "check" —
+	// бонус «+5» кубом проверки, "inline" — формулы внутри текста.
+	Rollable string `json:"rollable,omitempty"`
 	// ModifierTarget — цель модификатора, которая меняет значение поля.
 	ModifierTarget string   `json:"modifierTarget,omitempty"`
 	Options        []Option `json:"options,omitempty"`
@@ -197,6 +212,8 @@ type Section struct {
 	Tab      string   `json:"tab,omitempty"`
 	TabTitle string   `json:"tabTitle,omitempty"`
 	Mode     string   `json:"mode,omitempty"`
+	// Open — раскрыта ли секция из текстов в чтении (по умолчанию да).
+	Open *bool `json:"open,omitempty"`
 	// Bind — роль виджета → id поля схемы, см. widgetBinds.
 	Bind map[string]string `json:"bind,omitempty"`
 }
@@ -217,6 +234,10 @@ var widgetBinds = map[string][]bindRule{
 		{"dc", false, isNumeric},
 		{"modifier", false, isNumeric},
 		{"level", false, isNumeric},
+		{"ability", false, func(f *Field) bool { return f.Type == TypeSelect }},
+	},
+	"xp": {
+		{"xp", true, func(f *Field) bool { return f.Type == TypeNumber }},
 	},
 }
 
@@ -366,6 +387,12 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 	if len(f.Formula) > maxFormula || len(f.Roll) > maxFormula {
 		return fmt.Errorf("формула длиннее %d символов", maxFormula)
 	}
+	if f.Roll != "" && f.Type != TypeRoll && f.Type != TypeNumber && f.Type != TypeComputed {
+		return fmt.Errorf("roll — только у броска, числа и вычисляемого поля")
+	}
+	if f.Rollable != "" && (!column || f.Type != TypeText || (f.Rollable != RollableCheck && f.Rollable != RollableInline)) {
+		return fmt.Errorf("rollable — только у колонки текста, значения %s или %s", RollableCheck, RollableInline)
+	}
 	if column && (f.Type == TypeTable || f.Type == TypeResource) {
 		return fmt.Errorf("колонка таблицы не может быть таблицей или ресурсом")
 	}
@@ -401,6 +428,9 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 		for _, o := range f.Options {
 			if seen[o.Value] {
 				return fmt.Errorf("вариант %q повторяется", o.Value)
+			}
+			if len(o.Formula) > maxFormula {
+				return fmt.Errorf("формула варианта %q длиннее %d символов", o.Value, maxFormula)
 			}
 			seen[o.Value] = true
 		}

@@ -452,6 +452,327 @@
     }
    ],
    "static": "cycle"
+  },
+  {
+   "name": "select с формулами вариантов: выбранный вариант",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    },
+    "spellcasting": {
+     "ability": "int"
+    }
+   },
+   "values": {
+    "ability": 3,
+    "dc": 11
+   }
+  },
+  {
+   "name": "select с формулами вариантов: другой вариант",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    },
+    "spellcasting": {
+     "ability": "wis"
+    }
+   },
+   "values": {
+    "ability": 1,
+    "dc": 9
+   }
+  },
+  {
+   "name": "select с формулами вариантов: пусто — ноль",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    }
+   },
+   "values": {
+    "ability": 0,
+    "dc": 8
+   }
+  },
+  {
+   "name": "select с формулами вариантов: вариант без формулы",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    },
+    "spellcasting": {
+     "ability": "none"
+    }
+   },
+   "errors": {
+    "ability": "not_number",
+    "dc": "ref_error"
+   }
+  },
+  {
+   "name": "select с формулами вариантов: цикл через вариант",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@dc"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    }
+   },
+   "static": "cycle"
   }
  ],
  "_subtitles": "subtitles — подпись по шаблону list.subtitle (internal/schema: Subtitle, web/src/schema-list.js: cardSubtitle).",

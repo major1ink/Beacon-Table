@@ -70,8 +70,9 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 }
 
 // Схемы мира: у «Своей системы» и мира без модуля — встроенные; у системы
-// со своей схемой — её, недостающие виды — встроенные; у системы со старым
-// бланком D&D без схем — nil по всем видам (клиент рисует старым кодом).
+// со своей схемой — её, недостающие виды — встроенные; у системы со старыми
+// карточками D&D недостающие виды карточек — nil (клиент рисует старым кодом),
+// а лист всегда по схеме.
 func TestWorldSchemas(t *testing.T) {
 	m, _ := newTestManager(t)
 	own, err := schema.Parse([]byte(`{"format":"beacon-schema/v1","kind":"sheet",
@@ -111,8 +112,22 @@ func TestWorldSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, kind := range schema.Kinds {
-		if got[kind] != nil {
-			t.Errorf("старый бланк без схем: %s должен быть nil", kind)
+		if kind == schema.KindSheet {
+			if string(got[kind]) != string(builtinSheet.Raw) {
+				t.Error("старый бланк без схемы листа: лист — встроенный")
+			}
+			continue
 		}
+		if got[kind] != nil {
+			t.Errorf("старые карточки без схем: %s должен быть nil", kind)
+		}
+	}
+	legacy.Schemas = map[string]*schema.Schema{schema.KindSheet: own}
+	got, err = m.Schemas(&domain.Company{System: "oldsys"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got[schema.KindSheet]) != string(own.Raw) || got[schema.KindSpell] != nil {
+		t.Error("D&D со схемой листа: лист — её, карточки — старые")
 	}
 }

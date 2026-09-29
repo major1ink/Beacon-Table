@@ -10,9 +10,11 @@
 //   при изменении, refresh() — пересчитать сейчас, scheduleSave(),
 //   sendResolvedRoll(результат броска, подпись), vCard(заголовок, дети).
 import { icon } from "./icons.js";
+import { enhanceRolls, rollFormula } from "./inline-rolls.js";
 import { explainModifiers, statTarget } from "./modifiers.js";
 import { applyInput, createEvaluator } from "./schema-formula.js";
 import { cellPath, deletePath, formatNumber, formatPool, formatSigned, getPath, parsePool, setPath } from "./schema-layout.js";
+import { checkDie } from "./system-profile.js";
 
 export const SCALARS = new Set(["number", "computed", "text", "bool", "select", "dice", "roll", "resource", "prof", "tally", "pool"]);
 
@@ -59,12 +61,17 @@ export function viewTile(ctx, id, f) {
   switch (f.type) {
     case "number":
     case "computed":
-      return liveTile(ctx, f.label, () => {
-        const r = evaluatorOf(ctx).value(id);
-        if (r.error) return { text: "!", error: r.error };
-        const hint = f.modifierTarget ? modifierHint(ctx, f.modifierTarget, f.type === "number" ? raw() : null) : "";
-        return { text: showNumber(f, r.value), hint };
-      });
+      return liveTile(
+        ctx,
+        f.label,
+        () => {
+          const r = evaluatorOf(ctx).value(id);
+          if (r.error) return { text: "!", error: r.error };
+          const hint = f.modifierTarget ? modifierHint(ctx, f.modifierTarget, f.type === "number" ? raw() : null) : "";
+          return { text: showNumber(f, r.value), hint };
+        },
+        f.roll ? () => ctx.sendResolvedRoll(evaluatorOf(ctx).rollField(id), f.label) : null
+      );
     case "prof":
       return liveTile(ctx, f.label, () => ({ text: f.levels === 3 ? PROF_MARKS[profLevel(f, raw())] : raw() ? "✓" : "—" }));
     case "tally":
@@ -74,7 +81,10 @@ export function viewTile(ctx, id, f) {
     case "text":
       return String(raw() ?? "").trim() ? liveTile(ctx, f.label, () => ({ text: String(raw() ?? "") })) : null;
     case "bool":
-      return liveTile(ctx, f.label, () => ({ text: raw() ? "✓" : "—" }));
+      return liveTile(ctx, f.label, () => ({ text: raw() ? "✓" : "—" }), ctx.readOnly ? null : () => {
+        setPath(ctx.data, f.path, !raw());
+        changed(ctx);
+      });
     case "select":
       return selectTile(ctx, f, raw());
     case "resource": {
@@ -190,6 +200,7 @@ export function viewTable(ctx, id, f, title) {
               }
               if (c.type === "bool") return h("td", { text: getPath(row, c.path) ? "✓" : "" });
               if (c.type === "prof") return h("td", { text: profMark(c, getPath(row, c.path)) });
+              if (c.type === "text" && c.rollable) return rollableCell(ctx, c, String(getPath(row, c.path) ?? ""), rowName(f, row) || c.label);
               return h("td", { text: String(getPath(row, c.path) ?? "") });
             })
           )
@@ -197,6 +208,29 @@ export function viewTable(ctx, id, f, title) {
       ),
     ])
   );
+}
+
+const rowName = (f, row) => {
+  const col = firstTextColumn(f);
+  return col ? String(getPath(row, col.path) || "").trim() : "";
+};
+
+// rollableCell — ячейка текста, которую можно бросить: бонус «+5» кубом
+// проверки (check) или формулы внутри текста (inline).
+function rollableCell(ctx, c, text, label) {
+  const td = ctx.h("td", {});
+  if (c.rollable === "inline") {
+    td.textContent = text;
+    enhanceRolls(td, ctx.sendRoll);
+    return td;
+  }
+  const formula = /^[+-]\d+$/.test(text.trim()) ? rollFormula(text.trim(), checkDie()) : null;
+  if (!formula) {
+    td.textContent = text;
+    return td;
+  }
+  td.appendChild(ctx.h("button", { type: "button", class: "v-atk-hit", text: text.trim(), title: "Бросить: " + formula, onclick: () => ctx.sendRoll(formula, label) }));
+  return td;
 }
 
 // ---------- таблицы со строками (rows) ----------

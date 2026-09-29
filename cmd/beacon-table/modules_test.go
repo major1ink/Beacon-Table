@@ -57,3 +57,11 @@ func TestModuleAssetsHandler(t *testing.T) {
 		}
 	}
 }
+
+func TestBuiltinModulesHaveSheetSchemas(t *testing.T) {
+	for _, m := range builtinModules(systemFiles) {
+		if m.Schemas["sheet"] == nil || len(m.Schemas) != 1 {
+			t.Errorf("%s: схемы модуля %v — нужна только схема листа", m.Manifest.ID, m.Schemas)
+		}
+	}
+}

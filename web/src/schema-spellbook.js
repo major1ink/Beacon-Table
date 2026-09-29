@@ -89,6 +89,7 @@ function boundValue(ctx, sec, role) {
 
 function headTiles(ctx, sec) {
   const fields = ctx.compiled.schema.fields;
+  if (sec.bind.ability && !getPath(ctx.data, fields[sec.bind.ability].path)) return null;
   const tiles = ["modifier", "dc", "attack"]
     .filter((role) => sec.bind[role])
     .map((role) => {
@@ -151,7 +152,7 @@ function spellRow(ctx, sec, index, row, lvl, { read, charLevel, modValue, slotVa
   const { h } = ctx;
   const name = String(read(row, "name")).trim();
   const card = cardOf(index, name);
-  const meta = [read(row, "castTime"), read(row, "range")].filter(Boolean).join(" · ");
+  const meta = [read(row, "cast_time"), read(row, "range")].filter(Boolean).join(" · ");
   const notes = read(row, "notes");
   const metaEl = meta ? h("span", { class: "v-spell-meta", text: meta }) : null;
   const notesEl = notes ? h("span", { class: "v-spell-meta", text: notes }) : null;

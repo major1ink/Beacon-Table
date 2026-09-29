@@ -198,3 +198,20 @@ test("таблица со строками: битая формула и цик�
   const errors = compileSchema(schema).errors;
   assert.deepEqual(errors.map((e) => [e.field, e.row, e.error.code]), [["skills", "acrobatics", "syntax"], ["skills", "stealth", "cycle"]]);
 });
+
+test("бросок по клику у числа и вычисляемого поля", () => {
+  const schema = {
+    fields: {
+      dex: { type: "number", path: "abilities.dex", label: "Ловкость" },
+      dex_mod: { type: "computed", formula: "floor((@dex - 10) / 2)", roll: "1d20 + @dex_mod", label: "Ловкость" },
+      luck: { type: "number", path: "luck", roll: "2d6 + @luck", label: "Удача" },
+    },
+  };
+  const compiled = compileSchema(schema);
+  assert.deepEqual(compiled.errors, []);
+  const ev = createEvaluator(compiled, { abilities: { dex: 16 }, luck: 2 }, []);
+  assert.equal(ev.value("dex_mod").value, 3);
+  assert.equal(ev.rollField("dex_mod").formula, "1d20+3");
+  assert.equal(ev.rollField("luck").formula, "2d6+2");
+  assert.equal(ev.rollField("dex").error.code, "not_number");
+});

@@ -529,12 +529,27 @@ export function applyInput(current, text, resolve) {
 //     модификаторами stat.<ключ>; нет такой строки — 0;
 //   - иначе путь в JSON листа или карточки — значение как есть; нет — 0.
 
-const fieldFormula = (f) => {
-  if (!f) return null;
-  if (f.type === "computed") return { src: f.formula, dice: false };
-  if (f.type === "roll") return { src: f.roll, dice: true };
-  return null;
-};
+const ROLL_SUB = "roll";
+const optionSub = (value) => "opt:" + value;
+export const formulaKey = (id, sub) => (sub ? id + "#" + sub : id);
+
+// formulasOf — формулы поля (как internal/schema: formulasOf): sub — какая
+// ("" — основная, "roll" — бросок по клику, "opt:<значение>" — вариант
+// select), value — даёт значение поля и потому участвует в циклах.
+function formulasOf(f) {
+  if (!f) return [];
+  if (f.type === "roll") return [{ sub: "", src: f.roll, dice: true, value: false }];
+  const out = [];
+  if (f.type === "computed") out.push({ sub: "", src: f.formula, dice: false, value: true });
+  if (f.type === "select") for (const o of f.options || []) if (o.formula) out.push({ sub: optionSub(o.value), src: o.formula, dice: false, value: true });
+  if (f.roll && (f.type === "number" || f.type === "computed")) out.push({ sub: ROLL_SUB, src: f.roll, dice: true, value: false });
+  return out;
+}
+
+const hasValueFormula = (f) => formulasOf(f).some((ff) => ff.value);
+
+// fieldFormula — основная формула поля или колонки.
+const fieldFormula = (f) => formulasOf(f).find((ff) => ff.sub === "") || null;
 
 const own = (obj, key) => obj != null && Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -585,13 +600,14 @@ export function compileSchema(schema) {
   const graph = new Map();
   for (const id of Object.keys(fields).sort()) {
     const f = fields[id];
-    const ff = fieldFormula(f);
-    if (ff) {
+    const edges = [];
+    for (const ff of formulasOf(f)) {
       const c = compile(ff.src, ff.dice);
-      formulas.set(id, c);
+      formulas.set(formulaKey(id, ff.sub), c);
       if (c.error) errors.push({ field: id, error: c.error });
-      else if (f.type === "computed") graph.set(id, c.expr.refs.filter((r) => fields[r] && fields[r].type === "computed"));
+      else if (ff.value) edges.push(...c.expr.refs.filter((r) => fields[r] && hasValueFormula(fields[r])));
     }
+    if (hasValueFormula(f)) graph.set(id, edges);
     if (!f || f.type !== "table") continue;
     const cols = new Map();
     const byId = {};
@@ -726,6 +742,10 @@ export function createEvaluator(compiled, data, mods) {
         const cf = formulaOf(id);
         if (!cf || cf.error) throw cf ? cf.error : new FormulaError("syntax", 0, "нет формулы");
         v = evaluate(cf.expr, resolver(id));
+      } else if (f.type === "select" && hasValueFormula(f)) {
+        return optionValue(id, f);
+      } else if (f.type === "select") {
+        throw new FormulaError("not_number", 0, id);
       } else if (f.type === "roll" || f.type === "table" || f.type === "resource") {
         throw new FormulaError("not_number", 0, id);
       } else {
@@ -735,6 +755,16 @@ export function createEvaluator(compiled, data, mods) {
       return modify(v, f.modifierTarget);
     }
 
+    // optionValue — формула выбранного варианта select; пустой выбор — 0.
+    function optionValue(id, f) {
+      const chosen = lookupPath(source, pathOf(f));
+      if (typeof chosen !== "string" || chosen === "") return 0;
+      const cf = formulaOf(formulaKey(id, optionSub(chosen)));
+      if (!cf) throw new FormulaError("not_number", 0, id);
+      if (cf.error) throw cf.error;
+      return evaluate(cf.expr, resolver(id));
+    }
+
     // Ошибка вычисляемого поля, на которое ссылаются, становится «ошибкой
     // в @поле»; только у участников цикла она остаётся циклом.
     function resolver(self) {
@@ -742,7 +772,7 @@ export function createEvaluator(compiled, data, mods) {
         if (own(defs, name)) {
           const r = value(name);
           if (!r.error) return r.value;
-          if (defs[name].type !== "computed") throw r.error;
+          if (!hasValueFormula(defs[name])) throw r.error;
           if (r.error.code === "cycle" && self && inCycle.has(self)) throw r.error;
           throw new FormulaError("ref_error", 0, name);
         }
@@ -794,8 +824,9 @@ export function createEvaluator(compiled, data, mods) {
 
   function rollOf(defs, source, formulaOf, resolve, id, pathOf = (f) => f.path) {
     const f = defs[id];
-    if (f && f.type === "roll") {
-      const cf = formulaOf(id);
+    const clickRoll = f && f.roll && (f.type === "number" || f.type === "computed");
+    if (f && (f.type === "roll" || clickRoll)) {
+      const cf = formulaOf(clickRoll ? formulaKey(id, ROLL_SUB) : id);
       if (!cf || cf.error) return { formula: null, dice: 0, const: 0, error: cf ? cf.error : new FormulaError("syntax", 0, "нет формулы") };
       try {
         return Object.assign(diceRoll(cf.expr, resolve), { error: null });

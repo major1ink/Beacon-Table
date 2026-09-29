@@ -25,15 +25,15 @@ import (
 //
 // Зеркало на клиенте — web/src/schema-formula.js: createEvaluator.
 
-// compiled — разобранные формулы вычисляемых полей и бросков схемы (один
-// раз на схему).
+// compiled — разобранные формулы полей схемы (один раз на схему), по
+// formulaKey.
 func (s *Schema) compiled() map[string]compiledFormula {
 	s.compileOnce.Do(func() {
 		s.formulas = map[string]compiledFormula{}
 		for id, f := range s.Fields {
-			if src, dice, ok := fieldFormula(f); ok {
-				e, err := formula.Parse(src, dice)
-				s.formulas[id] = compiledFormula{expr: e, err: err}
+			for _, ff := range formulasOf(f) {
+				e, err := formula.Parse(ff.src, ff.dice)
+				s.formulas[formulaKey(id, ff.sub)] = compiledFormula{expr: e, err: err}
 			}
 		}
 	})
@@ -45,15 +45,56 @@ type compiledFormula struct {
 	err  error
 }
 
-// fieldFormula — формула поля: у вычисляемого — число, у броска — кубы.
-func fieldFormula(f *Field) (src string, dice, ok bool) {
+// fieldFormula — формула поля. sub — какая из формул поля ("" — основная,
+// "roll" — бросок по клику, "opt:<значение>" — вариант select); value —
+// формула даёт значение поля и потому участвует в поиске циклов.
+type fieldFormula struct {
+	sub, src    string
+	dice, value bool
+}
+
+// formulasOf — формулы поля: у вычисляемого — число, у броска — кубы, у
+// select — формулы вариантов; у числа и вычисляемого — ещё бросок по клику.
+func formulasOf(f *Field) []fieldFormula {
+	var out []fieldFormula
 	switch f.Type {
 	case TypeComputed:
-		return f.Formula, false, true
+		out = append(out, fieldFormula{src: f.Formula, value: true})
 	case TypeRoll:
-		return f.Roll, true, true
+		return []fieldFormula{{src: f.Roll, dice: true}}
+	case TypeSelect:
+		for _, o := range f.Options {
+			if o.Formula != "" {
+				out = append(out, fieldFormula{sub: optionSub(o.Value), src: o.Formula, value: true})
+			}
+		}
 	}
-	return "", false, false
+	if f.Roll != "" && (f.Type == TypeNumber || f.Type == TypeComputed) {
+		out = append(out, fieldFormula{sub: rollSub, src: f.Roll, dice: true})
+	}
+	return out
+}
+
+const rollSub = "roll"
+
+func optionSub(value string) string { return "opt:" + value }
+
+func formulaKey(id, sub string) string {
+	if sub == "" {
+		return id
+	}
+	return id + "#" + sub
+}
+
+// hasValueFormula — значение поля считается по формуле: вычисляемое поле или
+// select с формулами вариантов.
+func hasValueFormula(f *Field) bool {
+	for _, ff := range formulasOf(f) {
+		if ff.value {
+			return true
+		}
+	}
+	return false
 }
 
 // checkFormulas — формулы разбираются, ссылки ведут к полю, характеристике
@@ -68,7 +109,7 @@ func (s *Schema) checkFormulas(root reflect.Type) error {
 		if err != nil {
 			return fmt.Errorf("поле %s: %w", id, err)
 		}
-		if f.Type == TypeComputed {
+		if hasValueFormula(f) {
 			graph[id] = computedRefs(refs, s.Fields)
 		}
 		if f.Type != TypeTable {
@@ -136,37 +177,40 @@ func rowsOrOne(rows []Row) []Row {
 	return rows
 }
 
-// checkFieldFormula — разбор формулы поля и проверка её ссылок. cols —
+// checkFieldFormula — разбор формул поля и проверка их ссылок. cols —
 // колонки той же строки (у колонки таблицы), root — Go-тип, от которого
-// считаются пути (у колонки — тип строки).
+// считаются пути (у колонки — тип строки). Возвращает ссылки формул,
+// дающих значение поля.
 func checkFieldFormula(f *Field, root reflect.Type, fields, cols map[string]*Field) ([]string, error) {
-	src, dice, ok := fieldFormula(f)
-	if !ok {
-		return nil, nil
-	}
-	e, err := formula.Parse(src, dice)
-	if err != nil {
-		return nil, err
-	}
-	for _, ref := range e.Refs() {
-		if cols[ref] != nil || fields[ref] != nil || strings.HasPrefix(ref, "stat.") {
-			continue
+	var out []string
+	for _, ff := range formulasOf(f) {
+		e, err := formula.Parse(ff.src, ff.dice)
+		if err != nil {
+			return nil, err
 		}
-		if root != nil {
-			if _, err := domain.ResolveJSONPath(root, ref); err != nil {
-				return nil, &formula.Error{Code: formula.CodeUnknownRef, Detail: ref}
+		for _, ref := range e.Refs() {
+			if cols[ref] != nil || fields[ref] != nil || strings.HasPrefix(ref, "stat.") {
+				continue
+			}
+			if root != nil {
+				if _, err := domain.ResolveJSONPath(root, ref); err != nil {
+					return nil, &formula.Error{Code: formula.CodeUnknownRef, Detail: ref}
+				}
 			}
 		}
+		if ff.value {
+			out = append(out, e.Refs()...)
+		}
 	}
-	return e.Refs(), nil
+	return out, nil
 }
 
-// computedRefs — ссылки на вычисляемые поля из fields: только из них и
-// складывается цикл.
+// computedRefs — ссылки на поля с формулой значения из fields: только из них
+// и складывается цикл.
 func computedRefs(refs []string, fields map[string]*Field) []string {
 	var out []string
 	for _, r := range refs {
-		if f := fields[r]; f != nil && f.Type == TypeComputed {
+		if f := fields[r]; f != nil && hasValueFormula(f) {
 			out = append(out, r)
 		}
 	}
@@ -315,6 +359,11 @@ func (e *Evaluator) compute(id string, f *Field) (float64, error) {
 		if v, err = c.expr.Eval(e.resolver(id)); err != nil {
 			return 0, err
 		}
+	case TypeSelect:
+		if !hasValueFormula(f) {
+			return 0, &formula.Error{Code: formula.CodeNotNumber, Detail: id}
+		}
+		return e.optionValue(id, f)
 	case TypeRoll, TypeTable, TypeResource:
 		return 0, &formula.Error{Code: formula.CodeNotNumber, Detail: id}
 	default:
@@ -325,6 +374,23 @@ func (e *Evaluator) compute(id string, f *Field) (float64, error) {
 		v = n
 	}
 	return e.modify(v, f.ModifierTarget), nil
+}
+
+// optionValue — значение select с формулами вариантов: формула выбранного
+// варианта, у пустого выбора — 0.
+func (e *Evaluator) optionValue(id string, f *Field) (float64, error) {
+	chosen, _ := lookupPath(e.data, f.Path).(string)
+	if chosen == "" {
+		return 0, nil
+	}
+	c, ok := e.s.compiled()[formulaKey(id, optionSub(chosen))]
+	if !ok {
+		return 0, &formula.Error{Code: formula.CodeNotNumber, Detail: id}
+	}
+	if c.err != nil {
+		return 0, c.err
+	}
+	return c.expr.Eval(e.resolver(id))
 }
 
 // modify — модификаторы цели target поверх v. Модификаторы целые: основа
@@ -344,7 +410,7 @@ func (e *Evaluator) resolver(self string) formula.Resolver {
 		if e.s != nil {
 			if f := e.s.Fields[name]; f != nil {
 				v, err := e.Value(name)
-				if err == nil || f.Type != TypeComputed {
+				if err == nil || !hasValueFormula(f) {
 					return v, err
 				}
 				var fe *formula.Error

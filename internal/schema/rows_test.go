@@ -55,12 +55,23 @@ func TestParseRowsRejects(t *testing.T) {
 		"шкала на 99":             func(m map[string]any) { field(m, "fails")["max"] = 99 },
 		"шкала не в число":        func(m map[string]any) { field(m, "fails")["path"] = "info.class" },
 		"кривой тон":              func(m map[string]any) { field(m, "fails")["tone"] = "loud" },
-		"signed у шкалы":          func(m map[string]any) { field(m, "fails")["signed"] = true },
-		"max у числа":             func(m map[string]any) { field(m, "dex")["max"] = 3 },
-		"счётчик не в строку":     func(m map[string]any) { column(m, "slots", 0)["path"] = "{key}.x" },
-		"счётчик в число":         func(m map[string]any) { field(m, "slots")["path"] = "combat" },
-		"путь без ключа":          func(m map[string]any) { column(m, "skills", 0)["path"] = "acrobatics" },
-		"путь в никуда":           func(m map[string]any) { field(m, "slots")["rows"].([]any)[0].(map[string]any)["key"] = "x" },
+		"roll у текста":           func(m map[string]any) { field(m, "dex")["type"] = "text"; field(m, "dex")["roll"] = "1d20" },
+		"битый бросок у числа":    func(m map[string]any) { field(m, "dex")["roll"] = "1d20 +" },
+		"бросок у числа в никуда": func(m map[string]any) { field(m, "dex")["roll"] = "1d20 + @combat.shield" },
+		"rollable не в колонке":   func(m map[string]any) { field(m, "dex")["type"] = "text"; field(m, "dex")["rollable"] = "check" },
+		"rollable у числа":        func(m map[string]any) { column(m, "prepared", 1)["rollable"] = "check" },
+		"кривой rollable":         func(m map[string]any) { column(m, "prepared", 0)["rollable"] = "always" },
+		"xp без привязки":         func(m map[string]any) { m["layout"] = append(m["layout"].([]any), map[string]any{"widget": "xp"}) },
+		"xp не в число": func(m map[string]any) {
+			m["layout"] = append(m["layout"].([]any), map[string]any{"widget": "xp", "bind": map[string]any{"xp": "prof"}})
+		},
+		"ability не select":   func(m map[string]any) { section(m, 2)["bind"].(map[string]any)["ability"] = "dex" },
+		"signed у шкалы":      func(m map[string]any) { field(m, "fails")["signed"] = true },
+		"max у числа":         func(m map[string]any) { field(m, "dex")["max"] = 3 },
+		"счётчик не в строку": func(m map[string]any) { column(m, "slots", 0)["path"] = "{key}.x" },
+		"счётчик в число":     func(m map[string]any) { field(m, "slots")["path"] = "combat" },
+		"путь без ключа":      func(m map[string]any) { column(m, "skills", 0)["path"] = "acrobatics" },
+		"путь в никуда":       func(m map[string]any) { field(m, "slots")["rows"].([]any)[0].(map[string]any)["key"] = "x" },
 		"ключ дважды": func(m map[string]any) {
 			field(m, "saves")["rows"] = []any{map[string]any{"key": "a", "label": "A"}, map[string]any{"key": "a", "label": "B"}}
 		},
@@ -105,6 +116,39 @@ func TestParseRowsRejects(t *testing.T) {
 		m := goodRows(t)
 		fn(m)
 		if _, err := Parse(encode(t, m)); err == nil {
+			t.Errorf("%s: ожидали ошибку", name)
+		}
+	}
+}
+
+func TestParseSelectFormulas(t *testing.T) {
+	m := goodRows(t)
+	fields := m["fields"].(map[string]any)
+	fields["ability"] = map[string]any{"type": "select", "path": "spellcasting.ability", "label": "Характеристика", "options": []any{
+		map[string]any{"value": "dex", "label": "Ловкость", "formula": "@dex_mod"},
+		map[string]any{"value": "none", "label": "Нет"},
+	}}
+	fields["dc"] = map[string]any{"type": "computed", "label": "СЛ", "formula": "8 + @prof + @ability", "roll": "1d20 + @dc", "signed": true}
+	m["layout"].([]any)[2].(map[string]any)["bind"].(map[string]any)["ability"] = "ability"
+	if _, err := Parse(encode(t, m)); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(){
+		"битая формула варианта": func() {
+			fields["ability"].(map[string]any)["options"].([]any)[0].(map[string]any)["formula"] = "@dex_mod +"
+		},
+		"цикл через вариант": func() { fields["ability"].(map[string]any)["options"].([]any)[0].(map[string]any)["formula"] = "@dc" },
+		"вариант в никуда": func() {
+			fields["ability"].(map[string]any)["options"].([]any)[0].(map[string]any)["formula"] = "@combat.shield"
+		},
+	} {
+		bad := goodRows(t)
+		bf := bad["fields"].(map[string]any)
+		bf["ability"] = map[string]any{"type": "select", "path": "spellcasting.ability", "label": "X", "options": []any{map[string]any{"value": "dex", "label": "Л"}}}
+		bf["dc"] = map[string]any{"type": "computed", "label": "СЛ", "formula": "8 + @ability"}
+		fields = bf
+		mutate()
+		if _, err := Parse(encode(t, bad)); err == nil {
 			t.Errorf("%s: ожидали ошибку", name)
 		}
 	}

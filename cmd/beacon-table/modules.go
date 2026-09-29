@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"path"
@@ -22,7 +23,7 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 	}
 	out := make([]*module.Module, 0, len(systems))
 	for _, s := range systems {
-		out = append(out, module.Builtin(systemFS, "systemdata", s.id, &module.Manifest{
+		mod := module.Builtin(systemFS, "systemdata", s.id, &module.Manifest{
 			Format:          module.Format,
 			ID:              s.id,
 			Type:            module.TypeSystem,
@@ -37,7 +38,13 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 			Units:           &domain.SystemUnits{Weight: "фнт"},
 			Sheet:           s.id,
 			Currencies:      dndCurrencies(),
-		}))
+		})
+		schemas, err := module.LoadSchemas(systemFS, path.Join("systemdata", "schemas", s.id), mod.Manifest)
+		if err != nil {
+			panic(fmt.Sprintf("схемы встроенного модуля: %v", err))
+		}
+		mod.Schemas = schemas
+		out = append(out, mod)
 	}
 	return out
 }

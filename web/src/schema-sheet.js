@@ -30,7 +30,7 @@ function viewSection(ctx, sec) {
   const list = (sec.fields || []).map((id) => [id, fields[id]]).filter(([, f]) => f);
   // Секция из одних текстов — сворачиваемые блоки текста, как в бланке.
   if (list.length && list.every(([, f]) => f.type === "longtext")) {
-    return list.map(([, f]) => ctx.vText(list.length === 1 && sec.title ? sec.title : f.label, getPath(ctx.data, f.path)));
+    return list.map(([, f]) => ctx.vText(list.length === 1 && sec.title ? sec.title : f.label, getPath(ctx.data, f.path), { open: sec.open !== false }));
   }
   // Секция из одной таблицы — сама таблица под заголовком секции, без
   // карточки в карточке.
@@ -56,6 +56,8 @@ function viewWidget(ctx, sec) {
       return ctx.vMoneyCard();
     case "spellbook":
       return renderSpellbook(ctx, sec);
+    case "xp":
+      return ctx.vXpCard(ctx.compiled.schema.fields[sec.bind.xp]);
     default:
       return null;
   }
