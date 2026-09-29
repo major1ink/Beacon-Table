@@ -1,18 +1,7 @@
-// broadcast-guard.js — сторож страницы трансляции.
-//
-// Телевизор или приставка не показывают консоль, а человек у экрана видит
-// только «квадратик» и не может сказать, что сломалось. Этот скрипт:
-//
-//  - сразу сообщает серверу, что за браузер открыл трансляцию (модули,
-//    WebGL, видеокарта, размер экрана);
-//  - пересылает на сервер ошибки страницы — ДМ получит их в «Сообщить о
-//    баге» (см. internal/api/http/broadcast_diag.go, web/src/bug-report.js);
-//  - если стол так и не запустился, показывает на экране понятное
-//    объяснение вместо пустоты.
-//
-// Намеренно ES5 и без сборки (лежит в public/, копируется как есть): его
-// задача — выполниться там, где основной код страницы даже не разобрался.
-// Подключён обычным <script> до модулей, поэтому ловит и их ошибки разбора.
+/* eslint no-unused-vars: ["warn", { "caughtErrors": "none" }] */
+// Сторож страницы трансляции: отправляет на сервер сведения о браузере и ошибки,
+// а если стол не запустился, показывает объяснение на экране.
+// Написан на ES5 без сборки и подключён до модулей, чтобы работать в старых браузерах.
 (function () {
   "use strict";
 
@@ -32,9 +21,8 @@
       xhr.open("POST", "/api/broadcast/diag", true);
       xhr.setRequestHeader("Content-Type", "application/json");
       xhr.send(JSON.stringify(body));
-    // eslint-disable-next-line no-unused-vars -- ES5: catch без переменной появился только в ES2019
-    } catch (_) {
-      /* сеть недоступна — показывать на экране всё равно будем */
+    } catch (e) {
+      // сервер недоступен, отчёт не отправить
     }
   }
 
@@ -50,7 +38,7 @@
         var dbg = gl.getExtension("WEBGL_debug_renderer_info");
         if (dbg) out.gpu = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
         var lose = gl.getExtension("WEBGL_lose_context");
-        if (lose) lose.loseContext(); // у телевизора контекстов мало, пробный не держим
+        if (lose) lose.loseContext();
       }
     } catch (e) {
       out.webglError = String(e && e.message);
@@ -80,14 +68,12 @@
     if (err.message) return (err.name || "Error") + ": " + err.message;
     try {
       return JSON.stringify(err);
-    // eslint-disable-next-line no-unused-vars -- ES5: catch без переменной появился только в ES2019
-    } catch (_) {
+    } catch (e) {
       return String(err);
     }
   }
 
-  // capture: true — так сюда попадают и файлы, которые не загрузились
-  // (скрипт, стиль): у них событие error не всплывает до window.
+  // capture: true, чтобы ловить и не загрузившиеся скрипты и стили
   window.addEventListener(
     "error",
     function (e) {
@@ -105,8 +91,7 @@
     report("promise: " + errorText(e.reason));
   });
 
-  // Приложение и само ловит свои ошибки (catch + console.error) — такие до
-  // window.onerror не доходят, а они как раз самые говорящие.
+  // ошибки, которые приложение ловит само, до window.onerror не доходят
   if (window.console && console.error) {
     var original = console.error;
     console.error = function () {
@@ -154,13 +139,16 @@
     document.body.appendChild(box);
   }
 
-  // Контракт с pages/broadcast.js: started() — модуль страницы запустился,
-  // fatal() — запустился, но стол поднять не смог (например, нет WebGL).
+  // Вызывается из pages/broadcast.js: started — модуль страницы запустился,
+  // note — сведения для отчёта, fatal — стол поднять не удалось.
   window.__beaconBroadcast = {
     started: function () {
       if (started) return;
       started = true;
       post({ kind: "started" });
+    },
+    note: function (info) {
+      post({ kind: "info", info: info });
     },
     fatal: function (err) {
       var text = errorText(err) || String(err);

@@ -15,9 +15,7 @@ import (
 // из запроса значило бы открыть перенаправление на чужой адрес.
 const broadcastPagePath = "/broadcast.html"
 
-// broadcastShortPath — короткий адрес трансляции для набора с пульта:
-// «192.168.1.5:8080/tv» против «/broadcast.html?key=<32 знака>». Ведёт на
-// экран с кодом подтверждения (см. handleBroadcastShortcut).
+// broadcastShortPath — короткий адрес трансляции, чтобы набирать его с пульта.
 const broadcastShortPath = "/tv"
 
 // setBroadcastCookie — выдать этому браузеру право смотреть трансляцию (см.
@@ -51,14 +49,8 @@ func broadcastKey(r *http.Request) string {
 	return r.URL.Query().Get(domain.BroadcastKeyParam)
 }
 
-// broadcastLinkResponse — ответ ручек ссылки трансляции.
-//
-// Полный адрес собирает фронт из location.origin — сервер за обратным
-// прокси своего внешнего имени не знает и угадывать его по заголовкам не
-// должен. Исключение — lanOrigins: адреса этой машины в локальной сети. Они
-// нужны, когда ДМ сам открыл стол как localhost (десктоп, браузер на том же
-// компьютере): ссылка «http://localhost:8080/…» на телевизоре ведёт в
-// никуда, а именно её ДМ и скопировал бы.
+// broadcastLinkResponse собирает ответ с ключом и путями трансляции.
+// lanOrigins нужны, когда ДМ открыл стол как localhost: с телевизора эта ссылка не откроется.
 func (a *API) broadcastLinkResponse(key string) map[string]any {
 	lan := []string{}
 	if a.LANOrigins != nil {
@@ -102,10 +94,7 @@ func (a *API) handleBroadcastRotate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.broadcastLinkResponse(key))
 }
 
-// handleBroadcastShortcut — GET /tv и GET /broadcast: короткие адреса
-// трансляции. Ведут на саму страницу; ?key= переносится как есть, так что
-// ссылка с ключом тоже становится короче. Цель редиректа — константа плюс
-// экранированный ключ, чужой адрес сюда не подставить.
+// handleBroadcastShortcut — GET /tv и GET /broadcast: редирект на страницу трансляции с тем же ?key=.
 func (a *API) handleBroadcastShortcut(w http.ResponseWriter, r *http.Request) {
 	target := broadcastPagePath
 	if key := r.URL.Query().Get(domain.BroadcastKeyParam); key != "" {
@@ -143,9 +132,7 @@ func (a *API) BroadcastEntry(next http.Handler) http.Handler {
 			http.Redirect(w, r, broadcastPagePath, http.StatusSeeOther)
 			return
 		}
-		// Браузер экрана виден уже здесь, по заголовку: даже если на
-		// телевизоре потом не выполнится ни строчки, в отчёте о баге будет,
-		// что это был за движок (см. broadcast_diag.go).
+		// Браузер виден по заголовку, даже если скрипты страницы не запустятся.
 		a.broadcastDiag.pageLoaded(clientAddr(r), r.UserAgent())
 		next.ServeHTTP(w, r)
 	})
@@ -211,10 +198,32 @@ func (a *API) handleBroadcastRequestCreate(w http.ResponseWriter, r *http.Reques
 // ключ доезжает до телевизора сам, никто его не вводит и нигде не видит.
 func (a *API) handleBroadcastRequestState(w http.ResponseWriter, r *http.Request) {
 	state, key := a.Broadcast.RequestState(r.PathValue("id"))
+	resp := map[string]string{"state": state}
 	if state == domain.BroadcastRequestApproved && key != "" {
 		a.setBroadcastCookie(w, key)
+		// Ключ и в теле: браузеры приставок не всегда сохраняют cookie из ответа на XHR.
+		resp["key"] = key
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"state": state})
+	writeJSON(w, http.StatusOK, resp)
+}
+
+const probeCookieName = "beacon_probe"
+
+// handleBroadcastProbe — GET /api/broadcast/probe: ставит пробную cookie и
+// отвечает, пришла ли она с запросом. Экран зовёт её дважды подряд.
+func (a *API) handleBroadcastProbe(w http.ResponseWriter, r *http.Request) {
+	_, err := r.Cookie(probeCookieName)
+	//nolint:gosec // G124: пробная cookie без секретов, Secure — как у остальных
+	http.SetCookie(w, &http.Cookie{
+		Name:     probeCookieName,
+		Value:    "1",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   a.SecureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   600,
+	})
+	writeJSON(w, http.StatusOK, map[string]bool{"cookie": err == nil})
 }
 
 // handleBroadcastRequestList — GET /api/broadcast/requests (только ДМ):

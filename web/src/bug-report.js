@@ -100,9 +100,15 @@ async function collectTech() {
   return lines.join("\n");
 }
 
-// INFO_LABELS — подписи к сведениям, что прислал сторож страницы трансляции
-// (web/public/broadcast-guard.js), в порядке вывода.
+// INFO_LABELS — подписи к сведениям экрана трансляции в порядке вывода.
 const INFO_LABELS = [
+  ["cookieEnabled", "cookieEnabled"],
+  ["docCookie", "document.cookie"],
+  ["localStorage", "localStorage"],
+  ["sessionStorage", "sessionStorage"],
+  ["serverCookie", "cookie от сервера"],
+  ["accessAfterApproval", "доступ после подтверждения"],
+  ["login", "вход"],
   ["modules", "ES-модули"],
   ["webgl2", "WebGL2"],
   ["webgl", "WebGL"],
@@ -113,11 +119,8 @@ const INFO_LABELS = [
   ["dpr", "dpr"],
 ];
 
-// broadcastScreens — что сервер знает об экранах трансляции: телевизор сам
-// отчёт не отправит (консоли нет, пульт не клавиатура), поэтому его браузер
-// и ошибки приезжают сюда, в отчёт ДМ. Адрес экрана не пишем — отчёт уходит
-// в публичный issue, а разбору он ничего не даёт. У игрока ручка отвечает
-// отказом — блока просто нет.
+// broadcastScreens — что сервер знает об экранах трансляции. Адрес экрана в
+// отчёт не пишем: он уходит в публичный issue. У игрока блока нет.
 async function broadcastScreens() {
   let screens;
   try {
