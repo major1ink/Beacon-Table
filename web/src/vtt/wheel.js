@@ -6,12 +6,9 @@ const MOUSE_MIN_DELTA = 50;
 const PINCH_MAX_DELTA = 25;
 const PINCH_SPEED = 0.01;
 
-// createWheelClassifier возвращает функцию, которая по событию wheel говорит:
-// "pinch" (плавный зум), "pan" (сдвиг карты) или "zoom" (шаг зума колесом).
-// Мышь и тачпад различаются по значениям delta: колесо мыши даёт целые
-// deltaY от 100 и deltaX = 0, тачпад — мелкие и дробные значения или deltaX.
-// Инерция тачпада после отпускания пальцев даёт крупные значения, поэтому
-// события подряд считаются одним жестом.
+// createWheelClassifier по событию wheel возвращает "pinch" (щипок), "pan" (сдвиг карты)
+// или "zoom" (шаг колеса). Колесо мыши даёт целый deltaY от 50 и deltaX = 0,
+// тачпад — мелкие или дробные значения. События подряд считаются одним жестом.
 export function createWheelClassifier() {
   let lastPanAt = -Infinity;
   return (e) => {
@@ -23,7 +20,7 @@ export function createWheelClassifier() {
   };
 }
 
-// pinchFactor — множитель зума для щипка; ограничение нужно, чтобы Ctrl + колесо мыши не прыгало.
+// pinchFactor — множитель зума для щипка, с ограничением для Ctrl + колесо мыши.
 export function pinchFactor(deltaY) {
   const d = Math.max(-PINCH_MAX_DELTA, Math.min(PINCH_MAX_DELTA, deltaY));
   return Math.exp(-d * PINCH_SPEED);
