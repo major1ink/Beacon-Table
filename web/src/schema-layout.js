@@ -68,6 +68,24 @@ export function deletePath(obj, path) {
   if (parent && typeof parent === "object" && !Array.isArray(parent)) delete parent[last];
 }
 
+// parsePool — «4» или «4/2» (всего/потрачено) как { total, used }; null — не разбирается.
+export function parsePool(raw) {
+  const t = String(raw ?? "").trim();
+  if (!t) return null;
+  const both = /^(\d+)\s*\/\s*(\d+)$/.exec(t);
+  if (both) {
+    const total = parseInt(both[1], 10);
+    return { total, used: Math.min(parseInt(both[2], 10), total) };
+  }
+  const one = /^(\d+)$/.exec(t);
+  return one ? { total: parseInt(one[1], 10), used: 0 } : null;
+}
+
+export const formatPool = (total, used) => (used > 0 ? `${total}/${used}` : String(total));
+
+// cellPath — путь ячейки таблицы со строками от листа или карточки.
+export const cellPath = (table, column, row) => `${table.path}.${String(column.path).replaceAll("{key}", row.key)}`;
+
 // formatNumber — число для плитки: целое как есть, дробь — до сотых
 // (floor(x·100 + 0.5) — как на сервере, internal/schema: FormatNumber).
 export function formatNumber(v) {

@@ -10,6 +10,7 @@
 // схема. Лист без схемы (бланк D&D) рисуется старым кодом страницы.
 import { SCALARS, editInput, editTable, rowsTable, viewTable, viewTile } from "./schema-fields.js";
 import { TAB_INVENTORY, editTabs, getPath, setPath, viewColumns } from "./schema-layout.js";
+import { renderSpellbook } from "./schema-spellbook.js";
 
 
 // ==================== чтение ====================
@@ -53,6 +54,8 @@ function viewWidget(ctx, sec) {
       return ctx.vInventoryCard();
     case "money":
       return ctx.vMoneyCard();
+    case "spellbook":
+      return renderSpellbook(ctx, sec);
     default:
       return null;
   }
@@ -88,7 +91,9 @@ export function renderSchemaEdit(ctx) {
 
 function editSection(e, sec) {
   const { h } = e;
-  if (sec.widget) return sec.widget === "resources" ? resourcesTable(e, sec.title || "Ресурсы") : null;
+  if (sec.widget === "resources") return resourcesTable(e, sec.title || "Ресурсы");
+  if (sec.widget === "spellbook") return spellbookEdit(e, sec);
+  if (sec.widget) return null;
   const fields = e.compiled.schema.fields;
   const list = (sec.fields || []).map((id) => [id, fields[id]]).filter(([, f]) => f && f.type !== "roll");
   if (!list.length) return null;
@@ -105,6 +110,16 @@ function editSection(e, sec) {
   ]);
 }
 
+
+// spellbookEdit — виджет заклинаний в правке: таблицы заклинаний и ячеек.
+function spellbookEdit(e, sec) {
+  const fields = e.compiled.schema.fields;
+  const tables = [sec.bind.spells, sec.bind.slots].filter(Boolean);
+  return e.h("div", { class: "section" }, [
+    sec.title ? e.h("h3", { text: sec.title }) : null,
+    ...tables.map((id) => editTable(e, id, fields[id], true)),
+  ]);
+}
 
 // resourcesTable — ресурсы листа (sheet.resources: название, сейчас,
 // максимум, восстановление) — общий виджет страницы, в правке — таблица.

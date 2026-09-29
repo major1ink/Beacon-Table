@@ -74,31 +74,66 @@ func (s *Schema) checkFormulas(root reflect.Type) error {
 		if f.Type != TypeTable {
 			continue
 		}
-		var row reflect.Type
-		if root != nil {
-			if t, err := domain.ResolveJSONPath(root, f.Path); err == nil && t != nil && (t.Kind() == reflect.Slice || t.Kind() == reflect.Array) {
-				row = t.Elem()
-			}
+		if err := checkTableFormulas(root, id, f, s.Fields); err != nil {
+			return err
 		}
-		cols := map[string]*Field{}
-		for _, c := range f.Columns {
-			cols[c.ID] = c
+	}
+	return findCycle(graph)
+}
+
+// checkTableFormulas — ссылки и циклы формул колонок; у таблицы со строками
+// каждая строка проверяется отдельно.
+func checkTableFormulas(root reflect.Type, id string, f *Field, fields map[string]*Field) error {
+	var row reflect.Type
+	if root != nil && len(f.Rows) == 0 {
+		if t, err := domain.ResolveJSONPath(root, f.Path); err == nil && t != nil && (t.Kind() == reflect.Slice || t.Kind() == reflect.Array) {
+			row = t.Elem()
 		}
+	}
+	if len(f.Rows) > 0 {
+		row = root
+	}
+	cols := map[string]*Field{}
+	for _, c := range f.Columns {
+		cols[c.ID] = c
+	}
+	for _, r := range rowsOrOne(f.Rows) {
 		colGraph := map[string][]string{}
 		for _, c := range f.Columns {
-			refs, err := checkFieldFormula(c, row, s.Fields, cols)
+			if src, ok := r.Formulas[c.ID]; ok {
+				cc := *c
+				cc.Formula = src
+				c = &cc
+			}
+			refs, err := checkFieldFormula(c, row, fields, cols)
 			if err != nil {
-				return fmt.Errorf("поле %s, колонка %s: %w", id, c.ID, err)
+				return fmt.Errorf("поле %s, колонка %s%s: %w", id, c.ID, rowSuffix(r), err)
 			}
 			if c.Type == TypeComputed {
 				colGraph[c.ID] = computedRefs(refs, cols)
 			}
 		}
 		if err := findCycle(colGraph); err != nil {
-			return fmt.Errorf("поле %s: %w", id, err)
+			return fmt.Errorf("поле %s%s: %w", id, rowSuffix(r), err)
 		}
 	}
-	return findCycle(graph)
+	return nil
+}
+
+// rowSuffix — «, строка <ключ>» для текста ошибки.
+func rowSuffix(r Row) string {
+	if r.Key == "" {
+		return ""
+	}
+	return ", строка " + r.Key
+}
+
+// rowsOrOne — строки таблицы, у таблицы без строк — одна пустая.
+func rowsOrOne(rows []Row) []Row {
+	if len(rows) == 0 {
+		return []Row{{}}
+	}
+	return rows
 }
 
 // checkFieldFormula — разбор формулы поля и проверка её ссылок. cols —

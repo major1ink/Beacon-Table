@@ -164,3 +164,37 @@ test("ссылка не достаёт свойства прототипа", () 
   assert.equal(ev.dice("1d20 + @constructor").formula, "1d20");
   assert.equal(ev.dice("1d20 + @__proto__.x").formula, "1d20");
 });
+
+test("таблица со строками: значения по ключу, формулы строк, броски", () => {
+  const schema = readJSON("../../internal/schema/testdata/rows-schema.json");
+  const compiled = compileSchema(schema);
+  assert.deepEqual(compiled.errors, []);
+  const sheet = {
+    abilities: { dex: 16 },
+    info: { level: 5 },
+    skillProf: { acrobatics: 1, stealth: 2 },
+    saveProf: { dex: true },
+    spellcasting: { slotsByLevel: ["4/1", "2"] },
+  };
+  const ev = createEvaluator(compiled, sheet, []);
+  // Ловкость 16 → мод. 3, мастерство на 5 уровне 3.
+  assert.equal(ev.row("skills", 0).value("bonus").value, 3 + 3);
+  assert.equal(ev.row("skills", 1).value("bonus").value, 4 + 3 * 2, "своя база строки и экспертиза");
+  assert.equal(ev.row("skills", 2).value("bonus").value, 0, "без владения и без своей формулы — общая формула колонки");
+  assert.equal(ev.row("skills", 0).dice("check").formula, "1d20+6");
+  assert.equal(ev.row("skills", 1).dice("check").formula, "1d20+10");
+  assert.equal(ev.row("saves", 0).value("on").value, 1, "флажок — 1");
+  assert.equal(ev.row("slots", 0).value("slots").error.code, "not_number", "«4/1» — счётчик-строка, а не число в формуле");
+  // Пустого объекта и незнакомой строки не боимся: значения — ноль.
+  const empty = createEvaluator(compiled, { abilities: { dex: 10 }, info: { level: 1 } }, []);
+  assert.equal(empty.row("skills", 0).value("level").value, 0);
+  assert.equal(empty.row("skills", 0).value("bonus").value, 0);
+});
+
+test("таблица со строками: битая формула и цикл строки — ошибки схемы", () => {
+  const schema = readJSON("../../internal/schema/testdata/rows-schema.json");
+  schema.fields.skills.rows[0].formulas.base = "@dex_mod +";
+  schema.fields.skills.rows[1].formulas.base = "@bonus";
+  const errors = compileSchema(schema).errors;
+  assert.deepEqual(errors.map((e) => [e.field, e.row, e.error.code]), [["skills", "acrobatics", "syntax"], ["skills", "stealth", "cycle"]]);
+});

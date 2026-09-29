@@ -243,8 +243,9 @@ function schemaCtx() {
   return {
     h, data: sheet, readOnly, compiled: compiledSheet,
     field, textareaInput, identitySection,
-    scheduleSave, sendResolvedRoll, activeModifiers,
+    scheduleSave, sendRoll, sendResolvedRoll, activeModifiers,
     onRefresh: (fn) => vRefresh.push(fn),
+    refresh: refreshView,
     tabPanel,
     vCard, vText, vHero, vHpCard, liveStatusesHost, vResourcesCard, vInventoryCard, vMoneyCard,
   };

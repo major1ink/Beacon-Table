@@ -569,14 +569,18 @@ function cycleChain(stack, id) {
   return [...stack.slice(i), id].join(" → ");
 }
 
+// KEY — ключ строки в пути колонки таблицы со строками.
+export const KEY = "{key}";
+
 // compileSchema — формулы схемы разбираются один раз: { schema, formulas,
-// columns, errors }. errors — [{ field, column?, error }] в том же порядке,
-// в каком сервер нашёл бы первую (ссылки на пути клиент не проверяет —
-// схему уже проверил сервер).
+// columns, rows, errors }. errors — [{ field, column?, row?, error }] в том же порядке, в каком
+// сервер нашёл бы первую (ссылки на пути клиент не проверяет — схему уже
+// проверил сервер).
 export function compileSchema(schema) {
   const fields = (schema && schema.fields) || {};
   const formulas = new Map();
   const columns = new Map();
+  const rows = new Map();
   const errors = [];
   const graph = new Map();
   for (const id of Object.keys(fields).sort()) {
@@ -604,10 +608,33 @@ export function compileSchema(schema) {
     columns.set(id, cols);
     const cycle = findCycle(colGraph);
     if (cycle) errors.push({ field: id, error: cycle });
+    rows.set(id, compileRows(id, f, cols, byId, errors));
   }
   const cycle = findCycle(graph);
   if (cycle) errors.push({ field: null, error: cycle });
-  return { schema, formulas, columns, errors };
+  return { schema, formulas, columns, rows, errors };
+}
+
+// compileRows — формулы строк таблицы: ключ строки → колонка → формула.
+function compileRows(id, table, cols, byId, errors) {
+  const out = new Map();
+  for (const row of table.rows || []) {
+    const overrides = new Map();
+    for (const [colId, src] of Object.entries(row.formulas || {})) {
+      const c = compile(src, false);
+      overrides.set(colId, c);
+      if (c.error) errors.push({ field: id, column: colId, row: row.key, error: c.error });
+    }
+    out.set(row.key, overrides);
+    const graph = new Map();
+    for (const col of table.columns || []) {
+      const c = overrides.get(col.id) || cols.get(col.id);
+      if (c && !c.error && col.type === "computed") graph.set(col.id, c.expr.refs.filter((r) => byId[r] && byId[r].type === "computed"));
+    }
+    const cycle = findCycle(graph);
+    if (cycle) errors.push({ field: id, row: row.key, error: cycle });
+  }
+  return out;
 }
 
 // lookupPath — значение по пути «a.b.0»; undefined — его нет.
@@ -663,7 +690,8 @@ export function createEvaluator(compiled, data, mods) {
   const modify = (v, target) => (target && hasModifiersFor(target, list) ? applyModifiers(Math.floor(v), target, list) : v);
 
   // scope — «область» расчёта: поля листа или колонки одной строки.
-  function makeScope(defs, source, formulaOf, parent) {
+  // pathOf — путь значения поля (с подставленным ключом строки).
+  function makeScope(defs, source, formulaOf, parent, pathOf = (f) => f.path) {
     const memo = new Map();
     const busy = [];
     const inCycle = new Set();
@@ -701,7 +729,7 @@ export function createEvaluator(compiled, data, mods) {
       } else if (f.type === "roll" || f.type === "table" || f.type === "resource") {
         throw new FormulaError("not_number", 0, id);
       } else {
-        v = toNumber(lookupPath(source, f.path));
+        v = toNumber(lookupPath(source, pathOf(f)));
         if (v === null) throw new FormulaError("not_number", 0, id);
       }
       return modify(v, f.modifierTarget);
@@ -764,7 +792,7 @@ export function createEvaluator(compiled, data, mods) {
     }
   }
 
-  function rollOf(defs, source, formulaOf, resolve, id) {
+  function rollOf(defs, source, formulaOf, resolve, id, pathOf = (f) => f.path) {
     const f = defs[id];
     if (f && f.type === "roll") {
       const cf = formulaOf(id);
@@ -776,7 +804,7 @@ export function createEvaluator(compiled, data, mods) {
         return { formula: null, dice: 0, const: 0, error: e };
       }
     }
-    if (f && f.type === "dice") return roll(String(lookupPath(source, f.path) ?? ""), resolve);
+    if (f && f.type === "dice") return roll(String(lookupPath(source, pathOf(f)) ?? ""), resolve);
     return { formula: null, dice: 0, const: 0, error: new FormulaError("not_number", 0, id) };
   }
 
@@ -801,9 +829,13 @@ export function createEvaluator(compiled, data, mods) {
       const defs = {};
       for (const col of (table && table.columns) || []) defs[col.id] = col;
       const rowsData = table ? lookupPath(data, table.path) : undefined;
-      const rowData = Array.isArray(rowsData) ? rowsData[index] : undefined;
+      const keyed = table && table.rows ? table.rows[index] : null;
+      const rowData = keyed ? rowsData : Array.isArray(rowsData) ? rowsData[index] : undefined;
+      const pathOf = keyed ? (f) => String(f.path).replaceAll(KEY, keyed.key) : undefined;
       const colFormulas = c.columns.get(tableId) || new Map();
-      const scope = makeScope(defs, rowData, (id) => colFormulas.get(id), sheetResolve);
+      const overrides = keyed && c.rows ? (c.rows.get(tableId) || new Map()).get(keyed.key) : null;
+      const formulaOf = (cid) => (overrides && overrides.get(cid)) || colFormulas.get(cid);
+      const scope = makeScope(defs, rowData, formulaOf, sheetResolve, pathOf);
       const rowResolve = scope.resolver("");
       const api = {
         value: (id) => {
@@ -814,7 +846,7 @@ export function createEvaluator(compiled, data, mods) {
             return { value: null, error: e };
           }
         },
-        dice: (id) => rollOf(defs, rowData, (cid) => colFormulas.get(cid), rowResolve, id),
+        dice: (id) => rollOf(defs, rowData, formulaOf, rowResolve, id, pathOf),
       };
       rows.set(key, api);
       return api;

@@ -12,9 +12,19 @@
 import { icon } from "./icons.js";
 import { explainModifiers, statTarget } from "./modifiers.js";
 import { applyInput, createEvaluator } from "./schema-formula.js";
-import { deletePath, formatNumber, formatSigned, getPath, setPath } from "./schema-layout.js";
+import { cellPath, deletePath, formatNumber, formatPool, formatSigned, getPath, parsePool, setPath } from "./schema-layout.js";
 
-export const SCALARS = new Set(["number", "computed", "text", "bool", "select", "dice", "roll", "resource"]);
+export const SCALARS = new Set(["number", "computed", "text", "bool", "select", "dice", "roll", "resource", "prof", "tally", "pool"]);
+
+// showNumber — число поля или колонки, со знаком при signed.
+export const showNumber = (f, v) => (f.signed ? formatSigned(v) : formatNumber(v));
+
+// profLevel — состояние владения: 0 нет, 1 владение, 2 экспертиза.
+export const profLevel = (f, v) => (f.levels === 3 ? Number(v) || 0 : v ? 1 : 0);
+
+const PROF_TITLES = ["Без владения", "Владение", "Экспертиза"];
+const PROF_MARKS = ["—", "●", "◆"];
+const profMark = (f, v) => (f.levels === 3 ? PROF_MARKS[profLevel(f, v)] : v ? "✓" : "");
 
 // evaluatorOf — свежий расчёт по текущему состоянию листа или карточки:
 // значения и модификаторы меняются прямо во время просмотра (надел кольцо,
@@ -53,8 +63,14 @@ export function viewTile(ctx, id, f) {
         const r = evaluatorOf(ctx).value(id);
         if (r.error) return { text: "!", error: r.error };
         const hint = f.modifierTarget ? modifierHint(ctx, f.modifierTarget, f.type === "number" ? raw() : null) : "";
-        return { text: formatNumber(r.value), hint };
+        return { text: showNumber(f, r.value), hint };
       });
+    case "prof":
+      return liveTile(ctx, f.label, () => ({ text: f.levels === 3 ? PROF_MARKS[profLevel(f, raw())] : raw() ? "✓" : "—" }));
+    case "tally":
+      return ctx.h("div", { class: "v-tile" }, [tallyPips(ctx, f, raw, (v) => setPath(ctx.data, f.path, v)), ctx.h("span", { text: f.label })]);
+    case "pool":
+      return ctx.h("div", { class: "v-tile" }, [ctx.h("div", { class: "v-track" }, poolNodes(ctx, raw, (v) => setPath(ctx.data, f.path, v))), ctx.h("span", { text: f.label })]);
     case "text":
       return String(raw() ?? "").trim() ? liveTile(ctx, f.label, () => ({ text: String(raw() ?? "") })) : null;
     case "bool":
@@ -107,6 +123,7 @@ export function rowsOf(ctx, f) {
 // viewTable — таблица в чтении отдельной карточкой с заголовком title
 // (по умолчанию — подпись поля).
 export function viewTable(ctx, id, f, title) {
+  if (f.rows) return viewKeyedTable(ctx, id, f, title);
   const { h } = ctx;
   const heading = title || f.label;
   const rows = rowsOf(ctx, f);
@@ -169,9 +186,10 @@ export function viewTable(ctx, id, f, title) {
             cols.map((c) => {
               if (c.type === "computed") {
                 const r = evaluatorOf(ctx).row(id, i).value(c.id);
-                return h("td", { class: r.error ? "formula-error" : undefined, title: r.error ? r.error.message : undefined, text: r.error ? "!" : formatNumber(r.value) });
+                return h("td", { class: r.error ? "formula-error" : undefined, title: r.error ? r.error.message : undefined, text: r.error ? "!" : showNumber(c, r.value) });
               }
               if (c.type === "bool") return h("td", { text: getPath(row, c.path) ? "✓" : "" });
+              if (c.type === "prof") return h("td", { text: profMark(c, getPath(row, c.path)) });
               return h("td", { text: String(getPath(row, c.path) ?? "") });
             })
           )
@@ -181,10 +199,182 @@ export function viewTable(ctx, id, f, title) {
   );
 }
 
+// ---------- таблицы со строками (rows) ----------
+
+// viewKeyedTable — таблица со строками в чтении: с колонкой броска — сетка
+// кнопок, со счётчиком-строкой — строки с делениями, иначе обычная.
+export function viewKeyedTable(ctx, id, f, title) {
+  const { h } = ctx;
+  const cols = f.columns || [];
+  const heading = title || f.label;
+  const roll = cols.find((c) => c.type === "roll");
+  const pool = cols.find((c) => c.type === "pool");
+  const prof = cols.find((c) => c.type === "prof");
+  // итог строки — последняя вычисляемая или числовая колонка
+  const shown = cols.filter((c) => c.type === "computed" || c.type === "number").pop();
+  const rawOf = (c, row) => getPath(ctx.data, cellPath(f, c, row));
+  const paint = (node, c, i) => {
+    const r = evaluatorOf(ctx).row(id, i).value(c.id);
+    node.textContent = r.error ? "!" : showNumber(c, r.value);
+    node.classList.toggle("formula-error", !!r.error);
+    if (r.error) node.title = r.error.message;
+    else node.removeAttribute("title");
+  };
+  const live = (node, c, i) => {
+    paint(node, c, i);
+    ctx.onRefresh(() => paint(node, c, i));
+    return node;
+  };
+  if (roll) {
+    const buttons = f.rows.map((row, i) => {
+      const level = prof ? profLevel(prof, rawOf(prof, row)) : 0;
+      return h(
+        "button",
+        {
+          type: "button",
+          class: "v-skill" + (level ? " prof" : ""),
+          title: (prof ? PROF_TITLES[level] + " · " : "") + "бросок",
+          onclick: () => ctx.sendResolvedRoll(evaluatorOf(ctx).row(id, i).dice(roll.id), row.label),
+        },
+        [h("span", { class: "v-dot" + (level ? " p" + level : "") }), h("span", { class: "v-skill-name", text: row.label }), shown ? live(h("span", { class: "v-skill-val" }), shown, i) : null]
+      );
+    });
+    return ctx.vCard(heading, h("div", { class: "v-skills" }, buttons), "клик — бросок");
+  }
+  if (pool) {
+    const tracks = f.rows
+      .filter((row) => String(rawOf(pool, row) ?? "").trim())
+      .map((row) =>
+        h("div", { class: "v-track" }, [
+          h("span", { class: "v-track-name", text: row.label }),
+          ...poolNodes(ctx, () => rawOf(pool, row), (v) => setPath(ctx.data, cellPath(f, pool, row), v)),
+        ])
+      );
+    return ctx.vCard(heading, tracks, tracks.length ? "клик — потратить/вернуть" : null);
+  }
+  const plain = cols.filter((c) => c.type !== "roll");
+  const cell = (c, row, i) => {
+    if (c.type === "computed") return live(h("td", {}), c, i);
+    return h("td", { text: c.type === "prof" ? profMark(c, rawOf(c, row)) : String(rawOf(c, row) ?? "") });
+  };
+  return ctx.vCard(
+    heading,
+    h("table", { class: "dyn-table" }, [
+      h("thead", {}, [h("tr", {}, [h("th", {}), ...plain.map((c) => h("th", { text: c.label }))])]),
+      h("tbody", {}, f.rows.map((row, i) => h("tr", {}, [h("td", { text: row.label }), ...plain.map((c) => cell(c, row, i))]))),
+    ])
+  );
+}
+
+// editKeyedTable — таблица со строками в правке.
+export function editKeyedTable(e, id, f, withTitle) {
+  const { h } = e;
+  const cols = (f.columns || []).filter((c) => c.type !== "roll");
+  const cell = (c, row, i) => {
+    const own = c.path ? { ...c, path: cellPath(f, c, row) } : c;
+    return h("td", {}, [editInput(e, c.id, own, e.data, c.type === "computed" ? () => evaluatorOf(e).row(id, i).value(c.id) : null)]);
+  };
+  return h("div", {}, [
+    withTitle ? h("h3", { text: f.label }) : null,
+    h("table", { class: "dyn-table" }, [
+      h("thead", {}, [h("tr", {}, [h("th", {}), ...cols.map((c) => h("th", { text: c.label }))])]),
+      h("tbody", {}, f.rows.map((row, i) => h("tr", {}, [h("td", { text: row.label }), ...cols.map((c) => cell(c, row, i))]))),
+    ]),
+  ]);
+}
+
+// ---------- владение, шкалы, счётчики ----------
+
+// profToggle — переключатель владения, пишет bool или число 0..2.
+export function profToggle(e, f, get, set) {
+  const tri = f.levels === 3;
+  const btn = e.h("button", { type: "button", class: "prof-toggle" });
+  const show = () => {
+    const level = profLevel(f, get());
+    btn.setAttribute("data-state", String(level));
+    btn.textContent = level === 2 ? "◆" : "";
+    btn.title = tri ? PROF_TITLES[level] : level ? "Есть" : "Нет";
+  };
+  show();
+  if (e.readOnly) btn.disabled = true;
+  else
+    btn.addEventListener("click", () => {
+      const next = (profLevel(f, get()) + 1) % (tri ? 3 : 2);
+      set(tri ? next : next === 1);
+      show();
+      changed(e);
+    });
+  return btn;
+}
+
+// tallyPips — шкала из max делений: клик по крайнему заполненному гасит его,
+// иначе заполняет по это включительно.
+export function tallyPips(e, f, get, set) {
+  const wrap = e.h("div", { class: "bulb-row" });
+  const render = () => {
+    wrap.innerHTML = "";
+    const value = Number(get()) || 0;
+    for (let i = 0; i < f.max; i++) {
+      wrap.appendChild(
+        e.h("button", {
+          type: "button",
+          class: "bulb" + (i < value ? " filled" + (f.tone === "bad" ? " fail" : "") : ""),
+          title: String(i + 1),
+          onclick: e.readOnly
+            ? undefined
+            : () => {
+                set(value > i ? i : i + 1);
+                render();
+                changed(e);
+              },
+        })
+      );
+    }
+  };
+  render();
+  return wrap;
+}
+
+// poolNodes — счётчик «осталось / всего» и деления; строка, которую не
+// разобрать, остаётся текстом.
+export function poolNodes(e, get, set) {
+  const count = e.h("span", { class: "v-track-count" });
+  const pips = e.h("div", { class: "v-pips" });
+  const render = () => {
+    const p = parsePool(get());
+    pips.innerHTML = "";
+    if (!p) {
+      count.textContent = String(get() ?? "");
+      return;
+    }
+    const left = p.total - p.used;
+    count.textContent = `${left} / ${p.total}`;
+    for (let i = 0; i < p.total; i++) {
+      pips.appendChild(
+        e.h("button", {
+          type: "button",
+          class: "v-pip" + (i < left ? "" : " spent"),
+          title: String(i + 1),
+          onclick: e.readOnly
+            ? undefined
+            : () => {
+                set(formatPool(p.total, p.total - (left > i ? i : i + 1)));
+                render();
+                changed(e);
+              },
+        })
+      );
+    }
+  };
+  render();
+  e.onRefresh(render);
+  return [count, pips];
+}
+
 // changed — общее после любой правки: сохранить и пересчитать формулы.
 export function changed(e) {
   e.scheduleSave();
-  e.refresh();
+  if (e.refresh) e.refresh();
 }
 
 // editInput — поле ввода по типу. target — объект, от которого считается
@@ -213,6 +403,12 @@ export function editInput(e, id, f, target, valueOf) {
         });
       return c;
     }
+    case "prof":
+      return profToggle(e, f, get, set);
+    case "tally":
+      return tallyPips(e, f, get, set);
+    case "pool":
+      return plainInput(e, h("input", { type: "text", placeholder: "4 или 4/2 — всего/потрачено" }), get, set);
     case "select": {
       const sel = h("select", {}, [h("option", { value: "", text: "—" }), ...(f.options || []).map((o) => h("option", { value: o.value, text: o.label }))]);
       sel.value = String(get() ?? "");
@@ -232,7 +428,7 @@ export function editInput(e, id, f, target, valueOf) {
         exprInput(e, f, () => getPath(target, f.path + ".max"), (v) => setPath(target, f.path + ".max", v)),
       ]);
     case "computed":
-      return computedOutput(e, valueOf || (() => evaluatorOf(e).value(id)));
+      return computedOutput(e, valueOf || (() => evaluatorOf(e).value(id)), f);
     default:
       return null;
   }
@@ -296,11 +492,11 @@ export function exprInput(e, f, get, set) {
   return inp;
 }
 
-export function computedOutput(e, read) {
+export function computedOutput(e, read, f) {
   const span = e.h("span", { class: "computed" });
   const update = () => {
     const r = read();
-    span.textContent = r.error ? "!" : typeof r.value === "string" ? r.value : formatNumber(r.value);
+    span.textContent = r.error ? "!" : typeof r.value === "string" ? r.value : f ? showNumber(f, r.value) : formatNumber(r.value);
     span.classList.toggle("formula-error", !!r.error);
     if (r.error) span.title = r.error.message;
     else span.removeAttribute("title");
@@ -369,6 +565,12 @@ export function blankValue(c) {
       return c.optional ? undefined : 0;
     case "bool":
       return false;
+    case "prof":
+      return c.levels === 3 ? 0 : false;
+    case "tally":
+      return 0;
+    case "pool":
+      return "";
     case "text":
     case "longtext":
     case "dice":
@@ -379,6 +581,7 @@ export function blankValue(c) {
 }
 
 export function editTable(e, id, f, withTitle) {
+  if (f.rows) return editKeyedTable(e, id, f, withTitle);
   const cols = (f.columns || []).filter((c) => c.type !== "roll");
   return rowsTable(e, {
     title: withTitle ? f.label : "",

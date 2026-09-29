@@ -1,0 +1,58 @@
+{
+  "format": "beacon-schema/v1",
+  "kind": "sheet",
+  "fields": {
+    "dex": { "type": "number", "path": "abilities.dex", "label": "Ловкость" },
+    "dex_mod": { "type": "computed", "label": "Мод. Ловкости", "formula": "floor((@dex-10)/2)" },
+    "level": { "type": "number", "path": "info.level", "label": "Уровень" },
+    "prof": { "type": "computed", "label": "Мастерство", "formula": "2 + floor((@level-1)/4)" },
+    "fails": { "type": "tally", "path": "combat.deathSaveFail", "label": "Провалы", "max": 3, "tone": "bad" },
+    "skills": {
+      "type": "table",
+      "path": "skillProf",
+      "label": "Навыки",
+      "rows": [
+        { "key": "acrobatics", "label": "Акробатика", "formulas": { "base": "@dex_mod" } },
+        { "key": "stealth", "label": "Скрытность", "formulas": { "base": "@dex_mod + 1" } },
+        { "key": "athletics", "label": "Атлетика" }
+      ],
+      "columns": [
+        { "id": "level", "type": "prof", "path": "{key}", "label": "Владение", "levels": 3 },
+        { "id": "base", "type": "computed", "label": "База", "formula": "0" },
+        { "id": "bonus", "type": "computed", "label": "Бонус", "formula": "@base + @level * @prof" },
+        { "id": "check", "type": "roll", "label": "Проверка", "roll": "1d20 + @bonus" }
+      ]
+    },
+    "saves": {
+      "type": "table",
+      "path": "saveProf",
+      "label": "Спасброски",
+      "rows": [{ "key": "dex", "label": "Ловкость" }],
+      "columns": [{ "id": "on", "type": "prof", "path": "{key}", "label": "Владение", "levels": 2 }]
+    },
+    "slots": {
+      "type": "table",
+      "path": "spellcasting.slotsByLevel",
+      "label": "Ячейки",
+      "rows": [
+        { "key": "0", "label": "1 круг" },
+        { "key": "1", "label": "2 круг" }
+      ],
+      "columns": [{ "id": "slots", "type": "pool", "path": "{key}", "label": "Ячейки" }]
+    },
+    "prepared": {
+      "type": "table",
+      "path": "preparedSpells",
+      "label": "Заклинания",
+      "columns": [
+        { "id": "name", "type": "text", "path": "name", "label": "Название" },
+        { "id": "level", "type": "number", "path": "level", "label": "Круг" }
+      ]
+    }
+  },
+  "layout": [
+    { "title": "Навыки", "fields": ["skills"], "column": 1 },
+    { "title": "Спасброски", "fields": ["saves", "fails"], "column": 1 },
+    { "widget": "spellbook", "column": 2, "bind": { "spells": "prepared", "slots": "slots", "modifier": "dex_mod", "level": "level" } }
+  ]
+}

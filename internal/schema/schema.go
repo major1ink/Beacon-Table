@@ -59,18 +59,29 @@ const (
 	TypeResource = "resource" // счётчик «сейчас / максимум»
 	TypeComputed = "computed" // число по формуле, не хранится
 	TypeRoll     = "roll"     // бросок по формуле, не хранится
+	TypeProf     = "prof"     // владение: флажок или «нет / владение / экспертиза»
+	TypeTally    = "tally"    // шкала из делений: 0..max, клик по делению
+	TypePool     = "pool"     // счётчик-строка «всего/потрачено» («4/2»)
 )
 
 var fieldTypes = map[string]bool{
 	TypeNumber: true, TypeText: true, TypeLongText: true, TypeBool: true, TypeSelect: true,
 	TypeDice: true, TypeTable: true, TypeResource: true, TypeComputed: true, TypeRoll: true,
+	TypeProf: true, TypeTally: true, TypePool: true,
 }
 
 // storedTypes — типы, значение которых лежит в JSON и потому требует path.
 var storedTypes = map[string]bool{
 	TypeNumber: true, TypeText: true, TypeLongText: true, TypeBool: true, TypeSelect: true,
 	TypeDice: true, TypeTable: true, TypeResource: true,
+	TypeProf: true, TypeTally: true, TypePool: true,
 }
+
+// ToneBad — красные деления шкалы (tally).
+const ToneBad = "bad"
+
+// keyPlaceholder — ключ строки в пути колонки таблицы со строками.
+const keyPlaceholder = "{key}"
 
 // coreTargets — общие поля ядра, к которым схема привязывает свои поля
 // (раздел core): через них работают трекер боя, токены и модификаторы.
@@ -97,6 +108,7 @@ var widgets = map[string][]string{
 	"inventory": {KindSheet, KindMonster},
 	"money":     {KindSheet},
 	"spells":    {KindMonster},
+	"spellbook": {KindSheet},
 	"applies":   {KindSpell},
 	"modifiers": {KindItem},
 }
@@ -109,11 +121,16 @@ const (
 	maxOptions  = 200
 	maxSections = 100
 	maxLabelLen = 120
+	maxRows     = 100
+	maxTally    = 20
 	maxFormula  = 2000
 	maxColumn   = 3
 )
 
 var idRe = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// rowKeyRe — ключ строки таблицы со строками.
+var rowKeyRe = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 // Option — вариант поля select: значение в JSON, подпись, цвет и глиф.
 type Option struct {
@@ -125,11 +142,13 @@ type Option struct {
 
 // Field — поле схемы (или колонка таблицы).
 type Field struct {
-	ID      string `json:"id,omitempty"` // только у колонок таблицы
-	Type    string `json:"type"`
-	Path    string `json:"path,omitempty"`
-	Label   string `json:"label"`
-	Short   string `json:"short,omitempty"`
+	ID    string `json:"id,omitempty"` // только у колонок таблицы
+	Type  string `json:"type"`
+	Path  string `json:"path,omitempty"`
+	Label string `json:"label"`
+	Short string `json:"short,omitempty"`
+	// Signed — число со знаком («+3»).
+	Signed  bool   `json:"signed,omitempty"`
 	Formula string `json:"formula,omitempty"`
 	Roll    string `json:"roll,omitempty"`
 	// ModifierTarget — цель модификатора, которая меняет значение поля.
@@ -140,6 +159,22 @@ type Field struct {
 	// названия и колонка значения; значение меняют модификаторы
 	// stat.<ключ названия>.
 	StatRows *StatRows `json:"statRows,omitempty"`
+	// Levels — состояний у владения (prof): 2 — флажок, 3 — число 0..2.
+	Levels int `json:"levels,omitempty"`
+	// Max — делений у шкалы (tally), Tone — её цвет.
+	Max  int    `json:"max,omitempty"`
+	Tone string `json:"tone,omitempty"`
+	// Rows — заранее известные строки таблицы. path таблицы ведёт к объекту
+	// или списку, «{key}» в пути колонки — ключ строки (skillProf.{key}).
+	Rows []Row `json:"rows,omitempty"`
+}
+
+// Row — строка таблицы со строками; Formulas (id колонки → формула)
+// заменяют формулы вычисляемых колонок.
+type Row struct {
+	Key      string            `json:"key"`
+	Label    string            `json:"label"`
+	Formulas map[string]string `json:"formulas,omitempty"`
 }
 
 // StatRows — см. Field.StatRows.
@@ -162,6 +197,51 @@ type Section struct {
 	Tab      string   `json:"tab,omitempty"`
 	TabTitle string   `json:"tabTitle,omitempty"`
 	Mode     string   `json:"mode,omitempty"`
+	// Bind — роль виджета → id поля схемы, см. widgetBinds.
+	Bind map[string]string `json:"bind,omitempty"`
+}
+
+// bindRule — роль привязки виджета и какое поле к ней подходит.
+type bindRule struct {
+	Role     string
+	Required bool
+	Accept   func(f *Field) bool
+}
+
+// widgetBinds — роли привязки по виджетам.
+var widgetBinds = map[string][]bindRule{
+	"spellbook": {
+		{"spells", true, func(f *Field) bool { return f.Type == TypeTable && hasColumns(f, "name", "level") }},
+		{"slots", false, func(f *Field) bool { return f.Type == TypeTable && len(f.Rows) > 0 && hasPoolColumn(f) }},
+		{"attack", false, isNumeric},
+		{"dc", false, isNumeric},
+		{"modifier", false, isNumeric},
+		{"level", false, isNumeric},
+	},
+}
+
+func isNumeric(f *Field) bool { return f.Type == TypeNumber || f.Type == TypeComputed }
+
+func hasColumns(f *Field, ids ...string) bool {
+	for _, id := range ids {
+		found := false
+		for _, c := range f.Columns {
+			found = found || c.ID == id
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func hasPoolColumn(f *Field) bool {
+	for _, c := range f.Columns {
+		if c.Type == TypePool {
+			return true
+		}
+	}
+	return false
 }
 
 // List — как карточка выглядит в каталоге: подпись-шаблон («{level} круг ·
@@ -328,25 +408,33 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 		if len(f.Columns) == 0 || len(f.Columns) > maxColumns {
 			return fmt.Errorf("у таблицы нужно от 1 до %d колонок", maxColumns)
 		}
-		var row reflect.Type
-		if at != nil {
-			if at.Kind() != reflect.Slice && at.Kind() != reflect.Array {
-				return fmt.Errorf("path %q ведёт не к списку", f.Path)
-			}
-			row = at.Elem()
+		if err := checkTable(at, f); err != nil {
+			return err
 		}
-		ids := map[string]bool{}
-		for _, c := range f.Columns {
-			if c == nil || !idRe.MatchString(c.ID) || ids[c.ID] {
-				return fmt.Errorf("у колонки нет id, он кривой или повторяется")
-			}
-			ids[c.ID] = true
-			if err := checkField(row, c, true); err != nil {
-				return fmt.Errorf("колонка %s: %w", c.ID, err)
-			}
+	case TypeProf:
+		if f.Levels != 2 && f.Levels != 3 {
+			return fmt.Errorf("у владения levels — 2 (флажок) или 3 (нет / владение / экспертиза)")
 		}
-		if f.StatRows != nil && (!ids[f.StatRows.Name] || !ids[f.StatRows.Value]) {
-			return fmt.Errorf("statRows ссылается на неизвестные колонки")
+		switch {
+		case at == nil:
+		case f.Levels == 3 && !isIntKind(at.Kind()):
+			return fmt.Errorf("владение из трёх состояний — целое число, а по пути %q лежит %s", f.Path, at.Kind())
+		case f.Levels == 2 && at.Kind() != reflect.Bool:
+			return fmt.Errorf("владение-флажок хранится как bool, а по пути %q лежит %s", f.Path, at.Kind())
+		}
+	case TypeTally:
+		if f.Max < 1 || f.Max > maxTally {
+			return fmt.Errorf("у шкалы max — от 1 до %d", maxTally)
+		}
+		if f.Tone != "" && f.Tone != ToneBad {
+			return fmt.Errorf("тон шкалы %q: нужен %s или пусто", f.Tone, ToneBad)
+		}
+		if at != nil && !isIntKind(at.Kind()) {
+			return fmt.Errorf("шкала — целое число, а по пути %q лежит %s", f.Path, at.Kind())
+		}
+	case TypePool:
+		if at != nil && at.Kind() != reflect.String {
+			return fmt.Errorf("счётчик-строка хранится строкой, а по пути %q лежит %s", f.Path, at.Kind())
 		}
 	}
 	if f.StatRows != nil && f.Type != TypeTable {
@@ -355,8 +443,95 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 	if len(f.Columns) > 0 && f.Type != TypeTable {
 		return fmt.Errorf("колонки (columns) — только у таблицы")
 	}
+	if len(f.Rows) > 0 && f.Type != TypeTable {
+		return fmt.Errorf("строки (rows) — только у таблицы")
+	}
+	if f.Signed && f.Type != TypeNumber && f.Type != TypeComputed {
+		return fmt.Errorf("signed — только у числа и вычисляемого поля")
+	}
+	if (f.Levels != 0 && f.Type != TypeProf) || ((f.Max != 0 || f.Tone != "") && f.Type != TypeTally) {
+		return fmt.Errorf("levels — только у владения, max и tone — только у шкалы")
+	}
 	if f.ModifierTarget != "" && !domain.ValidModifierTarget(f.ModifierTarget) {
 		return fmt.Errorf("неверная цель модификатора %q", f.ModifierTarget)
+	}
+	return nil
+}
+
+func isIntKind(k reflect.Kind) bool {
+	return k >= reflect.Int && k <= reflect.Int64
+}
+
+// checkTable — колонки таблицы; at — Go-тип по path (nil — незнакомый ключ).
+func checkTable(at reflect.Type, f *Field) error {
+	keyed := len(f.Rows) > 0
+	if keyed && f.StatRows != nil {
+		return fmt.Errorf("таблица со строками (rows) не бывает таблицей характеристик (statRows)")
+	}
+	var row reflect.Type
+	if at != nil {
+		switch {
+		case keyed && at.Kind() != reflect.Map && at.Kind() != reflect.Slice && at.Kind() != reflect.Array:
+			return fmt.Errorf("path %q таблицы со строками ведёт не к объекту и не к списку", f.Path)
+		case !keyed && at.Kind() != reflect.Slice && at.Kind() != reflect.Array:
+			return fmt.Errorf("path %q ведёт не к списку", f.Path)
+		case keyed:
+			row = at
+		default:
+			row = at.Elem()
+		}
+	}
+	ids := map[string]*Field{}
+	for _, c := range f.Columns {
+		if c == nil || !idRe.MatchString(c.ID) || ids[c.ID] != nil {
+			return fmt.Errorf("у колонки нет id, он кривой или повторяется")
+		}
+		ids[c.ID] = c
+		if !keyed {
+			if err := checkField(row, c, true); err != nil {
+				return fmt.Errorf("колонка %s: %w", c.ID, err)
+			}
+			continue
+		}
+		if storedTypes[c.Type] && !strings.Contains(c.Path, keyPlaceholder) {
+			return fmt.Errorf("колонка %s: в таблице со строками путь колонки содержит %s", c.ID, keyPlaceholder)
+		}
+		for _, r := range f.Rows {
+			cc := *c
+			cc.Path = strings.ReplaceAll(c.Path, keyPlaceholder, r.Key)
+			if err := checkField(row, &cc, true); err != nil {
+				return fmt.Errorf("колонка %s, строка %s: %w", c.ID, r.Key, err)
+			}
+		}
+	}
+	if f.StatRows != nil && (ids[f.StatRows.Name] == nil || ids[f.StatRows.Value] == nil) {
+		return fmt.Errorf("statRows ссылается на неизвестные колонки")
+	}
+	return checkRows(f, ids)
+}
+
+// checkRows — ключи, подписи и колонки формул строк таблицы.
+func checkRows(f *Field, cols map[string]*Field) error {
+	if len(f.Rows) > maxRows {
+		return fmt.Errorf("в таблице больше %d строк", maxRows)
+	}
+	seen := map[string]bool{}
+	for _, r := range f.Rows {
+		if !rowKeyRe.MatchString(r.Key) || seen[r.Key] {
+			return fmt.Errorf("ключ строки %q кривой или повторяется — латиница, цифры и _", r.Key)
+		}
+		seen[r.Key] = true
+		if strings.TrimSpace(r.Label) == "" || len([]rune(r.Label)) > maxLabelLen {
+			return fmt.Errorf("у строки %s нет подписи или она длиннее %d символов", r.Key, maxLabelLen)
+		}
+		for id, src := range r.Formulas {
+			if c := cols[id]; c == nil || c.Type != TypeComputed {
+				return fmt.Errorf("строка %s: формула для %q — нужна вычисляемая колонка", r.Key, id)
+			}
+			if len(src) > maxFormula {
+				return fmt.Errorf("строка %s: формула длиннее %d символов", r.Key, maxFormula)
+			}
+		}
 	}
 	return nil
 }
@@ -383,6 +558,9 @@ func (s *Schema) checkSection(sec Section) error {
 			return fmt.Errorf("неизвестное поле %q", id)
 		}
 	}
+	if err := s.checkBind(sec); err != nil {
+		return err
+	}
 	if sec.Column < 0 || sec.Column > maxColumn {
 		return fmt.Errorf("колонка секции — от 1 до %d", maxColumn)
 	}
@@ -394,6 +572,41 @@ func (s *Schema) checkSection(sec Section) error {
 	}
 	if len([]rune(sec.Title)) > maxLabelLen || len([]rune(sec.TabTitle)) > maxLabelLen {
 		return fmt.Errorf("заголовок секции или вкладки длиннее %d символов", maxLabelLen)
+	}
+	return nil
+}
+
+// checkBind — роли и поля привязки виджета.
+func (s *Schema) checkBind(sec Section) error {
+	rules := widgetBinds[sec.Widget]
+	if len(rules) == 0 {
+		if len(sec.Bind) > 0 {
+			return fmt.Errorf("у виджета %q не бывает привязки (bind)", sec.Widget)
+		}
+		return nil
+	}
+	known := map[string]bool{}
+	for _, r := range rules {
+		known[r.Role] = true
+		id, ok := sec.Bind[r.Role]
+		if !ok {
+			if r.Required {
+				return fmt.Errorf("у виджета %q в привязке (bind) нужна роль %q", sec.Widget, r.Role)
+			}
+			continue
+		}
+		f := s.Fields[id]
+		if f == nil {
+			return fmt.Errorf("bind.%s ссылается на неизвестное поле %q", r.Role, id)
+		}
+		if !r.Accept(f) {
+			return fmt.Errorf("bind.%s: поле %q (%s) виджету %q не подходит", r.Role, id, f.Type, sec.Widget)
+		}
+	}
+	for role := range sec.Bind {
+		if !known[role] {
+			return fmt.Errorf("у виджета %q нет роли %q в привязке (bind)", sec.Widget, role)
+		}
 	}
 	return nil
 }
