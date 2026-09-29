@@ -170,16 +170,11 @@ export async function resetDMPassword() {
 }
 
 // ---- трансляция (ТВ/проектор) ----
-// Ссылка с ключом, по которой экран в комнате получает доступ к столу без
-// аккаунта (см. internal/service/broadcast.go), и короткий адрес для набора с
-// пульта. Сервер отдаёт только пути — origin подставляем здесь: за обратным
-// прокси своего внешнего адреса он не знает.
+// Ссылка с ключом и короткий адрес трансляции. Сервер отдаёт пути, origin
+// подставляем здесь.
 
-// tvOrigin — адрес стола, по которому до него дотянется телевизор. Обычно это
-// адрес, по которому стол открыт у ДМ. Но ДМ, открывший стол на этом же
-// компьютере (десктоп, localhost), получил бы ссылку «http://localhost:…»,
-// а на телевизоре она ведёт в никуда — тогда берём адрес машины в сети,
-// который знает сервер.
+// tvOrigin — адрес стола, доступный с телевизора. Если стол открыт как
+// localhost, берём адрес компьютера в сети.
 function tvOrigin(lanOrigins) {
   const host = location.hostname;
   const loopback = host === "localhost" || host === "::1" || host === "[::1]" || host.startsWith("127.") || host.endsWith(".localhost");
@@ -202,8 +197,7 @@ export async function rotateBroadcastLink() {
   return broadcastLinks(await apiFetch("/api/broadcast/link/rotate", { method: "POST" }));
 }
 
-// fetchBroadcastDiag — журнал экранов трансляции для отчёта о баге (только
-// ДМ, см. internal/api/http/broadcast_diag.go).
+// fetchBroadcastDiag — журнал экранов трансляции для отчёта о баге (только ДМ).
 export async function fetchBroadcastDiag() {
   return apiFetch("/api/broadcast/diag");
 }
@@ -228,10 +222,16 @@ export async function requestBroadcastAccess() {
 }
 
 // broadcastRequestState — что ответил ДМ: "pending" / "approved" /
-// "rejected" / "unknown" (заявка истекла — нужна новая). Вместе с "approved"
-// сервер кладёт браузеру cookie зрителя, так что ключ нигде не показывается.
+// "rejected" / "unknown" (заявка истекла — нужна новая). С "approved" сервер
+// ставит cookie зрителя и отдаёт ключ в теле.
 export async function broadcastRequestState(id) {
   return apiFetch(`/api/broadcast/requests/${encodeURIComponent(id)}`);
+}
+
+// probeBroadcastCookie ставит пробную cookie и говорит, пришла ли она с запросом.
+export async function probeBroadcastCookie() {
+  const { cookie } = await apiFetch("/api/broadcast/probe");
+  return !!cookie;
 }
 
 // ---- заявки экранов, сторона ДМ ----

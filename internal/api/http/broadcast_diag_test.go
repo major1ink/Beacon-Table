@@ -15,8 +15,7 @@ import (
 	"beacon-table/internal/service"
 )
 
-// diagServer — страница трансляции и ручки её журнала так, как их собирает
-// cmd/beacon-table/main.go, плюс cookie ДМ для чтения журнала.
+// diagServer поднимает страницу трансляции и ручки журнала, возвращает cookie ДМ.
 func diagServer(t *testing.T) (*httptest.Server, *http.Cookie) {
 	t.Helper()
 	ctx := context.Background()
@@ -47,8 +46,7 @@ func diagServer(t *testing.T) (*httptest.Server, *http.Cookie) {
 	return srv, &http.Cookie{Name: domain.SessionCookieName, Value: "sess-dm"}
 }
 
-// reply — прочитанный ответ: тело забираем и закрываем сразу, тестам нужны
-// только статус, заголовки и байты.
+// reply — уже прочитанный ответ сервера.
 type reply struct {
 	StatusCode int
 	Header     http.Header
@@ -93,9 +91,7 @@ type diagScreen struct {
 	Errors    []string          `json:"errors"`
 }
 
-// TestBroadcastDiagCollectsScreen — телевизор, на котором не выполнилось
-// ничего, всё равно оставляет в журнале свой браузер; сторож страницы
-// добавляет сведения и ошибки; ДМ читает это одним запросом.
+// TestBroadcastDiagCollectsScreen проверяет, что журнал собирает браузер, сведения и ошибки экрана.
 func TestBroadcastDiagCollectsScreen(t *testing.T) {
 	srv, dm := diagServer(t)
 	const tv = "Mozilla/5.0 (Linux; Android 7.1.2; TV Box) Chrome/69.0.3497.100"
@@ -132,8 +128,7 @@ func TestBroadcastDiagCollectsScreen(t *testing.T) {
 	}
 }
 
-// TestBroadcastDiagBounded — приём без авторизации, поэтому мусор из сети
-// не должен копить память: экранов и ошибок держится не больше потолка.
+// TestBroadcastDiagBounded проверяет ограничения журнала по числу экранов, ошибок и длине текста.
 func TestBroadcastDiagBounded(t *testing.T) {
 	srv, dm := diagServer(t)
 	for i := 0; i < 30; i++ {
@@ -163,8 +158,7 @@ func TestBroadcastDiagBounded(t *testing.T) {
 	}
 }
 
-// TestBroadcastShortcut — короткий адрес для пульта ведёт на страницу
-// трансляции и переносит ключ, а подставить в редирект чужой адрес нельзя.
+// TestBroadcastShortcut проверяет редирект коротких адресов на страницу трансляции.
 func TestBroadcastShortcut(t *testing.T) {
 	srv, _ := diagServer(t)
 	cases := map[string]string{
@@ -184,8 +178,7 @@ func TestBroadcastShortcut(t *testing.T) {
 	}
 }
 
-// TestBroadcastLinkLANOrigins — ДМ получает адреса стола в сети: по ним фронт
-// соберёт ссылку для телевизора, если сам стол открыт как localhost.
+// TestBroadcastLinkLANOrigins проверяет, что ссылка трансляции содержит адреса стола в сети.
 func TestBroadcastLinkLANOrigins(t *testing.T) {
 	srv, dm := diagServer(t)
 	var link struct {
@@ -197,5 +190,83 @@ func TestBroadcastLinkLANOrigins(t *testing.T) {
 	}
 	if link.ShortPath != "/tv" || len(link.LANOrigins) != 1 || link.LANOrigins[0] != "http://192.168.1.5:8080" {
 		t.Fatalf("ссылка: %+v", link)
+	}
+}
+
+// TestBroadcastApprovalReturnsKey проверяет, что после подтверждения ключ приходит в теле ответа один раз.
+func TestBroadcastApprovalReturnsKey(t *testing.T) {
+	srv, dm := diagServer(t)
+
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(do(t, srv, http.MethodPost, "/api/broadcast/requests", "tv", "").Body, &created); err != nil || created.ID == "" {
+		t.Fatalf("заявка не создана: %v %+v", err, created)
+	}
+
+	pending := do(t, srv, http.MethodGet, "/api/broadcast/requests/"+created.ID, "tv", "")
+	if strings.Contains(string(pending.Body), `"key"`) {
+		t.Fatalf("ключ виден до подтверждения: %s", pending.Body)
+	}
+
+	if code := do(t, srv, http.MethodPost, "/api/broadcast/requests/"+created.ID+"/approve", "", "", dm).StatusCode; code != http.StatusOK {
+		t.Fatalf("подтверждение: статус %d", code)
+	}
+
+	resp := do(t, srv, http.MethodGet, "/api/broadcast/requests/"+created.ID, "tv", "")
+	var got struct{ State, Key string }
+	if err := json.Unmarshal(resp.Body, &got); err != nil {
+		t.Fatalf("разбор ответа: %v", err)
+	}
+	if got.State != "approved" || got.Key == "" {
+		t.Fatalf("после подтверждения нет ключа: %s", resp.Body)
+	}
+	if !strings.Contains(strings.Join(resp.Header.Values("Set-Cookie"), ";"), domain.BroadcastCookieName+"="+got.Key) {
+		t.Fatalf("cookie зрителя не поставлена: %v", resp.Header.Values("Set-Cookie"))
+	}
+
+	again := do(t, srv, http.MethodGet, "/api/broadcast/requests/"+created.ID, "tv", "")
+	if strings.Contains(string(again.Body), got.Key) {
+		t.Fatalf("ключ выдан повторно: %s", again.Body)
+	}
+}
+
+// TestBroadcastProbeCookie проверяет пробную cookie: первый запрос ставит, второй видит.
+func TestBroadcastProbeCookie(t *testing.T) {
+	srv, _ := diagServer(t)
+
+	first := do(t, srv, http.MethodGet, "/api/broadcast/probe", "tv", "")
+	if !strings.Contains(string(first.Body), `"cookie":false`) {
+		t.Fatalf("первый запрос без cookie: %s", first.Body)
+	}
+	var probe *http.Cookie
+	for _, line := range first.Header.Values("Set-Cookie") {
+		if strings.HasPrefix(line, "beacon_probe=") {
+			probe = &http.Cookie{Name: "beacon_probe", Value: "1"}
+		}
+	}
+	if probe == nil {
+		t.Fatalf("пробная cookie не поставлена: %v", first.Header.Values("Set-Cookie"))
+	}
+
+	second := do(t, srv, http.MethodGet, "/api/broadcast/probe", "tv", "", probe)
+	if !strings.Contains(string(second.Body), `"cookie":true`) {
+		t.Fatalf("cookie вернулась, а проба её не увидела: %s", second.Body)
+	}
+}
+
+// TestBroadcastDiagInfoMerges проверяет, что новые сведения дополняют прежние.
+func TestBroadcastDiagInfoMerges(t *testing.T) {
+	srv, dm := diagServer(t)
+	do(t, srv, http.MethodPost, "/api/broadcast/diag", "tv", `{"kind":"page","info":{"webgl":"да"}}`)
+	do(t, srv, http.MethodPost, "/api/broadcast/diag", "tv", `{"kind":"info","info":{"serverCookie":"нет"}}`)
+	do(t, srv, http.MethodPost, "/api/broadcast/diag", "tv", `{"kind":"page","info":{"webgl":"да"}}`)
+
+	var screens []diagScreen
+	if err := json.Unmarshal(do(t, srv, http.MethodGet, "/api/broadcast/diag", "", "", dm).Body, &screens); err != nil {
+		t.Fatalf("разбор журнала: %v", err)
+	}
+	if len(screens) != 1 || screens[0].Info["webgl"] != "да" || screens[0].Info["serverCookie"] != "нет" {
+		t.Fatalf("сведения не сложились: %+v", screens)
 	}
 }

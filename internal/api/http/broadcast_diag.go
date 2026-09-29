@@ -8,32 +8,15 @@ import (
 	"time"
 )
 
-// Журнал экранов трансляции — для отчёта о баге.
-//
-// Трансляцию открывают встроенные браузеры телевизоров и приставок: консоли
-// там нет, и человек у экрана может рассказать разве что «один квадратик».
-// Поэтому сведения собирает сервер: какой браузер пришёл за страницей (это
-// видно по заголовку ещё до того, как на экране что-то выполнится), что про
-// себя сообщил сторож страницы (web/public/broadcast-guard.js) и какие
-// ошибки он поймал. ДМ получает это в «Сообщить о баге» (см.
-// web/src/bug-report.js) и видит текст целиком до отправки.
-//
-// Только в памяти: после перезапуска сервера журнал пуст, и это нормально —
-// нужен он ровно на время «телевизор не работает, отправлю отчёт».
-
+// Журнал экранов трансляции для отчёта о баге. Хранится в памяти.
 const (
-	// Экранов за вечер — единицы. Приём без авторизации, поэтому всё
-	// ограничено сверху: мусорные запросы из сети вытесняют друг друга, а не
-	// копят память.
 	maxDiagScreens = 8
 	maxDiagErrors  = 12
 	maxDiagText    = 600
-	maxDiagInfo    = 12
+	maxDiagInfo    = 24
 )
 
-// diagScreen — один экран: адрес плюс браузер. По одному адресу могут
-// прийти и телевизор, и телефон рядом (NAT, одна Wi-Fi-точка) — их
-// различает User-Agent.
+// diagScreen описывает один экран: адрес и браузер.
 type diagScreen struct {
 	Addr      string            `json:"addr"`
 	UserAgent string            `json:"userAgent"`
@@ -51,19 +34,18 @@ type broadcastDiag struct {
 	screens []*diagScreen
 }
 
+// clip обрезает строку до n байт, не разрывая символ.
 func clip(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	// Режем по границе руны: ошибка на русском не должна превратиться в
-	// битый UTF-8 в JSON.
 	for n > 0 && s[n]&0xC0 == 0x80 {
 		n--
 	}
 	return s[:n] + "…"
 }
 
-// screen — запись экрана, при необходимости новая. Вызывается под mu.
+// screen возвращает запись экрана, при необходимости создаёт новую. Вызывать под mu.
 func (d *broadcastDiag) screen(addr, ua string, now time.Time) *diagScreen {
 	ua = clip(ua, maxDiagText)
 	for _, s := range d.screens {
@@ -74,7 +56,6 @@ func (d *broadcastDiag) screen(addr, ua string, now time.Time) *diagScreen {
 	}
 	s := &diagScreen{Addr: addr, UserAgent: ua, FirstSeen: now, LastSeen: now}
 	if len(d.screens) >= maxDiagScreens {
-		// Вытесняем тот, о котором дольше всех ничего не слышно.
 		oldest := 0
 		for i, x := range d.screens {
 			if x.LastSeen.Before(d.screens[oldest].LastSeen) {
@@ -87,19 +68,17 @@ func (d *broadcastDiag) screen(addr, ua string, now time.Time) *diagScreen {
 	return s
 }
 
-// pageLoaded — браузер пришёл за самой страницей трансляции. Запоминаем при
-// каждой загрузке: «загрузок много, а стол не стартовал» — тоже сведение.
+// pageLoaded запоминает загрузку страницы трансляции.
 func (d *broadcastDiag) pageLoaded(addr, ua string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	s := d.screen(addr, ua, time.Now())
 	s.Loads++
-	// Новая загрузка — новая попытка: прежний итог к ней не относится.
 	s.Started = false
 	s.TimedOut = false
 }
 
-// diagEvent — то, что присылает сторож страницы.
+// diagEvent — сообщение от страницы трансляции (web/public/broadcast-guard.js).
 type diagEvent struct {
 	Kind    string            `json:"kind"`
 	Message string            `json:"message"`
@@ -111,11 +90,13 @@ func (d *broadcastDiag) record(addr, ua string, ev diagEvent) {
 	defer d.mu.Unlock()
 	s := d.screen(addr, ua, time.Now())
 	switch ev.Kind {
-	case "page":
-		s.Info = make(map[string]string, len(ev.Info))
+	case "page", "info":
+		if s.Info == nil {
+			s.Info = make(map[string]string, len(ev.Info))
+		}
 		for k, v := range ev.Info {
-			if len(s.Info) >= maxDiagInfo {
-				break
+			if _, ok := s.Info[k]; !ok && len(s.Info) >= maxDiagInfo {
+				continue
 			}
 			s.Info[clip(k, 32)] = clip(v, 200)
 		}
@@ -151,9 +132,8 @@ func (d *broadcastDiag) list() []diagScreen {
 	return out
 }
 
-// handleBroadcastDiagPost — POST /api/broadcast/diag: сторож страницы
-// трансляции рассказывает о браузере и ошибках. Без авторизации: экран, до
-// которого ДМ ещё не дошёл, — как раз тот, что ломается.
+// handleBroadcastDiagPost — POST /api/broadcast/diag: сведения о браузере и ошибки экрана.
+// Без авторизации: экран ещё не пущен.
 func (a *API) handleBroadcastDiagPost(w http.ResponseWriter, r *http.Request) {
 	var ev diagEvent
 	if err := json.NewDecoder(r.Body).Decode(&ev); err != nil {
@@ -164,8 +144,7 @@ func (a *API) handleBroadcastDiagPost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleBroadcastDiagList — GET /api/broadcast/diag (только ДМ): журнал для
-// отчёта о баге.
+// handleBroadcastDiagList — GET /api/broadcast/diag (только ДМ): журнал экранов.
 func (a *API) handleBroadcastDiagList(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.requireOwner(w, r); !ok {
 		return

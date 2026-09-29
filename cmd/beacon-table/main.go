@@ -263,9 +263,7 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota, companies.ChatHistory())
 	api.DemoMode = cfg.DemoMode
-	// Адреса в сети — для ссылки на трансляцию, когда ДМ открыл стол как
-	// localhost (см. apihttp: broadcastLinkResponse). Считаются на каждый
-	// запрос: ноутбук за вечер может сменить Wi-Fi.
+	// Адреса в сети для ссылки на трансляцию, считаются на каждый запрос.
 	api.LANOrigins = func() []string {
 		var out []string
 		for _, u := range accessURLs(cfg.Addr) {
