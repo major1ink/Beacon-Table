@@ -1,5 +1,6 @@
 import { Graphics } from "pixi.js";
 import { canvasPos, screenToWorld, getTransform, zoomAt, resetCamera } from "./camera.js";
+import { createWheelClassifier, pinchFactor } from "./wheel.js";
 import {
   tokenAt,
   snapToGrid,
@@ -106,13 +107,24 @@ export function createInteraction(ctx) {
     if (obj) mapObjectFocus.focus(obj, { minZoom });
   });
 
-  // ---- зум колесом, пан средней кнопкой — работают у всех трёх ролей ----
+  // ---- зум колесом и пан работают у всех трёх ролей ----
+  // Колесо мыши зумит, прокрутка тачпада двигает карту, щипок зумит плавно
+  // (см. wheel.js). Пан также средней кнопкой или пробелом с перетаскиванием.
+  const classifyWheel = createWheelClassifier();
   canvas.addEventListener(
     "wheel",
     (e) => {
       e.preventDefault();
       const { sx, sy } = canvasPos(e, canvas);
-      zoomAt(ctx.camera, sx, sy, e.deltaY < 0 ? 1.15 : 1 / 1.15, screenW(), screenH(), ctx.scene);
+      const intent = classifyWheel(e);
+      if (intent === "pan") {
+        const { scale } = getTransform(screenW(), screenH(), ctx.scene, ctx.camera);
+        ctx.camera.x += e.deltaX / scale;
+        ctx.camera.y += e.deltaY / scale;
+      } else {
+        const factor = intent === "pinch" ? pinchFactor(e.deltaY) : e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        zoomAt(ctx.camera, sx, sy, factor, screenW(), screenH(), ctx.scene);
+      }
       applyCameraAndRender();
     },
     { passive: false }
@@ -132,11 +144,49 @@ export function createInteraction(ctx) {
   canvas.addEventListener("pointercancel", () => document.dispatchEvent(new CustomEvent("vtt:cancelGesture")));
 
   let panning = null;
-  canvas.addEventListener("pointerdown", (e) => {
-    if (e.button !== 1) return;
+  let spaceHeld = false;
+
+  function startPan(e) {
     e.preventDefault();
     const { sx, sy } = canvasPos(e, canvas);
-    panning = { sx, sy, camX: ctx.camera.x, camY: ctx.camera.y };
+    panning = { sx, sy, camX: ctx.camera.x, camY: ctx.camera.y, button: e.button };
+    canvas.style.cursor = "grabbing";
+  }
+
+  function endPan() {
+    panning = null;
+    canvas.style.cursor = spaceHeld ? "grab" : "";
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.button === 1) startPan(e);
+  });
+
+  // Пробел с левой кнопкой двигает карту. Слушатель на window в фазе перехвата,
+  // чтобы инструменты карты не получили этот клик.
+  window.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (!spaceHeld || e.button !== 0 || e.target !== canvas) return;
+      e.stopPropagation();
+      startPan(e);
+    },
+    true
+  );
+  window.addEventListener("keydown", (e) => {
+    if (e.code !== "Space" || e.repeat || e.target.closest("input, textarea, select, button, a, summary, [contenteditable]")) return;
+    e.preventDefault();
+    spaceHeld = true;
+    if (!panning) canvas.style.cursor = "grab";
+  });
+  window.addEventListener("keyup", (e) => {
+    if (e.code !== "Space") return;
+    spaceHeld = false;
+    if (!panning) canvas.style.cursor = "";
+  });
+  window.addEventListener("blur", () => {
+    spaceHeld = false;
+    endPan();
   });
   window.addEventListener("pointermove", (e) => {
     if (!panning) return;
@@ -147,7 +197,7 @@ export function createInteraction(ctx) {
     applyCameraAndRender();
   });
   window.addEventListener("pointerup", (e) => {
-    if (e.button === 1) panning = null;
+    if (panning && e.button === panning.button) endPan();
   });
 
   // ---- планшет: один палец — инструмент, два пальца — камера ----

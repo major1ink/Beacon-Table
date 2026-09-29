@@ -1,4 +1,4 @@
-import{w as m,r as l,S as a}from"./wake-lock-B2rg1oFo.js";const c={name:"local-uniform-bit",vertex:{header:`
+import{w as m,r as l,S as a}from"./wake-lock-C2Pm1GDC.js";const c={name:"local-uniform-bit",vertex:{header:`
 
             struct LocalUniforms {
                 uTransformMatrix:mat3x3<f32>,
