@@ -2751,9 +2751,7 @@ const broadcastRotateBtn = document.getElementById("broadcastRotateBtn");
 
 const broadcastTvUrl = document.getElementById("broadcastTvUrl");
 
-// showBroadcastLinks — ссылка с ключом и короткий адрес для пульта. У
-// короткого срезаем «http://»: браузеры телевизоров подставляют его сами, а
-// набирать на пульте каждый знак — мучение.
+// showBroadcastLinks показывает ссылку с ключом и короткий адрес без «http://».
 function showBroadcastLinks({ url, tvUrl }) {
   broadcastLinkInput.value = url;
   broadcastTvUrl.textContent = tvUrl.replace(/^http:\/\//, "");

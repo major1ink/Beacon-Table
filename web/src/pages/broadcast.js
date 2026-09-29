@@ -1,15 +1,13 @@
 // Перенос inline-скрипта static/tv.html (переименован в broadcast.html —
 // "трансляция" точнее описывает назначение экрана, чем сокращение "tv", см.
-// README). initVTT остаётся async (PIXI.Application.init() в v8 — промис);
-// её провал уходит сторожу страницы (см. public/broadcast-guard.js).
+// README). initVTT остаётся async (PIXI.Application.init() в v8 — промис).
 //
-// legacy-dom — первым: полифилы DOM для старых браузеров телевизоров должны
-// встать до того, как их тронет код ниже.
+// legacy-dom импортируется первым: полифилы нужны до остального кода.
 import "../legacy-dom.js";
 import { initVTT } from "../vtt/index.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDiceFx } from "../dice-fx.js";
-import { broadcastAccessGranted, requestBroadcastAccess, broadcastRequestState } from "../api.js";
+import { broadcastAccessGranted, requestBroadcastAccess, broadcastRequestState, probeBroadcastCookie } from "../api.js";
 
 // Экран трансляции работает без аккаунта — вместо него ключ трансляции (см.
 // internal/service/broadcast.go). Попасть к нему можно двумя путями:
@@ -21,11 +19,9 @@ import { broadcastAccessGranted, requestBroadcastAccess, broadcastRequestState }
 //     ждёт, пока ДМ нажмёт «Пустить» у себя в «Настройках». Ради него всё и
 //     затевалось: длинную ссылку с ключом на телевизоре не набрать.
 //
-// Проверка в async-функции, а не через top-level await: сборка идёт под
-// старые браузеры телевизоров, где TLA нет (см. web/vite.broadcast.config.js).
+// Проверка в async-функции, а не через top-level await: в старых браузерах телевизоров TLA нет.
 //
-// guard — сторож из public/broadcast-guard.js. Его может не быть (скрипт не
-// загрузился), поэтому все вызовы через ?.
+// guard — сторож из public/broadcast-guard.js, если он загрузился.
 const guard = window.__beaconBroadcast;
 guard?.started();
 boot().catch((e) => {
@@ -35,10 +31,78 @@ boot().catch((e) => {
 
 async function boot() {
   if (await broadcastAccessGranted()) {
+    setTries(0);
     startTable();
     return;
   }
+  // Вход по ключу в адресе уже пробовали: новые заявки не заводим, проверяем cookie.
+  if (getTries() >= 1 && (await giveUpIfCookiesLost())) return;
   await waitForApproval();
+}
+
+// Счётчик попыток входа по ключу в адресе. Хранится в window.name: оно переживает
+// перезагрузку и редирект, а cookie и localStorage могут не работать.
+const TRIES_PREFIX = "beaconTvTries=";
+
+function getTries() {
+  const name = window.name || "";
+  return name.indexOf(TRIES_PREFIX) === 0 ? parseInt(name.slice(TRIES_PREFIX.length), 10) || 0 : 0;
+}
+
+function setTries(n) {
+  try {
+    if (n) window.name = TRIES_PREFIX + n;
+    else if ((window.name || "").indexOf(TRIES_PREFIX) === 0) window.name = "";
+  } catch {
+    /* window.name недоступно — счёт просто не ведём */
+  }
+}
+
+// probeCookies проверяет, что умеет хранить браузер, и отправляет итог в отчёт о баге.
+async function probeCookies() {
+  const result = {};
+  result.cookieEnabled = navigator.cookieEnabled ? "да" : "нет";
+  try {
+    document.cookie = "beacon_t=1; path=/; max-age=60";
+    result.docCookie = document.cookie.indexOf("beacon_t=1") >= 0 ? "да" : "нет";
+  } catch {
+    result.docCookie = "ошибка";
+  }
+  for (const [key, store] of [
+    ["localStorage", () => window.localStorage],
+    ["sessionStorage", () => window.sessionStorage],
+  ]) {
+    try {
+      const st = store();
+      st.setItem("beacon_t", "1");
+      result[key] = st.getItem("beacon_t") === "1" ? "да" : "нет";
+      st.removeItem("beacon_t");
+    } catch {
+      result[key] = "нет";
+    }
+  }
+  // первый запрос ставит cookie, второй показывает, вернул ли её браузер
+  try {
+    await probeBroadcastCookie();
+    result.serverCookie = (await probeBroadcastCookie()) ? "да" : "нет";
+  } catch {
+    result.serverCookie = "ошибка запроса";
+  }
+  guard?.note(result);
+  return result;
+}
+
+// giveUpIfCookiesLost останавливает экран, если браузер не сохраняет cookie от сервера.
+// Если cookie работают, сбрасывает счётчик попыток и возвращает false.
+async function giveUpIfCookiesLost() {
+  const result = await probeCookies();
+  if (result.serverCookie === "да") {
+    setTries(0);
+    return false;
+  }
+  guard?.note({ login: "остановлен: браузер не сохраняет cookie от сервера" });
+  showWaitingScreen().showNoAccess();
+  return true;
 }
 
 function startTable() {
@@ -79,6 +143,8 @@ const POLL_MS = 2000;
 // экран в комнате мог простоять всю подготовку к игре.
 async function waitForApproval() {
   const view = showWaitingScreen();
+  // пока ДМ не ответил, проверяем, что умеет браузер
+  probeCookies();
 
   for (;;) {
     let request;
@@ -111,18 +177,29 @@ async function pollRequest(id, view) {
   for (;;) {
     await sleep(POLL_MS);
 
-    let state;
+    let state, key;
     try {
-      ({ state } = await broadcastRequestState(id));
+      ({ state, key } = await broadcastRequestState(id));
     } catch {
       continue; // сеть моргнула — не теряем заявку, просто пробуем снова
     }
 
     if (state === "approved") {
-      // Cookie зрителя пришла вместе с этим ответом — перезагрузка открывает
-      // уже стол, и ключ нигде на экране не появляется.
       view.showApproved();
-      location.reload();
+      // cookie могла не сохраниться: без проверки перезагрузка снова покажет код
+      if (await broadcastAccessGranted()) {
+        setTries(0);
+        location.reload();
+        return true;
+      }
+      guard?.note({ accessAfterApproval: "нет: cookie из ответа не сохранилась" });
+      if (key) {
+        // вход по ссылке с ключом: cookie из ответа на переход принимаются надёжнее
+        setTries(1);
+        location.replace("/broadcast.html?key=" + encodeURIComponent(key));
+        return true;
+      }
+      view.showNoAccess();
       return true;
     }
     if (state === "rejected") {
@@ -150,8 +227,7 @@ function showWaitingScreen() {
   wrap.style.cssText += ";display:flex;align-items:center;justify-content:center;padding:6vmin;text-align:center;";
 
   const box = document.createElement("div");
-  // Перед clamp() — запасное значение: clamp() в Chromium только с 79, и
-  // старый браузер телевизора выкинет объявление целиком.
+  // запасное значение перед clamp(): в Chromium до 79 его нет
   box.style.cssText =
     "max-width:34ch;color:#e8e8ea;font:400 20px/1.5 sans-serif;font:400 clamp(16px,2vmin,22px)/1.5 system-ui,sans-serif;";
 
@@ -188,6 +264,13 @@ function showWaitingScreen() {
       code.textContent = "✕";
       code.style.color = "#e0756e";
       hint.textContent = "Сейчас попробуем ещё раз — с новым кодом.";
+    },
+    showNoAccess() {
+      title.textContent = "Браузер не запомнил доступ";
+      code.textContent = "✕";
+      code.style.color = "#e0756e";
+      hint.textContent =
+        "ДМ вас пустил, но этот браузер не сохраняет доступ. Подробности уже переданы на стол — ДМ увидит их в «Настройки» → «Сервер» → «Сообщить о баге». Попробуйте другой браузер на этом устройстве.";
     },
     showError(message) {
       title.textContent = "Нет связи с сервером";

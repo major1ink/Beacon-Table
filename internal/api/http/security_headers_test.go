@@ -57,10 +57,7 @@ func TestSecurityHeadersBeforeBody(t *testing.T) {
 	}
 }
 
-// Страница трансляции собирается с @vitejs/plugin-legacy, и его служебные
-// inline-скрипты выбирают, какую сборку грузить старому телевизору. Не
-// пропусти их CSP — телевизор без модулей не запустит вообще ничего, а
-// обновление плагина может поменять их текст.
+// TestCSPAllowsBroadcastInlineScripts проверяет, что CSP разрешает inline-скрипты legacy-плагина на странице трансляции.
 func TestCSPAllowsBroadcastInlineScripts(t *testing.T) {
 	page, err := os.ReadFile(filepath.Join("..", "..", "..", "cmd", "beacon-table", "static", "broadcast.html"))
 	if err != nil {
