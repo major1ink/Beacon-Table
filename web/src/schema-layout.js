@@ -44,6 +44,9 @@ export function editTabs(schema) {
 
 export { lookupPath as getPath };
 
+// sectionFields — id полей секции: fields или поля её плиток (cells).
+export const sectionFields = (sec) => sec.fields || (sec.cells || []).flat();
+
 const isIndex = (part) => /^\d+$/.test(part);
 
 // setPath — записать value по пути «a.b.0», создавая недостающие объекты и
@@ -98,18 +101,32 @@ export const formatSigned = (v) => (v >= 0 ? "+" : "") + formatNumber(v);
 // formatSubtitle — подпись карточки по шаблону схемы (list.subtitle, «Хиты
 // {hp} · Защита {ac}»): value(id) — текст поля ("" — пусто). Части между
 // «·», в которых все подстановки пустые, выпадают целиком — «Хиты  ·
-// Защита 13» не остаётся висеть.
+// Защита 13» не остаётся висеть; то же для необязательных частей
+// «[ ({note})]». Зеркало internal/schema/subtitle.go: FormatSubtitle.
 export function formatSubtitle(template, value) {
+  const fill = (s) => {
+    let placeholders = 0;
+    let filled = 0;
+    const text = s.replace(/\{([^{}]*)\}/g, (_, id) => {
+      placeholders++;
+      const v = String(value(id) ?? "").trim();
+      if (v) filled++;
+      return v;
+    });
+    return { text, placeholders, filled };
+  };
   return String(template || "")
     .split("·")
     .map((part) => {
       let placeholders = 0;
       let filled = 0;
-      const text = part.replace(/\{([^{}]*)\}/g, (_, id) => {
-        placeholders++;
-        const v = String(value(id) ?? "").trim();
-        if (v) filled++;
-        return v;
+      const text = part.replace(/\[([^[\]]*)\]|\{([^{}]*)\}/g, (m) => {
+        const optional = m.startsWith("[");
+        const r = fill(optional ? m.slice(1, -1) : m);
+        if (optional && r.placeholders && !r.filled) return "";
+        placeholders += r.placeholders;
+        filled += r.filled;
+        return r.text;
       });
       return placeholders && !filled ? "" : text.trim();
     })

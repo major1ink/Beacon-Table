@@ -62,12 +62,13 @@ const (
 	TypeProf     = "prof"     // владение: флажок или «нет / владение / экспертиза»
 	TypeTally    = "tally"    // шкала из делений: 0..max, клик по делению
 	TypePool     = "pool"     // счётчик-строка «всего/потрачено» («4/2»)
+	TypeTemplate = "template" // текст по шаблону из других полей, не хранится
 )
 
 var fieldTypes = map[string]bool{
 	TypeNumber: true, TypeText: true, TypeLongText: true, TypeBool: true, TypeSelect: true,
 	TypeDice: true, TypeTable: true, TypeResource: true, TypeComputed: true, TypeRoll: true,
-	TypeProf: true, TypeTally: true, TypePool: true,
+	TypeProf: true, TypeTally: true, TypePool: true, TypeTemplate: true,
 }
 
 // storedTypes — типы, значение которых лежит в JSON и потому требует path.
@@ -129,9 +130,14 @@ const (
 	maxSections = 100
 	maxLabelLen = 120
 	maxRows     = 100
-	maxTally    = 20
-	maxFormula  = 2000
-	maxColumn   = 3
+	// maxCellFields — полей в плитке секции; maxListItems — плашек, букв и
+	// правил каталога; maxRuleTokens — подстрок в правиле.
+	maxCellFields = 4
+	maxListItems  = 50
+	maxRuleTokens = 50
+	maxTally      = 20
+	maxFormula    = 2000
+	maxColumn     = 3
 )
 
 var idRe = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -179,9 +185,26 @@ type Field struct {
 	// Max — делений у шкалы (tally), Tone — её цвет.
 	Max  int    `json:"max,omitempty"`
 	Tone string `json:"tone,omitempty"`
+	// Template — текст поля template: «{ac}[ ({ac_note})]», см. FormatSubtitle.
+	Template string `json:"template,omitempty"`
+	// Facet — как значение текстового поля попадает в фильтр каталога.
+	Facet string `json:"facet,omitempty"`
+	// Suggest — подсказки текстового поля из карточек справочника.
+	Suggest *Suggest `json:"suggest,omitempty"`
 	// Rows — заранее известные строки таблицы. path таблицы ведёт к объекту
 	// или списку, «{key}» в пути колонки — ключ строки (skillProf.{key}).
 	Rows []Row `json:"rows,omitempty"`
+}
+
+// FacetBeforeParen — значение фильтра до скобки: «зверь (динозавр)» → «зверь».
+const FacetBeforeParen = "beforeParen"
+
+// Suggest — подсказки: названия записей справочника вида Reference; у
+// записей с ParentName (архетип класса) — только с родителем из поля
+// ParentField.
+type Suggest struct {
+	Reference   string `json:"reference"`
+	ParentField string `json:"parentField,omitempty"`
 }
 
 // Row — строка таблицы со строками; Formulas (id колонки → формула)
@@ -212,6 +235,9 @@ type Section struct {
 	Tab      string   `json:"tab,omitempty"`
 	TabTitle string   `json:"tabTitle,omitempty"`
 	Mode     string   `json:"mode,omitempty"`
+	// Cells — секция из плиток: в каждой несколько полей друг под другом
+	// («Сил» — 17 и +3).
+	Cells [][]string `json:"cells,omitempty"`
 	// Open — раскрыта ли секция из текстов в чтении (по умолчанию да).
 	Open *bool `json:"open,omitempty"`
 	// Bind — роль виджета → id поля схемы, см. widgetBinds.
@@ -275,6 +301,48 @@ type List struct {
 	Sort     []string `json:"sort,omitempty"`
 	Filters  []string `json:"filters,omitempty"`
 	Search   []string `json:"search,omitempty"`
+	// Badges — поля, чей текст стоит плашкой перед источником (цвет — у
+	// варианта select), Flags — буквы у строки каталога.
+	Badges []string `json:"badges,omitempty"`
+	Flags  []Flag   `json:"flags,omitempty"`
+	// Medallion — откуда берётся глиф и цвет карточки, Categories — дерево
+	// «Компендиума».
+	Medallion  *Medallion  `json:"medallion,omitempty"`
+	Categories *Categories `json:"categories,omitempty"`
+}
+
+// Flag — буква Mark у карточки, у которой булево поле Field включено.
+type Flag struct {
+	Field string `json:"field"`
+	Mark  string `json:"mark"`
+	Title string `json:"title,omitempty"`
+}
+
+// Rule — правило по тексту поля: значение содержит одну из подстрок
+// (Contains) или равно одному из значений (Equals), без учёта регистра.
+type Rule struct {
+	Label    string   `json:"label,omitempty"`
+	Contains []string `json:"contains,omitempty"`
+	Equals   []string `json:"equals,omitempty"`
+	Glyph    string   `json:"glyph,omitempty"`
+	Color    string   `json:"color,omitempty"`
+}
+
+// Medallion — глиф и цвет карточки: у поля select — из варианта, у текста —
+// из первого подошедшего правила; Glyph и Color — на случай без совпадения.
+type Medallion struct {
+	Field string `json:"field"`
+	Rules []Rule `json:"rules,omitempty"`
+	Glyph string `json:"glyph,omitempty"`
+	Color string `json:"color,omitempty"`
+}
+
+// Categories — разбиение карточек по тексту поля: первое подошедшее правило,
+// иначе Other.
+type Categories struct {
+	Field string `json:"field"`
+	Rules []Rule `json:"rules"`
+	Other string `json:"other,omitempty"`
 }
 
 // Schema — схема листа или карточки. Raw — файл как есть: его и получает
@@ -359,9 +427,12 @@ func (s *Schema) Validate() error {
 	if err := s.checkFormulas(root); err != nil {
 		return fmt.Errorf("схема %s, %w", s.Kind, err)
 	}
+	if err := s.checkTemplates(); err != nil {
+		return fmt.Errorf("схема %s, %w", s.Kind, err)
+	}
 	if s.List != nil {
 		l := s.List
-		if s.Kind == KindSheet && (l.Group != "" || len(l.Sort) > 0 || len(l.Filters) > 0 || len(l.Search) > 0) {
+		if s.Kind == KindSheet && (l.Group != "" || len(l.Sort) > 0 || len(l.Filters) > 0 || len(l.Search) > 0 || len(l.Badges) > 0 || len(l.Flags) > 0 || l.Medallion != nil || l.Categories != nil) {
 			return fmt.Errorf("у листа в разделе list — только subtitle (подпись готового персонажа)")
 		}
 		if err := s.checkList(); err != nil {
@@ -384,8 +455,17 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 	if strings.TrimSpace(f.Label) == "" || len([]rune(f.Label)) > maxLabelLen {
 		return fmt.Errorf("нет подписи (label) или она длиннее %d символов", maxLabelLen)
 	}
-	if len(f.Formula) > maxFormula || len(f.Roll) > maxFormula {
-		return fmt.Errorf("формула длиннее %d символов", maxFormula)
+	if len(f.Formula) > maxFormula || len(f.Roll) > maxFormula || len(f.Template) > maxFormula {
+		return fmt.Errorf("формула или шаблон длиннее %d символов", maxFormula)
+	}
+	if (f.Template != "") != (f.Type == TypeTemplate) || (f.Type == TypeTemplate && column) {
+		return fmt.Errorf("template — обязательный шаблон поля типа template, колонкой оно не бывает")
+	}
+	if f.Facet != "" && (f.Type != TypeText || f.Facet != FacetBeforeParen) {
+		return fmt.Errorf("facet — у текста, значение %s", FacetBeforeParen)
+	}
+	if f.Suggest != nil && (f.Type != TypeText || f.Suggest.Reference == "" || len(f.Suggest.Reference) > maxLabelLen) {
+		return fmt.Errorf("suggest — у текста, с видом записей справочника (reference)")
 	}
 	if f.Roll != "" && f.Type != TypeRoll && f.Type != TypeNumber && f.Type != TypeComputed {
 		return fmt.Errorf("roll — только у броска, числа и вычисляемого поля")
@@ -567,16 +647,27 @@ func checkRows(f *Field, cols map[string]*Field) error {
 }
 
 func (s *Schema) checkSection(sec Section) error {
-	if (sec.Widget == "") == (len(sec.Fields) == 0) {
-		return fmt.Errorf("в секции должно быть либо поля (fields), либо виджет (widget)")
+	kinds := 0
+	for _, has := range []bool{sec.Widget != "", len(sec.Fields) > 0, len(sec.Cells) > 0} {
+		if has {
+			kinds++
+		}
+	}
+	if kinds != 1 {
+		return fmt.Errorf("в секции должно быть одно из: поля (fields), плитки (cells) или виджет (widget)")
+	}
+	if len(sec.Cells) > 0 {
+		if err := s.checkCells(sec); err != nil {
+			return err
+		}
 	}
 	if sec.Widget != "" {
-		kinds, ok := widgets[sec.Widget]
+		widgetKinds, ok := widgets[sec.Widget]
 		if !ok {
 			return fmt.Errorf("неизвестный виджет %q", sec.Widget)
 		}
 		allowed := false
-		for _, k := range kinds {
+		for _, k := range widgetKinds {
 			allowed = allowed || k == s.Kind
 		}
 		if !allowed {
@@ -666,6 +757,9 @@ func (s *Schema) checkList() error {
 			}
 		}
 	}
+	if err := s.checkListExtras(); err != nil {
+		return err
+	}
 	if g := s.List.Group; g != "" {
 		f := s.Fields[g]
 		if f == nil {
@@ -675,6 +769,115 @@ func (s *Schema) checkList() error {
 		case TypeNumber, TypeComputed, TypeText, TypeSelect, TypeBool:
 		default:
 			return fmt.Errorf("группы по полю %q типа %s — нужно число, текст, выбор или флажок", g, f.Type)
+		}
+	}
+	return nil
+}
+
+// checkCells — плитки секции: у каждой от одного до четырёх полей-значений.
+func (s *Schema) checkCells(sec Section) error {
+	for _, cell := range sec.Cells {
+		if len(cell) == 0 || len(cell) > maxCellFields {
+			return fmt.Errorf("в плитке (cells) от 1 до %d полей", maxCellFields)
+		}
+		for _, id := range cell {
+			f := s.Fields[id]
+			if f == nil {
+				return fmt.Errorf("плитка ссылается на неизвестное поле %q", id)
+			}
+			if f.Type == TypeTable || f.Type == TypeLongText || f.Type == TypeResource {
+				return fmt.Errorf("поле %q (%s) не бывает в плитке", id, f.Type)
+			}
+		}
+	}
+	return nil
+}
+
+// checkTemplates — подстановки шаблонов ведут к полям схемы или ключам
+// карточки, но не к другим шаблонам; подсказки — к текстовому полю.
+func (s *Schema) checkTemplates() error {
+	for _, id := range sortedIDs(s.Fields) {
+		f := s.Fields[id]
+		if f.Type == TypeTemplate {
+			for _, m := range placeholderRe.FindAllStringSubmatch(f.Template, -1) {
+				ref := s.Fields[m[1]]
+				if !s.listRef(m[1]) || (ref != nil && ref.Type == TypeTemplate) {
+					return fmt.Errorf("поле %s: шаблон ссылается на %q — нужно поле схемы, но не шаблон", id, m[1])
+				}
+			}
+		}
+		if f.Suggest != nil && f.Suggest.ParentField != "" {
+			if p := s.Fields[f.Suggest.ParentField]; p == nil || p.Type != TypeText {
+				return fmt.Errorf("поле %s: suggest.parentField — текстовое поле схемы", id)
+			}
+		}
+	}
+	return nil
+}
+
+// checkListExtras — плашки, буквы, медальон и категории каталога.
+func (s *Schema) checkListExtras() error {
+	l := s.List
+	for _, id := range l.Badges {
+		if f := s.Fields[id]; f == nil || f.Type == TypeTable || f.Type == TypeLongText {
+			return fmt.Errorf("плашка ссылается на %q — нужно скалярное поле схемы", id)
+		}
+	}
+	if len(l.Badges) > maxListItems || len(l.Flags) > maxListItems {
+		return fmt.Errorf("плашек и букв — не больше %d", maxListItems)
+	}
+	for _, fl := range l.Flags {
+		f := s.Fields[fl.Field]
+		if f == nil || f.Type != TypeBool || fl.Mark == "" || len([]rune(fl.Mark)) > 3 {
+			return fmt.Errorf("буква каталога: булево поле %q и буква до 3 символов", fl.Field)
+		}
+	}
+	if m := l.Medallion; m != nil {
+		f := s.Fields[m.Field]
+		switch {
+		case f == nil:
+			return fmt.Errorf("медальон по неизвестному полю %q", m.Field)
+		case f.Type == TypeSelect && len(m.Rules) == 0:
+		case f.Type == TypeText && len(m.Rules) > 0:
+		default:
+			return fmt.Errorf("медальон: выбор без правил или текст с правилами, поле %q — %s", m.Field, f.Type)
+		}
+		if err := checkRules(m.Rules, false); err != nil {
+			return fmt.Errorf("медальон: %w", err)
+		}
+	}
+	if c := l.Categories; c != nil {
+		if f := s.Fields[c.Field]; f == nil || (f.Type != TypeText && f.Type != TypeSelect) {
+			return fmt.Errorf("категории по полю %q — нужен текст или выбор", c.Field)
+		}
+		if len(c.Rules) == 0 {
+			return fmt.Errorf("у категорий нет правил")
+		}
+		if err := checkRules(c.Rules, true); err != nil {
+			return fmt.Errorf("категории: %w", err)
+		}
+	}
+	return nil
+}
+
+// checkRules — правила по тексту: у каждого есть что сравнивать, у
+// категорий — ещё и подпись.
+func checkRules(rules []Rule, needLabel bool) error {
+	if len(rules) > maxListItems {
+		return fmt.Errorf("правил — не больше %d", maxListItems)
+	}
+	for i, r := range rules {
+		tokens := append(append([]string(nil), r.Contains...), r.Equals...)
+		if len(tokens) == 0 || len(tokens) > maxRuleTokens {
+			return fmt.Errorf("правило %d: от 1 до %d подстрок (contains) или значений (equals)", i+1, maxRuleTokens)
+		}
+		for _, t := range tokens {
+			if strings.TrimSpace(t) == "" || len([]rune(t)) > maxLabelLen {
+				return fmt.Errorf("правило %d: пустая или слишком длинная подстрока", i+1)
+			}
+		}
+		if needLabel && strings.TrimSpace(r.Label) == "" {
+			return fmt.Errorf("правило %d: нужна подпись (label)", i+1)
 		}
 	}
 	return nil

@@ -153,3 +153,90 @@ func TestParseSelectFormulas(t *testing.T) {
 		}
 	}
 }
+
+func goodCard() map[string]any {
+	return map[string]any{
+		"format": Format,
+		"kind":   "monster",
+		"fields": map[string]any{
+			"ac":   map[string]any{"type": "number", "path": "ac", "label": "КД"},
+			"note": map[string]any{"type": "text", "path": "acNote", "label": "Пометка", "facet": "beforeParen", "suggest": map[string]any{"reference": "класс", "parentField": "kind"}},
+			"kind": map[string]any{"type": "text", "path": "type", "label": "Тип"},
+			"cr": map[string]any{"type": "select", "path": "cr", "label": "ПО", "options": []any{
+				map[string]any{"value": "1", "label": "1", "glyph": "flame", "color": "#f00"},
+			}},
+			"boss":    map[string]any{"type": "bool", "path": "summonable", "label": "Призыв"},
+			"ac_line": map[string]any{"type": "template", "label": "Класс доспеха", "template": "{ac}[ ({note})]"},
+			"str":     map[string]any{"type": "number", "path": "abilities.str", "label": "Сила", "short": "Сил"},
+			"str_mod": map[string]any{"type": "computed", "label": "Мод.", "formula": "floor((@str - 10) / 2)"},
+		},
+		"layout": []any{
+			map[string]any{"title": "Бой", "fields": []any{"ac_line"}},
+			map[string]any{"cells": []any{[]any{"str", "str_mod"}}},
+		},
+		"list": map[string]any{
+			"subtitle":   "{ac_line}",
+			"badges":     []any{"cr"},
+			"flags":      []any{map[string]any{"field": "boss", "mark": "П", "title": "Призыв"}},
+			"medallion":  map[string]any{"field": "cr"},
+			"categories": map[string]any{"field": "kind", "other": "Прочее", "rules": []any{map[string]any{"label": "Нежить", "contains": []any{"нежить"}}}},
+		},
+	}
+}
+
+func TestParseCardExtras(t *testing.T) {
+	if _, err := Parse(encode(t, goodCard())); err != nil {
+		t.Fatal(err)
+	}
+	field := func(m map[string]any, id string) map[string]any {
+		return m["fields"].(map[string]any)[id].(map[string]any)
+	}
+	list := func(m map[string]any) map[string]any { return m["list"].(map[string]any) }
+	layout := func(m map[string]any, i int) map[string]any { return m["layout"].([]any)[i].(map[string]any) }
+	cases := map[string]func(m map[string]any){
+		"шаблон без template": func(m map[string]any) { delete(field(m, "ac_line"), "template") },
+		"template у числа":    func(m map[string]any) { field(m, "ac")["template"] = "{ac}" },
+		"шаблон в шаблон": func(m map[string]any) {
+			field(m, "ac")["type"] = "template"
+			delete(field(m, "ac"), "path")
+			field(m, "ac")["template"] = "{ac_line}"
+		},
+		"шаблон в никуда":  func(m map[string]any) { field(m, "ac_line")["template"] = "{nope}" },
+		"facet у числа":    func(m map[string]any) { field(m, "ac")["facet"] = "beforeParen" },
+		"кривой facet":     func(m map[string]any) { field(m, "note")["facet"] = "first" },
+		"suggest у числа":  func(m map[string]any) { field(m, "ac")["suggest"] = map[string]any{"reference": "класс"} },
+		"suggest без вида": func(m map[string]any) { field(m, "note")["suggest"] = map[string]any{} },
+		"suggest на чужого": func(m map[string]any) {
+			field(m, "note")["suggest"] = map[string]any{"reference": "класс", "parentField": "ac"}
+		},
+		"пустая плитка":   func(m map[string]any) { layout(m, 1)["cells"] = []any{[]any{}} },
+		"плитка из пяти":  func(m map[string]any) { layout(m, 1)["cells"] = []any{[]any{"str", "str", "str", "str", "str"}} },
+		"плитка в никуда": func(m map[string]any) { layout(m, 1)["cells"] = []any{[]any{"nope"}} },
+		"плитка и поля":   func(m map[string]any) { layout(m, 1)["fields"] = []any{"ac"} },
+		"плашка в никуда": func(m map[string]any) { list(m)["badges"] = []any{"nope"} },
+		"буква не булева": func(m map[string]any) { list(m)["flags"] = []any{map[string]any{"field": "ac", "mark": "П"}} },
+		"длинная буква": func(m map[string]any) {
+			list(m)["flags"] = []any{map[string]any{"field": "boss", "mark": "Призыв"}}
+		},
+		"медальон выбор с правилами": func(m map[string]any) {
+			list(m)["medallion"].(map[string]any)["rules"] = []any{map[string]any{"contains": []any{"x"}}}
+		},
+		"медальон текст без правил": func(m map[string]any) { list(m)["medallion"] = map[string]any{"field": "kind"} },
+		"медальон в никуда":         func(m map[string]any) { list(m)["medallion"] = map[string]any{"field": "nope"} },
+		"категории без правил":      func(m map[string]any) { list(m)["categories"].(map[string]any)["rules"] = []any{} },
+		"категория без подписи": func(m map[string]any) {
+			list(m)["categories"].(map[string]any)["rules"] = []any{map[string]any{"contains": []any{"x"}}}
+		},
+		"правило без подстрок": func(m map[string]any) {
+			list(m)["categories"].(map[string]any)["rules"] = []any{map[string]any{"label": "Х"}}
+		},
+		"категории по числу": func(m map[string]any) { list(m)["categories"].(map[string]any)["field"] = "ac" },
+	}
+	for name, fn := range cases {
+		m := goodCard()
+		fn(m)
+		if _, err := Parse(encode(t, m)); err == nil {
+			t.Errorf("%s: ожидали ошибку", name)
+		}
+	}
+}

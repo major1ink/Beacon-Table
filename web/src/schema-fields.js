@@ -14,9 +14,11 @@ import { enhanceRolls, rollFormula } from "./inline-rolls.js";
 import { explainModifiers, statTarget } from "./modifiers.js";
 import { applyInput, createEvaluator } from "./schema-formula.js";
 import { cellPath, deletePath, formatNumber, formatPool, formatSigned, getPath, parsePool, setPath } from "./schema-layout.js";
+import { fetchReferences } from "./api.js";
+import { displayValue } from "./schema-list.js";
 import { checkDie } from "./system-profile.js";
 
-export const SCALARS = new Set(["number", "computed", "text", "bool", "select", "dice", "roll", "resource", "prof", "tally", "pool"]);
+export const SCALARS = new Set(["number", "computed", "text", "bool", "select", "dice", "roll", "resource", "prof", "tally", "pool", "template"]);
 
 // showNumber — число поля или колонки, со знаком при signed.
 export const showNumber = (f, v) => (f.signed ? formatSigned(v) : formatNumber(v));
@@ -72,6 +74,8 @@ export function viewTile(ctx, id, f) {
         },
         f.roll ? () => ctx.sendResolvedRoll(evaluatorOf(ctx).rollField(id), f.label) : null
       );
+    case "template":
+      return liveTile(ctx, f.label, () => ({ text: displayValue(ctx.compiled, ctx.data, id) }));
     case "prof":
       return liveTile(ctx, f.label, () => ({ text: f.levels === 3 ? PROF_MARKS[profLevel(f, raw())] : raw() ? "✓" : "—" }));
     case "tally":
@@ -214,6 +218,41 @@ const rowName = (f, row) => {
   const col = firstTextColumn(f);
   return col ? String(getPath(row, col.path) || "").trim() : "";
 };
+
+// cellTiles — плитки секции (cells): у каждой подпись первого поля и
+// значения всех; значение с броском (roll) кликабельно. style: "sheet" —
+// плитки листа, "card" — плитки статблока.
+export function cellTiles(ctx, sec, style) {
+  const { h } = ctx;
+  const fields = ctx.compiled.schema.fields;
+  const card = style === "card";
+  const value = (id, first) => {
+    const f = fields[id];
+    const read = () => {
+      const r = f.type === "template" ? { value: displayValue(ctx.compiled, ctx.data, id) } : evaluatorOf(ctx).value(id);
+      return r.error ? { text: "!", error: r.error } : { text: typeof r.value === "string" ? r.value : showNumber(f, r.value) };
+    };
+    const clickable = f.roll && !first;
+    const node = card
+      ? h(clickable ? "button" : "span", { type: clickable ? "button" : undefined, class: first ? "mb-score" : "mb-mod", title: clickable ? "Бросить " + f.label : undefined })
+      : h(clickable ? "button" : "b", { type: clickable ? "button" : undefined, class: clickable ? "cell-roll" : undefined });
+    if (clickable) node.addEventListener("click", () => ctx.sendResolvedRoll(evaluatorOf(ctx).rollField(id), f.label));
+    const update = () => {
+      const r = read();
+      node.textContent = r.text;
+      node.classList.toggle("formula-error", !!r.error);
+    };
+    update();
+    ctx.onRefresh(update);
+    return node;
+  };
+  const tiles = sec.cells.map((ids) => {
+    const label = fields[ids[0]].short || fields[ids[0]].label;
+    if (card) return h("div", { class: "mb-tile" }, [h("span", { class: "card-lbl", text: label }), ...ids.map((id, i) => value(id, i === 0))]);
+    return h("div", { class: "v-tile" }, [...ids.map((id, i) => value(id, i === 0)), h("span", { text: label })]);
+  });
+  return h("div", { class: card ? "mb-ab" : "v-tiles" }, tiles);
+}
 
 // rollableCell — ячейка текста, которую можно бросить: бонус «+5» кубом
 // проверки (check) или формулы внутри текста (inline).
@@ -422,6 +461,7 @@ export function editInput(e, id, f, target, valueOf) {
     case "number":
       return exprInput(e, f, get, set);
     case "text":
+      return f.suggest ? suggestInput(e, f, target, get, set) : plainInput(e, h("input", { type: "text", placeholder: f.placeholder }), get, set);
     case "dice":
       return plainInput(e, h("input", { type: "text", placeholder: f.placeholder }), get, set);
     case "longtext":
@@ -444,8 +484,14 @@ export function editInput(e, id, f, target, valueOf) {
     case "pool":
       return plainInput(e, h("input", { type: "text", placeholder: "4 или 4/2 — всего/потрачено" }), get, set);
     case "select": {
-      const sel = h("select", {}, [h("option", { value: "", text: "—" }), ...(f.options || []).map((o) => h("option", { value: o.value, text: o.label }))]);
-      sel.value = String(get() ?? "");
+      const current = String(get() ?? "");
+      const known = (f.options || []).some((o) => o.value === current);
+      const sel = h("select", {}, [
+        h("option", { value: "", text: "—" }),
+        ...(f.options || []).map((o) => h("option", { value: o.value, text: o.label })),
+        current && !known ? h("option", { value: current, text: current }) : null,
+      ]);
+      sel.value = current;
       if (e.readOnly) sel.disabled = true;
       else
         sel.addEventListener("change", () => {
@@ -466,6 +512,36 @@ export function editInput(e, id, f, target, valueOf) {
     default:
       return null;
   }
+}
+
+// suggestInput — текстовое поле с подсказками из справочника: названия
+// записей вида f.suggest.reference; у записей с родителем — только с
+// родителем из поля f.suggest.parentField (архетипы выбранного класса).
+let referencesLoad = null;
+let suggestSeq = 0;
+
+function suggestInput(e, f, target, get, set) {
+  const list = e.h("datalist", { id: "schema-suggest-" + suggestSeq++ });
+  const inp = e.h("input", { type: "text", placeholder: f.placeholder, list: list.id });
+  const parent = f.suggest.parentField && e.compiled.schema.fields[f.suggest.parentField];
+  const kind = String(f.suggest.reference).trim().toLowerCase();
+  let references = [];
+  const fill = () => {
+    const owner = parent ? String(getPath(target, parent.path) ?? "").trim() : "";
+    list.innerHTML = "";
+    for (const r of references) {
+      if (String(r.kind || "").trim().toLowerCase() !== kind) continue;
+      if (owner && r.parentName && r.parentName !== owner) continue;
+      list.appendChild(e.h("option", { value: r.name }));
+    }
+  };
+  if (!referencesLoad) referencesLoad = fetchReferences().catch(() => []);
+  referencesLoad.then((all) => {
+    references = all;
+    fill();
+  });
+  e.onRefresh(fill);
+  return e.h("span", { class: "suggest-wrap" }, [plainInput(e, inp, get, set), list]);
 }
 
 export function plainInput(e, inp, get, set) {

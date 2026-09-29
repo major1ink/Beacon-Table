@@ -7,7 +7,7 @@
 import { statTarget } from "./modifiers.js";
 import { createEvaluator } from "./schema-formula.js";
 import { displayValue } from "./schema-list.js";
-import { formatNumber, formatSigned, getPath, visibleIn } from "./schema-layout.js";
+import { formatNumber, formatSigned, getPath, sectionFields, visibleIn } from "./schema-layout.js";
 
 // Общие поля ядра, которые уже показывает трекер боя у бойца: в попапе их
 // не повторяем.
@@ -51,7 +51,7 @@ function layoutFields(schema) {
   const out = [];
   for (const sec of schema.layout || []) {
     if (!visibleIn(sec, "view")) continue;
-    for (const id of sec.fields || []) {
+    for (const id of sectionFields(sec)) {
       if (seen.has(id) || !schema.fields[id]) continue;
       seen.add(id);
       out.push(id);

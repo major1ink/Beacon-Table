@@ -364,7 +364,7 @@ func (e *Evaluator) compute(id string, f *Field) (float64, error) {
 			return 0, &formula.Error{Code: formula.CodeNotNumber, Detail: id}
 		}
 		return e.optionValue(id, f)
-	case TypeRoll, TypeTable, TypeResource:
+	case TypeRoll, TypeTable, TypeResource, TypeTemplate:
 		return 0, &formula.Error{Code: formula.CodeNotNumber, Detail: id}
 	default:
 		n, ok := toNumber(lookupPath(e.data, f.Path))

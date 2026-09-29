@@ -8,8 +8,8 @@
 // деньги, ресурсы, живые состояния, сохранение и броски в чат — её, сюда
 // они приходят через ctx (см. schemaCtx там). Здесь — только то, что задаёт
 // схема. Лист без схемы (бланк D&D) рисуется старым кодом страницы.
-import { SCALARS, editInput, editTable, rowsTable, viewTable, viewTile } from "./schema-fields.js";
-import { TAB_INVENTORY, editTabs, getPath, setPath, viewColumns } from "./schema-layout.js";
+import { SCALARS, cellTiles, editInput, editTable, rowsTable, viewTable, viewTile } from "./schema-fields.js";
+import { TAB_INVENTORY, editTabs, getPath, sectionFields, setPath, viewColumns } from "./schema-layout.js";
 import { renderSpellbook } from "./schema-spellbook.js";
 
 
@@ -27,6 +27,7 @@ export function renderSchemaView(ctx) {
 function viewSection(ctx, sec) {
   if (sec.widget) return viewWidget(ctx, sec);
   const fields = ctx.compiled.schema.fields;
+  if (sec.cells) return ctx.vCard(sec.title || "", cellTiles(ctx, sec, "sheet"));
   const list = (sec.fields || []).map((id) => [id, fields[id]]).filter(([, f]) => f);
   // Секция из одних текстов — сворачиваемые блоки текста, как в бланке.
   if (list.length && list.every(([, f]) => f.type === "longtext")) {
@@ -97,7 +98,7 @@ function editSection(e, sec) {
   if (sec.widget === "spellbook") return spellbookEdit(e, sec);
   if (sec.widget) return null;
   const fields = e.compiled.schema.fields;
-  const list = (sec.fields || []).map((id) => [id, fields[id]]).filter(([, f]) => f && f.type !== "roll");
+  const list = sectionFields(sec).map((id) => [id, fields[id]]).filter(([, f]) => f && f.type !== "roll" && f.type !== "template");
   if (!list.length) return null;
   const inline = list.filter(([, f]) => f.type !== "table" && f.type !== "longtext");
   const blocks = list.filter(([, f]) => f.type === "table" || f.type === "longtext");

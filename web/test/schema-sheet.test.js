@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { deletePath, editTabs, formatNumber, formatSigned, formatSubtitle, getPath, setPath, viewColumns, visibleIn } from "../src/schema-layout.js";
+import { deletePath, editTabs, formatNumber, formatSigned, formatSubtitle, getPath, sectionFields, setPath, viewColumns, visibleIn } from "../src/schema-layout.js";
 
 const sheet = JSON.parse(readFileSync(new URL("../../internal/schema/builtin/sheet.json", import.meta.url), "utf8"));
 const titles = (sections) => sections.map((s) => s.title || s.widget);
@@ -95,4 +95,17 @@ test("встроенные карточки: секции видны в обои
     assert.ok(view > 0 && edit > 0, kind);
     assert.ok(schema.list && schema.list.subtitle, `${kind}: у карточки есть шаблон подписи`);
   }
+});
+
+test("поля секции: fields или поля плиток", () => {
+  assert.deepEqual(sectionFields({ fields: ["a", "b"] }), ["a", "b"]);
+  assert.deepEqual(sectionFields({ cells: [["a", "b"], ["c"]] }), ["a", "b", "c"]);
+  assert.deepEqual(sectionFields({ widget: "hp" }), []);
+});
+
+test("необязательные части подписи выпадают вместе с пустыми подстановками", () => {
+  const v = (m) => (id) => m[id] ?? "";
+  assert.equal(formatSubtitle("{ac}[ ({note})]", v({ ac: "17", note: "доспех" })), "17 (доспех)");
+  assert.equal(formatSubtitle("{ac}[ ({note})]", v({ ac: "17" })), "17");
+  assert.equal(formatSubtitle("[{a}] · {b}", v({ b: "x" })), "x");
 });

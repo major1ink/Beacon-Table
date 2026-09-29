@@ -43,9 +43,67 @@ export function displayValue(compiled, data, id, ev = evaluatorFor(compiled, dat
       const r = ev.rollField(id);
       return r.error ? "" : r.formula;
     }
+    case "template":
+      return formatSubtitle(field.template, (ref) => displayValue(compiled, data, ref, ev));
     default:
       return scalarText(raw);
   }
+}
+
+// ruleMatches — правило по тексту (list.medallion, list.categories):
+// подстрока или точное значение, без учёта регистра.
+export function ruleMatches(rule, text) {
+  const t = String(text || "").trim().toLowerCase();
+  if (!t) return false;
+  return (rule.contains || []).some((s) => t.includes(String(s).toLowerCase())) || (rule.equals || []).some((s) => t === String(s).toLowerCase());
+}
+
+// medallionOf — глиф и цвет карточки по list.medallion: у выбора — из
+// варианта, у текста — из первого подошедшего правила, иначе запасные.
+// null — схема медальон не задаёт.
+export function medallionOf(compiled, data) {
+  const m = compiled && compiled.schema.list && compiled.schema.list.medallion;
+  const field = m && compiled.schema.fields[m.field];
+  if (!field) return null;
+  const raw = scalarText(getPath(data, field.path)).trim();
+  const found =
+    field.type === "select"
+      ? (field.options || []).find((o) => o.value === raw)
+      : (m.rules || []).find((r) => ruleMatches(r, raw));
+  return { glyph: (found && found.glyph) || m.glyph || "", color: (found && found.color) || m.color || "" };
+}
+
+// categoriesOf — категории каталога по list.categories: [{ label, test(x) }]
+// в порядке правил, последняя — «остальное» (other), если оно задано.
+export function categoriesOf(compiled) {
+  const c = compiled && compiled.schema.list && compiled.schema.list.categories;
+  const field = c && compiled.schema.fields[c.field];
+  if (!field) return [];
+  const text = (x) => scalarText(getPath(x, field.path));
+  const out = c.rules.map((rule, i) => ({
+    label: rule.label,
+    test: (x) => {
+      if (!ruleMatches(rule, text(x))) return false;
+      return !c.rules.slice(0, i).some((prev) => ruleMatches(prev, text(x)));
+    },
+  }));
+  if (c.other) out.push({ label: c.other, test: (x) => !c.rules.some((rule) => ruleMatches(rule, text(x))) });
+  return out;
+}
+
+// badgesOf — плашки строки каталога по list.badges: [{ text, color }]; цвет —
+// у варианта выбора.
+export function badgesOf(compiled, data) {
+  const ev = evaluatorFor(compiled, data);
+  const out = [];
+  for (const id of (compiled.schema.list && compiled.schema.list.badges) || []) {
+    const text = displayValue(compiled, data, id, ev).trim();
+    if (!text) continue;
+    const field = compiled.schema.fields[id];
+    const opt = field && field.type === "select" ? (field.options || []).find((o) => o.value === scalarText(getPath(data, field.path))) : null;
+    out.push({ text, color: (opt && opt.color) || "" });
+  }
+  return out;
 }
 
 // cardSubtitle — подпись карточки (или листа) по шаблону list.subtitle.
@@ -97,17 +155,20 @@ const byName = (a, b) => String(a.name || "").localeCompare(String(b.name || "")
 
 // catalogConfig — настройки каталога (см. pages/catalog.js: CONFIGS) из
 // схемы вида карточек: подпись, поиск, фильтры, группы, сортировка.
-// Плашки — только источник: ПО, круг, редкость — поля D&D.
 export function catalogConfig(compiled) {
   const schema = compiled.schema;
   const list = schema.list || {};
   const fields = schema.fields;
   const out = {
     subText: (x) => cardSubtitle(compiled, x),
-    badge: (x) => String(x.source || "").trim(),
+    badge: (list.badges || []).length
+      ? (x) => [...badgesOf(compiled, x).map((b) => b.text), String(x.source || "").trim()].filter(Boolean)
+      : (x) => String(x.source || "").trim(),
     badgeTitle: null,
-    badgeColor: null,
-    flags: null,
+    badgeColor: (x, text) => (badgesOf(compiled, x).find((b) => b.text === text) || {}).color || "",
+    flags: (list.flags || []).length
+      ? (x) => list.flags.filter((fl) => fields[fl.field] && getPath(x, fields[fl.field].path) === true).map((fl) => [fl.mark, fl.title || fields[fl.field].label])
+      : null,
     extraFilter: null,
     searchHay: (x) => {
       const hay = [x.name, ...(x.tags || [])];
@@ -196,7 +257,8 @@ function filterSection(compiled, id) {
         title: field.label,
         kind: "list",
         of: (x) => {
-          const v = displayValue(compiled, x, id).trim();
+          let v = displayValue(compiled, x, id).trim();
+          if (field.facet === "beforeParen") v = v.replace(/\s*\(.*$/, "").replace(/^./, (c) => c.toUpperCase());
           return v ? [v] : [];
         },
       };

@@ -969,6 +969,122 @@
      ""
     ]
    ]
+  },
+  {
+   "name": "необязательные части и поле-шаблон: пометка есть",
+   "schema": {
+    "fields": {
+     "ac": {
+      "type": "number",
+      "path": "ac",
+      "label": "КД"
+     },
+     "note": {
+      "type": "text",
+      "path": "acNote",
+      "label": "Пометка"
+     },
+     "hp": {
+      "type": "number",
+      "path": "hp",
+      "label": "Хиты"
+     },
+     "dice": {
+      "type": "text",
+      "path": "hitDice",
+      "label": "Кость"
+     },
+     "ac_line": {
+      "type": "template",
+      "label": "Класс доспеха",
+      "template": "{ac}[ ({note})]"
+     },
+     "hp_line": {
+      "type": "template",
+      "label": "Хиты",
+      "template": "{hp}[ ({dice})]"
+     }
+    }
+   },
+   "data": {
+    "ac": 17,
+    "acNote": "природный доспех",
+    "hp": 45,
+    "hitDice": "6к10+12"
+   },
+   "cases": [
+    [
+     "{ac_line}",
+     "17 (природный доспех)"
+    ],
+    [
+     "{hp_line} · КД {ac_line}",
+     "45 (6к10+12) · КД 17 (природный доспех)"
+    ],
+    [
+     "{ac}[ / {note}]",
+     "17 / природный доспех"
+    ]
+   ]
+  },
+  {
+   "name": "необязательные части и поле-шаблон: пометки нет",
+   "schema": {
+    "fields": {
+     "ac": {
+      "type": "number",
+      "path": "ac",
+      "label": "КД"
+     },
+     "note": {
+      "type": "text",
+      "path": "acNote",
+      "label": "Пометка"
+     },
+     "hp": {
+      "type": "number",
+      "path": "hp",
+      "label": "Хиты"
+     },
+     "dice": {
+      "type": "text",
+      "path": "hitDice",
+      "label": "Кость"
+     },
+     "ac_line": {
+      "type": "template",
+      "label": "Класс доспеха",
+      "template": "{ac}[ ({note})]"
+     },
+     "hp_line": {
+      "type": "template",
+      "label": "Хиты",
+      "template": "{hp}[ ({dice})]"
+     }
+    }
+   },
+   "data": {
+    "ac": 17,
+    "hp": 45
+   },
+   "cases": [
+    [
+     "{ac_line}",
+     "17"
+    ],
+    [
+     "{hp_line} · КД {ac_line}",
+     "45 · КД 17"
+    ],
+    [
+     "{ac}[ / {note}]",
+     "17"
+    ],
+    [
+     "[{note}] · {ac}",
+     "17"
+    ]
+   ]
   }
  ]
 }

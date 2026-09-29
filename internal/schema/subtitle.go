@@ -2,6 +2,7 @@ package schema
 
 import (
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -22,18 +23,40 @@ func (s *Schema) Subtitle(src any) string {
 	return FormatSubtitle(s.List.Subtitle, func(id string) string { return ev.display(id) })
 }
 
-// FormatSubtitle — шаблон с подстановками {id}; value(id) — текст поля.
+// templateRe — «[необязательная часть]» или «{подстановка}».
+var templateRe = regexp.MustCompile(`\[([^\[\]]*)\]|\{([^{}]*)\}`)
+
+// FormatSubtitle — шаблон с подстановками {id} и необязательными частями
+// [ ({id})], которые выпадают, если все их подстановки пусты; value(id) —
+// текст поля.
 func FormatSubtitle(template string, value func(id string) string) string {
 	var out []string
-	for _, part := range strings.Split(template, "·") {
-		placeholders, filled := 0, 0
-		text := placeholderRe.ReplaceAllStringFunc(part, func(m string) string {
+	fill := func(s string) (text string, placeholders, filled int) {
+		text = placeholderRe.ReplaceAllStringFunc(s, func(m string) string {
 			placeholders++
 			v := strings.TrimSpace(value(m[1 : len(m)-1]))
 			if v != "" {
 				filled++
 			}
 			return v
+		})
+		return text, placeholders, filled
+	}
+	for _, part := range strings.Split(template, "·") {
+		placeholders, filled := 0, 0
+		text := templateRe.ReplaceAllStringFunc(part, func(m string) string {
+			inner := m
+			optional := strings.HasPrefix(m, "[")
+			if optional {
+				inner = m[1 : len(m)-1]
+			}
+			t, p, f := fill(inner)
+			if optional && p > 0 && f == 0 {
+				return ""
+			}
+			placeholders += p
+			filled += f
+			return t
 		})
 		if placeholders > 0 && filled == 0 {
 			continue
@@ -87,6 +110,8 @@ func (e *Evaluator) display(id string) string {
 			return f.Label
 		}
 		return ""
+	case TypeTemplate:
+		return FormatSubtitle(f.Template, e.display)
 	case TypeRoll:
 		c := e.s.compiled()[id]
 		if c.err != nil {

@@ -12,8 +12,9 @@ import { enhanceRolls } from "./inline-rolls.js";
 import { wireCatalogLinks } from "./catalog-links.js";
 import { renderNoteHtml } from "./notes/markdown.js";
 import { showAlert } from "./modal.js";
-import { SCALARS, computedOutput, editInput, editTable, evaluatorOf, viewTable } from "./schema-fields.js";
-import { formatNumber, getPath, setPath, visibleIn } from "./schema-layout.js";
+import { SCALARS, cellTiles, computedOutput, editInput, editTable, evaluatorOf, viewTable } from "./schema-fields.js";
+import { displayValue } from "./schema-list.js";
+import { formatNumber, getPath, sectionFields, setPath, visibleIn } from "./schema-layout.js";
 
 // renderSchemaCard — узлы основной колонки карточки. ctx:
 //   compiled — schema-formula.js: compileSchema(схема вида карточки);
@@ -78,7 +79,8 @@ function sendResolvedRoll(ctx, r, label) {
 // значение» под заголовком секции, тексты и таблицы — отдельными блоками.
 function section(f, sec) {
   const fields = f.compiled.schema.fields;
-  const list = (sec.fields || []).map((id) => [id, fields[id]]).filter(([, field]) => field);
+  if (sec.cells && f.readOnly) return [h("div", {}, [sec.title ? h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: sec.title })]) : null, cellTiles(f, sec, "card")])];
+  const list = sectionFields(sec).map((id) => [id, fields[id]]).filter(([, field]) => field);
   const scalars = list.filter(([, field]) => SCALARS.has(field.type));
   const out = [];
   const rows = scalars.map(([id, field]) => (f.readOnly ? readRow(f, id, field) : editRow(f, id, field))).filter(Boolean);
@@ -134,6 +136,10 @@ function readRow(f, id, field) {
     }
     case "bool":
       return empty ? null : kvRow(field.label, h("span", { class: "kvt-val", text: "✓" }));
+    case "template": {
+      const text = displayValue(f.compiled, f.data, id);
+      return text ? kvRow(field.label, h("span", { class: "kvt-val", text })) : null;
+    }
     case "select": {
       if (empty) return null;
       const opt = (field.options || []).find((o) => o.value === String(raw));
@@ -182,6 +188,7 @@ function editRow(f, id, field) {
       })
     );
   }
+  if (field.type === "template") return null;
   const input = editInput(f, id, field, f.data);
   return input ? kvRow(field.label, input) : null;
 }

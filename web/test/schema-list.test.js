@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { compileSchema } from "../src/schema-formula.js";
-import { cardSubtitle, catalogConfig } from "../src/schema-list.js";
+import { badgesOf, cardSubtitle, catalogConfig, categoriesOf, medallionOf, ruleMatches } from "../src/schema-list.js";
 
 const readJSON = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8"));
 const shared = readJSON("../../internal/schema/testdata/eval-cases.json").subtitles;
@@ -88,4 +88,63 @@ test("без группы — один список по сортировке", 
   assert.equal(cfg.groupKey, null);
   assert.equal(cfg.subText({ hp: 12, ac: 13 }), "Хиты 12 · Защита 13");
   assert.equal(cfg.subText({ ac: 13 }), "Защита 13");
+});
+
+const creature = compileSchema({
+  fields: {
+    type: { type: "text", path: "type", label: "Тип", facet: "beforeParen" },
+    cr: { type: "select", path: "cr", label: "ПО", options: [{ value: "1/2", label: "1/2", color: "#3fb950", glyph: "paw" }, { value: "1", label: "1" }] },
+    boss: { type: "bool", path: "summonable", label: "Призыв" },
+    rarity: { type: "select", path: "rarity", label: "Редкость", options: [{ value: "редкий", label: "редкий", color: "#4a8ef0" }] },
+    cr_line: { type: "template", label: "ПО", template: "ПО {cr}" },
+  },
+  layout: [{ fields: ["type"] }],
+  list: {
+    subtitle: "{type} · {cr_line}",
+    filters: ["type"],
+    badges: ["cr_line", "rarity"],
+    flags: [{ field: "boss", mark: "П", title: "Можно призывать" }],
+    medallion: { field: "type", glyph: "hood", rules: [{ contains: ["нежить", "скелет"], glyph: "skull", color: "#7fbf7f" }, { equals: ["дракон"], glyph: "dragon" }] },
+    categories: { field: "type", other: "Прочее", rules: [{ label: "Нежить", contains: ["нежить"] }, { label: "Звери", contains: ["зверь"] }] },
+  },
+});
+
+test("правило по тексту: подстрока или значение, без учёта регистра", () => {
+  assert.ok(ruleMatches({ contains: ["нежить"] }, "Нежить (зомби)"));
+  assert.ok(ruleMatches({ equals: ["класс"] }, " Класс "));
+  assert.ok(!ruleMatches({ equals: ["класс"] }, "классика"));
+  assert.ok(!ruleMatches({ contains: ["а"] }, ""));
+});
+
+test("медальон: у текста — правила, у выбора — вариант", () => {
+  assert.deepEqual(medallionOf(creature, { type: "нежить (скелет)" }), { glyph: "skull", color: "#7fbf7f" });
+  assert.deepEqual(medallionOf(creature, { type: "Дракон" }), { glyph: "dragon", color: "" });
+  assert.deepEqual(medallionOf(creature, { type: "гуманоид" }), { glyph: "hood", color: "" });
+  const byOption = compileSchema({ fields: { cr: creature.schema.fields.cr }, layout: [{ fields: ["cr"] }], list: { medallion: { field: "cr", glyph: "sparkle" } } });
+  assert.deepEqual(medallionOf(byOption, { cr: "1/2" }), { glyph: "paw", color: "#3fb950" });
+  assert.deepEqual(medallionOf(byOption, { cr: "7" }), { glyph: "sparkle", color: "" });
+  assert.equal(medallionOf(spells, { level: 1 }), null);
+});
+
+test("категории каталога: первое правило и «остальное»", () => {
+  const cats = categoriesOf(creature);
+  assert.deepEqual(cats.map((c) => c.label), ["Нежить", "Звери", "Прочее"]);
+  const of = (x) => cats.find((c) => c.test(x)).label;
+  assert.equal(of({ type: "нежить" }), "Нежить");
+  assert.equal(of({ type: "зверь (нежить)" }), "Нежить", "первое подошедшее");
+  assert.equal(of({ type: "зверь" }), "Звери");
+  assert.equal(of({ type: "" }), "Прочее");
+  assert.deepEqual(categoriesOf(spells), []);
+});
+
+test("плашки, буквы и фильтр по значению до скобки", () => {
+  const cfg = catalogConfig(creature);
+  const card = { name: "Волк", type: "зверь (волк)", cr: "1/2", rarity: "редкий", summonable: true, source: "MM" };
+  assert.deepEqual(badgesOf(creature, card), [{ text: "ПО 1/2", color: "" }, { text: "редкий", color: "#4a8ef0" }]);
+  assert.deepEqual(cfg.badge(card), ["ПО 1/2", "редкий", "MM"]);
+  assert.equal(cfg.badgeColor(card, "редкий"), "#4a8ef0");
+  assert.deepEqual(cfg.flags(card), [["П", "Можно призывать"]]);
+  assert.deepEqual(cfg.flags({ ...card, summonable: false }), []);
+  assert.deepEqual(cfg.sidebar[0].of(card), ["Зверь"]);
+  assert.equal(cardSubtitle(creature, card), "зверь (волк) · ПО 1/2");
 });
