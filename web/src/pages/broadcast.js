@@ -7,6 +7,7 @@ import "../legacy-dom.js";
 import { initVTT } from "../vtt/index.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
 import { createDiceFx } from "../dice-fx.js";
+import { codecSupport } from "../vtt/video-diag.js";
 import { broadcastAccessGranted, requestBroadcastAccess, broadcastRequestState, probeBroadcastCookie } from "../api.js";
 
 // Экран трансляции работает без аккаунта — вместо него ключ трансляции (см.
@@ -130,6 +131,7 @@ function startTable() {
     } else dice3d = next;
   });
   document.addEventListener("vtt:rollResult", (e) => diceFx.play(e.detail));
+  document.addEventListener("vtt:videoDiag", (e) => guard?.note({ ...e.detail, videoCodecs: codecSupport() }));
 
   initZoomHud();
 }
