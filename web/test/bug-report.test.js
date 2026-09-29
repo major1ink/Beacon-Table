@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildBody, issueURLFitting, mailtoURLFitting } from "../src/bug-report.js";
+import { buildBody, issueURLFitting, mailtoURLFitting, openInNewTab } from "../src/bug-report.js";
 
 test("тело issue идёт по разделам шаблона, пустые поля — прочерком", () => {
   const body = buildBody({ what: " карта чёрная ", steps: "", expected: "", tech: "—", withTech: false });
@@ -47,4 +47,16 @@ test("длинное письмо режется по тому же потолк
   const { url, trimmed } = mailtoURLFitting("Баг", "Стена текста кириллицей. ".repeat(600));
   assert.equal(trimmed, true);
   assert.ok(url.length <= 8000, `длина ссылки ${url.length}`);
+});
+
+test("ссылка открылась — вкладке обнуляется opener", () => {
+  const win = { opener: "стол" };
+  globalThis.window = { open: () => win };
+  assert.equal(openInNewTab("https://example.com"), true);
+  assert.equal(win.opener, null);
+});
+
+test("браузер заблокировал окно — false", () => {
+  globalThis.window = { open: () => null };
+  assert.equal(openInNewTab("https://example.com"), false);
 });

@@ -228,6 +228,15 @@ function textarea(parent, label, placeholder, rows) {
   return ta;
 }
 
+// openInNewTab открывает ссылку в новой вкладке, false — окно заблокировано.
+// Без noopener в window.open: с ним браузер всегда возвращает null, и блокировку не отличить.
+export function openInNewTab(url) {
+  const win = window.open(url, "_blank");
+  if (!win) return false;
+  win.opener = null;
+  return true;
+}
+
 // openBugReport — диалог. Версию спрашиваем у сервера асинхронно, поэтому
 // окно открывается сразу, а блок техданных дозаполняется.
 export async function openBugReport() {
@@ -354,8 +363,7 @@ export async function openBugReport() {
     // window.open тут вернул бы пустую вкладку.
     location.href = url;
   } else {
-    const win = window.open(url, "_blank", "noopener");
-    if (!win) {
+    if (!openInNewTab(url)) {
       showAlert("Браузер заблокировал новое окно. Разрешите всплывающие окна для этого адреса или скопируйте отчёт кнопкой «Скопировать отчёт».");
       return;
     }
