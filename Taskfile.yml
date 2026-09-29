@@ -30,6 +30,25 @@ tasks:
     cmds:
       - go build -tags desktop,gtk3 -o {{.BIN}}-desktop ./cmd/beacon-table
 
+  build:windows:
+    desc: Собрать сервер для Windows (beacon-table.exe), можно и с Linux
+    env:
+      CGO_ENABLED: "0"
+      GOOS: windows
+      GOARCH: amd64
+    cmds:
+      - go build -trimpath -o {{.BIN}}.exe ./cmd/beacon-table
+
+  build:desktop:windows:
+    desc: Собрать десктоп для Windows (beacon-table-desktop.exe), можно и с Linux
+    env:
+      CGO_ENABLED: "0"
+      GOOS: windows
+      GOARCH: amd64
+    cmds:
+      # -H windowsgui: без него рядом с окном открывается консоль
+      - go build -tags desktop -trimpath -ldflags "-s -w -H windowsgui" -o {{.BIN}}-desktop.exe ./cmd/beacon-table
+
   package:linux:
     desc: Собрать десктоп и пакеты .deb/.rpm в dist/ — как в CI (нужен nfpm)
     cmds:
