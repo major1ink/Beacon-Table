@@ -3,7 +3,7 @@
 // stat-editor.js). База — реальные числа из бестиария и листов персонажей,
 // расчёт — applyModifiers (modifiers.js); ничего не пишет, только читает.
 import { fetchCharacters, fetchCharacter, fetchBestiary } from "./api.js";
-import { standStats } from "./universal-stats.js";
+import { schemaBases, standStats } from "./universal-stats.js";
 import { loadSchemas, schemaFor } from "./schemas.js";
 import { compileSchema } from "./schema-formula.js";
 import { initiativeBase } from "./schema-summary.js";
@@ -15,7 +15,7 @@ const DUMMY = {
   id: "dummy",
   name: "Манекен",
   kind: "dummy",
-  stats: { ac: 10, speed: 30, "hp.max": 10, "hp.current": 10, initiative: 0, "abilities.str": 10, "abilities.dex": 10, "abilities.con": 10, "abilities.int": 10, "abilities.wis": 10, "abilities.cha": 10 },
+  stats: { ac: 10, speed: 30, "hp.max": 10, "hp.current": 10, initiative: 0 },
 };
 // Персонажей грузим по одному (список отдаёт только имена) — ограничение,
 // чтобы стол с сотней персонажей не открывал карточку минуту.
@@ -42,10 +42,10 @@ const speedOf = (s) => {
 };
 
 // fromSheet — основы персонажа: инициатива по правилу системы, свободные
-// характеристики — основы целей stat.<ключ>, плюс шесть характеристик D&D.
+// характеристики — основы целей stat.<ключ>, остальные цели — из полей схемы
+// листа с modifierTarget.
 function fromSheet(c) {
   const sheet = c.sheet || {};
-  const ab = sheet.abilities || {};
   const combat = sheet.combat || {};
   return {
     id: c.id,
@@ -58,18 +58,12 @@ function fromSheet(c) {
       "hp.current": combat.hpCurrent || 0,
       initiative: standInitiative("sheet", sheet),
       ...standStats(sheet),
-      "abilities.str": ab.str || 10,
-      "abilities.dex": ab.dex || 10,
-      "abilities.con": ab.con || 10,
-      "abilities.int": ab.int || 10,
-      "abilities.wis": ab.wis || 10,
-      "abilities.cha": ab.cha || 10,
+      ...schemaBases(schemaFor("sheet"), sheet),
     },
   };
 }
 
 function fromMonster(m) {
-  const ab = m.abilities || {};
   return {
     id: m.id,
     name: m.name,
@@ -80,12 +74,7 @@ function fromMonster(m) {
       "hp.max": m.hp || 0,
       "hp.current": m.hp || 0,
       initiative: standInitiative("monster", m),
-      "abilities.str": ab.str || 10,
-      "abilities.dex": ab.dex || 10,
-      "abilities.con": ab.con || 10,
-      "abilities.int": ab.int || 10,
-      "abilities.wis": ab.wis || 10,
-      "abilities.cha": ab.cha || 10,
+      ...schemaBases(schemaFor("monster"), m),
     },
   };
 }

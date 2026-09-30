@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 
 import { readFileSync } from "node:fs";
 
-import { standStats } from "../src/universal-stats.js";
+import { schemaBases, standStats } from "../src/universal-stats.js";
 import { initiativeBase } from "../src/schema-summary.js";
 import { compileSchema, createEvaluator } from "../src/schema-formula.js";
 import { hasImporter } from "../src/system-profile.js";
@@ -57,4 +57,15 @@ test("схема листа: поле «Вид» в info.race только у D&
   assert.equal(schemaHasPath(sheetSchema.schema, "info.race"), false);
   assert.equal(schemaHasWidget(sheetSchema.schema, "spellbook"), false);
   assert.equal(schemaHasPath(null, "info.race"), false);
+});
+
+test("основы целей системы для стенда — из полей схемы с modifierTarget", () => {
+  const dnd = (kind) => JSON.parse(readFileSync(new URL(`../../cmd/beacon-table/systemdata/schemas/dnd5e-2024/${kind}.json`, import.meta.url), "utf8"));
+  const abilities = { str: 14, dex: 8, con: 10, int: 12, wis: 13, cha: 9 };
+  const want = { "abilities.str": 14, "abilities.dex": 8, "abilities.con": 10, "abilities.int": 12, "abilities.wis": 13, "abilities.cha": 9 };
+  assert.deepEqual(schemaBases(dnd("sheet"), { abilities }), want);
+  assert.deepEqual(schemaBases(dnd("monster"), { abilities }), want);
+  assert.deepEqual(schemaBases(dnd("monster"), {}), {});
+  assert.deepEqual(schemaBases(sheetSchema.schema, { abilities }), {});
+  assert.deepEqual(schemaBases(null, { abilities }), {});
 });

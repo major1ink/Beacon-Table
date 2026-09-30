@@ -5,8 +5,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { ABILITY_TARGETS, applyModifiers } from "../src/modifiers.js";
+import { applyModifiers } from "../src/modifiers.js";
 import { compileSchema, createEvaluator } from "../src/schema-formula.js";
+
+const ABILITY_TARGETS = { str: "abilities.str", dex: "abilities.dex", con: "abilities.con", int: "abilities.int", wis: "abilities.wis", cha: "abilities.cha" };
 
 const load = (id) => JSON.parse(readFileSync(new URL(`../../cmd/beacon-table/systemdata/schemas/${id}/sheet.json`, import.meta.url), "utf8"));
 

@@ -31,14 +31,6 @@ export const TARGET_SPEED = "speed";
 export const TARGET_HP_MAX = "hp.max";
 export const TARGET_HP_CURRENT = "hp.current";
 export const TARGET_INITIATIVE = "initiative";
-export const ABILITY_TARGETS = {
-  str: "abilities.str",
-  dex: "abilities.dex",
-  con: "abilities.con",
-  int: "abilities.int",
-  wis: "abilities.wis",
-  cha: "abilities.cha",
-};
 
 // Свободные характеристики листа: цель "stat.<ключ>", ключ — statKey от
 // названия (зеркало domain.StatKey). Так «Сила −2» из карточки состояния

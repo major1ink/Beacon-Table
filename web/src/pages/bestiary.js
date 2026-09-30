@@ -49,8 +49,6 @@ let editMode = false;
 
 function normalizeMonster(raw) {
   const m = raw && typeof raw === "object" ? raw : {};
-  m.abilities = m.abilities || {};
-  for (const key of ["str", "dex", "con", "int", "wis", "cha"]) if (!m.abilities[key]) m.abilities[key] = 10;
   m.tags = Array.isArray(m.tags) ? m.tags : [];
   m.spells = Array.isArray(m.spells) ? m.spells : [];
   // inventory — шаблон добычи монстра (см. domain.InventoryEntry) — список
