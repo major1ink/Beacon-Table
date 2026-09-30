@@ -185,7 +185,12 @@ func goodCard() map[string]any {
 }
 
 func TestParseCardExtras(t *testing.T) {
-	if _, err := Parse(encode(t, goodCard())); err != nil {
+	good := goodCard()
+	good["fields"].(map[string]any)["lvl"] = map[string]any{"type": "select", "path": "hp", "label": "Круг", "numeric": true, "options": []any{
+		map[string]any{"value": "0", "label": "Заговор"}, map[string]any{"value": "1", "label": "1-й круг"},
+	}}
+	good["list"].(map[string]any)["pills"] = []any{"lvl", "boss"}
+	if _, err := Parse(encode(t, good)); err != nil {
 		t.Fatal(err)
 	}
 	field := func(m map[string]any, id string) map[string]any {
@@ -230,7 +235,15 @@ func TestParseCardExtras(t *testing.T) {
 		"правило без подстрок": func(m map[string]any) {
 			list(m)["categories"].(map[string]any)["rules"] = []any{map[string]any{"label": "Х"}}
 		},
-		"категории по числу": func(m map[string]any) { list(m)["categories"].(map[string]any)["field"] = "ac" },
+		"numeric у числа":   func(m map[string]any) { field(m, "ac")["numeric"] = true },
+		"numeric на строке": func(m map[string]any) { field(m, "cr")["numeric"] = true },
+		"numeric не число": func(m map[string]any) {
+			field(m, "cr")["path"] = "hp"
+			field(m, "cr")["numeric"] = true
+			field(m, "cr")["options"] = []any{map[string]any{"value": "abc", "label": "abc"}}
+		},
+		"плашка шапки в никуда": func(m map[string]any) { list(m)["pills"] = []any{"nope"} },
+		"категории по числу":    func(m map[string]any) { list(m)["categories"].(map[string]any)["field"] = "ac" },
 	}
 	for name, fn := range cases {
 		m := goodCard()

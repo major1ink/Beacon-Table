@@ -1,16 +1,11 @@
-// spell-preview.js — «Что произойдёт»: атака/спасбросок, урон с кликабельной
-// формулой, длительность и чипы состояний (domain.SpellStatusRef) как в
-// трекере. У ДМ внутри окна стола чип наложит метку через топ-документ
-// (postMessage "beacon:applySpellStatus", см. pages/dm.js) — тот же путь, что
-// был у блока «Накладывает состояния» в старом read-режиме.
+// spell-preview.js — чип состояния заклинания (domain.SpellStatusRef) как в
+// трекере.
 import { el } from "./card-shell.js";
-import { enhanceRolls } from "./inline-rolls.js";
 import { glyphNode } from "./condition-glyphs.js";
 
-// statusChip — чип состояния заклинания (domain.SpellStatusRef): глиф и цвет
-// состояния, раунды. canApply — клик накладывает метку на токен через
-// топ-документ (только ДМ внутри окна стола). Его же показывает виджет схемы
-// «Накладывает» (pages/spellbook.js: appliesFold).
+// statusChip — глиф и цвет состояния, раунды. canApply — клик накладывает
+// метку на токен через топ-документ (postMessage "beacon:applySpellStatus",
+// только ДМ внутри окна стола).
 export function statusChip(ref, { conditions, canApply, spellName }) {
   const cond = (conditions || []).find((c) => c.slug === ref.slug);
   const chip = el("span", { class: "spp-chip" + (canApply ? " clickable" : "") }, [
@@ -34,31 +29,4 @@ export function statusChip(ref, { conditions, canApply, spellName }) {
     });
   }
   return chip;
-}
-
-export function renderSpellPreview(spell, { sendRoll, attackLabel, conditions, canApply }) {
-  const root = el("div", { class: "spp" });
-  root.update = () => {
-    root.innerHTML = "";
-    const kv = [];
-    if (spell.attack) kv.push(el("b", { text: "Атака" }), el("span", { text: attackLabel(spell.attack) }));
-    if (spell.savingThrow) kv.push(el("b", { text: "Спасбросок" }), el("span", { text: spell.savingThrow }));
-    if (spell.damage) {
-      const d = el("span", { text: spell.damage });
-      if (sendRoll) enhanceRolls(d, sendRoll);
-      kv.push(el("b", { text: "Урон" }), d);
-    }
-    if (spell.duration) kv.push(el("b", { text: "Длится" }), el("span", { text: spell.duration }));
-    const chips = (spell.statuses || []).map((ref) => statusChip(ref, { conditions, canApply, spellName: spell.name }));
-    const note = spell.concentration
-      ? "Концентрация: при её потере эффект и метки снимаются."
-      : chips.length
-        ? canApply
-          ? "Клик по чипу — наложить метку на токен на карте."
-          : "Наложить метку может только ДМ из окна стола."
-        : "Ни атаки, ни спасброска, ни состояний — эффект целиком в описании.";
-    root.append(el("span", { class: "card-lbl", text: "Что произойдёт" }), kv.length ? el("div", { class: "spp-kv" }, kv) : null, ...chips, el("span", { class: "card-aside-note", text: note }));
-  };
-  root.update();
-  return root;
 }

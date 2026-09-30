@@ -18,13 +18,12 @@ import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
-import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
-import { glyphNode } from "../condition-glyphs.js";
-import { REFERENCE_KINDS, kindInfo, kindLabel } from "../reference-kind.js";
+import { el as hh, labeled, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { announceOwnHeader } from "../embed.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
-import { cardBody, cardSubtitle, renderSchemaCard } from "../schema-card.js";
+import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
+import { loadSystemProfile, sheetKind } from "../system-profile.js";
 
 // ==================== state ====================
 
@@ -69,51 +68,35 @@ function mdBlock(labelText, get, set) {
   return h("div", { class: "md-block" }, [t, render]);
 }
 
-const refGlyph = () => glyphNode((kindInfo(reference.kind) || { glyph: "scroll" }).glyph, "");
-const refColor = () => (kindInfo(reference.kind) || {}).color || "";
+// ==================== рендер ====================
 
-function heroPills() {
-  return [reference.kind ? pill(kindLabel(reference.kind), "rar") : null, reference.source ? pill(reference.source, "gold") : null, ...reference.tags.map((t) => pill(t))];
+let compiledReference = null;
+function renderApp() {
+  const root = document.getElementById("app");
+  root.innerHTML = "";
+  const s = schemaFor("reference");
+  if (!compiledReference || compiledReference.schema !== s) compiledReference = compileSchema(s);
+  renderSchemaView(root, compiledReference);
 }
 
-// sheetPreview — «На листе персонажа»: поле листа, в котором запись
-// появится подсказкой (см. character-sheet.js: referenceNames). Только у
-// видов записей, у которых такое поле есть.
+// sheetPreview — «На листе персонажа»: поле листа, которое подсказывает
+// записи этого вида (suggest в схеме листа); null — такого поля нет.
 function sheetPreview() {
-  const k = kindInfo(reference.kind);
-  if (!k || !k.sheetField) return null;
+  const kind = String(reference.kind || "").trim().toLowerCase();
+  const sheet = schemaFor("sheet");
+  const field = kind && sheet && Object.values(sheet.fields).find((f) => f.suggest && String(f.suggest.reference).toLowerCase() === kind);
+  if (!field) return null;
   const box = h("div", { class: "rp" });
   box.update = () => {
     box.innerHTML = "";
     box.append(
       h("span", { class: "card-lbl", text: "На листе персонажа" }),
-      h("div", { class: "rp-field" }, [h("span", { class: "rp-fl", text: k.sheetField }), h("div", { class: "rp-fv" }, [h("span", { text: reference.name || "Без имени" }), h("span", { html: icon("chevron-down", { size: 12 }) })])]),
+      h("div", { class: "rp-field" }, [h("span", { class: "rp-fl", text: field.label }), h("div", { class: "rp-fv" }, [h("span", { text: reference.name || "Без имени" }), h("span", { html: icon("chevron-down", { size: 12 }) })])]),
       h("span", { class: "card-aside-note", text: "Игрок выберет эту запись в поле листа, а описание появится подсказкой рядом." })
     );
   };
   box.update();
   return box;
-}
-
-// ==================== рендер ====================
-
-function renderApp() {
-  const root = document.getElementById("app");
-  root.innerHTML = "";
-  const compiled = referenceSchema();
-  if (compiled) renderSchemaView(root, compiled);
-  else if (editMode) renderEditView(root);
-  else renderReadView(root);
-}
-
-// compiledReference — схема записи справочника системы мира, разобранная
-// один раз; null — у системы старая карточка D&D (см. schemas.js).
-let compiledReference = null;
-function referenceSchema() {
-  const s = schemaFor("reference");
-  if (!s) return null;
-  if (!compiledReference || compiledReference.schema !== s) compiledReference = compileSchema(s);
-  return compiledReference;
 }
 
 // artField — «Арт»: загрузить свою иконку или убрать её; onArt() — после
@@ -175,20 +158,26 @@ function compatFold(readOnly, onPills) {
 // листе персонажа» и импорт — только у карточки D&D.
 function renderSchemaView(root, compiled) {
   const readOnly = !editMode;
-  const pills = () => [reference.source ? pill(reference.source, "gold") : null, ...reference.tags.map((t) => pill(t))];
   const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, reference) });
-  const glyph = () => glyphNode("scroll", "");
+  const head = cardHead(compiled, reference, "scroll");
+  const refreshHead = () => {
+    const next = cardHead(compiled, reference, "scroll");
+    subtitle.textContent = cardSubtitle(compiled, reference);
+    hero.setGlyph(next.glyph, reference.imageUrl);
+    hero.setColor(next.color);
+    hero.setPills(next.pills);
+  };
   const hero = renderHero({
-    glyph: glyph(),
+    glyph: head.glyph,
     imageUrl: reference.imageUrl,
-    color: "",
+    color: head.color,
     name: reference.name,
     namePlaceholder: "Название записи",
-    pills: pills(),
+    pills: head.pills,
     square: true,
     subtitle,
     readOnly,
-    controls: readOnly ? undefined : [artField(() => hero.setGlyph(glyph(), reference.imageUrl))],
+    controls: readOnly ? undefined : [artField(refreshHead)],
     onName: (v) => {
       reference.name = v;
       document.getElementById("refTitle").textContent = v || "Без имени";
@@ -197,12 +186,16 @@ function renderSchemaView(root, compiled) {
   });
   root.appendChild(hero.el);
   root.appendChild(ornament());
+  const preview = sheetPreview();
   const middle = renderSchemaCard({
     compiled,
     data: reference,
     readOnly,
     scheduleSave,
-    onChange: () => (subtitle.textContent = cardSubtitle(compiled, reference)),
+    onChange: () => {
+      refreshHead();
+      preview?.update();
+    },
     sendRoll: null,
     widgets: {},
   });
@@ -216,95 +209,9 @@ function renderSchemaView(root, compiled) {
   } else {
     desc = h("div", { class: "card-desc" }, [mdBlock("Описание", () => reference.description, (v) => (reference.description = v))]);
   }
-  root.appendChild(renderBody(cardBody([...middle, desc, compatFold(readOnly, () => hero.setPills(pills()))]), null));
-}
-
-function renderEditView(root) {
-
-  // Вид записи — известные списком, чужое значение остаётся как есть.
-  const kindSel = h("select", { "aria-label": "Вид записи" });
-  kindSel.appendChild(h("option", { value: "", text: "— вид записи —" }));
-  for (const k of REFERENCE_KINDS) kindSel.appendChild(h("option", { value: k.key, text: kindLabel(k.key) }));
-  if (reference.kind && !kindInfo(reference.kind)) kindSel.appendChild(h("option", { value: reference.kind, text: reference.kind }));
-  kindSel.value = reference.kind || "";
-  kindSel.addEventListener("change", () => {
-    reference.kind = kindSel.value;
-    scheduleSave();
-    renderApp(); // меняется набор: глиф, цвет, поле родителя, панель «На листе»
-  });
-  const parentInp = textInput(() => reference.parentName, (v) => { reference.parentName = v; parentInp.size = Math.max(12, v.length + 1); }, { placeholder: "родитель, например «Плут»", "aria-label": "Родитель" });
-  parentInp.size = Math.max(12, (reference.parentName || "").length + 1);
-  const hasParent = !!(kindInfo(reference.kind) || {}).hasParent || !!reference.parentName;
-  const subtitle = h("div", { class: "card-sub" }, [kindSel, hasParent ? h("span", { text: " · " }) : null, hasParent ? parentInp : null]);
-
-  const hero = renderHero({
-    glyph: refGlyph(),
-    imageUrl: reference.imageUrl,
-    color: refColor(),
-    name: reference.name,
-    namePlaceholder: "Название записи",
-    pills: heroPills(),
-    square: true,
-    subtitle,
-    controls: [artField(() => hero.setGlyph(refGlyph(), reference.imageUrl))],
-    onName: (v) => {
-      reference.name = v;
-      document.getElementById("refTitle").textContent = v || "Без имени";
-      scheduleSave();
-      if (preview) preview.update();
-    },
-  });
-  root.appendChild(hero.el);
-  root.appendChild(ornament());
-
-  const preview = sheetPreview();
-  const compatSummary = () => [reference.source, reference.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
-  const compatFold = fold({
-    title: "Совместимость и источник",
-    summary: compatSummary(),
-    body: [
-      h("div", { class: "card-grid2" }, [
-        labeled("Источник", textInput(() => reference.source, (v) => { reference.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "PHB'24" })),
-        labeled("Модуль Foundry", textInput(() => reference.foundryModuleId, (v) => { reference.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.classes" }), "Откуда импортирована — чтобы повторный импорт нашёл запись."),
-      ]),
-      tagsField(() => hero.setPills(heroPills())),
-    ],
-  });
-
-  root.appendChild(
-    renderBody(
-      [h("div", { class: "card-desc" }, [mdBlock("Описание", () => reference.description, (v) => (reference.description = v))]), h("div", { class: "card-folds" }, [compatFold, importSection()])],
-      preview ? [preview] : null
-    )
-  );
-}
-
-// ==================== read-режим (по умолчанию) ====================
-
-function renderReadView(root) {
-  const subtitle = h("div", { class: "card-sub", text: [kindLabel(reference.kind), reference.parentName ? "· " + reference.parentName : ""].filter(Boolean).join(" ") });
-  const hero = renderHero({
-    glyph: refGlyph(),
-    imageUrl: reference.imageUrl,
-    color: refColor(),
-    name: reference.name,
-    pills: heroPills(),
-    square: true,
-    subtitle,
-    readOnly: true,
-  });
-  root.appendChild(hero.el);
-  root.appendChild(ornament());
-
-  const preview = sheetPreview();
-  const desc = reference.description && reference.description.trim();
-  const body = h("div", { class: "card-prose card-desc" });
-  if (desc) {
-    body.innerHTML = renderNoteHtml(reference.description);
-    wireCatalogLinks(body);
-  } else body.appendChild(h("p", { class: "card-note", text: "Описания пока нет." }));
-  const compat = [reference.source, reference.foundryModuleId].filter(Boolean).join(" · ");
-  root.appendChild(renderBody([body, compat ? h("div", { class: "card-folds" }, [fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] })]) : null], preview ? [preview] : null));
+  const folds = [...middle, desc, compatFold(readOnly, refreshHead)];
+  if (!readOnly && sheetKind() !== "universal") folds.push(importSection());
+  root.appendChild(renderBody(cardBody(folds), preview ? [preview] : null));
 }
 
 function tagsField(onChange) {
@@ -503,7 +410,7 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
-  await loadSchemas();
+  await Promise.all([loadSchemas(), loadSystemProfile()]);
   if (!me) {
     location.href = "/";
     return;

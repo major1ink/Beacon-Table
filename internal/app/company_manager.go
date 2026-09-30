@@ -235,8 +235,8 @@ func (m *CompanyManager) SchemaOf(company *domain.Company, kind string) *schema.
 }
 
 // schemaSet — схемы мира company по видам: схема модуля системы, иначе
-// встроенная; у системы со старыми карточками D&D — nil по видам карточек,
-// которых у неё нет. Их же получает комната мира (формулы инициативы).
+// встроенная; у системы со старой карточкой существа D&D — nil по существу.
+// Их же получает комната мира (формулы инициативы).
 func (m *CompanyManager) schemaSet(company *domain.Company) (map[string]*schema.Schema, error) {
 	var mod *module.Module
 	if company != nil && company.System != domain.SystemCustom {
@@ -251,7 +251,7 @@ func (m *CompanyManager) schemaSet(company *domain.Company) (map[string]*schema.
 				continue
 			}
 		}
-		if legacy && kind != schema.KindSheet {
+		if legacy && kind == schema.KindMonster {
 			out[kind] = nil
 			continue
 		}

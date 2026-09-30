@@ -87,6 +87,13 @@ function collapsible(label, { className, startOpen }) {
 // compendium-taxonomy.js): у системы со схемой справочника или предметов
 // (schemas.js) вместо них один пункт «Справочник» / «Предметы» — группы и
 // фильтры там задаёт схема (см. pages/catalog.js).
+// categoryLabels — подписи категорий схемы вида (list.categories): по
+// порядку правил, «остальное» последним.
+function categoryLabels(kind) {
+  const c = schemaFor(kind) && schemaFor(kind).list && schemaFor(kind).list.categories;
+  return c ? [...c.rules.map((r) => r.label), c.other].filter(Boolean) : [];
+}
+
 function buildRoot(system, label, role, startOpen) {
   const { wrap, body } = collapsible(label, { className: "compendium-root", startOpen });
   const refSchema = !!schemaFor("reference");
@@ -96,7 +103,9 @@ function buildRoot(system, label, role, startOpen) {
     if (refSchema && cat.type === "reference") {
       if (refDone) continue;
       refDone = true;
-      body.appendChild(leafNode("Справочник", () => openCategory({ type: "reference", system, role, label: "Справочник" })));
+      const labels = categoryLabels("reference");
+      if (!labels.length) body.appendChild(leafNode("Справочник", () => openCategory({ type: "reference", system, role, label: "Справочник" })));
+      for (const name of labels) body.appendChild(leafNode(name, () => openCategory({ type: "reference", system, category: name, role, label: name })));
       continue;
     }
     body.appendChild(
@@ -104,7 +113,14 @@ function buildRoot(system, label, role, startOpen) {
     );
   }
   if (schemaFor("item")) {
-    body.appendChild(leafNode("Предметы", () => openCategory({ type: "items", system, role, label: "Предметы" })));
+    const labels = categoryLabels("item");
+    if (!labels.length) {
+      body.appendChild(leafNode("Предметы", () => openCategory({ type: "items", system, role, label: "Предметы" })));
+      return wrap;
+    }
+    const gear = collapsible("Снаряжение", { className: "compendium-group", startOpen: false });
+    for (const name of labels) gear.body.appendChild(leafNode(name, () => openCategory({ type: "items", system, category: name, role, label: name })));
+    body.appendChild(gear.wrap);
     return wrap;
   }
   const gear = collapsible("Снаряжение", { className: "compendium-group", startOpen: false });

@@ -495,7 +495,7 @@ export function editInput(e, id, f, target, valueOf) {
       if (e.readOnly) sel.disabled = true;
       else
         sel.addEventListener("change", () => {
-          if (sel.value) set(sel.value);
+          if (sel.value) set(f.numeric ? Number(sel.value) : sel.value);
           else deletePath(target, f.path);
           changed(e);
         });

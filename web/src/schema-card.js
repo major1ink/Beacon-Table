@@ -7,13 +7,14 @@
 // страницы (добыча, заклинания, «Накладывает», «Пока надет»).
 //
 // Карточка без схемы (D&D) рисуется старым кодом страницы.
-import { el as h, fold } from "./card-shell.js";
+import { el as h, fold, pill } from "./card-shell.js";
+import { glyphNode } from "./condition-glyphs.js";
 import { enhanceRolls } from "./inline-rolls.js";
 import { wireCatalogLinks } from "./catalog-links.js";
 import { renderNoteHtml } from "./notes/markdown.js";
 import { showAlert } from "./modal.js";
 import { SCALARS, cellTiles, computedOutput, editInput, editTable, evaluatorOf, viewTable } from "./schema-fields.js";
-import { displayValue } from "./schema-list.js";
+import { displayValue, medallionOf, pillsOf } from "./schema-list.js";
 import { formatNumber, getPath, sectionFields, setPath, visibleIn } from "./schema-layout.js";
 
 // renderSchemaCard — узлы основной колонки карточки. ctx:
@@ -56,6 +57,17 @@ export function renderSchemaCard(ctx) {
     out.push(...section(f, sec));
   }
   return out.filter(Boolean);
+}
+
+// cardHead — глиф, цвет медальона и плашки шапки карточки по list.medallion
+// и list.pills схемы; плашки источника и тегов — страницы.
+export function cardHead(compiled, data, fallbackGlyph) {
+  const m = medallionOf(compiled, data);
+  return {
+    glyph: glyphNode((m && m.glyph) || fallbackGlyph, ""),
+    color: (m && m.color) || "",
+    pills: [...pillsOf(compiled, data).map((p) => pill(p.text, p.kind)), data.source ? pill(data.source, "gold") : null, ...(data.tags || []).map((t) => pill(t))],
+  };
 }
 
 // cardSubtitle — подзаголовок карточки по шаблону list.subtitle (см.

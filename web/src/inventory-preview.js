@@ -50,7 +50,7 @@ export function renderInventoryPreview(item, { stand, sendRoll }) {
         el("div", { class: "ip-row" }, [el("span", { class: "ip-ic" }, [icon]), el("span", { class: "ip-nm", text: item.name || "Без имени" }), el("span", { class: "ip-w", text: "×1 · " + formatWeight(item.weightLb) })]),
         el("label", { class: "ip-eq" }, [toggle, "надето"]),
       ]),
-      kv.length ? el("div", { class: "ip-kv" }, kv) : null,
+      ...(kv.length ? [el("div", { class: "ip-kv" }, kv)] : []),
       el("span", { class: "card-aside-note", text: equipped ? "Так игрок увидит предмет на листе; изменения действуют, пока стоит «надето»." : "Снято — изменения из «Пока надет» не действуют." })
     );
   };

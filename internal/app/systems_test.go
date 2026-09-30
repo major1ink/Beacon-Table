@@ -112,14 +112,15 @@ func TestWorldSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, kind := range schema.Kinds {
-		if kind == schema.KindSheet {
-			if string(got[kind]) != string(builtinSheet.Raw) {
-				t.Error("старый бланк без схемы листа: лист — встроенный")
+		if kind == schema.KindMonster {
+			if got[kind] != nil {
+				t.Error("старое существо D&D без схемы: должно быть nil")
 			}
 			continue
 		}
-		if got[kind] != nil {
-			t.Errorf("старые карточки без схем: %s должен быть nil", kind)
+		builtin, _ := schema.Builtin(kind)
+		if string(got[kind]) != string(builtin.Raw) {
+			t.Errorf("D&D без схемы вида %s: должна быть встроенная", kind)
 		}
 	}
 	legacy.Schemas = map[string]*schema.Schema{schema.KindSheet: own}
@@ -127,7 +128,7 @@ func TestWorldSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got[schema.KindSheet]) != string(own.Raw) || got[schema.KindSpell] != nil {
-		t.Error("D&D со схемой листа: лист — её, карточки — старые")
+	if string(got[schema.KindSheet]) != string(own.Raw) || got[schema.KindMonster] != nil {
+		t.Error("D&D со схемой листа: лист — её, существо — старое")
 	}
 }

@@ -70,7 +70,25 @@ export function medallionOf(compiled, data) {
     field.type === "select"
       ? (field.options || []).find((o) => o.value === raw)
       : (m.rules || []).find((r) => ruleMatches(r, raw));
-  return { glyph: (found && found.glyph) || m.glyph || "", color: (found && found.color) || m.color || "" };
+  let color = (found && found.color) || m.color || "";
+  const colorField = m.colorField && compiled.schema.fields[m.colorField];
+  if (colorField) {
+    const opt = (colorField.options || []).find((o) => o.value === scalarText(getPath(data, colorField.path)));
+    color = (opt && opt.color) || m.color || "";
+  }
+  return { glyph: (found && found.glyph) || m.glyph || "", color };
+}
+
+// pillsOf — плашки шапки карточки по list.pills: [{ text, kind }]; kind —
+// "rar" у выбора, "att" у остальных (флажок, шаблон).
+export function pillsOf(compiled, data) {
+  const ev = evaluatorFor(compiled, data);
+  const out = [];
+  for (const id of (compiled.schema.list && compiled.schema.list.pills) || []) {
+    const text = displayValue(compiled, data, id, ev).trim();
+    if (text) out.push({ text, kind: compiled.schema.fields[id].type === "select" ? "rar" : "att" });
+  }
+  return out;
 }
 
 // categoriesOf — категории каталога по list.categories: [{ label, test(x) }]
@@ -258,6 +276,7 @@ function filterSection(compiled, id) {
         kind: "list",
         of: (x) => {
           let v = displayValue(compiled, x, id).trim();
+          if (field.facet === "list") return v.split(/[,;/]/).map((c) => c.trim()).filter(Boolean);
           if (field.facet === "beforeParen") v = v.replace(/\s*\(.*$/, "").replace(/^./, (c) => c.toUpperCase());
           return v ? [v] : [];
         },

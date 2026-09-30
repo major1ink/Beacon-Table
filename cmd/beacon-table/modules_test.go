@@ -58,10 +58,15 @@ func TestModuleAssetsHandler(t *testing.T) {
 	}
 }
 
-func TestBuiltinModulesHaveSheetSchemas(t *testing.T) {
+func TestBuiltinModulesHaveSchemas(t *testing.T) {
 	for _, m := range builtinModules(systemFiles) {
-		if m.Schemas["sheet"] == nil || len(m.Schemas) != 1 {
-			t.Errorf("%s: схемы модуля %v — нужна только схема листа", m.Manifest.ID, m.Schemas)
+		for _, kind := range []string{"sheet", "spell", "item", "reference"} {
+			if m.Schemas[kind] == nil {
+				t.Errorf("%s: нет схемы %s", m.Manifest.ID, kind)
+			}
+		}
+		if m.Schemas["monster"] != nil {
+			t.Errorf("%s: схема существа появится вместе со статблоком", m.Manifest.ID)
 		}
 	}
 }

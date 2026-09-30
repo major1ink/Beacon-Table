@@ -18,22 +18,19 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { renderStatEditor, loadTargets } from "../stat-editor.js";
 import { loadStand, renderStandSelect } from "../stand.js";
-import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
-import { renderKvTable } from "../kv-table.js";
+import { el as hh, labeled, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { renderInventoryPreview } from "../inventory-preview.js";
-import { glyphNode } from "../condition-glyphs.js";
 import { itemGlyphName } from "../item-glyph.js";
-import { RARITY, rarityColor } from "../item-rarity.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { loadSystemProfile, weightUnit } from "../system-profile.js";
+import { loadSystemProfile, sheetKind } from "../system-profile.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
-import { cardBody, cardSubtitle, renderSchemaCard } from "../schema-card.js";
+import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
 
 // ==================== state ====================
 
@@ -84,57 +81,15 @@ function mdBlock(labelText, get, set) {
   return h("div", { class: "md-block" }, [t, render]);
 }
 
-// attunementText — «требует настройки (колдуном)» для плашки и подзаголовка.
-function attunementText(it) {
-  if (!it.requiresAttunement) return "";
-  return it.attunementNote ? `требует настройки (${it.attunementNote})` : "требует настройки";
-}
-
-function heroPills() {
-  return [
-    item.rarity ? pill(item.rarity, "rar") : null,
-    item.requiresAttunement ? pill(attunementText(item), "att") : null,
-    item.source ? pill(item.source, "gold") : null,
-    ...item.tags.map((t) => pill(t)),
-  ];
-}
-
-// kvRows — строки таблицы «показатель · значение» (kv-table.js).
-function kvRows() {
-  return [
-    { label: "Стоимость", get: () => item.cost, set: (v) => (item.cost = v), placeholder: "50 зм.", mono: true },
-    { label: "Вес", get: () => item.weight, set: (v) => (item.weight = v), placeholder: "1 фунт.", mono: true },
-    // weightLb — тот же вес числом (см. domain.Item.WeightValue) в единицах
-    // системы мира для суммы инвентаря на листе; с текстовым «Вес» не
-    // синхронизируется.
-    { label: weightUnit() ? `Вес числом, ${weightUnit()}` : "Вес числом", get: () => item.weightLb, set: (v) => (item.weightLb = v), placeholder: "0", mono: true, type: "number", min: "0", step: "any", unit: weightUnit() ? " " + weightUnit() : "" },
-    { label: "Активация", get: () => item.activation, set: (v) => (item.activation = v), placeholder: "1 действие" },
-    { label: "Урон", get: () => item.damage, set: (v) => (item.damage = v), placeholder: "1к8 рубящий", mono: true },
-    { label: "Класс доспеха", get: () => item.armorClass, set: (v) => (item.armorClass = v), placeholder: "14 + Лов (макс 2)", mono: true },
-    { label: "Свойства", get: () => item.properties, set: (v) => (item.properties = v), placeholder: "лёгкое, фехтовальное" },
-    { label: "Заряды", get: () => item.charges, set: (v) => (item.charges = v), placeholder: "3 заряда, 1к3 на рассвете" },
-  ];
-}
-
 // ==================== рендер ====================
 
+let compiledItem = null;
 function renderApp() {
   const root = document.getElementById("app");
   root.innerHTML = "";
-  const compiled = itemSchema();
-  if (compiled) renderSchemaView(root, compiled);
-  else if (editMode) renderEditView(root);
-  else renderReadView(root);
-}
-
-// compiledItem — схема предмета системы мира, разобранная один раз; null —
-// у системы старая карточка D&D (см. schemas.js).
-let compiledItem = null;
-function itemSchema() {
   const s = schemaFor("item");
-  if (!s) return null;
   if (!compiledItem || compiledItem.schema !== s) compiledItem = compileSchema(s);
-  return compiledItem;
+  renderSchemaView(root, compiledItem);
 }
 
 // artField — «Арт»: загрузить свою иконку или убрать её; onArt() — после
@@ -211,28 +166,31 @@ function descFold(readOnly) {
 // стенд модификаторов — как у карточки D&D, импорт — только у неё.
 function renderSchemaView(root, compiled) {
   const readOnly = !editMode;
-  const pills = () => [item.source ? pill(item.source, "gold") : null, ...item.tags.map((t) => pill(t))];
   const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, item) });
   const stand = renderStandSelect(standEntries);
   const preview = renderInventoryPreview(item, { stand, sendRoll });
+  const head = cardHead(compiled, item, itemGlyphName(item));
+  const refreshHead = () => {
+    const next = cardHead(compiled, item, itemGlyphName(item));
+    subtitle.textContent = cardSubtitle(compiled, item);
+    hero.setGlyph(next.glyph, item.imageUrl);
+    hero.setColor(next.color);
+    hero.setPills(next.pills);
+    preview.update();
+  };
   const hero = renderHero({
-    glyph: glyphNode(itemGlyphName(item), ""),
+    glyph: head.glyph,
     imageUrl: item.imageUrl,
-    color: "",
+    color: head.color,
     name: item.name,
     namePlaceholder: "Название предмета",
-    pills: pills(),
+    pills: head.pills,
     square: true,
     subtitle,
     readOnly,
     controls: readOnly
       ? undefined
-      : [
-          artField(() => {
-            hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl);
-            preview.update();
-          }),
-        ],
+      : [artField(refreshHead)],
     onName: (v) => {
       item.name = v;
       document.getElementById("itemTitle").textContent = v || "Без имени";
@@ -253,135 +211,13 @@ function renderSchemaView(root, compiled) {
     data: item,
     readOnly,
     scheduleSave,
-    onChange: () => {
-      subtitle.textContent = cardSubtitle(compiled, item);
-      preview.update();
-    },
+    onChange: refreshHead,
     sendRoll,
     widgets: { modifiers: worn },
   });
-  root.appendChild(renderBody(cardBody([...middle, descFold(readOnly), compatFold(readOnly, () => hero.setPills(pills()))]), [preview]));
-}
-
-function renderEditView(root) {
-
-  // Редкость — известные значения списком, любое другое остаётся текстом.
-  const raritySel = h("select", {});
-  raritySel.appendChild(h("option", { value: "", text: "—" }));
-  for (const r of RARITY) raritySel.appendChild(h("option", { value: r.ru, text: r.ru }));
-  if (item.rarity && !RARITY.some((r) => r.ru === item.rarity)) raritySel.appendChild(h("option", { value: item.rarity, text: item.rarity }));
-  raritySel.value = item.rarity || "";
-  raritySel.addEventListener("change", () => {
-    item.rarity = raritySel.value;
-    scheduleSave();
-    refreshHead();
-  });
-  const attCb = h("input", { type: "checkbox" });
-  attCb.checked = !!item.requiresAttunement;
-  attCb.addEventListener("change", () => {
-    item.requiresAttunement = attCb.checked;
-    scheduleSave();
-    attNoteBox.hidden = !item.requiresAttunement;
-    refreshHead();
-  });
-  const attNote = textInput(() => item.attunementNote, (v) => { item.attunementNote = v; refreshHead(); }, { placeholder: "колдуном", style: "width:180px" });
-  const attNoteBox = labeled("Кем", attNote);
-  attNoteBox.hidden = !item.requiresAttunement;
-
-  // Книжный подзаголовок: тип правится прямо в нём.
-  const typeInp = textInput(() => item.type, (v) => { item.type = v; typeInp.size = Math.max(14, v.length + 1); hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl); preview.update(); }, { placeholder: "Доспех (кольчуга)", "aria-label": "Тип" });
-  typeInp.size = Math.max(14, (item.type || "").length + 1);
-  const subTail = h("span", {});
-  const subtitle = h("div", { class: "card-sub" }, [typeInp, subTail]);
-  const refreshHead = () => {
-    subTail.textContent = [item.rarity ? ", " + item.rarity : "", item.requiresAttunement ? " (" + attunementText(item) + ")" : ""].join("");
-    hero.setPills(heroPills());
-    hero.setColor(rarityColor(item.rarity) || "");
-  };
-
-  const hero = renderHero({
-    glyph: glyphNode(itemGlyphName(item), ""),
-    imageUrl: item.imageUrl,
-    color: rarityColor(item.rarity) || "",
-    name: item.name,
-    namePlaceholder: "Название предмета",
-    pills: heroPills(),
-    square: true,
-    subtitle,
-    controls: [labeled("Редкость", raritySel), h("div", { class: "field" }, [h("span", { text: "Требует" }), h("label", { class: "card-toggle" }, [attCb, "настройки"])]), attNoteBox, artField(() => { hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl); preview.update(); })],
-    onName: (v) => {
-      item.name = v;
-      document.getElementById("itemTitle").textContent = v || "Без имени";
-      scheduleSave();
-      preview.update();
-    },
-  });
-  refreshHead();
-  root.appendChild(hero.el);
-  root.appendChild(ornament());
-
-  const stand = renderStandSelect(standEntries);
-  const preview = renderInventoryPreview(item, { stand, sendRoll });
-  const kv = renderKvTable(kvRows(), { onChange: () => { scheduleSave(); preview.update(); }, hint: "Пустые строки в режиме чтения скрываются. Формулы кубов кликабельны." });
-  const worn = h("div", {}, [
-    h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: "Пока надет" })]),
-    renderStatEditor(item.modifiers, () => { scheduleSave(); preview.update(); }, { stand, periodic: false }),
-  ]);
-
-  const descFold = fold({ title: "Описание", summary: item.description || "что это и как выглядит", body: [mdBlock("Описание", () => item.description, (v) => { item.description = v; descFold.setSummary(v || "что это и как выглядит"); })] });
-  const compatSummary = () => [item.source, item.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
-  const compatFold = fold({
-    title: "Совместимость и источник",
-    summary: compatSummary(),
-    body: [
-      h("div", { class: "card-grid2" }, [
-        labeled("Источник", textInput(() => item.source, (v) => { item.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "DMG'24" })),
-        labeled("Модуль Foundry", textInput(() => item.foundryModuleId, (v) => { item.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.items" }), "Откуда импортирован — чтобы повторный импорт нашёл карточку."),
-      ]),
-      tagsField(() => hero.setPills(heroPills())),
-    ],
-  });
-
-  root.appendChild(renderBody([kv, worn, h("div", { class: "card-folds" }, [descFold, compatFold, importSection()])], [preview]));
-}
-
-// ==================== read-режим (по умолчанию) ====================
-
-function renderReadView(root) {
-  const subtitle = h("div", { class: "card-sub", text: [item.type, item.rarity].filter(Boolean).join(", ") + (item.requiresAttunement ? " (" + attunementText(item) + ")" : "") });
-  const hero = renderHero({
-    glyph: glyphNode(itemGlyphName(item), ""),
-    imageUrl: item.imageUrl,
-    color: rarityColor(item.rarity) || "",
-    name: item.name,
-    pills: heroPills(),
-    square: true,
-    subtitle,
-    readOnly: true,
-  });
-  root.appendChild(hero.el);
-  root.appendChild(ornament());
-
-  const stand = renderStandSelect(standEntries);
-  const preview = renderInventoryPreview(item, { stand, sendRoll });
-  const kv = renderKvTable(kvRows(), { readOnly: true, sendRoll });
-  const worn = item.modifiers.length
-    ? h("div", {}, [h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: "Пока надет" })]), renderStatEditor(item.modifiers, () => {}, { stand, periodic: false, readOnly: true })])
-    : null;
-
-  const folds = [];
-  const desc = item.description && item.description.trim();
-  if (desc) {
-    const body = h("div", { class: "card-prose" });
-    body.innerHTML = renderNoteHtml(item.description);
-    enhanceRolls(body, sendRoll);
-    wireCatalogLinks(body);
-    folds.push(fold({ title: "Описание", body: [body], open: true }));
-  }
-  const compat = [item.source, item.foundryModuleId].filter(Boolean).join(" · ");
-  if (compat) folds.push(fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }));
-
-  root.appendChild(renderBody([kv, worn, folds.length ? h("div", { class: "card-folds" }, folds) : null], [preview]));
+  const folds = [...middle, descFold(readOnly), compatFold(readOnly, refreshHead)];
+  if (!readOnly && sheetKind() !== "universal") folds.push(importSection());
+  root.appendChild(renderBody(cardBody(folds), [preview]));
 }
 
 function tagsField(onChange) {

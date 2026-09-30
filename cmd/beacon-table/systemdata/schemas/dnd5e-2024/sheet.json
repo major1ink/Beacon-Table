@@ -17,22 +17,35 @@
     "info_bg": {
       "type": "text",
       "path": "info.background",
-      "label": "Предыстория"
+      "label": "Предыстория",
+      "suggest": {
+        "reference": "происхождение"
+      }
     },
     "class": {
       "type": "text",
       "path": "info.class",
-      "label": "Класс"
+      "label": "Класс",
+      "suggest": {
+        "reference": "класс"
+      }
     },
     "subclass": {
       "type": "text",
       "path": "info.subclass",
-      "label": "Подкласс"
+      "label": "Подкласс",
+      "suggest": {
+        "reference": "архетип",
+        "parentField": "class"
+      }
     },
     "species": {
       "type": "text",
       "path": "info.species",
-      "label": "Вид"
+      "label": "Вид",
+      "suggest": {
+        "reference": "вид"
+      }
     },
     "level": {
       "type": "number",

@@ -180,6 +180,8 @@ type Field struct {
 	// названия и колонка значения; значение меняют модификаторы
 	// stat.<ключ названия>.
 	StatRows *StatRows `json:"statRows,omitempty"`
+	// Numeric — значения вариантов select хранятся числами.
+	Numeric bool `json:"numeric,omitempty"`
 	// Levels — состояний у владения (prof): 2 — флажок, 3 — число 0..2.
 	Levels int `json:"levels,omitempty"`
 	// Max — делений у шкалы (tally), Tone — её цвет.
@@ -196,8 +198,12 @@ type Field struct {
 	Rows []Row `json:"rows,omitempty"`
 }
 
-// FacetBeforeParen — значение фильтра до скобки: «зверь (динозавр)» → «зверь».
-const FacetBeforeParen = "beforeParen"
+// Значения Field.Facet: до скобки («зверь (динозавр)» → «зверь») и список
+// через запятую, точку с запятой или косую черту (несколько значений).
+const (
+	FacetBeforeParen = "beforeParen"
+	FacetList        = "list"
+)
 
 // Suggest — подсказки: названия записей справочника вида Reference; у
 // записей с ParentName (архетип класса) — только с родителем из поля
@@ -302,8 +308,10 @@ type List struct {
 	Filters  []string `json:"filters,omitempty"`
 	Search   []string `json:"search,omitempty"`
 	// Badges — поля, чей текст стоит плашкой перед источником (цвет — у
-	// варианта select), Flags — буквы у строки каталога.
+	// варианта select), Pills — плашки в шапке карточки, Flags — буквы у
+	// строки каталога.
 	Badges []string `json:"badges,omitempty"`
+	Pills  []string `json:"pills,omitempty"`
 	Flags  []Flag   `json:"flags,omitempty"`
 	// Medallion — откуда берётся глиф и цвет карточки, Categories — дерево
 	// «Компендиума».
@@ -335,6 +343,8 @@ type Medallion struct {
 	Rules []Rule `json:"rules,omitempty"`
 	Glyph string `json:"glyph,omitempty"`
 	Color string `json:"color,omitempty"`
+	// ColorField — поле select, чей вариант красит медальон вместо правил.
+	ColorField string `json:"colorField,omitempty"`
 }
 
 // Categories — разбиение карточек по тексту поля: первое подошедшее правило,
@@ -432,7 +442,7 @@ func (s *Schema) Validate() error {
 	}
 	if s.List != nil {
 		l := s.List
-		if s.Kind == KindSheet && (l.Group != "" || len(l.Sort) > 0 || len(l.Filters) > 0 || len(l.Search) > 0 || len(l.Badges) > 0 || len(l.Flags) > 0 || l.Medallion != nil || l.Categories != nil) {
+		if s.Kind == KindSheet && (l.Group != "" || len(l.Sort) > 0 || len(l.Filters) > 0 || len(l.Search) > 0 || len(l.Badges) > 0 || len(l.Pills) > 0 || len(l.Flags) > 0 || l.Medallion != nil || l.Categories != nil) {
 			return fmt.Errorf("у листа в разделе list — только subtitle (подпись готового персонажа)")
 		}
 		if err := s.checkList(); err != nil {
@@ -461,8 +471,11 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 	if (f.Template != "") != (f.Type == TypeTemplate) || (f.Type == TypeTemplate && column) {
 		return fmt.Errorf("template — обязательный шаблон поля типа template, колонкой оно не бывает")
 	}
-	if f.Facet != "" && (f.Type != TypeText || f.Facet != FacetBeforeParen) {
-		return fmt.Errorf("facet — у текста, значение %s", FacetBeforeParen)
+	if f.Numeric && f.Type != TypeSelect {
+		return fmt.Errorf("numeric — только у выбора")
+	}
+	if f.Facet != "" && (f.Type != TypeText || (f.Facet != FacetBeforeParen && f.Facet != FacetList)) {
+		return fmt.Errorf("facet — у текста, значение %s или %s", FacetBeforeParen, FacetList)
 	}
 	if f.Suggest != nil && (f.Type != TypeText || f.Suggest.Reference == "" || len(f.Suggest.Reference) > maxLabelLen) {
 		return fmt.Errorf("suggest — у текста, с видом записей справочника (reference)")
@@ -503,6 +516,16 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 	case TypeSelect:
 		if len(f.Options) == 0 || len(f.Options) > maxOptions {
 			return fmt.Errorf("у выбора нужно от 1 до %d вариантов", maxOptions)
+		}
+		if f.Numeric {
+			if at != nil && !isIntKind(at.Kind()) && at.Kind() != reflect.Float64 {
+				return fmt.Errorf("числовой выбор хранится числом, а по пути %q лежит %s", f.Path, at.Kind())
+			}
+			for _, o := range f.Options {
+				if !numberRe.MatchString(o.Value) {
+					return fmt.Errorf("вариант %q числового выбора — не число", o.Value)
+				}
+			}
 		}
 		seen := map[string]bool{}
 		for _, o := range f.Options {
@@ -818,12 +841,12 @@ func (s *Schema) checkTemplates() error {
 // checkListExtras — плашки, буквы, медальон и категории каталога.
 func (s *Schema) checkListExtras() error {
 	l := s.List
-	for _, id := range l.Badges {
+	for _, id := range append(append([]string(nil), l.Badges...), l.Pills...) {
 		if f := s.Fields[id]; f == nil || f.Type == TypeTable || f.Type == TypeLongText {
 			return fmt.Errorf("плашка ссылается на %q — нужно скалярное поле схемы", id)
 		}
 	}
-	if len(l.Badges) > maxListItems || len(l.Flags) > maxListItems {
+	if len(l.Badges) > maxListItems || len(l.Pills) > maxListItems || len(l.Flags) > maxListItems {
 		return fmt.Errorf("плашек и букв — не больше %d", maxListItems)
 	}
 	for _, fl := range l.Flags {
@@ -841,6 +864,9 @@ func (s *Schema) checkListExtras() error {
 		case f.Type == TypeText && len(m.Rules) > 0:
 		default:
 			return fmt.Errorf("медальон: выбор без правил или текст с правилами, поле %q — %s", m.Field, f.Type)
+		}
+		if cf := s.Fields[m.ColorField]; m.ColorField != "" && (cf == nil || cf.Type != TypeSelect) {
+			return fmt.Errorf("медальон: colorField — поле выбора схемы")
 		}
 		if err := checkRules(m.Rules, false); err != nil {
 			return fmt.Errorf("медальон: %w", err)
