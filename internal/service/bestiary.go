@@ -7,6 +7,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/schema"
 )
 
 // maxMonsterLongText/maxMonsterShortText — те же санитарные пределы, что и у
@@ -30,10 +31,11 @@ type BestiaryService interface {
 
 type bestiaryService struct {
 	monsters repository.MonsterRepository
+	schemaOf SchemaOf
 }
 
-func NewBestiaryService(monsters repository.MonsterRepository) BestiaryService {
-	return &bestiaryService{monsters: monsters}
+func NewBestiaryService(monsters repository.MonsterRepository, schemaOf SchemaOf) BestiaryService {
+	return &bestiaryService{monsters: monsters, schemaOf: schemaOf}
 }
 
 func validateMonsterName(name string) (string, error) {
@@ -80,6 +82,7 @@ func (s *bestiaryService) Create(ctx context.Context, name string) (*domain.Mons
 		return nil, err
 	}
 	m := domain.NewMonster(newID(), name)
+	applyDefaults(s.schemaOf, schema.KindMonster, m)
 	m.UpdatedAt = time.Now()
 	if err := s.monsters.Create(ctx, m.ID, m); err != nil {
 		return nil, err

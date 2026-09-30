@@ -9,6 +9,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"beacon-table/internal/domain"
 	"beacon-table/internal/module"
 )
 
@@ -67,6 +68,18 @@ func TestBuiltinModulesHaveSchemas(t *testing.T) {
 			if m.Schemas[kind] == nil {
 				t.Errorf("%s: нет схемы %s", m.Manifest.ID, kind)
 			}
+		}
+	}
+}
+
+func TestBuiltinMonsterDefaults(t *testing.T) {
+	for _, m := range builtinModules(systemFiles) {
+		mon := domain.NewMonster("m", "Гоблин")
+		if err := m.Schemas["monster"].ApplyDefaults(mon); err != nil {
+			t.Fatal(err)
+		}
+		if mon.Size != "Средний" || mon.AC != 10 || mon.Abilities != (domain.Abilities{Str: 10, Dex: 10, Con: 10, Int: 10, Wis: 10, Cha: 10}) {
+			t.Errorf("%s: новое существо %+v", m.Manifest.ID, mon)
 		}
 	}
 }

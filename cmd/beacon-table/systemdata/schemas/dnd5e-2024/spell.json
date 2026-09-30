@@ -48,7 +48,8 @@
           "value": "9",
           "label": "9-й круг"
         }
-      ]
+      ],
+      "default": 0
     },
     "school": {
       "type": "select",

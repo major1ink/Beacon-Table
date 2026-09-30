@@ -541,8 +541,9 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	boardSync := service.NewBoardHub(boardRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
 	assets := service.NewAssetService(assetRepo)
-	bestiary := service.NewBestiaryService(monsterRepo)
-	spells := service.NewSpellService(spellRepo)
+	schemaOf := func(kind string) *schema.Schema { return m.SchemaOf(company, kind) }
+	bestiary := service.NewBestiaryService(monsterRepo, schemaOf)
+	spells := service.NewSpellService(spellRepo, schemaOf)
 	items := service.NewItemService(itemRepo)
 	references := service.NewReferenceService(referenceRepo)
 	conditions := service.NewConditionService(conditionRepo)

@@ -193,6 +193,8 @@ type Field struct {
 	Facet string `json:"facet,omitempty"`
 	// Suggest — подсказки текстового поля из карточек справочника.
 	Suggest *Suggest `json:"suggest,omitempty"`
+	// Default — значение новой карточки (см. Schema.ApplyDefaults).
+	Default any `json:"default,omitempty"`
 	// Rows — заранее известные строки таблицы. path таблицы ведёт к объекту
 	// или списку, «{key}» в пути колонки — ключ строки (skillProf.{key}).
 	Rows []Row `json:"rows,omitempty"`
@@ -588,7 +590,7 @@ func checkField(root reflect.Type, f *Field, column bool) error {
 	if f.ModifierTarget != "" && !domain.ValidModifierTarget(f.ModifierTarget) {
 		return fmt.Errorf("неверная цель модификатора %q", f.ModifierTarget)
 	}
-	return nil
+	return checkDefault(f, column)
 }
 
 func isIntKind(k reflect.Kind) bool {

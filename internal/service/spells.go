@@ -7,6 +7,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/schema"
 )
 
 // maxSpellLongText/maxSpellShortText — те же санитарные пределы, что и у
@@ -34,11 +35,12 @@ type SpellService interface {
 }
 
 type spellService struct {
-	spells repository.SpellRepository
+	spells   repository.SpellRepository
+	schemaOf SchemaOf
 }
 
-func NewSpellService(spells repository.SpellRepository) SpellService {
-	return &spellService{spells: spells}
+func NewSpellService(spells repository.SpellRepository, schemaOf SchemaOf) SpellService {
+	return &spellService{spells: spells, schemaOf: schemaOf}
 }
 
 func validateSpellName(name string) (string, error) {
@@ -97,6 +99,7 @@ func (s *spellService) Create(ctx context.Context, name string) (*domain.Spell, 
 		return nil, err
 	}
 	sp := domain.NewSpell(newID(), name)
+	applyDefaults(s.schemaOf, schema.KindSpell, sp)
 	sp.UpdatedAt = time.Now()
 	if err := s.spells.Create(ctx, sp.ID, sp); err != nil {
 		return nil, err

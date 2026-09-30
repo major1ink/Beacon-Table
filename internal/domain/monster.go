@@ -121,15 +121,9 @@ type MonsterSpellRef struct {
 	Level   int    `json:"level"`
 }
 
-// NewMonster создаёт пустую карточку монстра с разумными дефолтами "из
-// коробки" — все характеристики по 10 (модификатор +0), КД 10, размер
-// "Средний", как у пустого бланка персонажа (DefaultCharacterSheet).
+// NewMonster создаёт пустую карточку существа. Значения новой карточки
+// (размер, КД, характеристики…) задаёт схема системы мира (default у поля,
+// см. schema.Schema.ApplyDefaults), а не ядро.
 func NewMonster(id, name string) *Monster {
-	return &Monster{
-		ID:        id,
-		Name:      name,
-		Size:      "Средний",
-		AC:        10,
-		Abilities: Abilities{Str: 10, Dex: 10, Con: 10, Int: 10, Wis: 10, Cha: 10},
-	}
+	return &Monster{ID: id, Name: name}
 }
