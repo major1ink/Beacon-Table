@@ -62,6 +62,19 @@ function layoutFields(schema) {
 
 const COMPACT_TYPES = new Set(["number", "computed"]);
 
+// tileMod — вычисляемое поле в паре с полем id в плитке секции (cells):
+// «Лов 15» и его модификатор.
+function tileMod(schema, id) {
+  for (const sec of schema.layout || []) {
+    for (const tile of sec.cells || []) {
+      const i = tile.indexOf(id);
+      const next = i >= 0 && schema.fields[tile[i + 1]];
+      if (next && next.type === "computed") return tile[i + 1];
+    }
+  }
+  return "";
+}
+
 // compactStats — короткие плитки: [{ label, value, note }]. Из строк таблиц
 // свободных характеристик (statRows: название — значение с модификаторами,
 // note — прочие числовые колонки, «+2») и из числовых полей с коротким
@@ -91,7 +104,9 @@ export function compactStats(compiled, data, mods) {
     if (!f.short || !COMPACT_TYPES.has(f.type)) continue;
     const value = displayValue(compiled, data, id, ev);
     if (value === "") continue;
-    out.push({ label: f.short, value, note: "", target: f.modifierTarget || "" });
+    const mod = tileMod(schema, id);
+    const note = mod ? displayValue(compiled, data, mod, ev) : "";
+    out.push({ label: f.short, value, note: note && Number(note) >= 0 ? "+" + note : note, target: f.modifierTarget || "" });
   }
   return out;
 }

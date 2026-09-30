@@ -70,9 +70,7 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 }
 
 // Схемы мира: у «Своей системы» и мира без модуля — встроенные; у системы
-// со своей схемой — её, недостающие виды — встроенные; у системы со старыми
-// карточками D&D недостающие виды карточек — nil (клиент рисует старым кодом),
-// а лист всегда по схеме.
+// со своей схемой — её, недостающие виды — встроенные.
 func TestWorldSchemas(t *testing.T) {
 	m, _ := newTestManager(t)
 	own, err := schema.Parse([]byte(`{"format":"beacon-schema/v1","kind":"sheet",
@@ -112,12 +110,6 @@ func TestWorldSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, kind := range schema.Kinds {
-		if kind == schema.KindMonster {
-			if got[kind] != nil {
-				t.Error("старое существо D&D без схемы: должно быть nil")
-			}
-			continue
-		}
 		builtin, _ := schema.Builtin(kind)
 		if string(got[kind]) != string(builtin.Raw) {
 			t.Errorf("D&D без схемы вида %s: должна быть встроенная", kind)
@@ -128,7 +120,7 @@ func TestWorldSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got[schema.KindSheet]) != string(own.Raw) || got[schema.KindMonster] != nil {
-		t.Error("D&D со схемой листа: лист — её, существо — старое")
+	if string(got[schema.KindSheet]) != string(own.Raw) || got[schema.KindMonster] == nil {
+		t.Error("D&D со схемой листа: лист — её, существо — встроенное")
 	}
 }

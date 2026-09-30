@@ -206,8 +206,7 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 // Schemas — схемы листа и карточек мира company по видам (см.
 // internal/schema), JSON как есть — его рисует клиент. Для каждого вида —
 // схема из модуля системы мира, если она там есть, иначе встроенная схема
-// «Своей системы». Исключение — система со старым бланком (D&D) без своих
-// схем: у неё все виды nil, и клиент рисует лист и карточки старым кодом.
+// «Своей системы».
 func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMessage, error) {
 	set, err := m.schemaSet(company)
 	if err != nil {
@@ -224,8 +223,7 @@ func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMe
 	return out, nil
 }
 
-// SchemaOf — схема вида kind мира company (см. schemaSet); nil — у системы
-// старый бланк D&D без схем.
+// SchemaOf — схема вида kind мира company (см. schemaSet).
 func (m *CompanyManager) SchemaOf(company *domain.Company, kind string) *schema.Schema {
 	set, err := m.schemaSet(company)
 	if err != nil {
@@ -235,25 +233,19 @@ func (m *CompanyManager) SchemaOf(company *domain.Company, kind string) *schema.
 }
 
 // schemaSet — схемы мира company по видам: схема модуля системы, иначе
-// встроенная; у системы со старой карточкой существа D&D — nil по существу.
-// Их же получает комната мира (формулы инициативы).
+// встроенная. Их же получает комната мира (формулы инициативы).
 func (m *CompanyManager) schemaSet(company *domain.Company) (map[string]*schema.Schema, error) {
 	var mod *module.Module
 	if company != nil && company.System != domain.SystemCustom {
 		mod, _ = m.modules.Get(company.System)
 	}
 	out := make(map[string]*schema.Schema, len(schema.Kinds))
-	legacy := mod != nil && domain.LegacySheetKind(mod.Manifest.Sheet)
 	for _, kind := range schema.Kinds {
 		if mod != nil {
 			if s, ok := mod.Schemas[kind]; ok {
 				out[kind] = s
 				continue
 			}
-		}
-		if legacy && kind == schema.KindMonster {
-			out[kind] = nil
-			continue
 		}
 		s, err := schema.Builtin(kind)
 		if err != nil {
