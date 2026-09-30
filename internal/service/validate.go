@@ -55,17 +55,6 @@ func clampVolume(v float64) float64 {
 	return v
 }
 
-// Границы листа (CharacterSheet.UpdateSheet) — не правила игры, а защита
-// от кривого клиента: строки и списки режет общий clampCard (см.
-// cardlimits.go). maxSheetDeathSaves/maxSheetExhaustion — санитарный
-// потолок счётчиков: сколько их на самом деле, решает система (у D&D — 3 и
-// 6); здесь тот же потолок, что у счётчика спасбросков в правилах боя и у
-// уровней состояния.
-const (
-	maxSheetDeathSaves = 10
-	maxSheetExhaustion = 20
-)
-
 func clampRunes(s string, max int) string {
 	r := []rune(s)
 	if len(r) > max {
@@ -74,14 +63,14 @@ func clampRunes(s string, max int) string {
 	return s
 }
 
-// sanitizeSheet — see maxSheet* выше.
+// sanitizeSheet — границы листа (CharacterSheet.UpdateSheet): не правила
+// игры, а защита от кривого клиента. Строки и списки режет общий clampCard
+// (см. cardlimits.go), незнакомые ключи — clampExtra; деньги — по правилам
+// ядра.
 func sanitizeSheet(sheet domain.CharacterSheet) domain.CharacterSheet {
 	clampCard(&sheet)
 	sheet.Extra = clampExtra(sheet.Extra)
 	sheet.Combat.Extra = clampExtra(sheet.Combat.Extra)
 	sheet.Coins = domain.SanitizeCoins(sheet.Coins)
-	sheet.Combat.DeathSaveSuccess = clampCount(sheet.Combat.DeathSaveSuccess, maxSheetDeathSaves)
-	sheet.Combat.DeathSaveFail = clampCount(sheet.Combat.DeathSaveFail, maxSheetDeathSaves)
-	sheet.Combat.Exhaustion = clampCount(sheet.Combat.Exhaustion, maxSheetExhaustion)
 	return sheet
 }

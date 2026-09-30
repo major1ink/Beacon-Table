@@ -10,7 +10,7 @@ func TestResolveJSONPath(t *testing.T) {
 	ok := map[string]reflect.Type{
 		"combat.ac":      reflect.TypeOf(0),
 		"COMBAT.AC":      reflect.TypeOf(0), // без учёта регистра, как encoding/json
-		"abilities.str":  reflect.TypeOf(0),
+		"abilities.str":  nil,               // поля системы лежат в Extra
 		"notes.0":        reflect.TypeOf(""),
 		"resources":      reflect.TypeOf([]ResourceRow{}),
 		"stats.3.name":   reflect.TypeOf(""),

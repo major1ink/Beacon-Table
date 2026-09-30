@@ -1,0 +1,172 @@
+{
+  "abilities": {
+    "cha": 3,
+    "con": 3,
+    "dex": 2,
+    "int": 1,
+    "str": 1,
+    "wis": 2
+  },
+  "additionalFeatures": "additionalfeatures-45",
+  "alignment": "alignment-76",
+  "allies": "allies-44",
+  "appearance": "appearance-74",
+  "armor": {
+    "heavyArmor": true,
+    "lightArmor": true,
+    "martialWeapons": true,
+    "mediumArmor": true,
+    "otherWeapons": "otherweapons-18",
+    "shield": true,
+    "simpleWeapons": true
+  },
+  "attacksSpells": "attacksspells-41",
+  "attunementItems": [
+    {
+      "attuned": true,
+      "name": "name-99"
+    },
+    {
+      "attuned": true,
+      "name": "name-100"
+    }
+  ],
+  "background": "background-75",
+  "bonds": "bonds-103",
+  "coins": {
+    "cp": 1,
+    "ep": 1,
+    "gp": 3,
+    "pp": 2,
+    "sp": 2
+  },
+  "combat": {
+    "ac": 3,
+    "conditions": "conditions-31",
+    "darkvision": 1,
+    "deathSaveFail": 1,
+    "deathSaveSuccess": 3,
+    "exhaustion": 2,
+    "hitDiceCurrent": "hitdicecurrent-25",
+    "hitDiceTotal": "hitdicetotal-24",
+    "hpCurrent": 1,
+    "hpMax": 3,
+    "hpTemp": 2,
+    "inspiration": true,
+    "isDying": true,
+    "speed": 3
+  },
+  "equipment": "equipment-77",
+  "feats": "feats-42",
+  "features": "features-40",
+  "flaws": "flaws-104",
+  "goals": "goals-43",
+  "ideals": "ideals-102",
+  "info": {
+    "background": "background-1",
+    "class": "class-2",
+    "level": 1,
+    "playerName": "playername-8",
+    "race": "race-5",
+    "species": "species-4",
+    "subclass": "subclass-3",
+    "xp": 2
+  },
+  "notes": [
+    "notes-47",
+    "notes-48",
+    "notes-49",
+    "notes-50",
+    "notes-51",
+    "notes-52"
+  ],
+  "personalityTraits": "personalitytraits-101",
+  "physical": {
+    "age": "age-83",
+    "eyes": "eyes-86",
+    "hair": "hair-88",
+    "height": "height-84",
+    "skin": "skin-87",
+    "weight": "weight-85"
+  },
+  "preparedSpells": [
+    {
+      "castTime": "casttime-65",
+      "concentration": true,
+      "level": 1,
+      "material": true,
+      "name": "name-64",
+      "notes": "notes-67",
+      "range": "range-66",
+      "ritual": true
+    },
+    {
+      "castTime": "casttime-70",
+      "concentration": true,
+      "level": 3,
+      "material": true,
+      "name": "name-69",
+      "notes": "notes-72",
+      "range": "range-71",
+      "ritual": true
+    }
+  ],
+  "proficiencyNotes": "proficiencynotes-90",
+  "resources": [
+    {
+      "current": 3,
+      "max": 1,
+      "name": "name-91",
+      "recovery": "recovery-94"
+    },
+    {
+      "current": 1,
+      "max": 2,
+      "name": "name-95",
+      "recovery": "recovery-98"
+    }
+  ],
+  "saveProf": {
+    "cha": false,
+    "con": true,
+    "dex": false,
+    "int": false,
+    "str": true,
+    "wis": true
+  },
+  "size": "size-73",
+  "skillProf": {
+    "skillprof-key-16": 3
+  },
+  "spellcasting": {
+    "ability": "ability-53",
+    "slotsByLevel": [
+      "slotsbylevel-54",
+      "slotsbylevel-55",
+      "slotsbylevel-56",
+      "slotsbylevel-57",
+      "slotsbylevel-58",
+      "slotsbylevel-59",
+      "slotsbylevel-60",
+      "slotsbylevel-61",
+      "slotsbylevel-62"
+    ]
+  },
+  "toolsLanguages": "toolslanguages-19",
+  "traits": "traits-89",
+  "treasure": "treasure-46",
+  "weapons": [
+    {
+      "bonus": "bonus-33",
+      "damage": "damage-34",
+      "name": "name-32",
+      "notes": "notes-35"
+    },
+    {
+      "bonus": "bonus-37",
+      "damage": "damage-38",
+      "name": "name-36",
+      "notes": "notes-39"
+    }
+  ]
+}

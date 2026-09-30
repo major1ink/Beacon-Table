@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -78,9 +79,9 @@ func TestCharacterService_Create_EmptyName(t *testing.T) {
 }
 
 // TestCharacterService_Create_DefaultSheet — новый персонаж сразу получает
-// domain.DefaultCharacterSheet() (характеристики по 10, уровень 1), а не
-// нулевой CharacterSheet{} — иначе первый рендер листа делил бы на модификатор
-// от несуществующей характеристики.
+// domain.DefaultCharacterSheet(), а не нулевой CharacterSheet{}: у него есть
+// словарь денег. Значения системы (уровень, характеристики) кладёт схема
+// мира, см. TestCharacterService_Create_SchemaDefaults.
 func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 	ctx := context.Background()
 	svc := service.NewCharacterService(memory.NewCharacterStore())
@@ -89,15 +90,15 @@ func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if c.Sheet.Abilities.Str != 10 || c.Sheet.Info.Level != 1 {
-		t.Fatalf("ожидали дефолтный лист (STR=10, уровень=1), получили %+v", c.Sheet)
+	if c.Sheet.Coins == nil {
+		t.Fatalf("ожидали дефолтный лист с деньгами, получили %+v", c.Sheet)
 	}
 
 	got, err := svc.Get(ctx, c.ID, "acc-1")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.Sheet.Abilities.Str != 10 {
+	if got.Sheet.Coins == nil {
 		t.Fatalf("Get вернул другой лист: %+v", got.Sheet)
 	}
 }
@@ -114,9 +115,7 @@ func TestCharacterService_UpdateSheet(t *testing.T) {
 	}
 
 	sheet := domain.DefaultCharacterSheet()
-	sheet.Abilities.Dex = 20
-	sheet.Info.Level = 5
-	sheet.Weapons = []domain.WeaponRow{{Name: "Скимитары", Bonus: "+9", Damage: "1к6 колющий"}}
+	sheet.Extra = domain.Extra{"abilities": json.RawMessage(`{"dex":20}`), "info": json.RawMessage(`{"level":5}`), "weapons": json.RawMessage(`[{"name":"Скимитары"}]`)}
 	if err := svc.UpdateSheet(ctx, c.ID, "acc-1", sheet); err != nil {
 		t.Fatalf("UpdateSheet: %v", err)
 	}
@@ -125,7 +124,7 @@ func TestCharacterService_UpdateSheet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.Sheet.Abilities.Dex != 20 || got.Sheet.Info.Level != 5 || len(got.Sheet.Weapons) != 1 {
+	if string(got.Sheet.Extra["abilities"]) != `{"dex":20}` || string(got.Sheet.Extra["info"]) != `{"level":5}` || got.Sheet.Extra["weapons"] == nil {
 		t.Fatalf("лист не сохранился как ожидалось: %+v", got.Sheet)
 	}
 

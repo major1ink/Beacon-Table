@@ -48,12 +48,9 @@ func TestParseRowsRejects(t *testing.T) {
 	cases := map[string]func(m map[string]any){
 		"владение без levels":     func(m map[string]any) { delete(column(m, "skills", 0), "levels") },
 		"владение из 4 состояний": func(m map[string]any) { column(m, "skills", 0)["levels"] = 4 },
-		"флажок в числе":          func(m map[string]any) { column(m, "skills", 0)["levels"] = 2 },
-		"тройка в флажке":         func(m map[string]any) { column(m, "saves", 0)["levels"] = 3 },
 		"levels у числа":          func(m map[string]any) { field(m, "dex")["levels"] = 2 },
 		"шкала без max":           func(m map[string]any) { delete(field(m, "fails"), "max") },
 		"шкала на 99":             func(m map[string]any) { field(m, "fails")["max"] = 99 },
-		"шкала не в число":        func(m map[string]any) { field(m, "fails")["path"] = "info.class" },
 		"кривой тон":              func(m map[string]any) { field(m, "fails")["tone"] = "loud" },
 		"roll у текста":           func(m map[string]any) { field(m, "dex")["type"] = "text"; field(m, "dex")["roll"] = "1d20" },
 		"битый бросок у числа":    func(m map[string]any) { field(m, "dex")["roll"] = "1d20 +" },
@@ -65,13 +62,11 @@ func TestParseRowsRejects(t *testing.T) {
 		"xp не в число": func(m map[string]any) {
 			m["layout"] = append(m["layout"].([]any), map[string]any{"widget": "xp", "bind": map[string]any{"xp": "prof"}})
 		},
-		"ability не select":   func(m map[string]any) { section(m, 2)["bind"].(map[string]any)["ability"] = "dex" },
-		"signed у шкалы":      func(m map[string]any) { field(m, "fails")["signed"] = true },
-		"max у числа":         func(m map[string]any) { field(m, "dex")["max"] = 3 },
-		"счётчик не в строку": func(m map[string]any) { column(m, "slots", 0)["path"] = "{key}.x" },
-		"счётчик в число":     func(m map[string]any) { field(m, "slots")["path"] = "combat" },
-		"путь без ключа":      func(m map[string]any) { column(m, "skills", 0)["path"] = "acrobatics" },
-		"путь в никуда":       func(m map[string]any) { field(m, "slots")["rows"].([]any)[0].(map[string]any)["key"] = "x" },
+		"ability не select": func(m map[string]any) { section(m, 2)["bind"].(map[string]any)["ability"] = "dex" },
+		"signed у шкалы":    func(m map[string]any) { field(m, "fails")["signed"] = true },
+		"max у числа":       func(m map[string]any) { field(m, "dex")["max"] = 3 },
+		"счётчик в число":   func(m map[string]any) { field(m, "slots")["path"] = "combat" },
+		"путь без ключа":    func(m map[string]any) { column(m, "skills", 0)["path"] = "acrobatics" },
 		"ключ дважды": func(m map[string]any) {
 			field(m, "saves")["rows"] = []any{map[string]any{"key": "a", "label": "A"}, map[string]any{"key": "a", "label": "B"}}
 		},
@@ -79,7 +74,6 @@ func TestParseRowsRejects(t *testing.T) {
 		"строка без подписи":   func(m map[string]any) { field(m, "saves")["rows"].([]any)[0].(map[string]any)["label"] = "" },
 		"rows у числа":         func(m map[string]any) { field(m, "dex")["rows"] = []any{map[string]any{"key": "a", "label": "A"}} },
 		"rows вместо statRows": func(m map[string]any) { field(m, "saves")["statRows"] = map[string]any{"name": "on", "value": "on"} },
-		"rows на строку":       func(m map[string]any) { field(m, "saves")["path"] = "info.class" },
 		"формула строки не колонке": func(m map[string]any) {
 			field(m, "skills")["rows"].([]any)[0].(map[string]any)["formulas"] = map[string]any{"nope": "1"}
 		},

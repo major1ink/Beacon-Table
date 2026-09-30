@@ -34,12 +34,14 @@ const (
 	legacyExpected = "testdata/world-v0.8.6.expected.json"
 )
 
-// filledSheet — лист, где заполнено каждое поле (спасброски — на все шесть
-// характеристик, как в настоящем листе, см. sqlite.decodeSheet).
-func filledSheet() domain.CharacterSheet {
+// filledSheet — лист D&D, где заполнено каждое поле (поля системы лежат в
+// Extra, см. testutil.DnDSheetJSON).
+func filledSheet(t *testing.T) domain.CharacterSheet {
+	t.Helper()
 	var sheet domain.CharacterSheet
-	testutil.Fill(&sheet)
-	sheet.SaveProf = map[string]bool{"str": true, "dex": false, "con": true, "int": false, "wis": true, "cha": false}
+	if err := json.Unmarshal(testutil.DnDSheetJSON(t), &sheet); err != nil {
+		t.Fatal(err)
+	}
 	return sheet
 }
 
@@ -134,7 +136,7 @@ func seedLegacyWorld(t *testing.T, m *CompanyManager) *domain.Company {
 	if err := chars.Create(ctx, &domain.Character{ID: "char-1", AccountID: "acc-player", Name: "Гвен", AvatarURL: url + "tokens/monster.webp"}); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := chars.UpdateSheet(ctx, "char-1", "acc-player", filledSheet()); err != nil || !ok {
+	if ok, err := chars.UpdateSheet(ctx, "char-1", "acc-player", filledSheet(t)); err != nil || !ok {
 		t.Fatalf("лист: ok=%v err=%v", ok, err)
 	}
 	var entry domain.InventoryEntry
@@ -143,7 +145,7 @@ func seedLegacyWorld(t *testing.T, m *CompanyManager) *domain.Company {
 	if _, err := chars.AddInventoryEntry(ctx, "char-1", "acc-player", entry); err != nil {
 		t.Fatal(err)
 	}
-	pregen := &domain.Pregen{ID: "pg-1", Name: "Пробный персонаж", AvatarURL: url + "tokens/monster.webp", Source: "ag-goblin-trouble", Sheet: filledSheet()}
+	pregen := &domain.Pregen{ID: "pg-1", Name: "Пробный персонаж", AvatarURL: url + "tokens/monster.webp", Source: "ag-goblin-trouble", Sheet: filledSheet(t)}
 	if err := sqlite.NewPregenStore(m.db, c.ID).Create(ctx, pregen); err != nil {
 		t.Fatal(err)
 	}

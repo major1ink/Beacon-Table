@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -25,8 +26,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 		t.Fatalf("ожидали обрезанное имя, получили %q", p.Name)
 	}
 	sheet := domain.DefaultCharacterSheet()
-	sheet.Info.Class = "Плут"
-	sheet.Info.Level = 3
+	sheet.Extra = domain.Extra{"info": json.RawMessage(`{"class":"Плут","level":3}`)}
 	sheet.Combat.HPMax = 21
 	if _, err := svc.Update(ctx, p.ID, "Шила", "http://x/a.png", "ag-goblin-trouble", sheet); err != nil {
 		t.Fatalf("Update: %v", err)
@@ -41,7 +41,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if c.AccountID != "acc-1" || c.Name != "Шила" || c.Sheet.Info.Class != "Плут" || c.Sheet.Combat.HPMax != 21 {
+	if c.AccountID != "acc-1" || c.Name != "Шила" || string(c.Sheet.Extra["info"]) != `{"class":"Плут","level":3}` || c.Sheet.Combat.HPMax != 21 {
 		t.Fatalf("лист не перенёсся в персонажа: %+v", c)
 	}
 	if avail, _ := svc.Available(ctx); len(avail) != 0 {

@@ -95,12 +95,13 @@ func TestSanitizersWithoutDnDRanges(t *testing.T) {
 	if m.Spells[0].Level != 15 || m.Spells[0].Name != "Щит" {
 		t.Errorf("заклинание статблока: %+v", m.Spells[0])
 	}
+	// Счётчики системы (спасброски от смерти, истощение) лежат в Extra листа и
+	// combat: их ограничивает только clampExtra.
 	sheet := domain.DefaultCharacterSheet()
-	sheet.Combat.DeathSaveFail = 5
-	sheet.Combat.Exhaustion = 50
+	sheet.Combat.Extra = domain.Extra{"deathSaveFail": json.RawMessage(`5`), "big": json.RawMessage(`"` + strings.Repeat("о", maxExtraValue) + `"`)}
 	got := sanitizeSheet(sheet)
-	if got.Combat.DeathSaveFail != 5 || got.Combat.Exhaustion != maxSheetExhaustion {
-		t.Errorf("счётчики листа: спасброски %d, истощение %d", got.Combat.DeathSaveFail, got.Combat.Exhaustion)
+	if string(got.Combat.Extra["deathSaveFail"]) != "5" || got.Combat.Extra["big"] != nil {
+		t.Errorf("Extra combat: %v", keysOf(got.Combat.Extra))
 	}
 }
 

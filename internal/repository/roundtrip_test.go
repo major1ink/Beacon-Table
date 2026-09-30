@@ -120,15 +120,16 @@ func TestRoundTrip_Condition(t *testing.T) {
 	sameJSON(t, "состояние", got, &c)
 }
 
-// filledSheet — лист, где заполнено каждое поле. Чтение накладывает лист
-// поверх DefaultCharacterSheet (см. sqlite.decodeSheet), где спасброски
-// заведены на все шесть характеристик, — в настоящем листе их тоже всегда
-// шесть, поэтому и здесь.
-func filledSheet() domain.CharacterSheet {
+// filledSheet — лист D&D, где заполнено каждое поле: поля системы лежат в
+// Extra (см. testutil.DnDSheetJSON), плюс один ключ, которого не знает ни
+// ядро, ни схема.
+func filledSheet(t *testing.T) domain.CharacterSheet {
+	t.Helper()
 	var sheet domain.CharacterSheet
-	testutil.Fill(&sheet)
-	sheet.SaveProf = map[string]bool{"str": true, "dex": false, "con": true, "int": false, "wis": true, "cha": false}
-	sheet.Extra = domain.Extra{"sanity": json.RawMessage(`{"value":60,"max":99}`)}
+	if err := json.Unmarshal(testutil.DnDSheetJSON(t), &sheet); err != nil {
+		t.Fatal(err)
+	}
+	sheet.Extra["sanity"] = json.RawMessage(`{"value":60,"max":99}`)
 	return sheet
 }
 
@@ -157,7 +158,7 @@ func TestRoundTrip_CharacterSheetAndInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sheet := filledSheet()
+	sheet := filledSheet(t)
 	if ok, err := store.UpdateSheet(ctx, "ch", "acc", sheet); err != nil || !ok {
 		t.Fatalf("UpdateSheet: ok=%v err=%v", ok, err)
 	}
@@ -197,7 +198,7 @@ func TestRoundTrip_Pregen(t *testing.T) {
 	var p domain.Pregen
 	testutil.Fill(&p)
 	p.ID = "pg"
-	p.Sheet = filledSheet()
+	p.Sheet = filledSheet(t)
 	if err := store.Create(ctx, &p); err != nil {
 		t.Fatal(err)
 	}

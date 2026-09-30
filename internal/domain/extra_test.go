@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"beacon-table/internal/testutil"
 )
 
 func TestExtraKeysSurvive(t *testing.T) {
@@ -43,11 +45,11 @@ func TestExtraOnSheetKeepsDefaults(t *testing.T) {
 	// Лист читается ПОВЕРХ листа по умолчанию (см. sqlite.decodeSheet):
 	// незнакомый ключ не должен сбивать это поведение.
 	sheet := DefaultCharacterSheet()
-	if err := json.Unmarshal([]byte(`{"info":{"level":3},"sanity":{"value":60,"max":99}}`), &sheet); err != nil {
+	if err := json.Unmarshal([]byte(`{"combat":{"ac":3},"sanity":{"value":60,"max":99}}`), &sheet); err != nil {
 		t.Fatal(err)
 	}
-	if sheet.Info.Level != 3 || sheet.Abilities.Str != 10 {
-		t.Fatalf("известные поля: %+v %+v", sheet.Info, sheet.Abilities)
+	if sheet.Combat.AC != 3 || sheet.Coins == nil {
+		t.Fatalf("известные поля и умолчания: %+v %v", sheet.Combat, sheet.Coins)
 	}
 	out, _ := json.Marshal(sheet)
 	if !strings.HasSuffix(string(out), `,"sanity":{"value":60,"max":99}}`) {
@@ -74,7 +76,7 @@ func TestExtraEmptyAndBroken(t *testing.T) {
 // Незнакомые ключи combat (поля системы — у D&D спасброски от смерти и
 // кость хитов) переживают чтение и запись листа.
 func TestExtraInsideCombatSurvives(t *testing.T) {
-	raw := `{"combat":{"ac":15,"hpMax":30,"hitDiceTotal":"5d10","deathSaveFail":2,"luck":{"a":[1,2]}},"homebrew":1}`
+	raw := `{"combat":{"ac":15,"hpMax":30,"hitDiceTotal":"5d10","luck":{"a":[1,2]}},"homebrew":1}`
 	var sheet CharacterSheet
 	if err := json.Unmarshal([]byte(raw), &sheet); err != nil {
 		t.Fatal(err)
@@ -82,7 +84,7 @@ func TestExtraInsideCombatSurvives(t *testing.T) {
 	if sheet.Combat.AC != 15 || sheet.Combat.HPMax != 30 {
 		t.Fatalf("известные поля combat: %+v", sheet.Combat)
 	}
-	if len(sheet.Combat.Extra) != 1 || string(sheet.Combat.Extra["luck"]) != `{"a":[1,2]}` {
+	if len(sheet.Combat.Extra) != 2 || string(sheet.Combat.Extra["luck"]) != `{"a":[1,2]}` {
 		t.Fatalf("Extra combat: %v", sheet.Combat.Extra)
 	}
 	out, err := json.Marshal(sheet)
@@ -96,5 +98,33 @@ func TestExtraInsideCombatSurvives(t *testing.T) {
 	combat, _ := back["combat"].(map[string]any)
 	if combat["luck"] == nil || combat["ac"] != float64(15) || back["homebrew"] != float64(1) {
 		t.Fatalf("после записи: %s", out)
+	}
+}
+
+// Полный лист D&D (каждое поле системы заполнено, в том числе вложенные
+// ключи combat) читается и пишется назад без потерь: после переезда полей
+// системы в Extra формат данных не меняется.
+func TestFullDnDSheetRoundTrip(t *testing.T) {
+	raw := testutil.DnDSheetJSON(t)
+	var sheet CharacterSheet
+	if err := json.Unmarshal(raw, &sheet); err != nil {
+		t.Fatal(err)
+	}
+	back, err := json.Marshal(sheet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want, got any
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(back, &got); err != nil {
+		t.Fatal(err)
+	}
+	if diff := testutil.JSONDiff(want, got); len(diff) > 0 {
+		t.Fatalf("лист изменился при круге: %v", diff)
+	}
+	if len(sheet.Extra) < 25 || len(sheet.Combat.Extra) < 7 {
+		t.Fatalf("поля системы должны лежать в Extra: лист %d ключей, combat %d", len(sheet.Extra), len(sheet.Combat.Extra))
 	}
 }

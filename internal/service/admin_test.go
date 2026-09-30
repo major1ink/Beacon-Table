@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -115,8 +116,7 @@ func TestAdminService_UpdateCharacterSheet_BypassesOwnership(t *testing.T) {
 	}
 
 	sheet := domain.DefaultCharacterSheet()
-	sheet.Abilities.Con = 18
-	sheet.Info.Level = 7
+	sheet.Extra = domain.Extra{"abilities": json.RawMessage(`{"con":18}`), "info": json.RawMessage(`{"level":7}`)}
 	if err := admin.UpdateCharacterSheet(ctx, c.ID, sheet); err != nil {
 		t.Fatalf("AdminService.UpdateCharacterSheet: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestAdminService_UpdateCharacterSheet_BypassesOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.Sheet.Abilities.Con != 18 || got.Sheet.Info.Level != 7 {
+	if string(got.Sheet.Extra["abilities"]) != `{"con":18}` || string(got.Sheet.Extra["info"]) != `{"level":7}` {
 		t.Fatalf("лист не сохранился как ожидалось: %+v", got.Sheet)
 	}
 
