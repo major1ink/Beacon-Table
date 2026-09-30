@@ -8,11 +8,10 @@ import { el } from "./card-shell.js";
 import { enhanceRolls } from "./inline-rolls.js";
 import { applyModifiers, TARGET_AC, TARGET_SPEED } from "./modifiers.js";
 import { glyphNode } from "./condition-glyphs.js";
-import { itemGlyphName } from "./item-glyph.js";
 import { formatWeight } from "./system-profile.js";
 
 // renderInventoryPreview — узел с update(); stand — select из stand.js.
-export function renderInventoryPreview(item, { stand, sendRoll }) {
+export function renderInventoryPreview(item, { stand, sendRoll, glyphName }) {
   const root = el("div", { class: "ip" });
   let equipped = true;
   root.update = () => {
@@ -24,7 +23,7 @@ export function renderInventoryPreview(item, { stand, sendRoll }) {
       equipped = toggle.checked;
       root.update();
     });
-    const icon = item.imageUrl ? el("img", { src: item.imageUrl, alt: "" }) : glyphNode(itemGlyphName(item), "");
+    const icon = item.imageUrl ? el("img", { src: item.imageUrl, alt: "" }) : glyphNode(glyphName(), "");
     const kv = [];
     if (who) {
       for (const [target, label] of [

@@ -20,7 +20,6 @@ import { renderStatEditor, loadTargets } from "../stat-editor.js";
 import { loadStand, renderStandSelect } from "../stand.js";
 import { el as hh, labeled, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { renderInventoryPreview } from "../inventory-preview.js";
-import { itemGlyphName } from "../item-glyph.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
@@ -31,6 +30,7 @@ import { loadSystemProfile, sheetKind } from "../system-profile.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
+import { medallionOf } from "../schema-list.js";
 
 // ==================== state ====================
 
@@ -168,10 +168,11 @@ function renderSchemaView(root, compiled) {
   const readOnly = !editMode;
   const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, item) });
   const stand = renderStandSelect(standEntries);
-  const preview = renderInventoryPreview(item, { stand, sendRoll });
-  const head = cardHead(compiled, item, itemGlyphName(item));
+  const fallbackGlyph = () => (medallionOf(compiled, item) || {}).glyph || "box";
+  const preview = renderInventoryPreview(item, { stand, sendRoll, glyphName: fallbackGlyph });
+  const head = cardHead(compiled, item, fallbackGlyph());
   const refreshHead = () => {
-    const next = cardHead(compiled, item, itemGlyphName(item));
+    const next = cardHead(compiled, item, fallbackGlyph());
     subtitle.textContent = cardSubtitle(compiled, item);
     hero.setGlyph(next.glyph, item.imageUrl);
     hero.setColor(next.color);

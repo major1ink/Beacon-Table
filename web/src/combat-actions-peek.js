@@ -17,9 +17,9 @@
 // бестиарии. Ссылки .catalog-ref (@UUID из модулей Foundry) тоже живые —
 // wireCatalogLinks, как и везде.
 //
-// У системы со схемой существа (internal/schema) попап собирается по ней:
-// плитки характеристик и поля боевой части (schema-summary.js: compactStats,
-// peekSections), кубы — кнопками. Без схемы — прежний статблок D&D.
+// Попап собирается по схеме существа (internal/schema): плитки
+// характеристик и поля боевой части (schema-summary.js: compactStats,
+// peekSections), кубы — кнопками.
 //
 // Своей истины модуль не держит: статблок тянется с сервера по monsterId и
 // кэшируется на время жизни страницы — правка статблока в соседнем окне
@@ -57,7 +57,6 @@ const CSS = `
 .actions-peek-head button:hover { color: var(--text); }
 .actions-peek-meta { font-size: 11.5px; opacity: 0.75; }
 .actions-peek-meta strong { opacity: 0.7; font-weight: 600; }
-.actions-peek-abilities { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
 .actions-peek-ability {
   display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 0;
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
@@ -142,36 +141,6 @@ export function isActionsPeekOpen(combatantId) {
   return !!openPeek && (!combatantId || openPeek.combatantId === combatantId);
 }
 
-const ABILITY_LABELS = [
-  ["str", "СИЛ"],
-  ["dex", "ЛОВ"],
-  ["con", "ТЕЛ"],
-  ["int", "ИНТ"],
-  ["wis", "МДР"],
-  ["cha", "ХАР"],
-];
-
-function fmtMod(n) {
-  return n >= 0 ? "+" + n : String(n);
-}
-
-// BLOCKS — что и в каком порядке показываем. Ровно боевая часть статблока:
-// описание/лор сюда не идёт (за ним — полная карточка), заклинания и
-// инвентарь тоже: их рендер живёт в bestiary.js и тянет свои запросы.
-const BLOCKS = [
-  ["Особенности", (m) => m.traits],
-  ["Действия", (m) => m.actions],
-  ["Бонусные действия", (m) => m.bonusActions],
-  ["Реакции", (m) => m.reactions],
-  // Вступление к легендарным ("может совершить 3 легендарных действия…")
-  // склеиваем с самими действиями ПУСТОЙ СТРОКОЙ, а не оборачиваем в <p>:
-  // после HTML-блока marked считает следующие строки его продолжением и
-  // markdown в них уже не разбирает — жирные названия действий остались бы
-  // текстом "**Рывок.**".
-  ["Легендарные действия", (m) => [m.legendaryActionsIntro, m.legendaryActions].filter(Boolean).join("\n\n")],
-  ["Логово", (m) => m.lairActions],
-];
-
 // openActionsPeek — показать попап.
 //
 //   combatant — боец из combat_state (нужны monsterId и name);
@@ -246,10 +215,8 @@ function render(el, monster, combatant, send, pinned) {
   };
 
   const compiled = compiledMonster();
-  const subtitle = compiled ? cardSubtitle(compiled, monster) : [monster.size, monster.type, monster.cr ? "ПО " + monster.cr : ""].filter(Boolean).join(", ");
-  el.appendChild(renderHead(combatant, subtitle, pinned));
-  if (compiled) renderSchemaBody(el, compiled, monster, sendRoll);
-  else renderLegacyBody(el, monster, sendRoll);
+  el.appendChild(renderHead(combatant, cardSubtitle(compiled, monster), pinned));
+  renderSchemaBody(el, compiled, monster, sendRoll);
 }
 
 function renderHead(combatant, subtitle, pinned) {
@@ -422,44 +389,6 @@ function renderSchemaBody(el, compiled, monster, sendRoll) {
     el.append(...nodes);
   }
   if (!any && !tiles.length) el.appendChild(hintLine(EMPTY_HINT));
-}
-
-// renderLegacyBody — статблок D&D (система без схемы существа).
-function renderLegacyBody(el, monster, sendRoll) {
-  // Строки, которых нет в карточке бойца трекера (КД/HP/инициатива там уже
-  // есть, и дублировать их незачем): скорость, чувства, спасброски, навыки.
-  for (const [label, value] of [
-    ["Скорость", monster.speed],
-    ["Чувства", monster.senses],
-    ["Спасброски", monster.savingThrows],
-    ["Навыки", monster.skills],
-    ["Иммунитет к состояниям", monster.conditionImmunities],
-    ["Сопротивление урону", monster.damageResistances],
-    ["Иммунитет к урону", monster.damageImmunities],
-    ["Уязвимость к урону", monster.damageVulnerabilities],
-  ]) {
-    if (!value || !String(value).trim()) continue;
-    el.appendChild(metaLine(label, value, sendRoll));
-  }
-
-  const abilities = monster.abilities || {};
-  const grid = document.createElement("div");
-  grid.className = "actions-peek-abilities";
-  for (const [key, label] of ABILITY_LABELS) {
-    const score = abilities[key] ?? 10;
-    grid.appendChild(abilityCell(label, `${score} (${fmtMod(Math.floor((score - 10) / 2))})`));
-  }
-  el.appendChild(grid);
-  enhanceRolls(grid, sendRoll); // клик по модификатору = проверка характеристики
-
-  let any = false;
-  for (const [title, get] of BLOCKS) {
-    const raw = get(monster);
-    if (!raw || !String(raw).trim()) continue;
-    any = true;
-    el.append(titleLine(title), textBlock(raw, sendRoll));
-  }
-  if (!any) el.appendChild(hintLine(EMPTY_HINT));
 }
 
 // Клик мимо и Esc закрывают попап — тот же контракт, что у палитры

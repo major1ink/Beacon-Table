@@ -23,7 +23,7 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { inApp } from "../native-app.js";
 import { el as hh, labeled, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { glyphNode } from "../condition-glyphs.js";
-import { monsterGlyphName, renderMonsterPreview } from "../monster-block.js";
+import { renderMonsterPreview } from "../monster-preview.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
@@ -32,6 +32,7 @@ import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
 import { coreSummary } from "../schema-summary.js";
+import { medallionOf } from "../schema-list.js";
 
 // ==================== state ====================
 
@@ -189,7 +190,7 @@ function compatFold(readOnly, onPills) {
 function renderSchemaView(root, compiled) {
   const readOnly = !editMode;
   const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, monster) });
-  const fallbackGlyph = () => monsterGlyphName(monster);
+  const fallbackGlyph = () => (medallionOf(compiled, monster) || {}).glyph || "hood";
   const head = cardHead(compiled, monster, fallbackGlyph());
   const refreshHead = () => {
     const next = cardHead(compiled, monster, fallbackGlyph());
@@ -220,6 +221,7 @@ function renderSchemaView(root, compiled) {
   root.appendChild(ornament());
   const preview = renderMonsterPreview(monster, {
     glyphNode,
+    glyphName: fallbackGlyph,
     numbers: () => {
       const c = coreSummary(compiled, monster, []);
       return { ini: c.initiative, ac: c.ac || "—", hp: c.hpMax || "—" };

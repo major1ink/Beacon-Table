@@ -3,7 +3,7 @@
 // dm.html/player.html, с параметрами через query string: type
 // (creatures|spells|items|reference), system (0|1 — какой корень дерева:
 // Beacon Table/Пользовательские), role (dm|player — только для виджета
-// "добавить заклинание"), kind (для reference) / category (для items),
+// "добавить заклинание"), category (подраздел из list.categories схемы),
 // title (заголовок окна).
 //
 // Функционально — перенос renderBestiaryRows/renderSpellRows/renderItemRows/
@@ -35,9 +35,6 @@ import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
 import { glyphNode } from "../condition-glyphs.js";
-import { rarityKey, rarityRank, rarityColor } from "../item-rarity.js";
-import { kindRank } from "../reference-kind.js";
-import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
 import { initFullscreenButton } from "../fullscreen.js";
@@ -53,59 +50,14 @@ const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
 const systemScope = qs.get("system") === "1";
 const role = qs.get("role") === "dm" ? "dm" : "player";
-const kind = qs.get("kind") || "";
 const category = qs.get("category") || "";
 const title = qs.get("title") || "Компендиум";
-
-function spellLevelLabel(lvl) {
-  return lvl ? lvl + "-й круг" : "Заговор";
-}
-
-function spellGroupLabel(lvl) {
-  return lvl ? lvl + "-й круг" : "Заговоры";
-}
 
 // «Адское возмездие [Hellish Rebuke]» → { ru, en }.
 function splitName(name) {
   const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name || "");
   return m ? { ru: m[1], en: m[2] } : { ru: name || "", en: "" };
 }
-
-function spellClasses(s) {
-  return String(s.classes || "").split(/[,;/]/).map((c) => c.trim()).filter(Boolean);
-}
-
-const CR_ORDER = ["", "0", "1/8", "1/4", "1/2", ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
-
-function crKey(cr) {
-  return String(cr || "").trim();
-}
-
-function crLabel(cr) {
-  return cr ? "ПО " + cr : "ПО —";
-}
-
-function crGroupLabel(cr) {
-  return cr ? "ПО " + cr : "ПО — (без уровня опасности)";
-}
-
-function crRank(cr) {
-  const i = CR_ORDER.indexOf(cr);
-  return i === -1 ? CR_ORDER.length : i;
-}
-
-function capitalize(t) {
-  t = String(t || "").trim();
-  return t ? t[0].toUpperCase() + t.slice(1) : "";
-}
-
-// «зверь (динозавр)» → «Зверь».
-function monsterBaseType(m) {
-  const t = capitalize(String(m.type || "").replace(/\s*\(.*$/, ""));
-  return t ? [t] : [];
-}
-
-
 
 function bySource(x) {
   const src = String(x.source || "").trim();
@@ -234,15 +186,6 @@ const CONFIGS = {
     mapOne: mapFoundryMonsterJson,
     avatar: true,
     avatarIcon: "creature",
-    searchHay: (m) => [m.name, m.type, ...(m.tags || [])],
-    badge: (m) => [crLabel(crKey(m.cr)), (m.source || "").trim()],
-    sidebar: [
-      { id: "cr", title: "ПО", kind: "chips", values: CR_ORDER, label: (v) => v || "—", of: (m) => [crKey(m.cr)] },
-      { id: "type", title: "Тип", kind: "list", of: monsterBaseType },
-    ],
-    groupKey: (m) => crKey(m.cr),
-    groupLabel: crGroupLabel,
-    groupSort: (a, b) => crRank(a) - crRank(b),
     draggable: true,
     dragMime: "application/x-beacon-monster",
     createPlaceholder: "Имя нового монстра",
@@ -259,21 +202,6 @@ const CONFIGS = {
     detailUrl: (id, o) => `/spellbook.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     mapOne: mapFoundrySpellJson,
     avatar: false,
-    searchHay: (s) => [s.name, s.school, s.classes, ...(s.tags || [])],
-    badge: (s) => (s.source || "").trim(),
-    badgeTitle: (s) => spellLevelLabel(s.level),
-    flags: (s) => [s.concentration && ["К", "Концентрация"], s.ritual && ["Р", "Ритуал"]].filter(Boolean),
-    sidebar: [
-      { id: "level", title: "Круг", kind: "chips", values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], label: String, of: (s) => [s.level || 0] },
-      { id: "props", title: "Свойства", kind: "toggles", items: [
-        { key: "concentration", label: "Концентрация", icon: "eye" },
-        { key: "ritual", label: "Ритуал", icon: "scroll" },
-      ] },
-      { id: "cls", title: "Класс", kind: "list", of: spellClasses },
-    ],
-    groupKey: (s) => s.level || 0,
-    groupLabel: spellGroupLabel,
-    groupSort: (a, b) => a - b,
     createPlaceholder: "Имя нового заклинания",
     emptyUser: "Своих заклинаний пока нет — создай или импортируй первое выше.",
     deleteConfirm: (s) => `Удалить «${s.name}» из библиотеки?`,
@@ -290,23 +218,10 @@ const CONFIGS = {
     mapOne: mapFoundryItemJson,
     avatar: true,
     avatarIcon: "backpack",
-    searchHay: (it) => [it.name, it.type, it.rarity, ...(it.tags || [])],
-    badge: (it) => [it.rarity || "", (it.source || "").trim()],
-    badgeColor: (it, text) => (text === it.rarity ? rarityColor(it.rarity) : ""),
-    flags: (it) => (it.requiresAttunement ? [["Н", "Требует настройки"]] : []),
-    sidebar: [
-      { id: "rarity", title: "Редкость", kind: "list", of: (it) => (rarityKey(it.rarity) ? [capitalize(rarityKey(it.rarity))] : []) },
-      { id: "props", title: "Свойства", kind: "toggles", items: [{ key: "requiresAttunement", label: "Настройка", icon: "zap" }] },
-      { id: "source", title: "Источник", kind: "list", of: bySource },
-    ],
-    groupKey: (it) => rarityKey(it.rarity),
-    groupLabel: (r) => capitalize(r) || "Без редкости",
-    groupSort: (a, b) => rarityRank(a) - rarityRank(b),
     createPlaceholder: "Имя нового предмета",
     emptyUser: "Своих предметов пока нет — создай или импортируй первый выше.",
     deleteConfirm: (it) => `Удалить «${it.name}» из библиотеки?`,
     savedMessageType: "beacon:itemSaved",
-    extraFilter: category ? (it) => classifyItemType(it.type) === category : null,
   },
   reference: {
     fetchAll: fetchReferences,
@@ -319,22 +234,10 @@ const CONFIGS = {
     batchEmptyMsg: "Не удалось распознать ни одной записи справочника (нужен класс/архетип/черта Foundry VTT).",
     avatar: true,
     avatarIcon: "scroll",
-    searchHay: (ref) => [ref.name, ref.kind, ref.parentName, ref.source, ...(ref.tags || [])],
-    badge: (ref) => (ref.source || "").trim(),
-    subText: (ref) => [splitName(ref.name).en, ref.parentName].filter(Boolean).join(" · "),
-    sidebar: [
-      { id: "kind", title: "Тип записи", kind: "list", of: (ref) => (ref.kind ? [capitalize(ref.kind)] : []) },
-      { id: "parent", title: "Класс", kind: "list", of: (ref) => (ref.parentName ? [ref.parentName] : []) },
-      { id: "tags", title: "Метки", kind: "list", of: byTags },
-    ],
-    groupKey: (ref) => String(ref.kind || "").trim().toLowerCase(),
-    groupLabel: (k) => capitalize(k) || "Без типа",
-    groupSort: (a, b) => kindRank(a) - kindRank(b) || a.localeCompare(b, "ru"),
     createPlaceholder: "Имя новой записи",
     emptyUser: "Своих записей пока нет — создай или импортируй первую выше.",
     deleteConfirm: (ref) => `Удалить «${ref.name}» из библиотеки?`,
     savedMessageType: "beacon:referenceSaved",
-    extraFilter: kind ? (ref) => classifyReferenceKind(ref.kind) === kind : null,
   },
   conditions: {
     fetchAll: fetchConditions,

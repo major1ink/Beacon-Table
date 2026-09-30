@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
-import { abilityMod, ABILITIES, crColor, fmtMod, monsterGlyphName } from "../src/monster-block.js";
+import { abilityMod, ABILITIES, crColor, fmtMod, monsterGlyphName } from "./legacy-taxonomy.js";
 import { createEvaluator, compileSchema } from "../src/schema-formula.js";
 import { catalogConfig, cardSubtitle, displayValue, medallionOf, pillsOf } from "../src/schema-list.js";
 import { compactStats, coreSummary } from "../src/schema-summary.js";

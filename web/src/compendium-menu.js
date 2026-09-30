@@ -3,27 +3,21 @@
 // opts.sticky: true — не закрывается по клику мимо/Esc, только своей
 // кнопкой ✕ в шапке ниже, см. mountCompendiumMenu). Два корня (Beacon Table
 // = System:true записи, Пользовательские = System:false), под каждым —
-// плоский список категорий + вложенный "Снаряжение" с подкатегориями (см.
-// compendium-taxonomy.js). Дерево само ничего не грузит с сервера (ни
+// плоский список категорий + вложенный "Снаряжение" с подкатегориями (из
+// list.categories схемы системы). Дерево само ничего не грузит с сервера (ни
 // счётчиков, ни списков) — просто открывает список конкретной категории
 // отдельным плавающим окном (см. catalog.js), тем же способом, что карточки
 // монстра/заклинания/предмета/справочника уже открываются из dm.js/player.js.
 import { icon } from "./icons.js";
 import { openFloatingWindow } from "./floating-window.js";
-import { ITEM_SUBCATEGORIES } from "./compendium-taxonomy.js";
 import { loadSchemas, schemaFor } from "./schemas.js";
 
-// FLAT_CATEGORIES — порядок как на референсе (TTG Club): Существа,
-// Заклинания, потом разбор Reference.Kind на 4 узла (см.
-// compendium-taxonomy.js: REFERENCE_GROUPS). "Снаряжение" достраивается
-// отдельно (см. buildRoot) — у него есть свои подкатегории, у остальных нет.
+// FLAT_CATEGORIES — порядок как на референсе (TTG Club). Справочник и
+// «Предметы» достраиваются отдельно (см. buildRoot): их подразделы задаёт
+// схема системы.
 const FLAT_CATEGORIES = [
   { id: "creatures", label: "Существа", type: "creatures", dmOnly: true },
   { id: "spells", label: "Заклинания", type: "spells" },
-  { id: "class", label: "Классы", type: "reference", kind: "class" },
-  { id: "species", label: "Виды", type: "reference", kind: "species" },
-  { id: "background", label: "Предыстории", type: "reference", kind: "background" },
-  { id: "trait", label: "Черты", type: "reference", kind: "trait" },
   // «Состояния» (см. domain.Condition) — свой узел, а не часть справочника:
   // это не текст для чтения, а карточки, которые вешаются метками на токены
   // (см. web/src/status-palette.js). Доступны не только ДМ — игроку нужно
@@ -31,18 +25,17 @@ const FLAT_CATEGORIES = [
   { id: "conditions", label: "Состояния", type: "conditions" },
 ];
 
-function catalogUrl({ type, system, kind, category, role, label }) {
+function catalogUrl({ type, system, category, role, label }) {
   const params = new URLSearchParams({ type, system: system ? "1" : "0", role, title: label });
-  if (kind) params.set("kind", kind);
   if (category) params.set("category", category);
   return "/catalog.html?" + params.toString();
 }
 
-function openCategory({ type, system, kind, category, role, label }) {
+function openCategory({ type, system, category, role, label }) {
   openFloatingWindow({
-    key: `catalog-${system ? 1 : 0}-${type}-${kind || category || ""}`,
+    key: `catalog-${system ? 1 : 0}-${type}-${category || ""}`,
     title: label,
-    url: catalogUrl({ type, system, kind, category, role, label }),
+    url: catalogUrl({ type, system, category, role, label }),
     width: 760,
     height: 640,
   });
@@ -82,11 +75,6 @@ function collapsible(label, { className, startOpen }) {
   return { wrap, body };
 }
 
-// buildRoot — категории одного корня. Подразделы справочника (классы,
-// виды…) и снаряжения (оружие, доспехи…) — разбор полей D&D (см.
-// compendium-taxonomy.js): у системы со схемой справочника или предметов
-// (schemas.js) вместо них один пункт «Справочник» / «Предметы» — группы и
-// фильтры там задаёт схема (см. pages/catalog.js).
 // categoryLabels — подписи категорий схемы вида (list.categories): по
 // порядку правил, «остальное» последним.
 function categoryLabels(kind) {
@@ -94,40 +82,32 @@ function categoryLabels(kind) {
   return c ? [...c.rules.map((r) => r.label), c.other].filter(Boolean) : [];
 }
 
+// kindNodes — справочник или предметы: пункт на всё или подразделы схемы
+// (предметы — вложенным «Снаряжением»).
+function kindNodes(body, system, role, { kind, type, single, group }) {
+  if (!schemaFor(kind)) return;
+  const labels = categoryLabels(kind);
+  if (!labels.length) {
+    body.appendChild(leafNode(single, () => openCategory({ type, system, role, label: single })));
+    return;
+  }
+  let into = body;
+  if (group) {
+    const gear = collapsible(group, { className: "compendium-group", startOpen: false });
+    body.appendChild(gear.wrap);
+    into = gear.body;
+  }
+  for (const name of labels) into.appendChild(leafNode(name, () => openCategory({ type, system, category: name, role, label: name })));
+}
+
 function buildRoot(system, label, role, startOpen) {
   const { wrap, body } = collapsible(label, { className: "compendium-root", startOpen });
-  const refSchema = !!schemaFor("reference");
-  let refDone = false;
   for (const cat of FLAT_CATEGORIES) {
     if (cat.dmOnly && role !== "dm") continue;
-    if (refSchema && cat.type === "reference") {
-      if (refDone) continue;
-      refDone = true;
-      const labels = categoryLabels("reference");
-      if (!labels.length) body.appendChild(leafNode("Справочник", () => openCategory({ type: "reference", system, role, label: "Справочник" })));
-      for (const name of labels) body.appendChild(leafNode(name, () => openCategory({ type: "reference", system, category: name, role, label: name })));
-      continue;
-    }
-    body.appendChild(
-      leafNode(cat.label, () => openCategory({ type: cat.type, system, kind: cat.kind, role, label: cat.label }))
-    );
+    body.appendChild(leafNode(cat.label, () => openCategory({ type: cat.type, system, role, label: cat.label })));
+    if (cat.id === "spells") kindNodes(body, system, role, { kind: "reference", type: "reference", single: "Справочник" });
   }
-  if (schemaFor("item")) {
-    const labels = categoryLabels("item");
-    if (!labels.length) {
-      body.appendChild(leafNode("Предметы", () => openCategory({ type: "items", system, role, label: "Предметы" })));
-      return wrap;
-    }
-    const gear = collapsible("Снаряжение", { className: "compendium-group", startOpen: false });
-    for (const name of labels) gear.body.appendChild(leafNode(name, () => openCategory({ type: "items", system, category: name, role, label: name })));
-    body.appendChild(gear.wrap);
-    return wrap;
-  }
-  const gear = collapsible("Снаряжение", { className: "compendium-group", startOpen: false });
-  for (const sub of ITEM_SUBCATEGORIES) {
-    gear.body.appendChild(leafNode(sub, () => openCategory({ type: "items", system, category: sub, role, label: sub })));
-  }
-  body.appendChild(gear.wrap);
+  kindNodes(body, system, role, { kind: "item", type: "items", single: "Предметы", group: "Снаряжение" });
   return wrap;
 }
 

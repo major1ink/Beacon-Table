@@ -157,40 +157,10 @@ async function loadCard(card, force = false) {
   editor?.repaint();
 }
 
-function abilityMod(score) {
-  const n = Math.floor(((score || 0) - 10) / 2);
-  return n >= 0 ? "+" + n : String(n);
-}
-
-const ABILITIES = [
-  ["str", "Сил"],
-  ["dex", "Лов"],
-  ["con", "Тел"],
-  ["int", "Инт"],
-  ["wis", "Муд"],
-  ["cha", "Хар"],
-];
-
-function abilitiesRow(abilities) {
-  return createElement(
-    "div",
-    { className: "board-card-abilities", key: "ab" },
-    ABILITIES.map(([k, label]) => {
-      const v = (abilities && abilities[k]) || 10;
-      return createElement("div", { className: "board-card-ability", key: k }, [
-        createElement("span", { className: "board-card-ability-label", key: "l" }, label),
-        createElement("span", { key: "v" }, v + " (" + abilityMod(v) + ")"),
-      ]);
-    })
-  );
-}
-
-// compiledSchema — схема вида kind системы мира, разобранная один раз; null
-// — у системы старые лист и статблок D&D.
+// compiledSchema — схема вида kind системы мира, разобранная один раз.
 const compiledSchemas = new Map();
 function compiledSchema(kind) {
   const s = schemaFor(kind);
-  if (!s) return null;
   const got = compiledSchemas.get(kind);
   if (got && got.schema === s) return got;
   const c = compileSchema(s);
@@ -293,31 +263,7 @@ function renderMonsterCard(card) {
   }
   if (got.error) return cardMessage("monster", "Монстр недоступен: " + got.error);
   const m = got.data;
-  const compiled = compiledSchema("monster");
-  if (compiled) return renderSchemaMonsterCard(card, m, compiled);
-  const subtitle = [m.size, m.type].filter(Boolean).join(" ") + (m.alignment ? ", " + m.alignment : "");
-  const hp = m.hp ? String(m.hp) + (m.hitDice ? " (" + m.hitDice + ")" : "") : "—";
-  const ac = m.ac ? String(m.ac) + (m.acNote ? " (" + m.acNote + ")" : "") : "—";
-  return cardShell("monster", [
-    cardHead({
-      image: m.imageUrl,
-      name: m.name,
-      subtitle,
-      onOpen: () => openMonster(card.id, m.name),
-      openTitle: "Открыть статблок",
-    }),
-    createElement("div", { className: "board-card-stats", key: "stats" }, [
-      statCell("КД", ac, "ac"),
-      statCell("Хиты", hp, "hp"),
-      statCell("Скорость", m.speed || "—", "spd"),
-    ]),
-    abilitiesRow(m.abilities),
-    createElement("div", { className: "board-card-foot", key: "foot" }, [
-      createElement("span", { key: "cr" }, "Опасность " + (m.cr || "—")),
-      m.proficiencyBonus ? createElement("span", { key: "pb" }, "Мастерство +" + m.proficiencyBonus) : null,
-    ]),
-    monsterControls(card, m),
-  ]);
+  return renderSchemaMonsterCard(card, m, compiledSchema("monster"));
 }
 
 // renderSchemaMonsterCard — существо по схеме системы: подпись из
@@ -367,31 +313,7 @@ function renderCharacterCard(card) {
   if (got.error) return cardMessage("character", "Лист недоступен: " + got.error);
   const c = got.data;
   const sheet = c.sheet || {};
-  const compiled = compiledSchema("sheet");
-  if (compiled) return renderSchemaCharacterCard(card, c, sheet, compiled);
-  const info = sheet.info || {};
-  const combat = sheet.combat || {};
-  const who = [info.class, info.level ? info.level + " ур." : ""].filter(Boolean).join(" ");
-  const kin = info.species || info.race || "";
-  const player = info.playerName || c.accountUsername || "";
-  const subtitle = [who, kin].filter(Boolean).join(" · ") + (player ? " — " + player : "");
-  let hp = combat.hpMax ? (combat.hpCurrent || 0) + " / " + combat.hpMax : "—";
-  if (combat.hpTemp) hp += " +" + combat.hpTemp;
-  return cardShell("character", [
-    cardHead({
-      image: c.avatarUrl,
-      name: c.name,
-      subtitle,
-      onOpen: () => openCharacter(card.id, c.name),
-      openTitle: "Открыть лист персонажа",
-    }),
-    createElement("div", { className: "board-card-stats", key: "stats" }, [
-      statCell("КД", combat.ac ? String(combat.ac) : "—", "ac"),
-      statCell("Хиты", hp, "hp"),
-      statCell("Скорость", combat.speed ? combat.speed + " фт." : "—", "spd"),
-    ]),
-    abilitiesRow(sheet.abilities),
-  ]);
+  return renderSchemaCharacterCard(card, c, sheet, compiledSchema("sheet"));
 }
 
 // renderSchemaCharacterCard — персонаж по схеме листа: подпись из
@@ -673,10 +595,8 @@ function pickRowText(row, main, meta) {
 
 async function pickMonster() {
   const list = await fetchBestiary().catch(() => []);
-  // Подпись строки — по схеме существа (list.subtitle), без неё — тип и
-  // опасность статблока D&D.
   const compiled = compiledSchema("monster");
-  const sub = (m) => (compiled ? cardSubtitle(compiled, m) : [m.type, m.cr ? "опасность " + m.cr : ""].filter(Boolean).join(" · "));
+  const sub = (m) => cardSubtitle(compiled, m);
   const picked = await pickFromList({
     title: "Монстр на доску",
     okLabel: "Вставить",

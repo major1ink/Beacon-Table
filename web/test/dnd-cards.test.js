@@ -5,11 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
-import { itemGlyphName } from "../src/item-glyph.js";
-import { rarityColor, rarityKey } from "../src/item-rarity.js";
-import { classifyItemType, classifyReferenceKind } from "../src/compendium-taxonomy.js";
-import { kindInfo, kindKey, kindLabel } from "../src/reference-kind.js";
-import { schoolInfo } from "../src/spell-school.js";
+import { classifyItemType, classifyReferenceKind, itemGlyphName, kindInfo, kindKey, kindLabel, rarityColor, rarityKey, schoolInfo } from "./legacy-taxonomy.js";
 import { compileSchema } from "../src/schema-formula.js";
 import { catalogConfig, categoriesOf, medallionOf, pillsOf } from "../src/schema-list.js";
 

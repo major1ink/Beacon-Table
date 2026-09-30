@@ -3,7 +3,7 @@
 // скорость, инициатива), короткие плитки характеристик и боевая часть
 // карточки. Без DOM: читают попап «чем ходит монстр»
 // (combat-actions-peek.js), карточки на досках (pages/board.js) и превью
-// существа «На карте и в трекере» (monster-block.js).
+// существа «На карте и в трекере» (monster-preview.js).
 import { statTarget } from "./modifiers.js";
 import { createEvaluator } from "./schema-formula.js";
 import { displayValue } from "./schema-list.js";
