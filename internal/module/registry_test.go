@@ -150,8 +150,6 @@ func TestManifestUnitsAndCurrencies(t *testing.T) {
 		"единицы у контента":  manifestJSON("a", "1.0.0", `"units":{"weight":"кг"}`),
 		"валюта дважды":       system(`"currencies":[{"key":"gp","label":"ЗМ"},{"key":"gp","label":"ЗМ"}]`),
 		"кривой ключ":         system(`"currencies":[{"key":"Gold","label":"ЗМ"}]`),
-		"лист у контента":     manifestJSON("a", "1.0.0", `"sheet":"universal"`),
-		"кривой вид листа":    system(`"sheet":"Big Sheet"`),
 		"броски у контента":   manifestJSON("a", "1.0.0", `"rolls":{"check":"1d20"}`),
 		"проверка без куба":   system(`"rolls":{"check":"5"}`),
 		"проверка со ссылкой": system(`"rolls":{"check":"1d20 + @dex"}`),
@@ -168,9 +166,6 @@ func TestManifestUnitsAndCurrencies(t *testing.T) {
 	}
 	if m.Units.Weight != "фнт" || len(m.Currencies) != 1 {
 		t.Fatalf("разобрано: %+v %+v", m.Units, m.Currencies)
-	}
-	if m, err := ParseManifest([]byte(system(`"sheet":"pathfinder-2e"`))); err != nil || m.Sheet != "pathfinder-2e" {
-		t.Fatalf("вид листа: %v %+v", err, m)
 	}
 	for _, check := range []string{" 2к6 ", "1d20+1", ""} {
 		if _, err := ParseManifest([]byte(system(`"rolls":{"check":"` + check + `"}`))); err != nil {

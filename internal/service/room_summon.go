@@ -58,11 +58,7 @@ func (r *Room) summonableMonsters() []summonable {
 		if !r.canSummon(m) {
 			continue
 		}
-		sub := sch.Subtitle(m)
-		if sch == nil && m.CR != "" {
-			sub = "ПО " + m.CR
-		}
-		out = append(out, summonable{ID: m.ID, Name: m.Name, ImageURL: m.ImageURL, Size: m.Size, Subtitle: sub})
+		out = append(out, summonable{ID: m.ID, Name: m.Name, ImageURL: m.ImageURL, Size: m.Size, Subtitle: sch.Subtitle(m)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

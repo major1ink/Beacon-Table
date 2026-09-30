@@ -36,7 +36,6 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 			Combat:          dndCombatRules(),
 			ModifierTargets: dndModifierTargets(),
 			Units:           &domain.SystemUnits{Weight: "фнт"},
-			Sheet:           s.id,
 			Currencies:      dndCurrencies(),
 			Importers:       []string{"foundry-dnd5e", "lss"},
 		})

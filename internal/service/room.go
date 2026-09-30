@@ -336,9 +336,8 @@ func (r *Room) combatRules() *domain.CombatRules {
 	return r.rules
 }
 
-// schemaFor — схема вида kind (schema.KindSheet, KindMonster…) системы мира;
-// nil — у системы старый бланк без схем (ссылки в формулах — только пути в
-// JSON). Комната без схем (тесты) — встроенные схемы «Своей системы».
+// schemaFor — схема вида kind (schema.KindSheet, KindMonster…) системы мира.
+// Комната без схем (тесты) — встроенные схемы «Своей системы».
 func (r *Room) schemaFor(kind string) *schema.Schema {
 	if kind == "" {
 		return nil

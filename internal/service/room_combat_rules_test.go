@@ -293,16 +293,6 @@ func TestInitiativeFormulaEdgeCases(t *testing.T) {
 	if got := add(r, monster(`{"id":"c","name":"Волк","initiative":"1d20 + @speed / 10","speed":"30"}`)); got != 9 || len(roller.formulas) != 1 || roller.formulas[0] != "1d20+3" {
 		t.Fatalf("ссылка на поле: %v, броски %v", got, roller.formulas)
 	}
-
-	// Система со старым бланком без схем: ссылки — только пути в JSON.
-	r = testRoom()
-	roller = &fixedRoller{total: 9}
-	r.dice = roller
-	r.schemas = map[string]*schema.Schema{schema.KindMonster: nil}
-	add(r, monster(`{"id":"d","name":"Гоблин","initiative":"1d20 + floor((@abilities.dex - 10) / 2) + @stat.ловкость","abilities":{"dex":14}}`))
-	if len(roller.formulas) != 1 || roller.formulas[0] != "1d20+2" {
-		t.Fatalf("без схемы: броски %v", roller.formulas)
-	}
 }
 
 // Общие поля ядра — по схеме системы: КД формулой приходит в трекер уже

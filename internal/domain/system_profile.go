@@ -32,42 +32,17 @@ type SystemRolls struct {
 }
 
 // SystemProfile — то, что клиенту нужно знать о системе мира, чтобы
-// показать лист, вес и деньги и бросать кубы (см. GET /api/system).
+// показать вес и деньги и бросать кубы (см. GET /api/system).
 // Initiative — правило броска инициативы: клиент по нему показывает
 // инициативу карточки. Importers — id импортёров, видимых в мире системы.
 type SystemProfile struct {
 	ID         string         `json:"id"`
 	Title      string         `json:"title"`
-	Sheet      string         `json:"sheet"`
 	Units      SystemUnits    `json:"units"`
 	Currencies []Currency     `json:"currencies"`
 	Rolls      SystemRolls    `json:"rolls"`
 	Initiative InitiativeRule `json:"initiative"`
 	Importers  []string       `json:"importers"`
-}
-
-// SheetUniversal — вид листа по умолчанию: универсальный лист (хиты,
-// защита, скорость, инициатива, свободные характеристики, броски, ресурсы,
-// инвентарь, деньги, заметки). Другие виды — бланки, которые клиент знает
-// поимённо (у встроенного D&D — "dnd5e-2014" и "dnd5e-2024"); их заменит
-// схема листа из модуля (задача «Схемы листа и карточек»).
-const SheetUniversal = "universal"
-
-// LegacySheetKind — вид листа, который клиент рисует старым кодом, а не по
-// схеме: бланки встроенного D&D. Пока система с таким видом листа не несёт
-// своих схем, лист и карточки её мира рисуются по-старому (переезд — задача
-// «Модуль D&D на схемах»).
-func LegacySheetKind(kind string) bool {
-	return kind == "dnd5e-2014" || kind == "dnd5e-2024"
-}
-
-var sheetKindRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
-
-// ValidSheetKind — годится ли строка в вид листа (раздел sheet в
-// module.json). Какие виды клиент умеет рисовать, решает клиент:
-// незнакомый вид он показывает универсальным листом.
-func ValidSheetKind(kind string) bool {
-	return len(kind) <= 64 && sheetKindRe.MatchString(kind)
 }
 
 // CustomUnits / CustomCurrencies — умолчания «Своей системы» и мира, чья

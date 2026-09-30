@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/schema"
@@ -18,7 +16,7 @@ import (
 
 // pregenSummaryJSON — короткая карточка пре-гена для списков (без полного
 // листа): имя, аватар и подпись (см. pregenSubtitle). sheet — схема листа
-// системы мира (nil — старый бланк D&D).
+// системы мира.
 func pregenSummaryJSON(p *domain.Pregen, sheet *schema.Schema) map[string]any {
 	return map[string]any{
 		"id":        p.ID,
@@ -28,27 +26,9 @@ func pregenSummaryJSON(p *domain.Pregen, sheet *schema.Schema) map[string]any {
 	}
 }
 
-// pregenSubtitle — подпись пре-гена: по шаблону list.subtitle схемы листа,
-// у бланка D&D — «вид, класс N ур.».
+// pregenSubtitle — подпись пре-гена по шаблону list.subtitle схемы листа.
 func pregenSubtitle(p *domain.Pregen, sheet *schema.Schema) string {
-	if sheet != nil {
-		return sheet.Subtitle(p.Sheet)
-	}
-	var parts []string
-	species := p.Sheet.Info.Species
-	if species == "" {
-		species = p.Sheet.Info.Race
-	}
-	if species != "" {
-		parts = append(parts, species)
-	}
-	if c := p.Sheet.Info.Class; c != "" {
-		if p.Sheet.Info.Level > 0 {
-			c += " " + strconv.Itoa(p.Sheet.Info.Level) + " ур."
-		}
-		parts = append(parts, c)
-	}
-	return strings.Join(parts, ", ")
+	return sheet.Subtitle(p.Sheet)
 }
 
 // ---- игрок (свои, по сессии) ----

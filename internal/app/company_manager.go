@@ -176,7 +176,7 @@ func (m *CompanyManager) ModifierTargets(company *domain.Company) []domain.Modif
 // (универсальный лист, «кг», «Деньги»).
 func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemProfile {
 	p := domain.SystemProfile{
-		ID: domain.SystemCustom, Title: "Своя система (без правил)", Sheet: domain.SheetUniversal,
+		ID: domain.SystemCustom, Title: "Своя система (без правил)",
 		Units: domain.CustomUnits(), Currencies: domain.CustomCurrencies(), Rolls: domain.CustomRolls(),
 		Initiative: domain.CustomCombatRules().Initiative, Importers: []string{},
 	}
@@ -189,9 +189,6 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 		return p
 	}
 	p.Title = mod.Manifest.Title
-	if mod.Manifest.Sheet != "" {
-		p.Sheet = mod.Manifest.Sheet
-	}
 	if mod.Manifest.Units != nil {
 		p.Units = *mod.Manifest.Units
 	}

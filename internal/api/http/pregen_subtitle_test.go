@@ -7,18 +7,9 @@ import (
 	"beacon-table/internal/schema"
 )
 
-// Подпись готового персонажа: по шаблону list.subtitle схемы листа, у
-// бланка D&D без схем — «вид, класс N ур.».
+// Подпись готового персонажа — по шаблону list.subtitle схемы листа.
 func TestPregenSubtitle(t *testing.T) {
 	p := &domain.Pregen{Name: "Шила", Sheet: domain.DefaultCharacterSheet()}
-	p.Sheet.Info.Class, p.Sheet.Info.Level, p.Sheet.Info.Race = "Плут", 3, "Эльф"
-	if got := pregenSubtitle(p, nil); got != "Эльф, Плут 3 ур." {
-		t.Errorf("D&D: %q", got)
-	}
-	p.Sheet.Info.Level = 0
-	if got := pregenSubtitle(p, nil); got != "Эльф, Плут" {
-		t.Errorf("D&D без уровня: %q", got)
-	}
 	sheet, err := schema.Parse([]byte(`{
 		"format": "beacon-schema/v1", "kind": "sheet",
 		"fields": {"hp_max": {"type": "number", "path": "combat.hpMax", "label": "Хиты"}},
