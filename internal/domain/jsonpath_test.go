@@ -17,6 +17,7 @@ func TestResolveJSONPath(t *testing.T) {
 		"coins.gp":       reflect.TypeOf(0),
 		"luck":           nil, // незнакомый ключ верхнего уровня — Extra
 		"homebrew.a.b.c": nil,
+		"combat.shield":  nil, // у combat свой Extra
 	}
 	for path, want := range ok {
 		got, err := ResolveJSONPath(sheet, path)
@@ -28,7 +29,7 @@ func TestResolveJSONPath(t *testing.T) {
 			t.Errorf("%s: тип %v, ожидали %v", path, got, want)
 		}
 	}
-	for _, bad := range []string{"", "combat.shield", "combat.ac.value", "notes.first", "a..b"} {
+	for _, bad := range []string{"", "combat.ac.value", "notes.first", "stats.3.shield", "a..b"} {
 		if _, err := ResolveJSONPath(sheet, bad); err == nil {
 			t.Errorf("%q: ожидали ошибку", bad)
 		}

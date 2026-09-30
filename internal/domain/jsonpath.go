@@ -41,8 +41,8 @@ func ResolveJSONPath(root reflect.Type, path string) (reflect.Type, error) {
 		case reflect.Struct:
 			f, ok := jsonField(t, seg)
 			if !ok {
-				if i == 0 && hasExtra(t) {
-					return nil, nil // незнакомый ключ верхнего уровня — Extra
+				if hasExtra(t) {
+					return nil, nil // незнакомый ключ структуры с Extra — хранится как есть
 				}
 				if i == 0 {
 					return nil, fmt.Errorf("путь %q: ядро не знает поле %q — незнакомый ключ здесь не сохранится", path, seg)
@@ -72,9 +72,9 @@ var (
 	extraType      = reflect.TypeOf(Extra{})
 )
 
-// hasExtra — хранит ли структура незнакомые ключи верхнего уровня (поле
-// Extra: карточки и лист, см. extra.go). У вложенных структур (строка
-// таблицы листа, combat) его нет — незнакомый ключ там теряется.
+// hasExtra — хранит ли структура незнакомые ключи (поле Extra: карточки,
+// лист и его combat, см. extra.go). У остальных вложенных структур (строка
+// таблицы листа) его нет — незнакомый ключ там теряется.
 func hasExtra(t reflect.Type) bool {
 	for i := 0; i < t.NumField(); i++ {
 		if t.Field(i).Type == extraType {

@@ -57,7 +57,7 @@ func TestParseRowsRejects(t *testing.T) {
 		"кривой тон":              func(m map[string]any) { field(m, "fails")["tone"] = "loud" },
 		"roll у текста":           func(m map[string]any) { field(m, "dex")["type"] = "text"; field(m, "dex")["roll"] = "1d20" },
 		"битый бросок у числа":    func(m map[string]any) { field(m, "dex")["roll"] = "1d20 +" },
-		"бросок у числа в никуда": func(m map[string]any) { field(m, "dex")["roll"] = "1d20 + @combat.shield" },
+		"бросок у числа в никуда": func(m map[string]any) { field(m, "dex")["roll"] = "1d20 + @stats.0.shield" },
 		"rollable не в колонке":   func(m map[string]any) { field(m, "dex")["type"] = "text"; field(m, "dex")["rollable"] = "check" },
 		"rollable у числа":        func(m map[string]any) { column(m, "prepared", 1)["rollable"] = "check" },
 		"кривой rollable":         func(m map[string]any) { column(m, "prepared", 0)["rollable"] = "always" },
@@ -93,7 +93,7 @@ func TestParseRowsRejects(t *testing.T) {
 			field(m, "skills")["rows"].([]any)[1].(map[string]any)["formulas"] = map[string]any{"base": "@bonus"}
 		},
 		"формула строки в никуда": func(m map[string]any) {
-			field(m, "skills")["rows"].([]any)[0].(map[string]any)["formulas"] = map[string]any{"base": "@combat.shield"}
+			field(m, "skills")["rows"].([]any)[0].(map[string]any)["formulas"] = map[string]any{"base": "@stats.0.shield"}
 		},
 		"bind у другого виджета": func(m map[string]any) {
 			section(m, 0)["widget"] = "hp"
@@ -139,7 +139,7 @@ func TestParseSelectFormulas(t *testing.T) {
 		},
 		"цикл через вариант": func() { fields["ability"].(map[string]any)["options"].([]any)[0].(map[string]any)["formula"] = "@dc" },
 		"вариант в никуда": func() {
-			fields["ability"].(map[string]any)["options"].([]any)[0].(map[string]any)["formula"] = "@combat.shield"
+			fields["ability"].(map[string]any)["options"].([]any)[0].(map[string]any)["formula"] = "@stats.0.shield"
 		},
 	} {
 		bad := goodRows(t)

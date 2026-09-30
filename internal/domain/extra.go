@@ -150,6 +150,16 @@ func (s Spell) MarshalJSON() ([]byte, error) {
 	return marshalWithExtra(plain(s), s.Extra)
 }
 
+func (c *CombatStats) UnmarshalJSON(data []byte) error {
+	type plain CombatStats
+	return unmarshalWithExtra(data, (*plain)(c), &c.Extra)
+}
+
+func (c CombatStats) MarshalJSON() ([]byte, error) {
+	type plain CombatStats
+	return marshalWithExtra(plain(c), c.Extra)
+}
+
 func (it *Item) UnmarshalJSON(data []byte) error {
 	type plain Item
 	return unmarshalWithExtra(data, (*plain)(it), &it.Extra)

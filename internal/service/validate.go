@@ -78,6 +78,7 @@ func clampRunes(s string, max int) string {
 func sanitizeSheet(sheet domain.CharacterSheet) domain.CharacterSheet {
 	clampCard(&sheet)
 	sheet.Extra = clampExtra(sheet.Extra)
+	sheet.Combat.Extra = clampExtra(sheet.Combat.Extra)
 	sheet.Coins = domain.SanitizeCoins(sheet.Coins)
 	sheet.Combat.DeathSaveSuccess = clampCount(sheet.Combat.DeathSaveSuccess, maxSheetDeathSaves)
 	sheet.Combat.DeathSaveFail = clampCount(sheet.Combat.DeathSaveFail, maxSheetDeathSaves)

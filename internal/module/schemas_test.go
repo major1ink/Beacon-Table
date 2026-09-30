@@ -38,11 +38,11 @@ func TestInstallModuleWithSchemas(t *testing.T) {
 func TestInstallRejectsBadSchemas(t *testing.T) {
 	r := NewRegistry(t.TempDir(), nil, nil, "0.9.0")
 	cases := map[string]map[string]string{
-		"битая схема":        {"module.json": systemManifest("a"), "schemas/sheet.json": `{"format":"beacon-schema/v1","kind":"sheet","fields":{}}`},
-		"не тот вид":         {"module.json": systemManifest("b"), "schemas/spell.json": sheetSchema},
-		"незнакомое имя":     {"module.json": systemManifest("c"), "schemas/vehicle.json": sheetSchema},
-		"схема у контента":   {"module.json": manifestJSON("d", "1.0.0"), "schemas/sheet.json": sheetSchema},
-		"путь внутрь combat": {"module.json": systemManifest("e"), "schemas/sheet.json": strings.Replace(sheetSchema, `"path":"luck"`, `"path":"combat.luck"`, 1)},
+		"битая схема":                {"module.json": systemManifest("a"), "schemas/sheet.json": `{"format":"beacon-schema/v1","kind":"sheet","fields":{}}`},
+		"не тот вид":                 {"module.json": systemManifest("b"), "schemas/spell.json": sheetSchema},
+		"незнакомое имя":             {"module.json": systemManifest("c"), "schemas/vehicle.json": sheetSchema},
+		"схема у контента":           {"module.json": manifestJSON("d", "1.0.0"), "schemas/sheet.json": sheetSchema},
+		"путь внутрь строки таблицы": {"module.json": systemManifest("e"), "schemas/sheet.json": strings.Replace(sheetSchema, `"path":"luck"`, `"path":"stats.0.luck"`, 1)},
 	}
 	for name, files := range cases {
 		_, err := r.Install(makeArchive(t, files))

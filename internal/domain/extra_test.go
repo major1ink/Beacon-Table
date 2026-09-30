@@ -70,3 +70,31 @@ func TestExtraEmptyAndBroken(t *testing.T) {
 		t.Fatal("неверный тип известного поля — ошибка, как и раньше")
 	}
 }
+
+// Незнакомые ключи combat (поля системы — у D&D спасброски от смерти и
+// кость хитов) переживают чтение и запись листа.
+func TestExtraInsideCombatSurvives(t *testing.T) {
+	raw := `{"combat":{"ac":15,"hpMax":30,"hitDiceTotal":"5d10","deathSaveFail":2,"luck":{"a":[1,2]}},"homebrew":1}`
+	var sheet CharacterSheet
+	if err := json.Unmarshal([]byte(raw), &sheet); err != nil {
+		t.Fatal(err)
+	}
+	if sheet.Combat.AC != 15 || sheet.Combat.HPMax != 30 {
+		t.Fatalf("известные поля combat: %+v", sheet.Combat)
+	}
+	if len(sheet.Combat.Extra) != 1 || string(sheet.Combat.Extra["luck"]) != `{"a":[1,2]}` {
+		t.Fatalf("Extra combat: %v", sheet.Combat.Extra)
+	}
+	out, err := json.Marshal(sheet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back map[string]any
+	if err := json.Unmarshal(out, &back); err != nil {
+		t.Fatal(err)
+	}
+	combat, _ := back["combat"].(map[string]any)
+	if combat["luck"] == nil || combat["ac"] != float64(15) || back["homebrew"] != float64(1) {
+		t.Fatalf("после записи: %s", out)
+	}
+}

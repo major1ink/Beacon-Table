@@ -117,15 +117,15 @@ func TestParseRejects(t *testing.T) {
 		"кривой id": func(m map[string]any) {
 			m["fields"].(map[string]any)["Bad Id"] = map[string]any{"type": "text", "path": "x", "label": "X"}
 		},
-		"неизвестный тип":      func(m map[string]any) { field(m, "ac")["type"] = "slider" },
-		"нет подписи":          func(m map[string]any) { field(m, "ac")["label"] = " " },
-		"без path":             func(m map[string]any) { delete(field(m, "ac"), "path") },
-		"path у вычисления":    func(m map[string]any) { field(m, "str_mod")["path"] = "x" },
-		"нет формулы":          func(m map[string]any) { delete(field(m, "str_mod"), "formula") },
-		"нет броска":           func(m map[string]any) { delete(field(m, "hit"), "roll") },
-		"внутрь combat":        func(m map[string]any) { field(m, "ac")["path"] = "combat.shield" },
-		"внутрь числа":         func(m map[string]any) { field(m, "ac")["path"] = "combat.ac.value" },
-		"select без вариантов": func(m map[string]any) { field(m, "school")["options"] = []any{} },
+		"неизвестный тип":       func(m map[string]any) { field(m, "ac")["type"] = "slider" },
+		"нет подписи":           func(m map[string]any) { field(m, "ac")["label"] = " " },
+		"без path":              func(m map[string]any) { delete(field(m, "ac"), "path") },
+		"path у вычисления":     func(m map[string]any) { field(m, "str_mod")["path"] = "x" },
+		"нет формулы":           func(m map[string]any) { delete(field(m, "str_mod"), "formula") },
+		"нет броска":            func(m map[string]any) { delete(field(m, "hit"), "roll") },
+		"внутрь строки таблицы": func(m map[string]any) { field(m, "ac")["path"] = "stats.0.shield" },
+		"внутрь числа":          func(m map[string]any) { field(m, "ac")["path"] = "combat.ac.value" },
+		"select без вариантов":  func(m map[string]any) { field(m, "school")["options"] = []any{} },
 		"вариант дважды": func(m map[string]any) {
 			o := map[string]any{"value": "fire", "label": "Огонь"}
 			field(m, "school")["options"] = []any{o, o}
@@ -152,7 +152,7 @@ func TestParseRejects(t *testing.T) {
 		"битая формула":      func(m map[string]any) { field(m, "str_mod")["formula"] = "floor((@str-10)/2" },
 		"кубы в вычислении":  func(m map[string]any) { field(m, "str_mod")["formula"] = "1d6 + 2" },
 		"кубы в умножении":   func(m map[string]any) { field(m, "hit")["roll"] = "2 * 1d6" },
-		"ссылка в никуда":    func(m map[string]any) { field(m, "str_mod")["formula"] = "@combat.shield" },
+		"ссылка в никуда":    func(m map[string]any) { field(m, "str_mod")["formula"] = "@stats.0.shield" },
 		"цикл": func(m map[string]any) {
 			field(m, "str_mod")["formula"] = "@loop"
 			m["fields"].(map[string]any)["loop"] = map[string]any{"type": "computed", "label": "Цикл", "formula": "@str_mod + 1"}

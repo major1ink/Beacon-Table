@@ -225,6 +225,10 @@ type CombatStats struct {
 	// что явно проставил игрок.
 	IsDying    bool   `json:"isDying"`
 	Conditions string `json:"conditions"` // "Состояния" — свободный текст
+
+	// Extra — ключи combat, которых эта структура не знает: хранятся и
+	// отдаются как есть, см. domain.Extra.
+	Extra Extra `json:"-"`
 }
 
 // WeaponRow — строка таблицы "Оружие и боевые заговоры". Bonus — свободный
