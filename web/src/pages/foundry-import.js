@@ -22,6 +22,7 @@ import {
   fetchJournal, fetchJournalEntry, createJournalEntry, updateJournalEntry,
   fetchAdminPregens, createAdminPregen, updateAdminPregen,
 } from "../api.js";
+import { hasImporter, loadSystemProfile } from "../system-profile.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
@@ -35,7 +36,7 @@ import { tokenArt, itemArt, pregenArt, mapPackDocs, cardKey, sameCard } from "..
 // порядок галочек, и порядок импорта внутри пака.
 // fetchAll у карточек — не только для галочки в отчёте: по этому списку
 // импорт проверяет, нет ли такой карточки в библиотеке уже (см. importCards).
-const TARGETS = [
+const ALL_TARGETS = [
   // linkField — куда положить id исходного документа Foundry. Только у
   // существ: по нему потом сойдутся карточка бестиария и токены, уже
   // стоящие на импортированных сценах (см. domain.Token.FoundryActorID и
@@ -64,7 +65,11 @@ const TARGETS = [
   { id: "scenes", label: "Сцены", server: true },
   { id: "playlists", label: "Плейлисты", server: true },
 ];
-const TARGET_BY_ID = Object.fromEntries(TARGETS.map((t) => [t.id, t]));
+// Карточные разделы (мапперы dnd5e) — только в мире с импортёром
+// foundry-dnd5e; сцены, плейлисты и журнал — в любом.
+const CARD_TARGETS = new Set(["pregens", "monsters", "spells", "items", "references", "conditions"]);
+let TARGETS = ALL_TARGETS;
+const TARGET_BY_ID = Object.fromEntries(ALL_TARGETS.map((t) => [t.id, t]));
 
 // JOURNAL_DEST — куда класть журналы модуля. В Foundry весь сюжет приключения
 // лежит в JournalEntry; на столе ему место в журнале (см. web/journal.html).
@@ -722,6 +727,11 @@ document.getElementById("closeBtn").onclick = () => {
     urlForm.style.display = "none";
     setStatus("Импорт пакетов Foundry доступен только ДМ.", true);
     return;
+  }
+  await loadSystemProfile();
+  if (!hasImporter("foundry-dnd5e")) {
+    TARGETS = ALL_TARGETS.filter((t) => !CARD_TARGETS.has(t.id));
+    for (const id of CARD_TARGETS) selectedTargets.delete(id);
   }
   // ?url= — окно открыто из настроек кнопкой "Обновить" у уже
   // установленного пакета (см. pages/dm.js: openFoundryUpdateWindow):

@@ -60,6 +60,9 @@ func TestModuleAssetsHandler(t *testing.T) {
 
 func TestBuiltinModulesHaveSchemas(t *testing.T) {
 	for _, m := range builtinModules(systemFiles) {
+		if got := m.Manifest.Importers; len(got) != 2 || got[0] != "foundry-dnd5e" || got[1] != "lss" {
+			t.Errorf("%s: импортёры %v", m.Manifest.ID, got)
+		}
 		for _, kind := range []string{"sheet", "monster", "spell", "item", "reference"} {
 			if m.Schemas[kind] == nil {
 				t.Errorf("%s: нет схемы %s", m.Manifest.ID, kind)

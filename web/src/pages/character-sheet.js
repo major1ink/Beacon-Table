@@ -42,9 +42,10 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { coinRows, formatWeight, loadSystemProfile, sheetKind } from "../system-profile.js";
+import { coinRows, formatWeight, hasImporter, loadSystemProfile } from "../system-profile.js";
 import { renderSchemaEdit, renderSchemaView } from "../schema-sheet.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
+import { schemaHasPath } from "../schema-layout.js";
 import { compileSchema, createEvaluator } from "../schema-formula.js";
 import { cardSubtitle } from "../schema-list.js";
 import { getPath, setPath } from "../schema-layout.js";
@@ -110,9 +111,10 @@ let liveStatuses = [];
 let itemCatalog = new Map();
 let liveStatusesEl = null;
 
-// isClassic — мир на D&D 5e 2014: импорт LSS кладёт вид в race, а не в species.
-function isClassic() {
-  return sheetKind() === "dnd5e-2014";
+// sheetHasRace — у листа мира поле «Вид» лежит в info.race (D&D 2014), а не
+// в info.species: импорт LSS кладёт вид туда.
+function sheetHasRace() {
+  return schemaHasPath(schemaFor("sheet"), "info.race");
 }
 
 // schemaCtx — то, что лист по схеме берёт у этой страницы, а не копирует:
@@ -202,7 +204,7 @@ function renderEditTabs() {
   }
   clearSchemaTabs();
   renderSchemaEdit(schemaCtx());
-  if (sheetKind() !== "universal") document.getElementById("tab1").prepend(importSection());
+  if (hasImporter("lss")) document.getElementById("tab1").prepend(importSection());
 }
 
 // ==================== переиспользуемые секции (обе системы/вкладки) ====================
@@ -225,7 +227,7 @@ async function applyLssFile(rawText, msgEl) {
     msgEl.classList.add("error");
     return;
   }
-  const { name, warnings } = applyLssImport(sheet, parsed, isClassic());
+  const { name, warnings } = applyLssImport(sheet, parsed, sheetHasRace());
   msgEl.textContent = `Импортировано${name ? `: «${name}»` : ""}.` + (warnings.length ? " " + warnings.join(" ") : "");
   msgEl.classList.add("ok");
   renderEditTabs();

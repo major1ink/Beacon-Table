@@ -26,7 +26,7 @@ import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { loadSystemProfile, sheetKind } from "../system-profile.js";
+import { hasImporter, loadSystemProfile } from "../system-profile.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
@@ -217,7 +217,7 @@ function renderSchemaView(root, compiled) {
     widgets: { modifiers: worn },
   });
   const folds = [...middle, descFold(readOnly), compatFold(readOnly, refreshHead)];
-  if (!readOnly && sheetKind() !== "universal") folds.push(importSection());
+  if (!readOnly && hasImporter("foundry-dnd5e")) folds.push(importSection());
   root.appendChild(renderBody(cardBody(folds), [preview]));
 }
 

@@ -27,7 +27,7 @@ import { renderMonsterPreview } from "../monster-preview.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { formatWeight, initiativeRule, loadSystemProfile, sheetKind } from "../system-profile.js";
+import { formatWeight, hasImporter, initiativeRule, loadSystemProfile } from "../system-profile.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
@@ -237,7 +237,7 @@ function renderSchemaView(root, compiled) {
     widgets: { inventory: () => invSection(readOnly), spells: () => spellsSection(readOnly) },
   });
   const folds = [...middle, textBlock("Описание", "description", readOnly ? { readOnly: true, open: false } : {}), compatFold(readOnly, refreshHead)];
-  if (!readOnly && sheetKind() !== "universal") folds.push(importSection());
+  if (!readOnly && hasImporter("foundry-dnd5e")) folds.push(importSection());
   root.appendChild(renderBody(cardBody(folds), [preview]));
 }
 

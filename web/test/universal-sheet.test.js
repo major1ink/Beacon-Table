@@ -1,6 +1,6 @@
 // Лист по схеме «Своей системы»: свободные характеристики с модификаторами
 // stat.<ключ> (schema-formula.js), основы для стенда конструктора
-// (universal-stats.js) и выбор вида листа по системе.
+// (universal-stats.js) и условия видимости импорта (импортёры системы).
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -9,7 +9,8 @@ import { readFileSync } from "node:fs";
 import { standStats } from "../src/universal-stats.js";
 import { initiativeBase } from "../src/schema-summary.js";
 import { compileSchema, createEvaluator } from "../src/schema-formula.js";
-import { sheetKindOf } from "../src/system-profile.js";
+import { hasImporter } from "../src/system-profile.js";
+import { schemaHasPath, schemaHasWidget } from "../src/schema-layout.js";
 
 const sheetSchema = compileSchema(JSON.parse(readFileSync(new URL("../../internal/schema/builtin/sheet.json", import.meta.url), "utf8")));
 const statValue = (stat, mods) => createEvaluator(sheetSchema, { stats: [stat] }, mods).stat(stat.name);
@@ -42,10 +43,18 @@ test("инициатива для стенда: постоянная часть 
   assert.equal(initiativeBase(sheetSchema, { initiative: "3" }, null), 0);
 });
 
-test("вид листа: D&D знаем поимённо, остальное — универсальный", () => {
-  assert.equal(sheetKindOf("dnd5e-2014"), "dnd5e-2014");
-  assert.equal(sheetKindOf("dnd5e-2024"), "dnd5e-2024");
-  assert.equal(sheetKindOf("universal"), "universal");
-  assert.equal(sheetKindOf("pathfinder-2e"), "universal");
-  assert.equal(sheetKindOf(""), "universal");
+test("импортёры системы: до загрузки профиля нет ни одного", () => {
+  assert.equal(hasImporter("foundry-dnd5e"), false);
+  assert.equal(hasImporter("lss"), false);
+});
+
+test("схема листа: поле «Вид» в info.race только у D&D 2014, виджет заклинаний у D&D", () => {
+  const sheet = (system) => JSON.parse(readFileSync(new URL(`../../cmd/beacon-table/systemdata/schemas/${system}/sheet.json`, import.meta.url), "utf8"));
+  assert.equal(schemaHasPath(sheet("dnd5e-2014"), "info.race"), true);
+  assert.equal(schemaHasPath(sheet("dnd5e-2024"), "info.race"), false);
+  assert.equal(schemaHasWidget(sheet("dnd5e-2014"), "spellbook"), true);
+  assert.equal(schemaHasWidget(sheet("dnd5e-2024"), "spellbook"), true);
+  assert.equal(schemaHasPath(sheetSchema.schema, "info.race"), false);
+  assert.equal(schemaHasWidget(sheetSchema.schema, "spellbook"), false);
+  assert.equal(schemaHasPath(null, "info.race"), false);
 });

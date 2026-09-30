@@ -113,7 +113,14 @@ type Manifest struct {
 	// модификатора в тексте). Только у системного модуля; без раздела —
 	// domain.CustomRolls.
 	Rolls *domain.SystemRolls `json:"rolls,omitempty"`
+	// Importers — импортёры, которые видны в мире этой системы: id из
+	// набора клиента ("foundry-dnd5e", "lss"); незнакомый клиенту id ничего
+	// не включает. Только у системного модуля.
+	Importers []string `json:"importers,omitempty"`
 }
+
+// maxImporters — сколько импортёров может объявить система.
+const maxImporters = 16
 
 // maxModifierTargets — сколько целей модификаторов может объявить система.
 const maxModifierTargets = 64
@@ -178,6 +185,9 @@ func (m *Manifest) Validate() error {
 	if err := m.validateModifierTargets(); err != nil {
 		return err
 	}
+	if err := m.validateImporters(); err != nil {
+		return err
+	}
 	return m.validateUnitsAndCurrencies()
 }
 
@@ -205,6 +215,31 @@ func (m *Manifest) validateUnitsAndCurrencies() error {
 	}
 	if err := domain.ValidateCurrencies(m.Currencies); err != nil {
 		return fmt.Errorf("модуль %s: %w", m.ID, err)
+	}
+	return nil
+}
+
+// validateImporters — импортёры системы: только у системного модуля, id по
+// маске id модуля, без повторов.
+func (m *Manifest) validateImporters() error {
+	if len(m.Importers) == 0 {
+		return nil
+	}
+	if m.Type != TypeSystem {
+		return fmt.Errorf("импортёров (importers) объявляет только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	if len(m.Importers) > maxImporters {
+		return fmt.Errorf("модуль %s: импортёров больше %d", m.ID, maxImporters)
+	}
+	seen := map[string]bool{}
+	for _, id := range m.Importers {
+		switch {
+		case !validID.MatchString(id):
+			return fmt.Errorf("модуль %s: неверный id импортёра %q", m.ID, id)
+		case seen[id]:
+			return fmt.Errorf("модуль %s: импортёр %q объявлен дважды", m.ID, id)
+		}
+		seen[id] = true
 	}
 	return nil
 }

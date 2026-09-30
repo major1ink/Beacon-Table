@@ -100,7 +100,7 @@ const SPELL_LEVELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 // applyLssImport — мутирует sheet (см. normalizeSheet в character-sheet.js
 // — sheet сюда приходит уже нормализованным). targetIsClassic — система
-// ОТКРЫТОГО персонажа (isClassic()), а не файла: определяет race/species и
+// ОТКРЫТОГО персонажа (sheetHasRace()), а не файла: определяет race/species и
 // используется только для предупреждения о несовпадении редакции, разбор
 // остальных полей от неё не зависит. Возвращает {name, warnings} для
 // сообщения в UI.

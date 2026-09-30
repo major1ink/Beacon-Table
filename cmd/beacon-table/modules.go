@@ -38,6 +38,7 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 			Units:           &domain.SystemUnits{Weight: "фнт"},
 			Sheet:           s.id,
 			Currencies:      dndCurrencies(),
+			Importers:       []string{"foundry-dnd5e", "lss"},
 		})
 		schemas, err := module.LoadSchemas(systemFS, path.Join("systemdata", "schemas", s.id), mod.Manifest)
 		if err != nil {

@@ -133,3 +133,13 @@ export function formatSubtitle(template, value) {
     .filter(Boolean)
     .join(" · ");
 }
+
+// schemaHasPath — есть ли у схемы поле с таким путём в данных.
+export function schemaHasPath(schema, path) {
+  return !!schema && Object.values(schema.fields || {}).some((f) => f.path === path);
+}
+
+// schemaHasWidget — есть ли в раскладке схемы секция с виджетом.
+export function schemaHasWidget(schema, widget) {
+  return !!schema && (schema.layout || []).some((sec) => sec.widget === widget);
+}

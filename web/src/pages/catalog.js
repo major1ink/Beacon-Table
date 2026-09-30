@@ -43,8 +43,9 @@ import { asButton } from "../a11y.js";
 import { announceOwnHeader } from "../embed.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
+import { schemaHasWidget } from "../schema-layout.js";
 import { catalogConfig, categoriesOf } from "../schema-list.js";
-import { loadSystemProfile, sheetKind } from "../system-profile.js";
+import { hasImporter, loadSystemProfile } from "../system-profile.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -269,18 +270,24 @@ let cfg = CONFIGS[type];
 // SCHEMA_KINDS — вид схемы (schemas.js) у каталогов карточек. Если у системы
 // мира есть схема вида, подпись, поиск, фильтры, группы и сортировка
 // берутся из её раздела list (schema-list.js: catalogConfig), а не из полей
-// D&D; импорт Foundry и «добавить заклинание на лист» — только у D&D-миров.
-// Возвращает true, если импорт у этого мира скрыт.
+// D&D.
 const SCHEMA_KINDS = { creatures: "monster", spells: "spell", items: "item", reference: "reference" };
 function applySchemaConfig() {
   const schema = cfg && SCHEMA_KINDS[type] && schemaFor(SCHEMA_KINDS[type]);
-  if (!schema) return false;
+  if (!schema) return;
   const compiled = compileSchema(schema);
   const own = catalogConfig(compiled);
   if (category) own.extraFilter = (categoriesOf(compiled).find((c) => c.label === category) || {}).test || null;
-  const dnd = sheetKind() !== "universal";
-  cfg = Object.assign({}, cfg, own, dnd ? {} : { mapOne: null, batchMap: null, extraWidget: null });
-  return !dnd;
+  cfg = Object.assign({}, cfg, own);
+}
+
+// applyImporters — импорт Foundry (карточки, состояния) есть только у
+// систем с импортёром foundry-dnd5e.
+function applyImporters() {
+  if (!hasImporter("foundry-dnd5e")) cfg = Object.assign({}, cfg, { mapOne: null, batchMap: null });
+  // Заклинание можно добавить на лист, только если у листа есть виджет заклинаний.
+  if (!schemaHasWidget(schemaFor("sheet"), "spellbook")) cfg = Object.assign({}, cfg, { extraWidget: null });
+  if (!cfg.mapOne && !cfg.batchMap) importLabel.style.display = "none";
 }
 
 // ==================== DOM ====================
@@ -649,7 +656,8 @@ window.addEventListener("message", (e) => {
     return;
   }
   await Promise.all([loadSchemas(), loadSystemProfile()]);
-  if (applySchemaConfig()) importLabel.style.display = "none";
+  applySchemaConfig();
+  applyImporters();
   initSidebar();
   if (systemScope) {
     createForm.style.display = "none";
