@@ -82,6 +82,31 @@ for (const id of ["dnd5e-2024", "dnd5e-2014"]) {
     }
   });
 
+  test(`${id}: лист без полей системы считается по умолчаниям схемы`, () => {
+    const compiled = compileSchema(load(id));
+    // Пустой лист (перенесён из «Своей системы» или старый) и новый лист
+    // 0.9.0 — без характеристик, владений и заклинаний: значения берутся из
+    // default схемы, а не дают модификатор −5.
+    for (const sheet of [{}, { combat: {}, notes: [] }, JSON.parse(readFileSync(new URL("./fixtures/new-sheet.json", import.meta.url), "utf8"))]) {
+      const ev = createEvaluator(compiled, sheet, []);
+      const value = (fid) => {
+        const r = ev.value(fid);
+        assert.equal(r.error, null, `${fid}: ${r.error && r.error.message}`);
+        return r.value;
+      };
+      assert.equal(value("prof"), 2);
+      for (const a of ABILITIES) {
+        assert.equal(value(a), 10, a);
+        assert.equal(value(a + "_mod"), 0, `мод. ${a}`);
+      }
+      assert.equal(value("initiative"), 0);
+      assert.equal(value("passive"), 10);
+      assert.equal(ev.rollField("initiative").formula, "1d20");
+      assert.equal(ev.row("skills", 0).value("bonus").value, 0);
+      assert.equal(ev.row("saves", 0).value("bonus").value, 0);
+    }
+  });
+
   test(`${id}: броски листа`, () => {
     const compiled = compileSchema(load(id));
     const sheet = sheetOf(7);

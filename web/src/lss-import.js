@@ -98,13 +98,55 @@ function appendOrSet(current, incoming) {
 
 const SPELL_LEVELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-// applyLssImport — мутирует sheet (см. normalizeSheet в character-sheet.js
-// — sheet сюда приходит уже нормализованным). targetIsClassic — система
+const ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"];
+
+// prepareLssSheet — дозаполняет в sheet структуры бланка D&D, в которые
+// пишет импорт (у листа другой системы или нового персонажа их может не
+// быть), не трогая то, что уже есть. Идемпотентна.
+export function prepareLssSheet(sheet) {
+  const s = sheet;
+  s.info = s.info || {};
+  if (!s.info.level) s.info.level = 1;
+  s.abilities = s.abilities || {};
+  for (const key of ABILITY_KEYS) if (!s.abilities[key]) s.abilities[key] = 10;
+  s.saveProf = s.saveProf || {};
+  for (const key of ABILITY_KEYS) if (s.saveProf[key] === undefined) s.saveProf[key] = false;
+  s.skillProf = s.skillProf || {};
+  s.armor = s.armor || {};
+  s.combat = s.combat || {};
+  s.weapons = Array.isArray(s.weapons) ? s.weapons : [];
+  s.spellcasting = s.spellcasting || {};
+  s.spellcasting.ability = s.spellcasting.ability || "";
+  // Ячейки заклинаний — массив из 9 строк; то, что уже записано (лист по
+  // схеме пишет ячейки по номеру круга), сохраняем.
+  const slots = s.spellcasting.slotsByLevel;
+  s.spellcasting.slotsByLevel = Array.from({ length: 9 }, (_, i) => {
+    const v = slots && typeof slots === "object" ? slots[i] : "";
+    return v === undefined || v === null ? "" : v;
+  });
+  s.preparedSpells = Array.isArray(s.preparedSpells) ? s.preparedSpells : [];
+  // Черты характера — на обеих системах, race/species — у «чужой» системы
+  // остаются пустой строкой, ничего не отображающей.
+  for (const key of ["personalityTraits", "ideals", "bonds", "flaws", "traits", "proficiencyNotes"]) s[key] = s[key] || "";
+  for (const key of ["race", "species", "playerName"]) s.info[key] = s.info[key] || "";
+  s.physical = s.physical || {};
+  for (const k of ["age", "height", "weight", "eyes", "skin", "hair"]) s.physical[k] = s.physical[k] || "";
+  s.combat.darkvision = s.combat.darkvision || 0;
+  s.combat.isDying = !!s.combat.isDying;
+  // Настройка на предметы — список строк; как минимум три, как привычные
+  // «3 слота», но можно добавлять и удалять.
+  s.attunementItems = Array.isArray(s.attunementItems) ? s.attunementItems.slice() : [];
+  while (s.attunementItems.length < 3) s.attunementItems.push({ name: "", attuned: false });
+  return s;
+}
+
+// applyLssImport — мутирует sheet (сначала prepareLssSheet). targetIsClassic — система
 // ОТКРЫТОГО персонажа (sheetHasRace()), а не файла: определяет race/species и
 // используется только для предупреждения о несовпадении редакции, разбор
 // остальных полей от неё не зависит. Возвращает {name, warnings} для
 // сообщения в UI.
 export function applyLssImport(sheet, parsed, targetIsClassic) {
+  prepareLssSheet(sheet);
   const data = parsed.data;
   const info = data.info || {};
   const subInfo = data.subInfo || {};

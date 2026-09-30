@@ -9,6 +9,7 @@
 // Long Story Short 2014 и 2024. Длинные тексты в них заменены заглушкой —
 // важна форма документа, а не чужой перевод.
 import test from "node:test";
+import assert from "node:assert/strict";
 import { matchGolden, fixture, fixtureText, safe } from "./golden.js";
 
 const { mapFoundryMonsterJson } = await import("../src/monster-import.js");
@@ -17,7 +18,7 @@ const { mapFoundrySpellJson, mapFoundrySpellStatuses } = await import("../src/sp
 const { mapFoundryItemJson } = await import("../src/item-import.js");
 const { mapFoundryReferenceBatch } = await import("../src/reference-import.js");
 const { mapFoundryConditionBatch } = await import("../src/condition-import.js");
-const { parseLssExport, applyLssImport } = await import("../src/lss-import.js");
+const { parseLssExport, applyLssImport, prepareLssSheet } = await import("../src/lss-import.js");
 const { normalizeSheet } = await import("../src/sheet-normalize.js");
 const { tokenArt, itemArt, pregenArt, mapPackDocs, cardKey, sameCard } = await import("../src/foundry-import-cards.js");
 
@@ -120,11 +121,13 @@ test("импорт пакета: совпадение с уже заведённ
   });
 });
 
-// LSS: парсинг файла и перенос в лист — тем же путём, что в бланке: лист,
-// каким его отдаёт сервер новому персонажу (fixtures/default-sheet.json =
-// domain.DefaultCharacterSheet), проходит normalizeSheet, затем импорт.
+// LSS: парсинг файла и перенос в лист — тем же путём, что в бланке: лист
+// проходит normalizeSheet, затем импорт (он сам готовит структуры D&D,
+// prepareLssSheet). Эталонный лист — fixtures/default-sheet.json: так сервер
+// отдавал новому персонажу до 0.9.0, все поля бланка заведены (у настоящих
+// персонажей из миров 0.8.x листы такие же).
 function freshSheet() {
-  return normalizeSheet(fixture("default-sheet.json"));
+  return prepareLssSheet(normalizeSheet(fixture("default-sheet.json")));
 }
 
 function lss(file, targetIsClassic) {
@@ -163,9 +166,37 @@ test("LSS: повторный импорт не затирает и не дуб�
   matchGolden("lss-2024-twice", sheet);
 });
 
-test("лист нового персонажа после normalizeSheet", () => {
+test("лист нового персонажа после normalizeSheet и подготовки к импорту LSS", () => {
   matchGolden("sheet-normalized", freshSheet());
 });
+
+// Лист нового персонажа с 0.9.0 (fixtures/new-sheet.json = общие поля ядра и
+// default схемы D&D: характеристики 10, уровень 1) принимает импорт так же:
+// результат совпадает с импортом в лист 0.8.x во всём, кроме пустых значений,
+// которые лист 0.9.0 просто не хранит.
+const nonEmpty = (v) => {
+  if (Array.isArray(v)) return v.map(nonEmpty).filter((x) => x !== undefined);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const [k, x] of Object.entries(v)) {
+      const n = nonEmpty(x);
+      if (n !== undefined) out[k] = n;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return v === "" || v === false || v === 0 || v === null ? undefined : v;
+};
+
+for (const [file, classic] of [["lss/lss-2024.json", false], ["lss/lss-2014.json", true]]) {
+  test(`LSS ${file}: в лист 0.9.0 то же, что в лист 0.8.x, без пустых значений`, () => {
+    const parsed = parseLssExport(fixtureText(file));
+    const old = freshSheet();
+    applyLssImport(old, parsed, classic);
+    const fresh = normalizeSheet(fixture("new-sheet.json"));
+    applyLssImport(fresh, parsed, classic);
+    assert.deepEqual(nonEmpty(fresh), nonEmpty(old));
+  });
+}
 
 test("LSS: чужие файлы отклоняются понятной ошибкой", () => {
   matchGolden("lss-errors", {
