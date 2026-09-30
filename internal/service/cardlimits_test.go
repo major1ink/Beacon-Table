@@ -80,21 +80,17 @@ func keysOf(e domain.Extra) []string {
 	return out
 }
 
-// Правила D&D ушли из санитайзеров — остались санитарные пределы.
+// Правила D&D ушли из санитайзеров — остались санитарные пределы; поля
+// системы лежат в Extra и ограничены только им.
 func TestSanitizersWithoutDnDRanges(t *testing.T) {
-	sp := sanitizeSpell(domain.Spell{Level: 12})
-	if sp.Level != 12 {
-		t.Errorf("уровень заклинания 12 — не мусор, а система с другими уровнями: %d", sp.Level)
+	sp := sanitizeSpell(domain.Spell{Extra: domain.Extra{"level": json.RawMessage(`12`)}})
+	if string(sp.Extra["level"]) != "12" {
+		t.Errorf("уровень заклинания 12 — не мусор, а система с другими уровнями: %s", sp.Extra["level"])
 	}
-	if got := sanitizeSpell(domain.Spell{Level: 500}).Level; got != maxLevel {
-		t.Errorf("уровень 500 → %d, ожидали %d", got, maxLevel)
-	}
-	if got := sanitizeSpell(domain.Spell{Level: -1}).Level; got != 0 {
-		t.Errorf("уровень -1 → %d", got)
-	}
-	m := sanitizeMonster(domain.Monster{Size: strings.Repeat("о", 1000), Spells: []domain.MonsterSpellRef{{Name: " Щит ", Level: 15}}})
-	if len([]rune(m.Size)) != 1000 {
-		t.Errorf("«короткие» поля больше не режутся на 300: %d", len([]rune(m.Size)))
+	long := json.RawMessage(`"` + strings.Repeat("о", 1000) + `"`)
+	m := sanitizeMonster(domain.Monster{Extra: domain.Extra{"size": long}, Spells: []domain.MonsterSpellRef{{Name: " Щит ", Level: 15}}})
+	if string(m.Extra["size"]) != string(long) {
+		t.Errorf("«короткие» поля системы не режутся")
 	}
 	if m.Spells[0].Level != 15 || m.Spells[0].Name != "Щит" {
 		t.Errorf("заклинание статблока: %+v", m.Spells[0])

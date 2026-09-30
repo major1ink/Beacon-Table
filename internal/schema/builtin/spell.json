@@ -2,7 +2,7 @@
   "format": "beacon-schema/v1",
   "kind": "spell",
   "fields": {
-    "level": { "type": "number", "path": "level", "label": "Круг" },
+    "level": { "type": "number", "path": "level", "label": "Круг", "default": 0 },
     "cast_time": { "type": "text", "path": "castTime", "label": "Время" },
     "range": { "type": "text", "path": "range", "label": "Дистанция" },
     "duration": { "type": "text", "path": "duration", "label": "Длительность" },

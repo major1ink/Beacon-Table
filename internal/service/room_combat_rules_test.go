@@ -132,7 +132,7 @@ func TestDnDRulesDeathSaves(t *testing.T) {
 func TestDnDRulesMonsterXPFromCR(t *testing.T) {
 	r := testRoom()
 	r.rules = dndTestRules()
-	r.monsters = &fakeMonsters{list: []*domain.Monster{{ID: "gob", Name: "Гоблин", CR: "1/2"}}}
+	r.monsters = &fakeMonsters{list: []*domain.Monster{testMonster(t, `{"id":"gob","name":"Гоблин","cr":"1/2"}`)}}
 	r.combat.Combatants["c1"] = &domain.Combatant{ID: "c1", TokenID: "tok-1", MonsterID: "gob", HPCurrent: 7, HPMax: 7}
 
 	r.handleSetCombatantHP("c1", nil, nil, nil, ptr(-7))
@@ -145,7 +145,7 @@ func TestInitiativeFollowsRules(t *testing.T) {
 	r := testRoom()
 	roller := &fixedRoller{total: 15}
 	r.dice = roller
-	r.monsters = &fakeMonsters{list: []*domain.Monster{{ID: "gob", Name: "Гоблин", Abilities: domain.Abilities{Dex: 14}}}}
+	r.monsters = &fakeMonsters{list: []*domain.Monster{testMonster(t, `{"id":"gob","name":"Гоблин","abilities":{"dex":14}}`)}}
 
 	// «Своя система»: у карточки нет поля initiative — ручной ввод.
 	r.handleAddCombatant(domain.ClientMsg{MonsterID: "gob"})
@@ -174,7 +174,7 @@ func TestInitiativeDexFromStatus(t *testing.T) {
 	r.dice = roller
 	r.rules = dndTestRules()
 	r.schemas = map[string]*schema.Schema{schema.KindMonster: dexMonsterSchema(t)}
-	r.monsters = &fakeMonsters{list: []*domain.Monster{{ID: "gob", Name: "Гоблин", Abilities: domain.Abilities{Dex: 14}}}}
+	r.monsters = &fakeMonsters{list: []*domain.Monster{testMonster(t, `{"id":"gob","name":"Гоблин","abilities":{"dex":14}}`)}}
 	tok := r.scenes["scene-1"].Tokens["tok-1"]
 	tok.MonsterID = "gob"
 	tok.Statuses = []domain.AppliedStatus{{Slug: "haste", Modifiers: []domain.Modifier{

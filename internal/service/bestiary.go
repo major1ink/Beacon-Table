@@ -59,7 +59,6 @@ func sanitizeMonster(m domain.Monster) domain.Monster {
 	}
 	m.AC = max(m.AC, 0)
 	m.HP = max(m.HP, 0)
-	m.ProficiencyBonus = max(m.ProficiencyBonus, 0)
 	for i := range m.Inventory {
 		m.Inventory[i].Name = strings.TrimSpace(m.Inventory[i].Name)
 		m.Inventory[i].Quantity = max(m.Inventory[i].Quantity, 0)

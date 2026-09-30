@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"testing"
 
 	"beacon-table/internal/domain"
@@ -56,22 +57,22 @@ func TestApplyDefaults(t *testing.T) {
 	if err := s.ApplyDefaults(m); err != nil {
 		t.Fatal(err)
 	}
-	if m.AC != 10 || m.HP != 0 || m.Size != "Средний" || m.Abilities.Str != 10 || m.Abilities.Dex != 10 || m.Name != "Гоблин" {
-		t.Fatalf("значения по умолчанию: %+v", m)
+	if m.AC != 10 || m.HP != 0 || m.Name != "Гоблин" || m.Extra.String("size") != "Средний" || string(m.Extra["abilities"]) != `{"dex":10,"str":10}` {
+		t.Fatalf("значения по умолчанию: %+v %s", m, m.Extra["abilities"])
 	}
 	// Заполненное не трогается.
 	m2 := domain.NewMonster("id2", "Волк")
-	m2.AC, m2.Size = 13, "Большой"
+	m2.AC, m2.Extra = 13, domain.Extra{"size": json.RawMessage(`"Большой"`)}
 	if err := s.ApplyDefaults(m2); err != nil {
 		t.Fatal(err)
 	}
-	if m2.AC != 13 || m2.Size != "Большой" || m2.Abilities.Str != 10 {
+	if m2.AC != 13 || m2.Extra.String("size") != "Большой" || string(m2.Extra["abilities"]) != `{"dex":10,"str":10}` {
 		t.Fatalf("заполненное затёрто: %+v", m2)
 	}
 	// Схема без default карточку не меняет.
 	plain, _ := Builtin(KindMonster)
 	m3 := domain.NewMonster("id3", "Тень")
-	if err := plain.ApplyDefaults(m3); err != nil || m3.AC != 0 || m3.Size != "" {
+	if err := plain.ApplyDefaults(m3); err != nil || m3.AC != 0 || len(m3.Extra) != 0 {
 		t.Fatalf("встроенная схема: %v %+v", err, m3)
 	}
 }

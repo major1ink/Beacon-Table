@@ -5,24 +5,12 @@ import "time"
 // Spell — карточка библиотеки заклинаний, общей на весь стол (её видят и
 // правят и ДМ, и игроки — в отличие от Monster, у которого бестиарий
 // инструмент только ДМ). Хранится файлом на диске, один JSON на заклинание
-// (см. internal/repository/spellfile) — та же идея, что и у Monster/Note.
+// (см. internal/repository/spellfile).
 //
-// Тот же "умный бланк", что и у Monster (см. monster.go): сервер не знает
-// правил D&D — не считает СЛ спасброска, не проверяет доступность школ по
-// классам, не парсит формулы урона. Единственный неочевидный момент —
-// заполняется это чаще всего не руками, а импортом одного JSON-файла
-// экспорта заклинания с https://5e14.ttg.club (кнопка "Экспортировать в
-// FvTT" отдаёт файл в формате Foundry VTT dnd5e — тот же формат, что и у
-// экспорта существ, которым пользуется TTG Club). Разбор этого формата и
-// перевод в поля Spell — целиком на клиенте (web/src/spell-import.js), это
-// просто перевод чужого формата данных в наш, а не игровое правило —
-// сервер как обычно ничего об этом не знает и получает уже готовый Spell.
-//
-// Компоненты/спасбросок/урон — свободный текст (Verbal/Somatic/Material —
-// исключение, три чекбокса нужны, чтобы отличать заговоры с материальным
-// компонентом при фильтрации/отображении), как и в реальных карточках
-// заклинаний бывают трудноформализуемые формулировки ("см. описание",
-// "особая" длительность и т.п.) — те же соображения, что и у Monster.
+// Ядро знает у заклинания только общее: название, источник, описание, теги и
+// состояния, которые оно накладывает. Остальное (круг, школа, компоненты,
+// урон…) описывает схема игровой системы из модуля и лежит в Extra под теми
+// же ключами JSON: ядро хранит эти значения как есть и не проверяет.
 type Spell struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -39,31 +27,6 @@ type Spell struct {
 	Module          string `json:"module,omitempty"`
 	Source          string `json:"source,omitempty"` // "PHB'24", "MHH"...
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
-
-	Level  int    `json:"level"`            // 0-9, 0 = заговор
-	School string `json:"school,omitempty"` // "Прорицание" и т.п. — свободный текст
-
-	CastTime      string `json:"castTime,omitempty"` // "1 действие", "1 час", "Реакция, когда..."
-	Ritual        bool   `json:"ritual"`
-	Range         string `json:"range,omitempty"` // "120 фт.", "Касание", "На себя (конус 15 фт.)"
-	Verbal        bool   `json:"verbal"`
-	Somatic       bool   `json:"somatic"`
-	Material      bool   `json:"material"`
-	MaterialNote  string `json:"materialNote,omitempty"` // "жемчужина стоимостью не менее 100 зм..."
-	Duration      string `json:"duration,omitempty"`     // "Мгновенная", "1 минута", "Пока не рассеяно"
-	Concentration bool   `json:"concentration"`
-
-	SavingThrow string `json:"savingThrow,omitempty"` // "Тел", "Мдр"... — свободный текст, СЛ никто не считает на сервере
-	// Attack — заклинание бьёт броском атаки, а не спасброском цели. Код, а
-	// не текст: по нему лист персонажа рисует кнопку броска (бонус считает
-	// сам — карточка про персонажа не знает).
-	Attack string `json:"attack,omitempty"`
-	Damage string `json:"damage,omitempty"` // "8к6 (огонь)"
-	// Upcast — прибавка за каждый круг ячейки выше своего ("1к6"). Полем, а
-	// не строкой в описании: по нему лист считает урон с ячейки повыше (см.
-	// spellDamageText в web/src/pages/character-sheet.js).
-	Upcast  string `json:"upcast,omitempty"`
-	Classes string `json:"classes,omitempty"` // "Волшебник, Чародей..." — свободный текст, экспорт TTG Club это не отдаёт
 
 	Description string   `json:"description,omitempty"` // markdown/HTML — рендерится тем же marked, что и заметки ДМ (см. web/src/notes/markdown.js); из импорта приходит готовый HTML, marked пропускает его как есть
 	Tags        []string `json:"tags,omitempty"`
@@ -88,17 +51,6 @@ type Spell struct {
 	// Extra — ключи JSON, которых эта структура не знает (поля схемы
 	// игровой системы и т.п.): хранятся и отдаются как есть, см. domain.Extra.
 	Extra Extra `json:"-"`
-}
-
-// Вид броска атаки заклинанием (см. Spell.Attack).
-const (
-	SpellAttackMelee  = "melee"
-	SpellAttackRanged = "ranged"
-)
-
-// ValidSpellAttack — известный ли код; всё прочее сервер гасит в "".
-func ValidSpellAttack(v string) bool {
-	return v == SpellAttackMelee || v == SpellAttackRanged
 }
 
 // SpellStatusRef — одна строка списка «Накладывает» карточки заклинания.

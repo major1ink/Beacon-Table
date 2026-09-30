@@ -21,6 +21,15 @@ import (
 // схемы кладут свои поля на верхний уровень.
 type Extra map[string]json.RawMessage
 
+// String — строковое значение ключа; "" — ключа нет или там не строка.
+func (e Extra) String(key string) string {
+	var v string
+	if json.Unmarshal(e[key], &v) != nil {
+		return ""
+	}
+	return v
+}
+
 // knownKeys — имена JSON-полей структуры в нижнем регистре: encoding/json
 // сопоставляет ключи без учёта регистра, и "Name" уже разобран в поле
 // name — хранить его ещё и в Extra значило бы получить дубль при записи.

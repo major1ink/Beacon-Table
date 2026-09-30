@@ -51,17 +51,12 @@ func validateSpellName(name string) (string, error) {
 	return name, nil
 }
 
-// sanitizeSpell — общие пределы карточки (строки, списки, теги, незнакомые ключи — см. cardlimits.go), вид
-// атаки и состояния, которые заклинание накладывает. Молча, без ошибки.
+// sanitizeSpell — общие пределы карточки (строки, списки, теги, незнакомые ключи — см. cardlimits.go)
+// и состояния, которые заклинание накладывает. Молча, без ошибки.
 func sanitizeSpell(s domain.Spell) domain.Spell {
 	clampCard(&s)
 	s.Tags = sanitizeTags(s.Tags)
 	s.Extra = clampExtra(s.Extra)
-	if !domain.ValidSpellAttack(s.Attack) {
-		s.Attack = ""
-	}
-	s.Upcast = strings.TrimSpace(s.Upcast)
-	s.Level = clampCount(s.Level, maxLevel)
 	// Statuses (см. domain.SpellStatusRef) — список «что накладывает».
 	// Slug приводим к каноничному виду тем же нормализатором, что и карточка
 	// состояния (см. conditions.go: NormalizeConditionSlug): иначе "Prone",

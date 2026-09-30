@@ -235,8 +235,11 @@ func TestParseCardExtras(t *testing.T) {
 		"правило без подстрок": func(m map[string]any) {
 			list(m)["categories"].(map[string]any)["rules"] = []any{map[string]any{"label": "Х"}}
 		},
-		"numeric у числа":   func(m map[string]any) { field(m, "ac")["numeric"] = true },
-		"numeric на строке": func(m map[string]any) { field(m, "cr")["numeric"] = true },
+		"numeric у числа": func(m map[string]any) { field(m, "ac")["numeric"] = true },
+		"numeric на строке": func(m map[string]any) {
+			field(m, "cr")["path"] = "speed"
+			field(m, "cr")["numeric"] = true
+		},
 		"numeric не число": func(m map[string]any) {
 			field(m, "cr")["path"] = "hp"
 			field(m, "cr")["numeric"] = true

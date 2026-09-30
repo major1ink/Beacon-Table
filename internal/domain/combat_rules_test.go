@@ -81,10 +81,17 @@ func TestInitiativeFormula(t *testing.T) {
 
 func TestXPFor(t *testing.T) {
 	dnd := dndRules()
-	if got := dnd.XPFor(&Monster{CR: " 1/2 "}); got != 100 {
+	var cr Monster
+	if err := json.Unmarshal([]byte(`{"name":"Гоблин","cr":" 1/2 "}`), &cr); err != nil {
+		t.Fatal(err)
+	}
+	if got := dnd.XPFor(&cr); got != 100 {
 		t.Errorf("D&D, CR 1/2: %d", got)
 	}
-	if got := dnd.XPFor(&Monster{CR: "страшный"}); got != 0 {
+	if err := json.Unmarshal([]byte(`{"name":"Гоблин","cr":"страшный"}`), &cr); err != nil {
+		t.Fatal(err)
+	}
+	if got := dnd.XPFor(&cr); got != 0 {
 		t.Errorf("D&D, CR не из таблицы: %d", got)
 	}
 	var m Monster

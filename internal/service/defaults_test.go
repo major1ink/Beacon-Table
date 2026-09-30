@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 
 	"beacon-table/internal/domain"
@@ -31,4 +32,15 @@ func TestApplyDefaultsBySchemaOf(t *testing.T) {
 	if blank.AC != 0 {
 		t.Fatalf("без схемы карточка пустая: %d", blank.AC)
 	}
+}
+
+// testMonster — карточка существа из JSON: поля системы (характеристики,
+// опасность…) лежат в Extra, литералом структуры их не задать.
+func testMonster(t *testing.T, raw string) *domain.Monster {
+	t.Helper()
+	var m domain.Monster
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		t.Fatal(err)
+	}
+	return &m
 }
