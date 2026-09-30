@@ -34,9 +34,9 @@ const (
 	maxLevel = 99
 	// maxExtraKeys / maxExtraKeyLen / maxExtraValue — незнакомые ядру ключи
 	// (domain.Extra): их не разбираем, только ограничиваем объём.
-	maxExtraKeys   = 64
-	maxExtraKeyLen = 64
-	maxExtraValue  = 64 << 10
+	maxExtraKeys   = domain.MaxExtraKeys
+	maxExtraKeyLen = domain.MaxExtraKeyLen
+	maxExtraValue  = domain.MaxExtraValueLen
 )
 
 // clampCard обрезает каждую строку до maxText рун и каждый список до

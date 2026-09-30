@@ -21,6 +21,15 @@ import (
 // схемы кладут свои поля на верхний уровень.
 type Extra map[string]json.RawMessage
 
+// Пределы незнакомых ключей карточки и листа: сверх них сервер молча
+// отбрасывает ключ (см. service.clampExtra), а проверка модуля считает это
+// ошибкой — иначе клон карточки потерял бы поле.
+const (
+	MaxExtraKeys     = 64
+	MaxExtraKeyLen   = 64
+	MaxExtraValueLen = 64 << 10
+)
+
 // String — строковое значение ключа; "" — ключа нет или там не строка.
 func (e Extra) String(key string) string {
 	var v string

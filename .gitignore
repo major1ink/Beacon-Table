@@ -3,6 +3,7 @@
 *.txt
 /beacon-table
 /beacon-table-desktop
+/btmod
 /uploads
 /data
 beacon.conf
