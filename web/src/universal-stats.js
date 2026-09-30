@@ -20,10 +20,3 @@ export function standStats(sheet) {
   }
   return out;
 }
-
-// initiativeBase — инициатива для стенда: число, если в поле число, иначе 0
-// (формулу кубов и ссылки стенд не считает).
-export function initiativeBase(sheet) {
-  const s = String((sheet && sheet.initiative) || "").replace(/\s+/g, "");
-  return /^[+-]?\d+$/.test(s) ? parseInt(s, 10) : 0;
-}

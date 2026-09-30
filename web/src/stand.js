@@ -3,7 +3,11 @@
 // stat-editor.js). База — реальные числа из бестиария и листов персонажей,
 // расчёт — applyModifiers (modifiers.js); ничего не пишет, только читает.
 import { fetchCharacters, fetchCharacter, fetchBestiary } from "./api.js";
-import { initiativeBase, standStats } from "./universal-stats.js";
+import { standStats } from "./universal-stats.js";
+import { loadSchemas, schemaFor } from "./schemas.js";
+import { compileSchema } from "./schema-formula.js";
+import { initiativeBase } from "./schema-summary.js";
+import { initiativeRule, loadSystemProfile } from "./system-profile.js";
 
 const STORAGE_KEY = "beacon.stand";
 // Без мира с существами стенд всё равно должен что-то показывать.
@@ -17,22 +21,32 @@ const DUMMY = {
 // чтобы стол с сотней персонажей не открывал карточку минуту.
 const MAX_CHARACTERS = 20;
 
-const abilityMod = (score) => Math.floor(((score || 10) - 10) / 2);
+
+// standInitiative — число инициативы по правилу системы; 0 — схемы нет.
+const compiled = new Map();
+function standInitiative(kind, data) {
+  const s = schemaFor(kind);
+  if (!s) return 0;
+  let c = compiled.get(kind);
+  if (!c || c.schema !== s) {
+    c = compileSchema(s);
+    compiled.set(kind, c);
+  }
+  return initiativeBase(c, data, initiativeRule());
+}
+
 // Скорость монстра — свободный текст («30 фт., полёт 60 фт.»): берём первое число.
 const speedOf = (s) => {
   const m = String(s || "").match(/\d+/);
   return m ? parseInt(m[0], 10) : 30;
 };
 
-// fromSheet — основы персонажа. У универсального листа инициатива — поле
-// листа (число; формулу кубов стенд не бросает), свободные характеристики —
-// основы целей stat.<ключ>; у бланка D&D — модификатор Ловкости и шесть
-// характеристик.
+// fromSheet — основы персонажа: инициатива по правилу системы, свободные
+// характеристики — основы целей stat.<ключ>, плюс шесть характеристик D&D.
 function fromSheet(c) {
   const sheet = c.sheet || {};
   const ab = sheet.abilities || {};
   const combat = sheet.combat || {};
-  const universalInit = String(sheet.initiative || "").trim() !== "";
   return {
     id: c.id,
     name: c.name,
@@ -42,7 +56,7 @@ function fromSheet(c) {
       speed: combat.speed || 30,
       "hp.max": combat.hpMax || 0,
       "hp.current": combat.hpCurrent || 0,
-      initiative: universalInit ? initiativeBase(sheet) : abilityMod(ab.dex),
+      initiative: standInitiative("sheet", sheet),
       ...standStats(sheet),
       "abilities.str": ab.str || 10,
       "abilities.dex": ab.dex || 10,
@@ -65,7 +79,7 @@ function fromMonster(m) {
       speed: speedOf(m.speed),
       "hp.max": m.hp || 0,
       "hp.current": m.hp || 0,
-      initiative: abilityMod(ab.dex),
+      initiative: standInitiative("monster", m),
       "abilities.str": ab.str || 10,
       "abilities.dex": ab.dex || 10,
       "abilities.con": ab.con || 10,
@@ -79,6 +93,7 @@ function fromMonster(m) {
 // loadStand — все доступные записи. Ошибки глотаем: игроку бестиарий
 // недоступен (403), а карточка должна открыться всё равно.
 export async function loadStand() {
+  await Promise.all([loadSchemas(), loadSystemProfile()]);
   const entries = [];
   try {
     const list = await fetchCharacters();

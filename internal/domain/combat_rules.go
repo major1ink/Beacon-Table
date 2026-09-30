@@ -3,7 +3,6 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,16 +29,11 @@ type CombatRules struct {
 // Формула броска — значение поля RollField листа персонажа или карточки
 // существа («1d20+2», «1d20 + @stat.ловкость»), а если поля нет или оно
 // пустое — Roll. Пустая формула — ручной ввод: боец встаёт с инициативой 0,
-// ДМ вписывает число в трекере. К формуле прибавляется Bonus и модификаторы
+// ДМ вписывает число в трекере. К формуле прибавляются модификаторы
 // инициативы от висящих состояний.
 type InitiativeRule struct {
 	Roll      string `json:"roll,omitempty"`
 	RollField string `json:"rollField,omitempty"`
-	// Bonus — откуда прибавка: "abilityMod:<ключ>" — floor((x−10)/2) от
-	// abilities.<ключ>; "field:<путь>" — число из поля; "" или "none" — нет.
-	// То же пишется формулой в Roll («1d20 + floor((@abilities.dex-10)/2)»);
-	// Bonus остаётся, пока встроенный D&D не переедет на схемы.
-	Bonus string `json:"bonus,omitempty"`
 }
 
 // Что происходит с бойцом, когда его хиты опустились до нуля.
@@ -121,9 +115,6 @@ func (r *CombatRules) Validate() error {
 	if in.RollField != "" && !fieldPathRe.MatchString(in.RollField) {
 		return fmt.Errorf("инициатива: неверное поле %q", in.RollField)
 	}
-	if _, _, err := parseBonus(in.Bonus); err != nil {
-		return err
-	}
 	usesSaves := false
 	for _, v := range []string{r.ZeroHP.Character, r.ZeroHP.Other} {
 		switch v {
@@ -157,26 +148,10 @@ func (r *CombatRules) Validate() error {
 	return nil
 }
 
-// parseBonus разбирает InitiativeRule.Bonus: вид ("abilityMod", "field" или
-// "") и путь к полю.
-func parseBonus(bonus string) (kind, path string, err error) {
-	if bonus == "" || bonus == "none" {
-		return "", "", nil
-	}
-	kind, path, ok := strings.Cut(bonus, ":")
-	if !ok || (kind != "abilityMod" && kind != "field") || !fieldPathRe.MatchString(path) {
-		return "", "", fmt.Errorf("инициатива: прибавка %q — нужно abilityMod:<ключ>, field:<поле> или none", bonus)
-	}
-	if kind == "abilityMod" {
-		path = "abilities." + path
-	}
-	return kind, path, nil
-}
-
 // InitiativeFormula — формула броска инициативы для бойца, чей лист или
 // карточка — src (любая структура, которая пишется в JSON; nil — голый
 // токен). applyStatus — модификаторы инициативы от висящих состояний
-// поверх прибавки из правил (nil — их нет). Пустая строка — ручной ввод.
+// поверх формулы (nil — их нет). Пустая строка — ручной ввод.
 // Формула — как написана (с «к», ссылками @поле): к формуле сервера её
 // сводит schema.Evaluator.Dice.
 func (r *CombatRules) InitiativeFormula(src any, applyStatus func(int) int) string {
@@ -192,27 +167,11 @@ func (r *CombatRules) InitiativeFormula(src any, applyStatus func(int) int) stri
 	if roll == "" {
 		return ""
 	}
-	kind, path, _ := parseBonus(r.Initiative.Bonus)
 	mod := 0
-	switch kind {
-	case "abilityMod":
-		// Без листа или карточки — характеристика 10, прибавка 0.
-		score := 10
-		if v, ok := lookupField(fields, path); ok {
-			if n, ok := scalarInt(v); ok {
-				score = n
-			}
-		}
-		mod = int(math.Floor(float64(score-10) / 2))
-	case "field":
-		if v, ok := lookupField(fields, path); ok {
-			mod, _ = scalarInt(v)
-		}
-	}
 	if applyStatus != nil {
 		mod = applyStatus(mod)
 	}
-	if kind == "" && mod == 0 {
+	if mod == 0 {
 		return roll
 	}
 	return fmt.Sprintf("%s%+d", roll, mod)

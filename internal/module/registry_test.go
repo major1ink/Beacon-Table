@@ -80,7 +80,7 @@ func TestManifestValidate(t *testing.T) {
 
 func TestManifestCombatRules(t *testing.T) {
 	raw := strings.Replace(manifestJSON("hack", "1.0.0",
-		`"combat":{"initiative":{"roll":"2d6","bonus":"field:init"},"zeroHp":{"character":"deathSaves","other":"out","deathSaves":{"success":2,"fail":4}},"xp":{"field":"xp"}}`),
+		`"combat":{"initiative":{"roll":"2d6"},"zeroHp":{"character":"deathSaves","other":"out","deathSaves":{"success":2,"fail":4}},"xp":{"field":"xp"}}`),
 		`"content"`, `"system"`, 1)
 	m, err := ParseManifest([]byte(raw))
 	if err != nil {

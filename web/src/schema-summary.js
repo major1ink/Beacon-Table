@@ -45,6 +45,34 @@ export function coreSummary(compiled, data, mods) {
   return { hp, hpMax, ac: text("ac"), speed: text("speed"), initiative };
 }
 
+// ruleInitiative — бросок инициативы по правилу системы (domain.InitiativeRule):
+// формула из поля rollField карточки, а если его нет — roll; ссылки @поле
+// считаются по схеме. null — формулы нет или она не считается.
+export function ruleInitiative(compiled, data, rule) {
+  if (!compiled || !rule) return null;
+  const text = [rule.rollField ? getPath(data, rule.rollField) : "", rule.roll]
+    .map((v) => (typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : ""))
+    .find(Boolean);
+  if (!text) return null;
+  const r = createEvaluator(compiled, data, []).dice(text);
+  return r.error ? null : r;
+}
+
+// initiativeText — инициатива карточки текстом: «1d20+2» или число без
+// кубов; "" — правила нет.
+export function initiativeText(compiled, data, rule) {
+  const r = ruleInitiative(compiled, data, rule);
+  if (!r) return "";
+  return r.dice > 0 ? r.formula : String(r.const);
+}
+
+// initiativeBase — постоянная часть инициативы («1d20 + @dex_mod» даёт
+// модификатор Ловкости); 0 — правила или схемы нет.
+export function initiativeBase(compiled, data, rule) {
+  const r = ruleInitiative(compiled, data, rule);
+  return r ? r.const : 0;
+}
+
 // layoutFields — id полей в порядке раскладки режима чтения, без повторов.
 function layoutFields(schema) {
   const seen = new Set();

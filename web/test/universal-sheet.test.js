@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 
 import { readFileSync } from "node:fs";
 
-import { initiativeBase, standStats } from "../src/universal-stats.js";
+import { standStats } from "../src/universal-stats.js";
+import { initiativeBase } from "../src/schema-summary.js";
 import { compileSchema, createEvaluator } from "../src/schema-formula.js";
 import { sheetKindOf } from "../src/system-profile.js";
 
@@ -30,12 +31,15 @@ test("основы характеристик для стенда", () => {
   assert.deepEqual(standStats({}), {});
 });
 
-test("инициатива из поля листа", () => {
-  assert.equal(initiativeBase({ initiative: "3" }), 3);
-  assert.equal(initiativeBase({ initiative: "-1" }), -1);
-  assert.equal(initiativeBase({ initiative: "2d6" }), 0);
-  assert.equal(initiativeBase({ initiative: "1d20 + @stat.ловкость" }), 0);
-  assert.equal(initiativeBase({}), 0);
+test("инициатива для стенда: постоянная часть формулы из поля листа", () => {
+  const rule = { rollField: "initiative" };
+  const base = (sheet) => initiativeBase(sheetSchema, sheet, rule);
+  assert.equal(base({ initiative: "3" }), 3);
+  assert.equal(base({ initiative: "-1" }), -1);
+  assert.equal(base({ initiative: "2d6" }), 0);
+  assert.equal(base({ initiative: "1d20 + @stat.ловкость", stats: [{ name: "Ловкость", value: 4 }] }), 4);
+  assert.equal(base({}), 0);
+  assert.equal(initiativeBase(sheetSchema, { initiative: "3" }, null), 0);
 });
 
 test("вид листа: D&D знаем поимённо, остальное — универсальный", () => {

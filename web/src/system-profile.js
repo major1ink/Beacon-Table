@@ -5,6 +5,7 @@
 // системы» — «кг» и «Деньги»).
 //
 // Куб проверки (rolls.check) — чем бросается голый модификатор в тексте.
+// Правило инициативы (initiative) — формула броска инициативы.
 //
 // Загрузка одна на страницу (loadSystemProfile в boot страницы); функции
 // форматирования синхронные и до загрузки отдают нейтральный вид — число
@@ -12,7 +13,7 @@
 import { fetchSystemProfile } from "./api.js";
 
 // До загрузки куб проверки — «1d20», как у «Своей системы» (domain.CustomRolls).
-let profile = { id: "", title: "", sheet: "", units: { weight: "" }, currencies: [], rolls: { check: "1d20" } };
+let profile = { id: "", title: "", sheet: "", units: { weight: "" }, currencies: [], rolls: { check: "1d20" }, initiative: { roll: "", rollField: "initiative" } };
 let loading = null;
 
 export function loadSystemProfile() {
@@ -27,6 +28,7 @@ export function loadSystemProfile() {
             units: { weight: (p.units && p.units.weight) || "" },
             currencies: Array.isArray(p.currencies) ? p.currencies : [],
             rolls: { check: p.rolls && typeof p.rolls.check === "string" ? p.rolls.check : "1d20" },
+            initiative: { roll: (p.initiative && p.initiative.roll) || "", rollField: (p.initiative && p.initiative.rollField) || "" },
           };
         }
         return profile;
@@ -41,6 +43,10 @@ export const weightUnit = () => profile.units.weight;
 // checkDie — куб проверки системы («1d20», «2d6»; "" — голый модификатор в
 // тексте не бросается), см. inline-rolls.js.
 export const checkDie = () => profile.rolls.check;
+
+// initiativeRule — правило инициативы системы: поле карточки с формулой
+// (rollField) и запасная формула (roll), см. schema-summary.js: ruleInitiative.
+export const initiativeRule = () => profile.initiative;
 
 // Виды листа, которые клиент умеет рисовать поимённо (бланки встроенного
 // D&D); всё остальное — универсальный лист (domain.SheetUniversal).

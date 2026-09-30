@@ -50,13 +50,13 @@ func builtinModules(systemFS fs.FS) []*module.Module {
 }
 
 // dndCombatRules — правила боя D&D 5e (одинаковые в 2014 и 2024): инициатива
-// 1d20 + модификатор Ловкости, персонаж на 0 хитов бросает спасброски от
+// 1d20 + модификатор Ловкости (формулой по схемам листа и существа), персонаж на 0 хитов бросает спасброски от
 // смерти (3 успеха — приходит в себя с 1 хитом, 3 провала — смерть),
 // существо умирает сразу, опыт — по уровню опасности (таблица DMG,
 // "Beating Encounters").
 func dndCombatRules() *domain.CombatRules {
 	return &domain.CombatRules{
-		Initiative: domain.InitiativeRule{Roll: "1d20", Bonus: "abilityMod:dex"},
+		Initiative: domain.InitiativeRule{Roll: "1d20 + @dex_mod"},
 		ZeroHP: domain.ZeroHPRule{
 			Character:  domain.ZeroHPDeathSaves,
 			Other:      domain.ZeroHPDead,

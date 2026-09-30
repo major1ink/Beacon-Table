@@ -27,11 +27,11 @@ import { renderMonsterPreview } from "../monster-preview.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { formatWeight, loadSystemProfile, sheetKind } from "../system-profile.js";
+import { formatWeight, initiativeRule, loadSystemProfile, sheetKind } from "../system-profile.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
-import { coreSummary } from "../schema-summary.js";
+import { coreSummary, initiativeText } from "../schema-summary.js";
 import { medallionOf } from "../schema-list.js";
 
 // ==================== state ====================
@@ -224,7 +224,7 @@ function renderSchemaView(root, compiled) {
     glyphName: fallbackGlyph,
     numbers: () => {
       const c = coreSummary(compiled, monster, []);
-      return { ini: c.initiative, ac: c.ac || "—", hp: c.hpMax || "—" };
+      return { ini: initiativeText(compiled, monster, initiativeRule()) || c.initiative, ac: c.ac || "—", hp: c.hpMax || "—" };
     },
   });
   const middle = renderSchemaCard({

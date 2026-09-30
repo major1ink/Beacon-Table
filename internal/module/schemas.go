@@ -62,7 +62,29 @@ func LoadSchemas(fsys fs.FS, dir string, man *Manifest) (map[string]*schema.Sche
 		}
 		out[kind] = s
 	}
+	if err := checkInitiativeRefs(out, man); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// checkInitiativeRefs — ссылки формулы инициативы (combat.initiative.roll)
+// должны находиться в схемах листа и существа модуля: опечатка иначе молча
+// даёт 0.
+func checkInitiativeRefs(schemas map[string]*schema.Schema, man *Manifest) error {
+	if man.Combat == nil || man.Combat.Initiative.Roll == "" {
+		return nil
+	}
+	for _, kind := range []string{schema.KindSheet, schema.KindMonster} {
+		s := schemas[kind]
+		if s == nil {
+			continue
+		}
+		if err := s.CheckRefs(man.Combat.Initiative.Roll); err != nil {
+			return fmt.Errorf("модуль %s: инициатива %q не сходится со схемой %s: %w", man.ID, man.Combat.Initiative.Roll, kind, err)
+		}
+	}
+	return nil
 }
 
 func knownSchemaKind(kind string) bool {

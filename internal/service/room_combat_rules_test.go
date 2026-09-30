@@ -16,13 +16,31 @@ import (
 
 func dndTestRules() *domain.CombatRules {
 	return &domain.CombatRules{
-		Initiative: domain.InitiativeRule{Roll: "1d20", Bonus: "abilityMod:dex"},
+		Initiative: domain.InitiativeRule{Roll: "1d20 + @dex_mod"},
 		ZeroHP: domain.ZeroHPRule{
 			Character: domain.ZeroHPDeathSaves, Other: domain.ZeroHPDead,
 			DeathSaves: &domain.DeathSavesRule{Success: 3, Fail: 3, StabilizeHP: 1},
 		},
 		XP: domain.XPRule{Field: "cr", Table: map[string]int{"1/2": 100}},
 	}
+}
+
+// dexMonsterSchema — схема существа с модификатором Ловкости, на который
+// ссылается формула инициативы D&D.
+func dexMonsterSchema(t *testing.T) *schema.Schema {
+	t.Helper()
+	s, err := schema.Parse([]byte(`{
+		"format": "beacon-schema/v1", "kind": "monster",
+		"fields": {
+			"dex": {"type": "number", "path": "abilities.dex", "label": "Ловкость", "modifierTarget": "abilities.dex"},
+			"dex_mod": {"type": "computed", "label": "Мод. Ловкости", "formula": "floor((@dex - 10) / 2)"}
+		},
+		"layout": [{"fields": ["dex", "dex_mod"]}]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }
 
 func hasStatus(list []domain.AppliedStatus, slug string) bool {
@@ -141,9 +159,30 @@ func TestInitiativeFollowsRules(t *testing.T) {
 	}
 
 	r.rules = dndTestRules()
+	r.schemas = map[string]*schema.Schema{schema.KindMonster: dexMonsterSchema(t)}
 	r.handleAddCombatant(domain.ClientMsg{MonsterID: "gob"})
 	if len(roller.formulas) != 1 || roller.formulas[0] != "1d20+2" {
 		t.Fatalf("D&D, Лов 14: формулы %v", roller.formulas)
+	}
+}
+
+// Ловкость от состояния меняет инициативу: модификатор abilities.dex
+// входит в @dex_mod.
+func TestInitiativeDexFromStatus(t *testing.T) {
+	r := testRoom()
+	roller := &fixedRoller{total: 15}
+	r.dice = roller
+	r.rules = dndTestRules()
+	r.schemas = map[string]*schema.Schema{schema.KindMonster: dexMonsterSchema(t)}
+	r.monsters = &fakeMonsters{list: []*domain.Monster{{ID: "gob", Name: "Гоблин", Abilities: domain.Abilities{Dex: 14}}}}
+	tok := r.scenes["scene-1"].Tokens["tok-1"]
+	tok.MonsterID = "gob"
+	tok.Statuses = []domain.AppliedStatus{{Slug: "haste", Modifiers: []domain.Modifier{
+		{Target: "abilities.dex", Mode: domain.ModifierAdd, Value: "4"},
+	}}}
+	r.handleAddCombatant(domain.ClientMsg{TokenID: "tok-1"})
+	if len(roller.formulas) != 1 || roller.formulas[0] != "1d20+4" {
+		t.Fatalf("Лов 14 + 4 от состояния: формулы %v, ждали 1d20+4", roller.formulas)
 	}
 }
 

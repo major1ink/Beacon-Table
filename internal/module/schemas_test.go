@@ -63,3 +63,19 @@ func TestInstallRejectsBadSchemas(t *testing.T) {
 		t.Fatalf("прежняя версия должна остаться: %v %+v", err, m)
 	}
 }
+
+func TestInstallChecksInitiativeRefs(t *testing.T) {
+	withRoll := func(id, roll string) string {
+		man := strings.TrimSuffix(strings.TrimSpace(systemManifest(id)), "}")
+		return man + `,"combat":{"initiative":{"roll":"` + roll + `"},"zeroHp":{"character":"out","other":"dead"}}}`
+	}
+	r := NewRegistry(t.TempDir(), nil, nil, "0.9.0")
+	if _, err := r.Install(makeArchive(t, map[string]string{"module.json": withRoll("ok", "1d20 + @luck + @stat.удача"), "schemas/sheet.json": sheetSchema})); err != nil {
+		t.Fatalf("ссылки на поле схемы и характеристику: %v", err)
+	}
+	_, err := r.Install(makeArchive(t, map[string]string{"module.json": withRoll("typo", "1d20 + @luk"), "schemas/sheet.json": sheetSchema}))
+	var ve *domain.ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("опечатка в ссылке: ожидали ValidationError, получили %v", err)
+	}
+}

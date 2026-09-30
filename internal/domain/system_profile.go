@@ -33,13 +33,16 @@ type SystemRolls struct {
 
 // SystemProfile — то, что клиенту нужно знать о системе мира, чтобы
 // показать лист, вес и деньги и бросать кубы (см. GET /api/system).
+// Initiative — правило броска инициативы: клиент по нему показывает
+// инициативу карточки.
 type SystemProfile struct {
-	ID         string      `json:"id"`
-	Title      string      `json:"title"`
-	Sheet      string      `json:"sheet"`
-	Units      SystemUnits `json:"units"`
-	Currencies []Currency  `json:"currencies"`
-	Rolls      SystemRolls `json:"rolls"`
+	ID         string         `json:"id"`
+	Title      string         `json:"title"`
+	Sheet      string         `json:"sheet"`
+	Units      SystemUnits    `json:"units"`
+	Currencies []Currency     `json:"currencies"`
+	Rolls      SystemRolls    `json:"rolls"`
+	Initiative InitiativeRule `json:"initiative"`
 }
 
 // SheetUniversal — вид листа по умолчанию: универсальный лист (хиты,

@@ -122,6 +122,38 @@ func (s *Schema) checkFormulas(root reflect.Type) error {
 	return findCycle(graph)
 }
 
+// CheckRefs — формула src (кубы разрешены) разбирается, а её ссылки ведут к
+// полю схемы, свободной характеристике, пути Go-типа этого вида или ключу,
+// который хранит поле схемы.
+func (s *Schema) CheckRefs(src string) error {
+	e, err := formula.Parse(src, true)
+	if err != nil {
+		return err
+	}
+	root := rootTypes[s.Kind]
+	for _, ref := range e.Refs() {
+		if s.Fields[ref] != nil || strings.HasPrefix(ref, "stat.") {
+			continue
+		}
+		t, err := domain.ResolveJSONPath(root, ref)
+		if err != nil || (t == nil && !s.hasPath(ref)) {
+			return &formula.Error{Code: formula.CodeUnknownRef, Detail: ref}
+		}
+	}
+	return nil
+}
+
+// hasPath — есть ли у схемы поле с таким путём: незнакомый ядру ключ верхнего
+// уровня годится для ссылки, только если его хранит поле схемы.
+func (s *Schema) hasPath(path string) bool {
+	for _, f := range s.Fields {
+		if f.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
 // checkTableFormulas — ссылки и циклы формул колонок; у таблицы со строками
 // каждая строка проверяется отдельно.
 func checkTableFormulas(root reflect.Type, id string, f *Field, fields map[string]*Field) error {

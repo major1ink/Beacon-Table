@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { abilityMod, ABILITIES, crColor, fmtMod, monsterGlyphName } from "./legacy-taxonomy.js";
 import { createEvaluator, compileSchema } from "../src/schema-formula.js";
 import { catalogConfig, cardSubtitle, displayValue, medallionOf, pillsOf } from "../src/schema-list.js";
-import { compactStats, coreSummary } from "../src/schema-summary.js";
+import { compactStats, coreSummary, initiativeText } from "../src/schema-summary.js";
 
 const root = new URL("../../cmd/beacon-table/systemdata/", import.meta.url);
 const schema = (system) => compileSchema(JSON.parse(readFileSync(new URL(`schemas/${system}/monster.json`, root), "utf8")));
@@ -59,6 +59,15 @@ test("существа: КД, хиты и модификаторы как в п�
       assert.equal(ev.value(a.key + "_mod").value, abilityMod(m.abilities[a.key]), `${m.name}: ${a.key}`);
       assert.equal(ev.rollField(a.key + "_mod").formula, "1d20" + (abilityMod(m.abilities[a.key]) ? (abilityMod(m.abilities[a.key]) > 0 ? "+" : "") + abilityMod(m.abilities[a.key]) : ""), m.name);
     }
+  }
+});
+
+test("существа: инициатива по правилу D&D — Ловкость существа", () => {
+  const compiled = schema("dnd5e-2024");
+  const rule = { roll: "1d20 + @dex_mod" };
+  for (const m of monsters()) {
+    const mod = abilityMod(m.abilities.dex);
+    assert.equal(initiativeText(compiled, m, rule), "1d20" + (mod ? (mod > 0 ? "+" : "") + mod : ""), m.name);
   }
 });
 

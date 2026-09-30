@@ -7,7 +7,7 @@ import (
 
 func dndRules() *CombatRules {
 	return &CombatRules{
-		Initiative: InitiativeRule{Roll: "1d20", Bonus: "abilityMod:dex"},
+		Initiative: InitiativeRule{Roll: "1d20 + @dex_mod"},
 		ZeroHP: ZeroHPRule{
 			Character: ZeroHPDeathSaves, Other: ZeroHPDead,
 			DeathSaves: &DeathSavesRule{Success: 3, Fail: 3, StabilizeHP: 1},
@@ -31,8 +31,6 @@ func TestCombatRulesValidate(t *testing.T) {
 	bad := map[string]func(r *CombatRules){
 		"формула не из кубов":     func(r *CombatRules) { r.Initiative.Roll = "1d20; drop" },
 		"кубы в умножении":        func(r *CombatRules) { r.Initiative.Roll = "2 * 1d20" },
-		"неизвестная прибавка":    func(r *CombatRules) { r.Initiative.Bonus = "luck:dex" },
-		"прибавка без поля":       func(r *CombatRules) { r.Initiative.Bonus = "field:" },
 		"неизвестный режим":       func(r *CombatRules) { r.ZeroHP.Other = "explode" },
 		"спасброски без счётчика": func(r *CombatRules) { r.ZeroHP.DeathSaves = nil },
 		"ноль успехов":            func(r *CombatRules) { r.ZeroHP.DeathSaves.Success = 0 },
@@ -51,19 +49,12 @@ func TestCombatRulesValidate(t *testing.T) {
 
 func TestInitiativeFormula(t *testing.T) {
 	dnd := dndRules()
-	sheet := DefaultCharacterSheet()
-	sheet.Abilities.Dex = 15
-	if got := dnd.InitiativeFormula(sheet, nil); got != "1d20+2" {
-		t.Errorf("D&D, Лов 15: %q", got)
-	}
-	// Голый токен: характеристика 10, но прибавка всё равно пишется — как
-	// раньше, "1d20+0".
-	if got := dnd.InitiativeFormula(nil, nil); got != "1d20+0" {
-		t.Errorf("D&D без листа: %q", got)
+	if got := dnd.InitiativeFormula(DefaultCharacterSheet(), nil); got != "1d20 + @dex_mod" {
+		t.Errorf("D&D: %q", got)
 	}
 	minus2 := func(mod int) int { return mod - 2 }
-	if got := dnd.InitiativeFormula(&Monster{Abilities: Abilities{Dex: 8}}, minus2); got != "1d20-3" {
-		t.Errorf("D&D, Лов 8 и состояние -2: %q", got)
+	if got := dnd.InitiativeFormula(nil, minus2); got != "1d20 + @dex_mod-2" {
+		t.Errorf("D&D и состояние -2: %q", got)
 	}
 
 	custom := CustomCombatRules()
@@ -85,14 +76,6 @@ func TestInitiativeFormula(t *testing.T) {
 	}
 	if got := custom.InitiativeFormula(m, nil); got != "12" {
 		t.Errorf("своя система, число в поле: %q", got)
-	}
-
-	byField := &CombatRules{Initiative: InitiativeRule{Roll: "2d6", Bonus: "field:init"}}
-	if err := json.Unmarshal([]byte(`{"name":"Тень","init":3}`), &m); err != nil {
-		t.Fatal(err)
-	}
-	if got := byField.InitiativeFormula(m, nil); got != "2d6+3" {
-		t.Errorf("прибавка из поля: %q", got)
 	}
 }
 
