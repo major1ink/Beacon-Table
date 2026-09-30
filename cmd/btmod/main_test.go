@@ -67,6 +67,13 @@ func TestPackAndIndex(t *testing.T) {
 	if code, _, errOut := call("index", "-o", index, "--base-url", "https://example.com/dl", "--merge", index, out); code != 0 {
 		t.Fatalf("index --merge: код %d, %q", code, errOut)
 	}
+	notes, err := os.ReadFile(filepath.Join(out, "sample-1.0.0.notes.md")) //nolint:gosec // временный файл теста
+	if err != nil || strings.TrimSpace(string(notes)) != "Первый выпуск." {
+		t.Fatalf("заметки выпуска: %q %v", notes, err)
+	}
+	if code, stdout, _ := call("info", dir); code != 0 || stdout != "sample\t1.0.0\tПример\n" {
+		t.Fatalf("info: код %d, %q", code, stdout)
+	}
 	broken := writeModule(t, "1.0.0")
 	if err := os.Remove(filepath.Join(broken, "CHANGELOG.md")); err != nil {
 		t.Fatal(err)

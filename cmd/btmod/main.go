@@ -6,6 +6,7 @@
 //	btmod validate [--tag id/vX.Y.Z] [--prev-summary файл] <папка модуля>...
 //	btmod pack -o <папка выпуска> <папка модуля>
 //	btmod index -o index.json --base-url <корень загрузок> [--merge index.json] <папка выпуска>
+//	btmod info <папка модуля>
 package main
 
 import (
@@ -25,6 +26,7 @@ const usage = `использование:
   btmod validate [--tag id/vX.Y.Z] [--prev-summary файл] <папка модуля>...
   btmod pack -o <папка выпуска> <папка модуля>
   btmod index -o <index.json> --base-url <корень загрузок> [--merge <index.json>] <папка выпуска>
+  btmod info <папка модуля>    — id, версия и название через табуляцию (для скриптов выпуска)
 `
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -40,6 +42,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = pack(args[1:], stdout)
 	case "index":
 		err = index(args[1:], stdout)
+	case "info":
+		err = info(args[1:], stdout)
 	default:
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -154,5 +158,17 @@ func index(args []string, stdout io.Writer) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "%s: модулей %d\n", *out, len(idx.Modules))
+	return nil
+}
+
+func info(args []string, stdout io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("нужна одна папка модуля")
+	}
+	s, err := modtool.Summarize(args[0])
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", s.ID, s.Version, s.Title)
 	return nil
 }

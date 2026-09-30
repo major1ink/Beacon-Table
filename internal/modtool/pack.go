@@ -19,6 +19,7 @@ type Pack struct {
 	Archive string // <id>-<версия>.btmod
 	Sum     string // <id>-<версия>.sha256
 	Summary string // <id>-<версия>.summary.json
+	Notes   string // <id>-<версия>.notes.md — текст записи CHANGELOG для описания выпуска
 	SHA256  string
 	Size    int64
 }
@@ -50,7 +51,7 @@ func PackModule(dir, out string) (*Pack, error) {
 		return nil, err
 	}
 	base := sum.ID + "-" + sum.Version
-	p := &Pack{Archive: base + ".btmod", Sum: base + ".sha256", Summary: base + ".summary.json"}
+	p := &Pack{Archive: base + ".btmod", Sum: base + ".sha256", Summary: base + ".summary.json", Notes: base + ".notes.md"}
 	archive := filepath.Join(out, p.Archive)
 	if err := writeZip(dir, archive); err != nil {
 		return nil, err
@@ -68,6 +69,9 @@ func PackModule(dir, out string) (*Pack, error) {
 		return nil, err
 	}
 	if err := os.WriteFile(filepath.Join(out, p.Summary), data, 0o600); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(out, p.Notes), []byte(sum.Changelog+"\n"), 0o600); err != nil {
 		return nil, err
 	}
 	return p, nil
