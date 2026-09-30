@@ -8,12 +8,13 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository/memory"
+	"beacon-table/internal/schema"
 	"beacon-table/internal/service"
 )
 
 func TestCharacterService_CreateListUpdateDelete(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "  Elminster  ", "http://example.com/a.png")
 	if err != nil {
@@ -52,7 +53,7 @@ func TestCharacterService_CreateListUpdateDelete(t *testing.T) {
 // злоумышленнику, что id вообще существует.
 func TestCharacterService_OwnershipEnforced(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Drizzt", "")
 	if err != nil {
@@ -69,7 +70,7 @@ func TestCharacterService_OwnershipEnforced(t *testing.T) {
 
 func TestCharacterService_Create_EmptyName(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	_, err := svc.Create(ctx, "acc-1", "   ", "")
 	var verr *domain.ValidationError
@@ -84,7 +85,7 @@ func TestCharacterService_Create_EmptyName(t *testing.T) {
 // мира, см. TestCharacterService_Create_SchemaDefaults.
 func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Bruenor", "")
 	if err != nil {
@@ -103,11 +104,37 @@ func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 	}
 }
 
+// TestCharacterService_Create_SchemaDefaults — значения нового листа
+// (уровень, характеристики) кладёт схема листа мира: default у полей.
+func TestCharacterService_Create_SchemaDefaults(t *testing.T) {
+	ctx := context.Background()
+	sheet, err := schema.Parse([]byte(`{"format":"beacon-schema/v1","kind":"sheet","fields":{
+		"dex":{"type":"number","path":"abilities.dex","label":"Ловкость","default":10},
+		"level":{"type":"number","path":"info.level","label":"Уровень","default":1}
+	},"layout":[{"fields":["dex","level"]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := service.NewCharacterService(memory.NewCharacterStore(), func(kind string) *schema.Schema {
+		if kind == schema.KindSheet {
+			return sheet
+		}
+		return nil
+	})
+	c, err := svc.Create(ctx, "acc-1", "Bruenor", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if string(c.Sheet.Extra["abilities"]) != `{"dex":10}` || string(c.Sheet.Extra["info"]) != `{"level":1}` || c.Sheet.Coins == nil {
+		t.Fatalf("умолчания схемы: %v", c.Sheet.Extra)
+	}
+}
+
 // TestCharacterService_UpdateSheet — сохранённые значения читаются обратно,
 // а владение проверяется так же, как и у Update/Delete.
 func TestCharacterService_UpdateSheet(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Drizzt", "")
 	if err != nil {
@@ -146,7 +173,7 @@ func TestCharacterService_UpdateSheet(t *testing.T) {
 func TestCharacterService_UpdateInventoryItem_EquipSplitsAndMerges(t *testing.T) {
 	ctx := context.Background()
 	store := memory.NewCharacterStore()
-	svc := service.NewCharacterService(store)
+	svc := service.NewCharacterService(store, nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Дриззт", "")
 	if err != nil {
@@ -203,7 +230,7 @@ func TestCharacterService_UpdateInventoryItem_EquipSplitsAndMerges(t *testing.T)
 func TestCharacterService_UpdateInventoryItem_ZeroQuantityRemovesEntry(t *testing.T) {
 	ctx := context.Background()
 	store := memory.NewCharacterStore()
-	svc := service.NewCharacterService(store)
+	svc := service.NewCharacterService(store, nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Дриззт", "")
 	if err != nil {

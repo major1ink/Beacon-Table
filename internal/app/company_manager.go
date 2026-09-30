@@ -551,8 +551,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	world := &ActiveWorld{
 		Company:    company,
 		Room:       room,
-		Characters: service.NewCharacterService(characterRepo),
-		Pregens:    service.NewPregenService(pregenRepo, characterRepo),
+		Characters: service.NewCharacterService(characterRepo, schemaOf),
+		Pregens:    service.NewPregenService(pregenRepo, characterRepo, schemaOf),
 		Admin:      service.NewAdminService(m.accounts, m.sessions, characterRepo, company.ID),
 		Bestiary:   bestiary,
 		Spells:     spells,

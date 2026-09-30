@@ -399,7 +399,11 @@ func (e *Evaluator) compute(id string, f *Field) (float64, error) {
 	case TypeRoll, TypeTable, TypeResource, TypeTemplate:
 		return 0, &formula.Error{Code: formula.CodeNotNumber, Detail: id}
 	default:
-		n, ok := toNumber(lookupPath(e.data, f.Path))
+		raw := lookupPath(e.data, f.Path)
+		if d, ok := f.Default.(float64); ok && raw == nil && f.Type == TypeNumber {
+			raw = d // значения нет вовсе — запасное из схемы
+		}
+		n, ok := toNumber(raw)
 		if !ok {
 			return 0, &formula.Error{Code: formula.CodeNotNumber, Detail: id}
 		}

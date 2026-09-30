@@ -77,6 +77,19 @@ func TestBuiltinModulesHaveSchemas(t *testing.T) {
 	}
 }
 
+func TestBuiltinSheetDefaults(t *testing.T) {
+	for _, m := range builtinModules(systemFiles) {
+		sheet := domain.DefaultCharacterSheet()
+		if err := m.Schemas["sheet"].ApplyDefaults(&sheet); err != nil {
+			t.Fatal(err)
+		}
+		abilities := `{"cha":10,"con":10,"dex":10,"int":10,"str":10,"wis":10}`
+		if string(sheet.Extra["abilities"]) != abilities || string(sheet.Extra["info"]) != `{"level":1}` {
+			t.Errorf("%s: новый лист %s %s", m.Manifest.ID, sheet.Extra["abilities"], sheet.Extra["info"])
+		}
+	}
+}
+
 func TestBuiltinMonsterDefaults(t *testing.T) {
 	for _, m := range builtinModules(systemFiles) {
 		mon := domain.NewMonster("m", "Гоблин")

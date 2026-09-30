@@ -749,7 +749,10 @@ export function createEvaluator(compiled, data, mods) {
       } else if (f.type === "roll" || f.type === "table" || f.type === "resource") {
         throw new FormulaError("not_number", 0, id);
       } else {
-        v = toNumber(lookupPath(source, pathOf(f)));
+        let raw = lookupPath(source, pathOf(f));
+        // значения нет вовсе — запасное из схемы
+        if ((raw === undefined || raw === null) && f.type === "number" && typeof f.default === "number") raw = f.default;
+        v = toNumber(raw);
         if (v === null) throw new FormulaError("not_number", 0, id);
       }
       return modify(v, f.modifierTarget);

@@ -773,6 +773,134 @@
     }
    },
    "static": "cycle"
+  },
+  {
+   "name": "default: значения нет — запасное из схемы",
+   "schema": {
+    "fields": {
+     "dex": {
+      "type": "number",
+      "path": "abilities.dex",
+      "label": "Ловкость",
+      "default": 10,
+      "modifierTarget": "abilities.dex"
+     },
+     "dex_mod": {
+      "type": "computed",
+      "formula": "floor((@dex - 10) / 2)",
+      "label": "x"
+     },
+     "hp": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты"
+     },
+     "init": {
+      "type": "computed",
+      "formula": "@hp + @dex_mod",
+      "label": "x"
+     }
+    }
+   },
+   "data": {},
+   "mods": [],
+   "values": {
+    "dex": 10,
+    "dex_mod": 0,
+    "hp": 0,
+    "init": 0
+   }
+  },
+  {
+   "name": "default: явный ноль — не отсутствие",
+   "schema": {
+    "fields": {
+     "dex": {
+      "type": "number",
+      "path": "abilities.dex",
+      "label": "Ловкость",
+      "default": 10,
+      "modifierTarget": "abilities.dex"
+     },
+     "dex_mod": {
+      "type": "computed",
+      "formula": "floor((@dex - 10) / 2)",
+      "label": "x"
+     },
+     "hp": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты"
+     },
+     "init": {
+      "type": "computed",
+      "formula": "@hp + @dex_mod",
+      "label": "x"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "dex": 0
+    }
+   },
+   "mods": [],
+   "values": {
+    "dex": 0,
+    "dex_mod": -5,
+    "hp": 0,
+    "init": -5
+   }
+  },
+  {
+   "name": "default: заполнено — как есть, модификаторы поверх",
+   "schema": {
+    "fields": {
+     "dex": {
+      "type": "number",
+      "path": "abilities.dex",
+      "label": "Ловкость",
+      "default": 10,
+      "modifierTarget": "abilities.dex"
+     },
+     "dex_mod": {
+      "type": "computed",
+      "formula": "floor((@dex - 10) / 2)",
+      "label": "x"
+     },
+     "hp": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты"
+     },
+     "init": {
+      "type": "computed",
+      "formula": "@hp + @dex_mod",
+      "label": "x"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "dex": 14
+    },
+    "combat": {
+     "hpMax": 7
+    }
+   },
+   "mods": [
+    {
+     "target": "abilities.dex",
+     "mode": "add",
+     "value": "2"
+    }
+   ],
+   "values": {
+    "dex": 16,
+    "dex_mod": 3,
+    "hp": 7,
+    "init": 10
+   }
   }
  ],
  "_subtitles": "subtitles — подпись по шаблону list.subtitle (internal/schema: Subtitle, web/src/schema-list.js: cardSubtitle).",

@@ -50,7 +50,8 @@
     "level": {
       "type": "number",
       "path": "info.level",
-      "label": "Уровень"
+      "label": "Уровень",
+      "default": 1
     },
     "xp": {
       "type": "number",
@@ -73,7 +74,8 @@
       "path": "abilities.str",
       "label": "Сила",
       "short": "Сил",
-      "modifierTarget": "abilities.str"
+      "modifierTarget": "abilities.str",
+      "default": 10
     },
     "str_mod": {
       "type": "computed",
@@ -87,7 +89,8 @@
       "path": "abilities.dex",
       "label": "Ловкость",
       "short": "Лов",
-      "modifierTarget": "abilities.dex"
+      "modifierTarget": "abilities.dex",
+      "default": 10
     },
     "dex_mod": {
       "type": "computed",
@@ -101,7 +104,8 @@
       "path": "abilities.con",
       "label": "Телосложение",
       "short": "Тел",
-      "modifierTarget": "abilities.con"
+      "modifierTarget": "abilities.con",
+      "default": 10
     },
     "con_mod": {
       "type": "computed",
@@ -115,7 +119,8 @@
       "path": "abilities.int",
       "label": "Интеллект",
       "short": "Инт",
-      "modifierTarget": "abilities.int"
+      "modifierTarget": "abilities.int",
+      "default": 10
     },
     "int_mod": {
       "type": "computed",
@@ -129,7 +134,8 @@
       "path": "abilities.wis",
       "label": "Мудрость",
       "short": "Мдр",
-      "modifierTarget": "abilities.wis"
+      "modifierTarget": "abilities.wis",
+      "default": 10
     },
     "wis_mod": {
       "type": "computed",
@@ -143,7 +149,8 @@
       "path": "abilities.cha",
       "label": "Харизма",
       "short": "Хар",
-      "modifierTarget": "abilities.cha"
+      "modifierTarget": "abilities.cha",
+      "default": 10
     },
     "cha_mod": {
       "type": "computed",

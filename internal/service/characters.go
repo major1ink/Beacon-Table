@@ -6,6 +6,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/schema"
 )
 
 // maxInventoryNotes — санитарный предел заметки записи инвентаря персонажа,
@@ -55,10 +56,11 @@ type CharacterService interface {
 
 type characterService struct {
 	characters repository.CharacterRepository
+	schemaOf   SchemaOf
 }
 
-func NewCharacterService(characters repository.CharacterRepository) CharacterService {
-	return &characterService{characters: characters}
+func NewCharacterService(characters repository.CharacterRepository, schemaOf SchemaOf) CharacterService {
+	return &characterService{characters: characters, schemaOf: schemaOf}
 }
 
 func (s *characterService) List(ctx context.Context, accountID string) ([]*domain.Character, error) {
@@ -81,7 +83,9 @@ func (s *characterService) Create(ctx context.Context, accountID, name, avatarUR
 	if err != nil {
 		return nil, err
 	}
-	c := &domain.Character{ID: newID(), AccountID: accountID, Name: name, AvatarURL: avatarURL, Sheet: domain.DefaultCharacterSheet()}
+	sheet := domain.DefaultCharacterSheet()
+	applyDefaults(s.schemaOf, schema.KindSheet, &sheet)
+	c := &domain.Character{ID: newID(), AccountID: accountID, Name: name, AvatarURL: avatarURL, Sheet: sheet}
 	if err := s.characters.Create(ctx, c); err != nil {
 		return nil, err
 	}

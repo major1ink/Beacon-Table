@@ -15,7 +15,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 	ctx := context.Background()
 	pregens := memory.NewPregenStore()
 	chars := memory.NewCharacterStore()
-	svc := service.NewPregenService(pregens, chars)
+	svc := service.NewPregenService(pregens, chars, nil)
 
 	// Импорт: пустой пре-ген по имени, затем полная перезапись листом.
 	p, err := svc.Import(ctx, "  Шила  ")
@@ -85,7 +85,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 }
 
 func TestPregenService_ImportRejectsEmptyName(t *testing.T) {
-	svc := service.NewPregenService(memory.NewPregenStore(), memory.NewCharacterStore())
+	svc := service.NewPregenService(memory.NewPregenStore(), memory.NewCharacterStore(), nil)
 	if _, err := svc.Import(context.Background(), "   "); err == nil {
 		t.Fatal("пустое имя пре-гена должно отклоняться")
 	}
