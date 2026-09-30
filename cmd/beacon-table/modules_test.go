@@ -90,7 +90,7 @@ func TestBuiltinMonsterDefaults(t *testing.T) {
 	}
 }
 
-// Существа и заклинания из systemdata читаются и пишутся назад без потерь:
+// Существа, заклинания, предметы и справочник из systemdata читаются и пишутся назад без потерь:
 // поля системы лежат в Extra под теми же ключами.
 func TestSystemCatalogRoundTrip(t *testing.T) {
 	check := func(dir string, into func() any, minCount int) {
@@ -116,11 +116,11 @@ func TestSystemCatalogRoundTrip(t *testing.T) {
 			var want, got any
 			_ = json.Unmarshal(raw, &want)
 			_ = json.Unmarshal(back, &got)
-			// Пустые строки и списки не сравниваем: imageUrl и tags при записи
-			// опускаются (omitempty), а поля системы в Extra остаются как были.
+			// Пустые строки, списки и нули не сравниваем: imageUrl, tags и
+			// weightLb при записи опускаются (omitempty), а поля системы в Extra остаются как были.
 			for _, tree := range []any{want, got} {
 				for k, v := range tree.(map[string]any) {
-					if list, ok := v.([]any); (ok && len(list) == 0) || v == "" {
+					if list, ok := v.([]any); (ok && len(list) == 0) || v == "" || v == float64(0) {
 						delete(tree.(map[string]any), k)
 					}
 				}
@@ -143,4 +143,6 @@ func TestSystemCatalogRoundTrip(t *testing.T) {
 	}
 	check("bestiary", func() any { return &domain.Monster{} }, 300)
 	check("spells", func() any { return &domain.Spell{} }, 300)
+	check("items", func() any { return &domain.Item{} }, 400)
+	check("references", func() any { return &domain.Reference{} }, 250)
 }
