@@ -49,13 +49,12 @@ func Summarize(dir string) (*Summary, error) {
 		MinAppVersion: man.MinAppVersion, Systems: man.Systems, Requires: man.Requires, LegacyIDs: man.LegacyIDs,
 		Counts: map[string]int{}, Names: map[string][]string{}, Slugs: map[string][]string{},
 	}
-	r := &Report{}
-	for kind, cards := range checkCards(r, fsys) {
-		for _, c := range cards {
-			s.Counts[kind]++
-			s.Names[kind] = append(s.Names[kind], c.name)
-			s.Slugs[kind] = append(s.Slugs[kind], c.slug)
-		}
+	for _, c := range module.CheckContent(fsys, man).Cards {
+		s.Counts[c.Kind]++
+		s.Names[c.Kind] = append(s.Names[c.Kind], c.Name)
+		s.Slugs[c.Kind] = append(s.Slugs[c.Kind], c.Slug)
+	}
+	for kind := range s.Counts {
 		sort.Strings(s.Names[kind])
 		sort.Strings(s.Slugs[kind])
 	}

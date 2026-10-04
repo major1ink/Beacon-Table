@@ -303,3 +303,100 @@ func TestBrokenModuleDoesNotHideOthers(t *testing.T) {
 		t.Fatalf("список: %v %v", all, err)
 	}
 }
+
+func TestInstallRejectsBadCards(t *testing.T) {
+	cases := map[string]struct {
+		files map[string]string
+		want  string
+	}{
+		"не JSON":           {map[string]string{"bestiary/goblin.json": "{"}, "не JSON-объект"},
+		"без имени":         {map[string]string{"bestiary/goblin.json": `{"name":" "}`}, "нет имени"},
+		"с id":              {map[string]string{"spells/fire.json": `{"id":"x","name":"Огонь"}`}, `нет "id"`},
+		"плохое имя файла":  {map[string]string{"items/Big Sword.json": `{"name":"Меч"}`}, "латиница"},
+		"не .json":          {map[string]string{"items/sword.txt": "x"}, "файл .json"},
+		"вложенная папка":   {map[string]string{"items/sub/sword.json": `{"name":"Меч"}`}, "вложенные папки"},
+		"чужое состояние":   {map[string]string{"conditions/prone.json": `{"name":"Лежит","slug":"down"}`}, "slug состояния"},
+		"чужая картинка":    {map[string]string{"bestiary/goblin.json": `{"name":"Гоблин","imageUrl":"/module-assets/other/g.webp"}`}, "чужой модуль"},
+		"нет картинки":      {map[string]string{"bestiary/goblin.json": `{"name":"Гоблин","imageUrl":"/module-assets/bad/g.webp"}`}, "нет картинки assets/g.webp"},
+		"длинный ключ":      {map[string]string{"bestiary/goblin.json": `{"name":"Гоблин","` + strings.Repeat("k", domain.MaxExtraKeyLen+1) + `":1}`}, "не поместится"},
+		"неверный тип поля": {map[string]string{"bestiary/goblin.json": `{"name":["Гоблин"]}`}, "bestiary/goblin.json"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := NewRegistry(t.TempDir(), nil, nil, "0.9.0")
+			if _, err := r.Install(makeArchive(t, map[string]string{"module.json": manifestJSON("bad", "1.0.0")})); err != nil {
+				t.Fatal(err)
+			}
+			files := map[string]string{"module.json": manifestJSON("bad", "1.1.0")}
+			for k, v := range tc.files {
+				files[k] = v
+			}
+			_, err := r.Install(makeArchive(t, files))
+			var ve *domain.ValidationError
+			if !errors.As(err, &ve) || !strings.Contains(ve.Msg, tc.want) {
+				t.Fatalf("ожидали ValidationError с %q, получили %v", tc.want, err)
+			}
+			if m, _ := r.Get("bad"); m == nil || m.Manifest.Version != "1.0.0" {
+				t.Fatal("прежняя версия модуля должна остаться")
+			}
+		})
+	}
+}
+
+func TestInstallReportsFirstErrors(t *testing.T) {
+	files := map[string]string{"module.json": manifestJSON("many", "1.0.0")}
+	for i := range 8 {
+		files["bestiary/m"+strings.Repeat("a", i+1)+".json"] = `{}`
+	}
+	_, err := NewRegistry(t.TempDir(), nil, nil, "").Install(makeArchive(t, files))
+	if err == nil || !strings.Contains(err.Error(), "и ещё 3") {
+		t.Fatalf("ожидали 5 ошибок и «и ещё 3»: %v", err)
+	}
+}
+
+func TestInstallWarningsDoNotBlock(t *testing.T) {
+	_, err := NewRegistry(t.TempDir(), nil, nil, "").Install(makeArchive(t, map[string]string{
+		"module.json":          manifestJSON("warn", "1.0.0"),
+		"bestiary/goblin.json": `{"name":"Гоблин","imageUrl":"https://example.com/g.webp"}`,
+		"assets/unused.webp":   "img",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstallRequires(t *testing.T) {
+	system := func(version string) string {
+		return strings.Replace(manifestJSON("rules", version), `"content"`, `"system"`, 1)
+	}
+	content := makeArchive(t, map[string]string{
+		"module.json": manifestJSON("srd", "1.0.0", `"systems":["rules"]`, `"requires":[{"id":"rules","minVersion":"1.2.0"}]`),
+	})
+	r := NewRegistry(t.TempDir(), nil, nil, "")
+	steps := []struct {
+		system string
+		want   string
+	}{
+		{"", "нужен модуль rules (не ниже 1.2.0) — сначала установи"},
+		{"1.1.0", "не ниже 1.2.0, а установлен 1.1.0"},
+		{"1.2.0", ""},
+	}
+	for _, s := range steps {
+		if s.system != "" {
+			if _, err := r.Install(makeArchive(t, map[string]string{"module.json": system(s.system)})); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, err := r.Install(content)
+		var ve *domain.ValidationError
+		switch {
+		case s.want == "" && err != nil:
+			t.Fatalf("система %s: %v", s.system, err)
+		case s.want != "" && (!errors.As(err, &ve) || !strings.Contains(ve.Msg, s.want)):
+			t.Fatalf("система %q: ожидали %q, получили %v", s.system, s.want, err)
+		}
+	}
+	if _, err := r.Get("srd"); err != nil {
+		t.Fatal("контент должен встать после системы")
+	}
+}

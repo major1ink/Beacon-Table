@@ -105,7 +105,19 @@ type Registry struct {
 // NewRegistry — root обычно <data>/modules. appVersion — версия программы
 // для проверки minAppVersion; пусто или "dev" — не проверяем.
 func NewRegistry(root string, builtin []*Module, devDirs []string, appVersion string) *Registry {
-	return &Registry{root: root, builtin: builtin, devDirs: devDirs, appVersion: appVersion}
+	r := &Registry{root: root, builtin: builtin, devDirs: devDirs, appVersion: appVersion}
+	r.checkDev()
+	return r
+}
+
+// checkDev — dev-модуль с битыми карточками не отключается, ошибки только
+// в журнал: автор правит его на ходу.
+func (r *Registry) checkDev() {
+	for _, dir := range r.devDirs {
+		for _, m := range scanDir(dir, SourceDev) {
+			checkContent(m.FS, m.Manifest)
+		}
+	}
 }
 
 // List — все доступные модули, по одному на id, отсортированы по id.
@@ -226,6 +238,9 @@ func (r *Registry) Install(archive string) (*Module, error) {
 	if err := r.checkAppVersion(man); err != nil {
 		return nil, &domain.ValidationError{Msg: err.Error()}
 	}
+	if err := r.checkRequires(man); err != nil {
+		return nil, &domain.ValidationError{Msg: err.Error()}
+	}
 	if err := os.MkdirAll(r.root, 0o750); err != nil {
 		return nil, err
 	}
@@ -234,11 +249,15 @@ func (r *Registry) Install(archive string) (*Module, error) {
 		_ = os.RemoveAll(tmp)
 		return nil, &domain.ValidationError{Msg: err.Error()}
 	}
-	// Схемы проверяются до подмены прежней версии: модуль с битой схемой не
-	// ставится, а старая версия остаётся.
+	// Схемы и карточки проверяются до подмены прежней версии: битый модуль
+	// не ставится, а старая версия остаётся.
 	if _, err := loadSchemas(os.DirFS(tmp), man); err != nil {
 		_ = os.RemoveAll(tmp)
 		return nil, &domain.ValidationError{Msg: err.Error()}
+	}
+	if problems := checkContent(os.DirFS(tmp), man); len(problems) > 0 {
+		_ = os.RemoveAll(tmp)
+		return nil, contentError(man.ID, problems)
 	}
 	final := filepath.Join(r.root, man.ID)
 	old := ""
@@ -303,6 +322,54 @@ func (r *Registry) checkAppVersion(m *Manifest) error {
 		return fmt.Errorf("модулю %s нужна программа не ниже %s, а у тебя %s — обнови Beacon Table", m.ID, need, app)
 	}
 	return nil
+}
+
+// checkRequires — модули из requires уже стоят на сервере и не старее
+// minVersion: контент без своей системы не ставится.
+func (r *Registry) checkRequires(m *Manifest) error {
+	for _, dep := range m.Requires {
+		have, err := r.Get(dep.ID)
+		switch {
+		case err != nil && dep.MinVersion != "":
+			return fmt.Errorf("модулю %s нужен модуль %s (не ниже %s) — сначала установи его", m.ID, dep.ID, dep.MinVersion)
+		case err != nil:
+			return fmt.Errorf("модулю %s нужен модуль %s — сначала установи его", m.ID, dep.ID)
+		case dep.MinVersion == "":
+			continue
+		}
+		need, _ := ParseVersion(dep.MinVersion)
+		cur, _ := ParseVersion(have.Manifest.Version)
+		if cur.Less(need) {
+			return fmt.Errorf("модулю %s нужен модуль %s не ниже %s, а установлен %s — сначала обнови его", m.ID, dep.ID, need, cur)
+		}
+	}
+	return nil
+}
+
+// maxReportedErrors — сколько ошибок карточек показать человеку; полный
+// список уходит в журнал.
+const maxReportedErrors = 5
+
+// checkContent проверяет карточки модуля и пишет все замечания в журнал;
+// возвращает ошибки.
+func checkContent(fsys fs.FS, man *Manifest) []string {
+	rep := CheckContent(fsys, man)
+	for _, w := range rep.Warnings {
+		slog.Warn("Модуль: предупреждение проверки", "id", man.ID, "problem", w)
+	}
+	for _, e := range rep.Errors {
+		slog.Warn("Модуль: ошибка проверки", "id", man.ID, "problem", e)
+	}
+	return rep.Errors
+}
+
+func contentError(id string, problems []string) error {
+	shown := problems[:min(len(problems), maxReportedErrors)]
+	msg := fmt.Sprintf("модуль %s не установлен: %s", id, strings.Join(shown, "; "))
+	if rest := len(problems) - len(shown); rest > 0 {
+		msg += fmt.Sprintf(" … и ещё %d", rest)
+	}
+	return &domain.ValidationError{Msg: msg}
 }
 
 // findManifest — module.json в корне архива или в единственной папке
