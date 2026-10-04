@@ -6,7 +6,8 @@
 //
 // Куб проверки (rolls.check) — чем бросается голый модификатор в тексте.
 // Правило инициативы (initiative) — формула броска инициативы. Импортёры
-// (importers) — id импортёров, которые видны в мире системы.
+// (importers) — id импортёров, которые видны в мире системы. Модули
+// (modules) — подключённые к миру, в порядке подключения.
 //
 // Загрузка одна на страницу (loadSystemProfile в boot страницы); функции
 // форматирования синхронные и до загрузки отдают нейтральный вид — число
@@ -14,7 +15,7 @@
 import { fetchSystemProfile } from "./api.js";
 
 // До загрузки куб проверки — «1d20», как у «Своей системы» (domain.CustomRolls).
-let profile = { id: "", title: "", units: { weight: "" }, currencies: [], rolls: { check: "1d20" }, initiative: { roll: "", rollField: "initiative" }, importers: [] };
+let profile = { id: "", title: "", units: { weight: "" }, currencies: [], rolls: { check: "1d20" }, initiative: { roll: "", rollField: "initiative" }, importers: [], modules: [] };
 let loading = null;
 
 export function loadSystemProfile() {
@@ -30,6 +31,7 @@ export function loadSystemProfile() {
             rolls: { check: p.rolls && typeof p.rolls.check === "string" ? p.rolls.check : "1d20" },
             initiative: { roll: (p.initiative && p.initiative.roll) || "", rollField: (p.initiative && p.initiative.rollField) || "" },
             importers: Array.isArray(p.importers) ? p.importers : [],
+            modules: Array.isArray(p.modules) ? p.modules : [],
           };
         }
         return profile;
@@ -52,6 +54,14 @@ export const initiativeRule = () => profile.initiative;
 // hasImporter — объявляет ли система мира импортёр id ("foundry-dnd5e",
 // "lss"); до загрузки профиля — нет.
 export const hasImporter = (id) => profile.importers.includes(id);
+
+// worldModules — модули мира [{id, title, type}]; moduleTitle — название по
+// id (неизвестный модуль — сам id).
+export const worldModules = () => profile.modules;
+export function moduleTitle(id) {
+  const m = profile.modules.find((x) => x.id === id);
+  return m ? m.title : id;
+}
 
 // formatWeight — «2.5 фнт» / «2.5 кг»; без единицы — просто число.
 export function formatWeight(value) {

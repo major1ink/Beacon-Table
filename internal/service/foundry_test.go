@@ -70,6 +70,7 @@ type fakeRoom struct {
 
 func (f *fakeRoom) Join(RoomClient)                       {}
 func (f *fakeRoom) Leave(RoomClient)                      {}
+func (f *fakeRoom) ShutdownForReload()                    {}
 func (f *fakeRoom) Dispatch(RoomClient, domain.ClientMsg) {}
 func (f *fakeRoom) Shutdown()                             {}
 func (f *fakeRoom) NotifyJournalChanged(string)           {}

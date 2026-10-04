@@ -210,3 +210,26 @@ test("негодный кадр не роняет обработчик и не �
 
   assert.deepEqual(got, [{ type: "roll_result" }]);
 });
+
+test("world_reload перезагружает страницу и не переподключается", async () => {
+  installBrowser();
+  let reloaded = 0;
+  globalThis.location.reload = () => reloaded++;
+  const appended = [];
+  globalThis.document.createElement = () => ({ style: {} });
+  globalThis.document.body = { appendChild: (el) => appended.push(el) };
+  const got = [];
+  openSocket("/ws/dm", { onMessage: (d) => got.push(d) });
+  sockets[0].accept();
+
+  sockets[0].deliver({ type: "world_reload" });
+  sockets[0].drop();
+  await settle();
+
+  assert.deepEqual(got, []);
+  assert.equal(appended.length, 1);
+  assert.equal(pending.length, 1, "только таймер перезагрузки, без переподключения");
+  pending[0]();
+  assert.equal(reloaded, 1);
+  assert.equal(sockets.length, 1);
+});

@@ -48,6 +48,17 @@ async function sessionState() {
   }
 }
 
+// reloadForWorldChange — у мира сменились модули или система: схемы и
+// каталоги на странице устарели, проще перечитать её целиком.
+function reloadForWorldChange() {
+  const note = document.createElement("div");
+  note.textContent = "Модули мира изменились — обновляю страницу…";
+  note.style.cssText =
+    "position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:100000;padding:10px 16px;border-radius:8px;background:#222;color:#fff;font:14px sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4)";
+  document.body.appendChild(note);
+  setTimeout(() => location.reload(), 800);
+}
+
 // openSocket открывает сокет по адресу path ("/ws/dm", "/ws/player",
 // "/ws/view") и держит его открытым, пока страница жива.
 //
@@ -98,6 +109,11 @@ export function openSocket(path, { onMessage, onOpen, onDrop, onAuthFailed } = {
         data = JSON.parse(ev.data);
       } catch {
         return; // не наш кадр — молча пропускаем, рвать соединение не за что
+      }
+      if (data && data.type === "world_reload") {
+        closedByUs = true;
+        reloadForWorldChange();
+        return;
       }
       onMessage?.(data);
     };

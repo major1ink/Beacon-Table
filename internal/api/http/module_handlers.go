@@ -70,7 +70,7 @@ func (a *API) handleModulesList(w http.ResponseWriter, r *http.Request) {
 		if missing == nil {
 			missing = []string{}
 		}
-		out["world"] = map[string]any{"id": cur.Company.ID, "enabled": enabled, "missing": missing}
+		out["world"] = map[string]any{"id": cur.Company.ID, "system": cur.Company.System, "enabled": enabled, "missing": missing}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -155,11 +155,33 @@ func (a *API) handleWorldModulesSet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "нужен список modules")
 		return
 	}
-	if err := a.Companies.SetWorldModules(r.Context(), r.PathValue("id"), req.Modules); err != nil {
+	saved, err := a.Companies.SetWorldModules(r.Context(), r.PathValue("id"), req.Modules)
+	if err != nil {
 		writeModuleErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"modules": req.Modules})
+	writeJSON(w, http.StatusOK, map[string]any{"modules": saved})
+}
+
+// handleWorldSystemSet — PUT /api/companies/{id}/system {"system": "..."}:
+// сменить систему мира. В ответе — выключенные модули чужой системы.
+func (a *API) handleWorldSystemSet(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireOwner(w, r); !ok {
+		return
+	}
+	var req struct {
+		System string `json:"system"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil || req.System == "" {
+		writeErr(w, http.StatusBadRequest, "нужна система system")
+		return
+	}
+	disabled, err := a.Companies.SetWorldSystem(r.Context(), r.PathValue("id"), req.System)
+	if err != nil {
+		writeModuleErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"system": req.System, "disabled": disabled})
 }
 
 func writeModuleErr(w http.ResponseWriter, err error) {

@@ -45,11 +45,22 @@ import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { schemaHasWidget } from "../schema-layout.js";
 import { catalogConfig, categoriesOf } from "../schema-list.js";
-import { hasImporter, loadSystemProfile } from "../system-profile.js";
+import { hasImporter, loadSystemProfile, moduleTitle, worldModules } from "../system-profile.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
-const systemScope = qs.get("system") === "1";
+// source — id модуля, USER_SOURCE (библиотека мира, как в
+// compendium-menu.js) или ALL_SOURCES.
+const USER_SOURCE = "user";
+const ALL_SOURCES = "all";
+let source = qs.get("source") || USER_SOURCE;
+const isModuleSource = () => source !== USER_SOURCE && source !== ALL_SOURCES;
+
+function inSource(x) {
+  if (source === ALL_SOURCES) return true;
+  if (source === USER_SOURCE) return !x.system;
+  return x.system && x.module === source;
+}
 const role = qs.get("role") === "dm" ? "dm" : "player";
 const category = qs.get("category") || "";
 const title = qs.get("title") || "Компендиум";
@@ -328,6 +339,37 @@ function toggleSide(sec, value, btn) {
   renderRows();
 }
 
+// initSourceFilter — «Модуль»: модули мира, «Пользовательские», «Все».
+function initSourceFilter() {
+  const options = [...worldModules().map((m) => [m.id, m.title]), [USER_SOURCE, "Пользовательские"], [ALL_SOURCES, "Все"]];
+  const wrap = document.createElement("div");
+  const head = document.createElement("p");
+  head.className = "side-title";
+  head.textContent = "Модуль";
+  const body = document.createElement("div");
+  body.className = "side-list";
+  for (const [id, label] of options) {
+    body.appendChild(
+      sideButton(label, id === source, (e) => {
+        source = id;
+        for (const b of body.children) b.classList.toggle("on", b === e.currentTarget);
+        applySource();
+        renderRows();
+      }, "side-item")
+    );
+  }
+  wrap.append(head, body);
+  sideEl.appendChild(wrap);
+}
+
+// applySource — создавать и импортировать можно только в свою библиотеку.
+function applySource() {
+  const readOnly = isModuleSource();
+  createForm.style.display = readOnly ? "none" : "";
+  importLabel.style.display = readOnly || (!cfg.mapOne && !cfg.batchMap) ? "none" : "";
+  systemHintEl.style.display = readOnly ? "block" : "none";
+}
+
 function initSidebar() {
   if (!cfg) return;
   for (const sec of cfg.sidebar || []) {
@@ -460,14 +502,13 @@ function buildRow(x) {
     row.appendChild(badge);
   }
 
-  // Каталог "из коробки" (System, см. соответствующий system.go у каждого
-  // репозитория) — только для чтения, та же логика для всех 4 типов.
+  // Карточка модуля — только для чтения, бейдж с названием модуля.
   if (x.system) {
     const badge = document.createElement("span");
     badge.className = "catalog-sys-badge";
-    badge.title = "Карточка каталога «из коробки» — только для чтения";
+    badge.title = `Карточка модуля «${moduleTitle(x.module)}» — только для чтения`;
     badge.innerHTML = icon("lock", { size: 11 });
-    badge.append(" каталог");
+    badge.append(" " + moduleTitle(x.module));
     row.appendChild(badge);
   } else {
     const delBtn = document.createElement("button");
@@ -493,7 +534,7 @@ function buildRow(x) {
 function renderRows() {
   const filter = searchEl.value.trim().toLowerCase();
   rowsEl.innerHTML = "";
-  let onScope = list.filter((x) => !!x.system === systemScope);
+  let onScope = list.filter(inSource);
   if (cfg.extraFilter) onScope = onScope.filter(cfg.extraFilter);
   renderSideLists(onScope);
   const filtered = onScope.filter((x) => {
@@ -504,7 +545,7 @@ function renderRows() {
   if (filtered.length === 0) {
     const empty = document.createElement("p");
     empty.className = "hint";
-    empty.textContent = onScope.length === 0 ? (systemScope ? "Каталог «из коробки» пуст." : cfg.emptyUser) : "Ничего не найдено.";
+    empty.textContent = onScope.length === 0 ? (isModuleSource() ? "В модуле нет карточек этого вида." : cfg.emptyUser) : "Ничего не найдено.";
     rowsEl.appendChild(empty);
     return;
   }
@@ -658,12 +699,9 @@ window.addEventListener("message", (e) => {
   await Promise.all([loadSchemas(), loadSystemProfile()]);
   applySchemaConfig();
   applyImporters();
+  initSourceFilter();
   initSidebar();
-  if (systemScope) {
-    createForm.style.display = "none";
-    importLabel.style.display = "none";
-    systemHintEl.style.display = "";
-  }
+  applySource();
   if (type === "spells" && cfg.extraWidget) {
     try {
       if (role === "dm") {

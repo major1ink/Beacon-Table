@@ -65,13 +65,7 @@ func (r *Room) summonableMonsters() []summonable {
 }
 
 // canSummon — доступно игроку: по тумблеру стола либо по флагу карточки.
-// Встроенный каталог при этом подчиняется своему тумблеру
-// (CombatState.ShowBuiltinCards): скрыт у ДМ — скрыт и в призыве, иначе у
-// игрока было бы больше карточек, чем у ведущего.
 func (r *Room) canSummon(m *domain.Monster) bool {
-	if m.System && !r.combat.ShowBuiltinCards {
-		return false
-	}
 	return r.combat.SummonAll || m.Summonable
 }
 

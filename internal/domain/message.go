@@ -196,11 +196,6 @@ type ClientMsg struct {
 	Count     int    `json:"count,omitempty"`
 	SummonAll *bool  `json:"summonAll,omitempty"`
 
-	// ShowBuiltinCards — только для "set_show_builtin_cards": общий тумблер
-	// стола (раздел "Настройки"), показывать ли вшитый каталог "из коробки" в
-	// справочнике и пикерах (см. domain.CombatState.ShowBuiltinCards).
-	ShowBuiltinCards *bool `json:"showBuiltinCards,omitempty"`
-
 	// PlayerDrawingEnabled — только для "set_player_drawing_enabled": общий
 	// тумблер стола, могут ли игроки рисовать пометки на карте (см.
 	// domain.CombatState.PlayerDrawingEnabled).

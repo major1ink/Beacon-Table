@@ -178,9 +178,16 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 	p := domain.SystemProfile{
 		ID: domain.SystemCustom, Title: "Своя система (без правил)",
 		Units: domain.CustomUnits(), Currencies: domain.CustomCurrencies(), Rolls: domain.CustomRolls(),
-		Initiative: domain.CustomCombatRules().Initiative, Importers: []string{},
+		Initiative: domain.CustomCombatRules().Initiative, Importers: []string{}, Modules: []domain.WorldModule{},
 	}
-	if company == nil || company.System == domain.SystemCustom {
+	if company == nil {
+		return p
+	}
+	mods, _ := m.resolveModules(company)
+	for _, mod := range mods {
+		p.Modules = append(p.Modules, domain.WorldModule{ID: mod.Manifest.ID, Title: mod.Manifest.Title, Type: mod.Manifest.Type})
+	}
+	if company.System == domain.SystemCustom {
 		return p
 	}
 	p.ID, p.Title = company.System, company.System

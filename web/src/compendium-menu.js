@@ -1,9 +1,8 @@
 // compendium-menu.js — дерево навигации панели "Справочник" (см.
 // vtt/side-menu.js: addIcon — панель монтируется туда же, где 🔊/🎲, с
 // opts.sticky: true — не закрывается по клику мимо/Esc, только своей
-// кнопкой ✕ в шапке ниже, см. mountCompendiumMenu). Два корня (Beacon Table
-// = System:true записи, Пользовательские = System:false), под каждым —
-// плоский список категорий + вложенный "Снаряжение" с подкатегориями (из
+// кнопкой ✕ в шапке ниже, см. mountCompendiumMenu). Корень на каждый модуль
+// мира и «Пользовательские», под каждым — плоский список категорий + вложенный "Снаряжение" с подкатегориями (из
 // list.categories схемы системы). Дерево само ничего не грузит с сервера (ни
 // счётчиков, ни списков) — просто открывает список конкретной категории
 // отдельным плавающим окном (см. catalog.js), тем же способом, что карточки
@@ -11,6 +10,10 @@
 import { icon } from "./icons.js";
 import { openFloatingWindow } from "./floating-window.js";
 import { loadSchemas, schemaFor } from "./schemas.js";
+import { loadSystemProfile, worldModules } from "./system-profile.js";
+
+// USER_SOURCE — источник «Пользовательские»: карточки библиотеки мира.
+export const USER_SOURCE = "user";
 
 // FLAT_CATEGORIES — порядок как на референсе (TTG Club). Справочник и
 // «Предметы» достраиваются отдельно (см. buildRoot): их подразделы задаёт
@@ -25,17 +28,17 @@ const FLAT_CATEGORIES = [
   { id: "conditions", label: "Состояния", type: "conditions" },
 ];
 
-function catalogUrl({ type, system, category, role, label }) {
-  const params = new URLSearchParams({ type, system: system ? "1" : "0", role, title: label });
+function catalogUrl({ type, source, category, role, label }) {
+  const params = new URLSearchParams({ type, source, role, title: label });
   if (category) params.set("category", category);
   return "/catalog.html?" + params.toString();
 }
 
-function openCategory({ type, system, category, role, label }) {
+function openCategory({ type, source, category, role, label }) {
   openFloatingWindow({
-    key: `catalog-${system ? 1 : 0}-${type}-${category || ""}`,
+    key: `catalog-${source}-${type}-${category || ""}`,
     title: label,
-    url: catalogUrl({ type, system, category, role, label }),
+    url: catalogUrl({ type, source, category, role, label }),
     width: 760,
     height: 640,
   });
@@ -51,7 +54,7 @@ function leafNode(label, onOpen) {
 }
 
 // collapsible — общий тоггл-заголовок (chevron + подпись) поверх вложенного
-// контейнера, используется и для корней (Beacon Table/Пользовательские), и
+// контейнера, используется и для корней (модули/Пользовательские), и
 // для "Снаряжение" внутри корня — тот же приём, другой уровень вложенности.
 function collapsible(label, { className, startOpen }) {
   const wrap = document.createElement("div");
@@ -84,11 +87,11 @@ function categoryLabels(kind) {
 
 // kindNodes — справочник или предметы: пункт на всё или подразделы схемы
 // (предметы — вложенным «Снаряжением»).
-function kindNodes(body, system, role, { kind, type, single, group }) {
+function kindNodes(body, source, role, { kind, type, single, group }) {
   if (!schemaFor(kind)) return;
   const labels = categoryLabels(kind);
   if (!labels.length) {
-    body.appendChild(leafNode(single, () => openCategory({ type, system, role, label: single })));
+    body.appendChild(leafNode(single, () => openCategory({ type, source, role, label: single })));
     return;
   }
   let into = body;
@@ -97,17 +100,17 @@ function kindNodes(body, system, role, { kind, type, single, group }) {
     body.appendChild(gear.wrap);
     into = gear.body;
   }
-  for (const name of labels) into.appendChild(leafNode(name, () => openCategory({ type, system, category: name, role, label: name })));
+  for (const name of labels) into.appendChild(leafNode(name, () => openCategory({ type, source, category: name, role, label: name })));
 }
 
-function buildRoot(system, label, role, startOpen) {
+function buildRoot(source, label, role, startOpen) {
   const { wrap, body } = collapsible(label, { className: "compendium-root", startOpen });
   for (const cat of FLAT_CATEGORIES) {
     if (cat.dmOnly && role !== "dm") continue;
-    body.appendChild(leafNode(cat.label, () => openCategory({ type: cat.type, system, role, label: cat.label })));
-    if (cat.id === "spells") kindNodes(body, system, role, { kind: "reference", type: "reference", single: "Справочник" });
+    body.appendChild(leafNode(cat.label, () => openCategory({ type: cat.type, source, role, label: cat.label })));
+    if (cat.id === "spells") kindNodes(body, source, role, { kind: "reference", type: "reference", single: "Справочник" });
   }
-  kindNodes(body, system, role, { kind: "item", type: "items", single: "Предметы", group: "Снаряжение" });
+  kindNodes(body, source, role, { kind: "item", type: "items", single: "Предметы", group: "Снаряжение" });
   return wrap;
 }
 
@@ -132,11 +135,6 @@ function foundryImportNode() {
 // (заголовок + ✕, см. panel.close() в side-menu.js) и деревом. role: "dm" |
 // "player" — только чтобы скрыть "Существа" у игрока (сервер всё равно
 // отказал бы 403 на /api/monsters, см. requireAdminAccount).
-//
-// Корень "Beacon Table" (вшитый каталог, System:true) виден только когда
-// включён общий тумблер стола "Показывать встроенные карточки" (см.
-// domain.CombatState.ShowBuiltinCards) — значение приходит в combat_state и
-// тем же событием "vtt:combatState" перестраивает дерево на лету.
 export function mountCompendiumMenu(panelEl, { role, canImport = true }) {
   panelEl.classList.add("compendium-tree");
 
@@ -156,21 +154,13 @@ export function mountCompendiumMenu(panelEl, { role, canImport = true }) {
   const treeWrap = document.createElement("div");
   panelEl.appendChild(treeWrap);
 
-  let showBuiltin = false;
   function renderTree() {
     treeWrap.innerHTML = "";
-    if (showBuiltin) treeWrap.appendChild(buildRoot(true, "Beacon Table", role, true));
-    treeWrap.appendChild(buildRoot(false, "Пользовательские", role, !showBuiltin));
+    for (const m of worldModules()) treeWrap.appendChild(buildRoot(m.id, m.title, role, false));
+    treeWrap.appendChild(buildRoot(USER_SOURCE, "Пользовательские", role, true));
     if (role === "dm" && canImport) treeWrap.appendChild(foundryImportNode());
   }
   renderTree();
   // Схемы системы мира решают, какие подразделы показывать (см. buildRoot).
-  loadSchemas().then(renderTree);
-
-  document.addEventListener("vtt:combatState", (e) => {
-    const next = !!(e.detail && e.detail.showBuiltinCards);
-    if (next === showBuiltin) return;
-    showBuiltin = next;
-    renderTree();
-  });
+  Promise.all([loadSchemas(), loadSystemProfile()]).then(renderTree);
 }

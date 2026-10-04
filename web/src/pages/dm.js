@@ -65,6 +65,11 @@ import {
   fetchFoundryModules,
   checkFoundryModuleUpdates,
   deleteFoundryModule,
+  fetchModules,
+  fetchSystems,
+  installModuleFile,
+  setWorldModules,
+  setWorldSystem,
   shutdownServer,
   fetchTutorial,
   saveTutorial,
@@ -79,6 +84,7 @@ import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabe
 import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutorial.js";
 import { dmTourSteps } from "../tutorial-dm.js";
+import { loadSystemProfile } from "../system-profile.js";
 import { escapeHtml, cssUrl } from "../html.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
 import { asButton } from "../a11y.js";
@@ -2424,7 +2430,7 @@ async function loadSettingsTab(tab) {
       await renderAppVersion();
       break;
     case "modules":
-      await renderFoundryModules();
+      await Promise.all([renderWorldModules(), renderFoundryModules()]);
       break;
     default:
       // «Стол» — тумблеры приходят со снапшотом сцены; свой запрос только у
@@ -2486,7 +2492,8 @@ function showTutorialHint(key, text, title) {
   showAlert(text, { title });
 }
 
-function runDmTour() {
+async function runDmTour() {
+  await loadSystemProfile();
   startTour(dmTourSteps(), {
     key: TUTORIAL_KEY,
     onFinish: () => setTutorialState("done"),
@@ -2917,6 +2924,128 @@ broadcastRotateBtn.onclick = async () => {
 };
 
 // ---- модули Foundry VTT (раздел "Настройки") ----
+// ---- модули мира (Настройки → Модули) ----
+// Смена системы и включение модулей перезапускают мир: страницы у всех
+// перезагрузятся сами по world_reload (см. ws-reconnect.js).
+const worldSystemSelect = document.getElementById("worldSystemSelect");
+const worldSystemBtn = document.getElementById("worldSystemBtn");
+const worldModulesList = document.getElementById("worldModulesList");
+const moduleInstallFile = document.getElementById("moduleInstallFile");
+let worldModulesData = null; // ответ fetchModules
+let worldSystems = []; // ответ fetchSystems
+
+const systemName = (id) => (worldSystems.find((x) => x.id === id) || {}).title || id;
+const fitsSystem = (m, system) => !m.systems || !m.systems.length || m.systems.includes(system);
+
+async function renderWorldModules() {
+  try {
+    [worldModulesData, worldSystems] = await Promise.all([fetchModules(), fetchSystems()]);
+  } catch (err) {
+    worldModulesList.innerHTML = `<p class="hint">Ошибка: ${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  drawWorldSystem();
+  drawWorldModules();
+}
+
+function drawWorldSystem() {
+  const world = worldModulesData.world;
+  worldSystemSelect.innerHTML = "";
+  for (const sys of worldSystems) worldSystemSelect.add(new Option(sys.title, sys.id, false, sys.id === world.system));
+  if (!worldSystems.some((x) => x.id === world.system)) {
+    const opt = new Option(`${world.system} — модуль не установлен`, world.system, false, true);
+    opt.disabled = true;
+    worldSystemSelect.add(opt);
+  }
+  worldSystemBtn.disabled = true;
+}
+
+worldSystemSelect.onchange = () => {
+  worldSystemBtn.disabled = !worldModulesData || worldSystemSelect.value === worldModulesData.world.system;
+};
+
+worldSystemBtn.onclick = async () => {
+  const { world, modules } = worldModulesData;
+  const next = worldSystemSelect.value;
+  const off = modules.filter((m) => m.type === "content" && world.enabled.includes(m.id) && !fitsSystem(m, next));
+  let text = `Сменить систему мира на «${systemName(next)}»? Поля прежней системы останутся в данных и не будут показываться, пока её не вернёшь. Мир перезапустится, у всех за столом обновится страница.`;
+  if (off.length) text += `\n\nВыключатся модули для другой системы: ${off.map((m) => `«${m.title}»`).join(", ")}.`;
+  if (!(await showConfirm(text, { title: "Система мира", okLabel: "Сменить" }))) return;
+  try {
+    await setWorldSystem(world.id, next);
+  } catch (err) {
+    showAlert("Не удалось сменить систему: " + err.message);
+  }
+};
+
+function drawWorldModules() {
+  const { world, modules } = worldModulesData;
+  worldModulesList.innerHTML = "";
+  const content = modules.filter((m) => m.type === "content");
+  const missing = (world.missing || []).filter((id) => id !== world.system);
+  if (!content.length && !missing.length) {
+    worldModulesList.innerHTML = '<p class="hint">Модулей контента на сервере нет.</p>';
+    return;
+  }
+  for (const m of content) {
+    const fits = fitsSystem(m, world.system);
+    const note = fits ? `v${m.version}` : `для системы ${m.systems.map(systemName).join(", ")}`;
+    worldModulesList.appendChild(moduleToggleRow(m.id, m.title, note, world.enabled.includes(m.id), !fits));
+  }
+  for (const id of missing) worldModulesList.appendChild(moduleToggleRow(id, id, "не найден на сервере", true, false));
+}
+
+function moduleToggleRow(id, title, note, on, locked) {
+  const row = document.createElement("div");
+  row.className = "checkbox-row";
+  const label = document.createElement("label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.className = "switch";
+  box.checked = on;
+  box.disabled = locked;
+  box.onchange = () => toggleWorldModule(id, box);
+  const hint = document.createElement("span");
+  hint.className = "hint";
+  hint.textContent = ` — ${note}`;
+  label.append(box, ` ${title}`, hint);
+  row.appendChild(label);
+  return row;
+}
+
+async function toggleWorldModule(id, box) {
+  const world = worldModulesData.world;
+  const ok = await showConfirm(`${box.checked ? "Включить" : "Выключить"} модуль? Мир перезапустится, у всех за столом обновится страница.`, {
+    title: "Модули мира",
+    okLabel: box.checked ? "Включить" : "Выключить",
+  });
+  if (!ok) {
+    box.checked = !box.checked;
+    return;
+  }
+  const next = box.checked ? [...world.enabled, id] : world.enabled.filter((x) => x !== id);
+  try {
+    await setWorldModules(world.id, next);
+  } catch (err) {
+    box.checked = !box.checked;
+    showAlert("Не удалось изменить модули: " + err.message);
+  }
+}
+
+document.getElementById("moduleInstallBtn").onclick = () => moduleInstallFile.click();
+moduleInstallFile.onchange = async () => {
+  const file = moduleInstallFile.files[0];
+  moduleInstallFile.value = "";
+  if (!file) return;
+  try {
+    const m = await installModuleFile(file);
+    await renderWorldModules();
+    showAlert(`Модуль «${m.title}» ${m.version} установлен. ${m.type === "system" ? "Выбери его системой мира выше." : "Включи его в списке модулей."}`);
+  } catch (err) {
+    showAlert("Модуль не установлен: " + err.message);
+  }
+};
+
 // Список того, что ДМ хотя бы раз импортировал в этот мир (см.
 // service.FoundryService.Installed), плюс необязательная проверка новых
 // версий по кнопке (см. checkFoundryModuleUpdates) — сама по себе она не
@@ -4607,9 +4736,6 @@ document.addEventListener("vtt:hubState", (e) => {
 
 initItemPicker(document.getElementById("lootHubPicker"), {
   onPick: (item, qty) => vtt.send({ type: "hub_add_item", itemId: item.id, quantity: qty }),
-  // Вшитый каталог прячем, пока в "Настройках" не включён показ встроенных
-  // карточек (см. showBuiltinCardsToggle) — геттер, чекбокс синкается сервером.
-  excludeBuiltin: () => !document.getElementById("showBuiltinCardsToggle").checked,
 });
 
 onPanelOpen("loot", renderLootHub);
@@ -4711,20 +4837,6 @@ combatHighlightActiveToggle.onchange = () => {
   vtt.send({ type: "set_highlight_active_token", highlightActiveToken: combatHighlightActiveToggle.checked });
 };
 
-// showBuiltinCardsToggle / hideLightMarkersToggle — тот же приём: общие тумблеры
-// стола, значение приходит внутри "combat_state" (см. domain.CombatState.
-// ShowBuiltinCards / HideLightMarkers, service.combatPayload). showBuiltinCards
-// правит дерево справочника и пикеры (compendium-menu.js, combat-panel.js,
-// status-palette.js, item-picker хаба лута ниже); hideLightMarkers долетает до
-// слоя токенов через vtt/index.js (см. vtt:combatState там).
-const showBuiltinCardsToggle = document.getElementById("showBuiltinCardsToggle");
-document.addEventListener("vtt:combatState", (e) => {
-  showBuiltinCardsToggle.checked = !!e.detail.showBuiltinCards;
-});
-showBuiltinCardsToggle.onchange = () => {
-  vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
-};
-
 // summonAllToggle — тот же приём (см. domain.CombatState.SummonAll):
 // игрокам открывается вся библиотека для призыва; точечно — флагом «Можно
 // призывать» на карточке (pages/bestiary.js).
@@ -4812,6 +4924,8 @@ hidePlayerDrawingsToggle.onchange = () => {
   vtt.send({ type: "set_hide_player_drawings", hidePlayerDrawings: hidePlayerDrawingsToggle.checked });
 };
 
+// hideLightMarkersToggle — общий тумблер стола (см. domain.CombatState.
+// HideLightMarkers); до слоя токенов долетает через vtt/index.js.
 const hideLightMarkersToggle = document.getElementById("hideLightMarkersToggle");
 document.addEventListener("vtt:combatState", (e) => {
   hideLightMarkersToggle.checked = e.detail.hideLightMarkers !== false;

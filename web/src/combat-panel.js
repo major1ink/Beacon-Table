@@ -28,6 +28,7 @@ import { showAlert, showConfirm } from "./modal.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
 import { cssUrl } from "./html.js";
 import { asButton } from "./a11y.js";
+import { moduleTitle } from "./system-profile.js";
 
 // FOLLOW_KEY — режим "статблок следует за ходом" переживает перезагрузку
 // страницы: это настройка привычки ДМ, а не состояние конкретного боя.
@@ -62,10 +63,6 @@ export function initCombatPanel({ send, els }) {
   // monsterId или characterId (см. domain.ClientMsg/room.go: handleAddCombatant,
   // третий источник — карточка игрока напрямую, без токена на карте).
   let searchList = [];
-  // showBuiltinCards — общий тумблер стола (см. domain.CombatState.
-  // ShowBuiltinCards, приходит в combat_state): пока false, из поиска
-  // "+ Добавить" выпадают монстры вшитого каталога (kind:"monster" + system).
-  let showBuiltinCards = false;
   // latestKilled — вкладка "Убитые": снимок combat_state.killed (см.
   // internal/service/room.go: killedMonsters) — все Dead-токены активной
   // сцены, кроме игровых персонажей. Отдельный от latestCombat список,
@@ -549,14 +546,6 @@ export function initCombatPanel({ send, els }) {
     // вкладка всё равно есть только во встроенной ДМ-панели/её плавающем
     // окне, но модуль общий, лишняя проверка тут не помешает).
     latestKilled = Array.isArray(e.detail.killed) ? e.detail.killed : [];
-    // showBuiltinCards — общий тумблер стола (см. domain.CombatState): пока
-    // выключен, поиск "+ Добавить" не показывает монстров вшитого каталога
-    // (m.system). Уже загруженный searchList перечищаем на месте.
-    const nextShowBuiltin = !!e.detail.showBuiltinCards;
-    if (nextShowBuiltin !== showBuiltinCards) {
-      showBuiltinCards = nextShowBuiltin;
-      renderSearchResults();
-    }
     renderPanel();
     renderKilledPanel();
     syncFollow();
@@ -596,7 +585,7 @@ export function initCombatPanel({ send, els }) {
           id: m.id,
           name: m.name,
           image: m.imageUrl,
-          system: !!m.system,
+          module: m.system ? m.module : "",
           tags: [m.type, ...(m.tags || [])],
         })),
         ...characters.map((c) => ({
@@ -624,7 +613,7 @@ export function initCombatPanel({ send, els }) {
     els.searchResults.innerHTML = "";
     if (!filter) return;
     const filtered = searchList
-      .filter((m) => (showBuiltinCards || !m.system) && [m.name, ...(m.tags || [])].join(" ").toLowerCase().includes(filter))
+      .filter((m) => [m.name, ...(m.tags || [])].join(" ").toLowerCase().includes(filter))
       .slice(0, 20);
     if (filtered.length === 0) {
       const empty = document.createElement("p");
@@ -647,6 +636,9 @@ export function initCombatPanel({ send, els }) {
       // монстрами непонятно, что это игрок, а не NPC.
       if (m.kind === "character") {
         name.textContent += m.owner ? ` (игрок: ${m.owner})` : " (игрок)";
+        name.title = m.name;
+      } else if (m.module) {
+        name.textContent += ` · ${moduleTitle(m.module)}`;
         name.title = m.name;
       }
       row.append(avatar, name);

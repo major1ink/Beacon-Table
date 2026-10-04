@@ -52,6 +52,28 @@ export async function fetchCompanies() {
 export async function fetchSystems() {
   return apiFetch("/api/systems");
 }
+// ---- модули контента (см. internal/module) — только владелец ----
+// fetchModules — установленные модули и модули запущенного мира:
+// {modules:[...], world:{id, system, enabled, missing}}.
+export async function fetchModules() {
+  return apiFetch("/api/modules");
+}
+// installModuleFile — поставить или обновить модуль из архива .btmod.
+export async function installModuleFile(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/modules", { method: "POST", body: form });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || res.statusText || "ошибка установки");
+  return data;
+}
+export async function setWorldModules(companyId, modules) {
+  return apiFetch(`/api/companies/${companyId}/modules`, { method: "PUT", body: JSON.stringify({ modules }) });
+}
+// setWorldSystem — сменить систему мира; в ответе {system, disabled}.
+export async function setWorldSystem(companyId, system) {
+  return apiFetch(`/api/companies/${companyId}/system`, { method: "PUT", body: JSON.stringify({ system }) });
+}
 export async function createCompany(name, system) {
   return apiFetch("/api/companies", { method: "POST", body: JSON.stringify({ name, system }) });
 }

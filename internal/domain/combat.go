@@ -95,13 +95,6 @@ type Combatant struct {
 // всем ролям — подсказывает не только ДМ, но и игрокам/TV, чей ход прямо
 // сейчас на самой карте, а не только в верхнем оверлее.
 //
-// ShowBuiltinCards — общий тумблер стола ("Настройки"): показывать ли в
-// справочнике и пикерах вшитый каталог "из коробки" (записи System:true, см.
-// internal/repository/*/system.go). bool, дефолт false — на новых и на всех
-// ранее заведённых столах встроенный каталог по умолчанию скрыт, ДМ включает
-// его вручную. Значение не секрет — уходит всем ролям (дерево справочника
-// одно на всех, см. web/src/compendium-menu.js).
-//
 // HideLightMarkers — общий тумблер стола ("Настройки"): прятать ли у ДМ
 // иконки-лампочки токенов света (Token.LightOnly) вне открытого раздела
 // "Освещение". *bool по тому же принципу, что HighlightActiveToken: nil (в
@@ -116,7 +109,6 @@ type CombatState struct {
 	ShowHP               bool                  `json:"showHp,omitempty"`
 	LootingEnabled       bool                  `json:"lootingEnabled,omitempty"`
 	HighlightActiveToken *bool                 `json:"highlightActiveToken,omitempty"`
-	ShowBuiltinCards     bool                  `json:"showBuiltinCards,omitempty"`
 	HideLightMarkers     *bool                 `json:"hideLightMarkers,omitempty"`
 	// PlayerDrawingEnabled — могут ли игроки рисовать на слое пометок (см.
 	// domain.Drawing, service.Room.handleAddDrawing). Выключено по умолчанию.

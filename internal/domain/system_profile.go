@@ -43,6 +43,16 @@ type SystemProfile struct {
 	Rolls      SystemRolls    `json:"rolls"`
 	Initiative InitiativeRule `json:"initiative"`
 	Importers  []string       `json:"importers"`
+	// Modules — модули мира, которые есть на сервере, в порядке подключения:
+	// по ним клиент строит корни компендиума и подписывает карточки.
+	Modules []WorldModule `json:"modules"`
+}
+
+// WorldModule — модуль, подключённый к миру.
+type WorldModule struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Type  string `json:"type"`
 }
 
 // CustomUnits / CustomCurrencies — умолчания «Своей системы» и мира, чья

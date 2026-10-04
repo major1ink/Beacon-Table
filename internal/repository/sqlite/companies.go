@@ -70,6 +70,30 @@ func (s *CompanyStore) SetModules(ctx context.Context, id string, modules []stri
 	return nil
 }
 
+// SetSystem — сменить систему мира вместе со списком модулей и пометкой
+// system у его персонажей.
+func (s *CompanyStore) SetSystem(ctx context.Context, id, system string, modules []string) error {
+	if modules == nil {
+		modules = []string{}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `UPDATE companies SET system = ?, modules = ? WHERE id = ?`, system, encodeModules(modules), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE characters SET system = ? WHERE company_id = ?`, system, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // Create implements repository.CompanyRepository.
 func (s *CompanyStore) Create(ctx context.Context, c *domain.Company) error {
 	_, err := s.db.ExecContext(ctx,

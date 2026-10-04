@@ -127,11 +127,10 @@ export function mountSummonPanel(panelEl, { send }) {
   document.addEventListener("vtt:libraryChanged", (e) => {
     if (!e.detail || e.detail.kind === "compendium") refresh();
   });
-  // Оба тумблера стола влияют на список: «любых существ» и «показывать
-  // встроенные карточки» (см. canSummon в room_summon.go).
+  // Тумблер «любых существ» меняет список (см. canSummon в room_summon.go).
   let key = null;
   document.addEventListener("vtt:combatState", (e) => {
-    const next = `${!!(e.detail && e.detail.summonAll)}:${!!(e.detail && e.detail.showBuiltinCards)}`;
+    const next = !!(e.detail && e.detail.summonAll);
     if (next === key) return;
     key = next;
     refresh();

@@ -35,6 +35,9 @@ type CompanyRepository interface {
 	Delete(ctx context.Context, id string) error
 	// SetModules — модули, подключённые к миру (domain.Company.Modules).
 	SetModules(ctx context.Context, id string, modules []string) error
+	// SetSystem — сменить систему мира и список модулей; персонажи мира
+	// получают ту же пометку system.
+	SetSystem(ctx context.Context, id, system string, modules []string) error
 	// ActiveID/SetActiveID — id компании, сейчас запущенной на сервере
 	// (server_state, ключ "active_company_id"); пустая строка — ничего не
 	// запущено (валидно на свежей установке до первого "Создать мир").

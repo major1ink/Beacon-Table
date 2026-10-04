@@ -137,6 +137,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/modules/{id}", a.handleModuleDelete)
 	mux.HandleFunc("GET /api/companies/{id}/modules", a.handleWorldModulesGet)
 	mux.HandleFunc("PUT /api/companies/{id}/modules", a.handleWorldModulesSet)
+	mux.HandleFunc("PUT /api/companies/{id}/system", a.handleWorldSystemSet)
 
 	mux.HandleFunc("GET /api/characters", a.handleCharactersList)
 	mux.HandleFunc("POST /api/characters", a.handleCharacterCreate)

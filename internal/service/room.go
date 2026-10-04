@@ -38,6 +38,10 @@ type RoomService interface {
 	Leave(c RoomClient)
 	Dispatch(c RoomClient, msg domain.ClientMsg)
 	Shutdown()
+	// ShutdownForReload — как Shutdown, но клиенты перед отключением
+	// получают world_reload: у мира сменились модули или система, и
+	// страницам нужно перечитать схемы.
+	ShutdownForReload()
 	ImportScenes(ctx context.Context, scenes []*domain.SceneState) (int, error)
 	// LinkTokensToMonsters дописывает Token.MonsterID токенам, приехавшим со
 	// сценами из Foundry, по карте "id актёра Foundry -> id карточки
@@ -151,7 +155,10 @@ type Room struct {
 	join     chan RoomClient
 	leave    chan RoomClient
 	inbound  chan inboundMsg
-	shutdown chan chan struct{}
+	shutdown chan shutdownReq
+	// stopped закрывается, когда run() завершился: Join/Leave/Dispatch после
+	// этого не ждут комнату, которой больше нет.
+	stopped chan struct{}
 	// importScenes — сцены, приехавшие импортом пакета Foundry (см.
 	// ImportScenes): отдельный канал, а не inbound, потому что это не
 	// команда клиента и авторизации по роли у неё нет — вызывающего
@@ -294,7 +301,8 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		join:           make(chan RoomClient),
 		leave:          make(chan RoomClient),
 		inbound:        make(chan inboundMsg, 32),
-		shutdown:       make(chan chan struct{}),
+		shutdown:       make(chan shutdownReq),
+		stopped:        make(chan struct{}),
 		importScenes:   make(chan importScenesReq),
 		linkTokens:     make(chan linkTokensReq),
 		spawnToken:     make(chan spawnTokenReq),
@@ -349,10 +357,28 @@ func (r *Room) schemaFor(kind string) *schema.Schema {
 	return r.schemas[kind]
 }
 
-func (r *Room) Join(c RoomClient)  { r.join <- c }
-func (r *Room) Leave(c RoomClient) { r.leave <- c }
+// Join — после остановки комнаты клиент сразу отключается и переподключится
+// уже к новому миру.
+func (r *Room) Join(c RoomClient) {
+	select {
+	case r.join <- c:
+	case <-r.stopped:
+		c.Close()
+	}
+}
+
+func (r *Room) Leave(c RoomClient) {
+	select {
+	case r.leave <- c:
+	case <-r.stopped:
+	}
+}
+
 func (r *Room) Dispatch(c RoomClient, msg domain.ClientMsg) {
-	r.inbound <- inboundMsg{from: c, msg: msg}
+	select {
+	case r.inbound <- inboundMsg{from: c, msg: msg}:
+	case <-r.stopped:
+	}
 }
 
 // ImportScenes — см. RoomService.ImportScenes. ctx нужен не для отмены самой
@@ -551,11 +577,13 @@ func (r *Room) run() {
 		case <-ticker.C:
 			r.flushIfDirty()
 
-		case done := <-r.shutdown:
+		case req := <-r.shutdown:
 			// финальное сохранение перед выходом процесса — не ждём таймер,
 			// чтобы Ctrl+C или закрытие сервиса не роняло последние секунды правок.
 			r.flushIfDirty()
-			close(done)
+			r.dropClients(req.reload)
+			close(r.stopped)
+			close(req.done)
 			return
 		}
 	}
@@ -824,11 +852,6 @@ func (r *Room) handleInbound(im inboundMsg) {
 			r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
 		}
 		return
-	case "set_show_builtin_cards":
-		if im.msg.ShowBuiltinCards != nil {
-			r.handleSetShowBuiltinCards(*im.msg.ShowBuiltinCards)
-		}
-		return
 	case "set_hide_light_markers":
 		if im.msg.HideLightMarkers != nil {
 			r.handleSetHideLightMarkers(*im.msg.HideLightMarkers)
@@ -986,13 +1009,38 @@ func (r *Room) flushIfDirty() {
 	}
 }
 
-// Shutdown синхронно сохраняет текущую сцену и завершает горутину run().
-// Вызывается композиционным корнем при получении SIGINT/SIGTERM, чтобы
-// гарантированно не потерять правки за последние autosaveInterval секунд.
-func (r *Room) Shutdown() {
-	done := make(chan struct{})
-	r.shutdown <- done
-	<-done
+type shutdownReq struct {
+	done   chan struct{}
+	reload bool
+}
+
+// Shutdown синхронно сохраняет текущую сцену, отключает клиентов и
+// завершает горутину run(). Повторный вызов ничего не делает.
+func (r *Room) Shutdown() { r.stop(false) }
+
+// ShutdownForReload — см. RoomService.ShutdownForReload.
+func (r *Room) ShutdownForReload() { r.stop(true) }
+
+func (r *Room) stop(reload bool) {
+	req := shutdownReq{done: make(chan struct{}), reload: reload}
+	select {
+	case r.shutdown <- req:
+		<-req.done
+	case <-r.stopped:
+	}
+}
+
+// dropClients отключает всех: иначе они остались бы на сокетах комнаты,
+// которая больше ничего не читает.
+func (r *Room) dropClients(reload bool) {
+	for c := range r.clients {
+		if reload {
+			c.Send(map[string]any{"type": "world_reload"})
+		}
+		c.Close()
+	}
+	clear(r.clients)
+	clear(r.viewing)
 }
 
 // sceneOf — сцена, которую видит клиент: открытая им у себя (viewing), если
@@ -2369,16 +2417,6 @@ func (r *Room) handleSetHighlightActiveToken(v bool) {
 	r.broadcastCombat()
 }
 
-// handleSetShowBuiltinCards — "set_show_builtin_cards": общий тумблер стола,
-// показывать ли вшитый каталог "из коробки" в справочнике и пикерах (см.
-// domain.CombatState.ShowBuiltinCards, combatPayload). Только UI клиента —
-// сами карточки System сервер по-прежнему отдаёт всем эндпоинтам.
-func (r *Room) handleSetShowBuiltinCards(v bool) {
-	r.combat.ShowBuiltinCards = v
-	r.markCombatDirty()
-	r.broadcastCombat()
-}
-
 // handleSetHideLightMarkers — "set_hide_light_markers": общий тумблер стола,
 // прятать ли у ДМ лампочки токенов света вне раздела "Освещение" (см.
 // domain.CombatState.HideLightMarkers, combatPayload).
@@ -2608,7 +2646,6 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// combat.json/новый стол) трактуем как включено, см.
 		// domain.CombatState.HighlightActiveToken.
 		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
-		"showBuiltinCards":     r.combat.ShowBuiltinCards,
 		"summonAll":            r.combat.SummonAll,
 		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
 		// включено (прятать), см. domain.CombatState.HideLightMarkers.

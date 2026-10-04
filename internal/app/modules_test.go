@@ -2,14 +2,18 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/module"
+	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
 
@@ -266,5 +270,179 @@ func TestCreateWorldSystems(t *testing.T) {
 	// Системы нет на сервере — мир не создаётся.
 	if _, err := m.Create(ctx, "Чужой", "pathfinder"); err == nil {
 		t.Fatal("мир создан на неустановленной системе")
+	}
+}
+
+// worldClient — экран, подключённый к комнате мира.
+type worldClient struct {
+	got    []string
+	closed bool
+}
+
+func (c *worldClient) Send(v any) {
+	if m, ok := v.(map[string]any); ok {
+		if typ, _ := m["type"].(string); typ != "" {
+			c.got = append(c.got, typ)
+		}
+	}
+}
+func (c *worldClient) Close()                  { c.closed = true }
+func (c *worldClient) Role() domain.ClientRole { return domain.RoleDM }
+func (c *worldClient) PlayerID() string        { return "dm" }
+func (c *worldClient) PlayerName() string      { return "dm" }
+func (c *worldClient) reloaded() bool          { return slices.Contains(c.got, "world_reload") }
+func (c *worldClient) waitJoined(t *testing.T) {
+	t.Helper()
+	waitFor(t, func() bool { return len(c.got) > 0 })
+}
+func waitFor(t *testing.T, ok func() bool) {
+	t.Helper()
+	for range 200 {
+		if ok() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("не дождались")
+}
+
+// withSRD — контент для D&D 2024 рядом с универсальным extra.
+func withSRD(t *testing.T, m *CompanyManager) {
+	t.Helper()
+	dir := filepath.Join(filepath.Dir(m.dataRoot), "modules", "srd")
+	writeFile(t, filepath.Join(dir, "module.json"),
+		`{"format":"beacon-module/v1","id":"srd","type":"content","title":"SRD","version":"1.0.0","systems":["dnd5e-2024"]}`)
+	writeFile(t, filepath.Join(dir, "bestiary", "orc.json"), `{"name":"Орк"}`)
+}
+
+func TestSetWorldModulesRules(t *testing.T) {
+	ctx := context.Background()
+	m := modulesManager(t)
+	withSRD(t, m)
+
+	home, err := m.Create(ctx, "Хоумбрю", domain.SystemCustom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.SetWorldModules(ctx, home.ID, []string{"extra"}); err != nil || strings.Join(got, ",") != "extra" {
+		t.Fatalf("универсальный контент в «Своей системе»: %v %v", got, err)
+	}
+	for _, id := range []string{"srd", "dnd5e-2024"} {
+		if _, err := m.SetWorldModules(ctx, home.ID, []string{"extra", id}); err == nil {
+			t.Errorf("%s включился в «Своей системе»", id)
+		}
+	}
+
+	dnd, err := m.Create(ctx, "D&D", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.SetWorldModules(ctx, dnd.ID, []string{"srd", "extra"})
+	if err != nil || strings.Join(got, ",") != "dnd5e-2024,srd,extra" {
+		t.Fatalf("система мира остаётся всегда: %v %v", got, err)
+	}
+	if got, err := m.SetWorldModules(ctx, dnd.ID, []string{"extra", "dnd5e-2024"}); err != nil || strings.Join(got, ",") != "extra,dnd5e-2024" {
+		t.Fatalf("порядок с системой в списке: %v %v", got, err)
+	}
+}
+
+func TestSetWorldSystem(t *testing.T) {
+	ctx := context.Background()
+	m := modulesManager(t)
+	withSRD(t, m)
+	t.Cleanup(m.Shutdown)
+
+	c, err := m.Create(ctx, "Мир", domain.SystemCustom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.SetWorldModules(ctx, c.ID, []string{domain.BaseModuleID, "extra"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.accounts.Create(ctx, &domain.Account{
+		ID: "acc-p", Username: "player", PasswordHash: "h",
+		Role: domain.AccountRolePlayer, Status: domain.AccountStatusActive, CompanyID: c.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sheet := domain.CharacterSheet{Extra: domain.Extra{"abilities": json.RawMessage(`{"str":18}`)}}
+	if err := sqlite.NewCharacterStore(m.db, c.ID, c.System).Create(ctx, &domain.Character{ID: "char-p", AccountID: "acc-p", Name: "Пик", Sheet: sheet}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Launch(ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	screen := &worldClient{}
+	m.Current().Room.Join(screen)
+	screen.waitJoined(t)
+
+	if _, err := m.SetWorldSystem(ctx, c.ID, "pathfinder"); err == nil {
+		t.Fatal("сменили на неустановленную систему")
+	}
+	disabled, err := m.SetWorldSystem(ctx, c.ID, domain.SystemDnD5e2024)
+	if err != nil || len(disabled) != 0 {
+		t.Fatalf("смена на D&D: %v %v", disabled, err)
+	}
+	world, _ := m.companies.ByID(ctx, c.ID)
+	if world.System != domain.SystemDnD5e2024 || strings.Join(world.Modules, ",") != "dnd5e-2024,extra" {
+		t.Fatalf("после смены: %s %v", world.System, world.Modules)
+	}
+	if m.Current().Company.System != domain.SystemDnD5e2024 {
+		t.Fatal("мир не перезапущен на новой системе")
+	}
+	if !screen.reloaded() || !screen.closed {
+		t.Fatalf("экран не получил world_reload и не отключён: %v %v", screen.got, screen.closed)
+	}
+	ch, err := sqlite.NewCharacterStore(m.db, c.ID, domain.SystemDnD5e2024).ByID(ctx, "char-p")
+	if err != nil || ch.System != domain.SystemDnD5e2024 || string(ch.Sheet.Extra["abilities"]) != `{"str":18}` {
+		t.Fatalf("персонаж после смены: %+v %v", ch, err)
+	}
+
+	if _, err := m.SetWorldModules(ctx, c.ID, []string{"srd", "extra"}); err != nil {
+		t.Fatal(err)
+	}
+	disabled, err = m.SetWorldSystem(ctx, c.ID, domain.SystemCustom)
+	if err != nil || strings.Join(disabled, ",") != "srd" {
+		t.Fatalf("обратно на «Свою»: выключены %v %v", disabled, err)
+	}
+	world, _ = m.companies.ByID(ctx, c.ID)
+	if strings.Join(world.Modules, ",") != "base,extra" {
+		t.Fatalf("модули «Своей системы»: %v", world.Modules)
+	}
+	ch, _ = sqlite.NewCharacterStore(m.db, c.ID, domain.SystemCustom).ByID(ctx, "char-p")
+	if string(ch.Sheet.Extra["abilities"]) != `{"str":18}` {
+		t.Fatal("поля D&D потерялись при обратной смене")
+	}
+}
+
+func TestStoppedRoomDoesNotHang(t *testing.T) {
+	ctx := context.Background()
+	m := modulesManager(t)
+	t.Cleanup(m.Shutdown)
+	c, err := m.Create(ctx, "Мир", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Launch(ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	room := m.Current().Room
+	room.Shutdown()
+	room.Shutdown()
+	late := &worldClient{}
+	done := make(chan struct{})
+	go func() {
+		room.Join(late)
+		room.Dispatch(late, domain.ClientMsg{Type: "ping"})
+		room.Leave(late)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("остановленная комната заблокировала клиента")
+	}
+	if !late.closed {
+		t.Fatal("опоздавший клиент не отключён")
 	}
 }
