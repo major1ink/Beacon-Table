@@ -3,14 +3,14 @@
 import { fetchMe, fetchSystems } from "./api.js";
 import { fold, el } from "./card-shell.js";
 import { importerInfo } from "./importers.js";
-import { showAlert } from "./modal.js";
+import { showAlert, showConfirm } from "./modal.js";
 import { isOwner } from "./roles.js";
 import { changeWorldSystem } from "./world-system.js";
 
 const lead = (id) => `Этот импорт — для ${importerInfo(id).title}, а мир сейчас играет по другой системе.`;
 
 // offerImport — ДМ-владелец: переключить мир на систему импортёра, если её
-// модуль установлен, иначе подсказка, как его поставить; остальным — просьба
+// модуль установлен, иначе предложение открыть витрину; остальным — просьба
 // к ДМ.
 export async function offerImport(id) {
   const info = importerInfo(id);
@@ -31,7 +31,8 @@ export async function offerImport(id) {
     await changeWorldSystem(target, lead(id));
     return;
   }
-  await showAlert(`${lead(id)} Модуль ${info.title} не установлен: поставь его в «Настройки → Модули» («Установить из файла…») и выбери системой мира.`, { title: "Импорт" });
+  const open = await showConfirm(`${lead(id)} Модуль ${info.title} не установлен — его можно поставить в витрине модулей, а потом выбрать системой мира.`, { title: "Импорт", okLabel: "Открыть витрину" });
+  if (open) window.open(`/modules.html?module=${encodeURIComponent(info.offer)}`, "_blank", "noopener");
 }
 
 export const offerButtonLabel = (id) => `Подключить ${importerInfo(id).title}`;

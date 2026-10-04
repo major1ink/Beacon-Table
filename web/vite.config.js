@@ -60,6 +60,7 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, "index.html"),
         worlds: resolve(__dirname, "worlds.html"),
+        modules: resolve(__dirname, "modules.html"),
         dm: resolve(__dirname, "dm.html"),
         player: resolve(__dirname, "player.html"),
         broadcast: resolve(__dirname, "broadcast.html"),

@@ -3,8 +3,9 @@
 // поднят на сервере (см. internal/app.CompanyManager — активен ровно один).
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
-import { fetchMe, apiLogout, fetchCompanies, fetchSystems, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer, fetchTutorial, saveTutorial } from "../api.js";
+import { fetchMe, apiLogout, fetchCompanies, fetchSystems, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchWorldRequirements, fetchVersion, apiChangeOwnPassword, shutdownServer, fetchTutorial, saveTutorial } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
+import { runModulesWizard } from "../modules-wizard.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { startTour } from "../tutorial.js";
 import { escapeHtml } from "../html.js";
@@ -49,7 +50,24 @@ async function loadSystems() {
       return opt;
     }),
   );
+  const install = document.createElement("option");
+  install.value = INSTALL_SYSTEM;
+  install.textContent = "+ Установить систему…";
+  select.appendChild(install);
+  previousSystem = select.value;
 }
+
+// Пункт «+ Установить систему…» не система, а вход в витрину.
+const INSTALL_SYSTEM = "__install__";
+let previousSystem = "";
+document.getElementById("worldSystem").addEventListener("change", (e) => {
+  if (e.target.value !== INSTALL_SYSTEM) {
+    previousSystem = e.target.value;
+    return;
+  }
+  e.target.value = previousSystem;
+  location.href = "/modules.html?type=system";
+});
 
 // Мир может быть ещё запущен (ДМ пришёл сюда сразу после логина, а не кнопкой
 // «К мирам» из стола, которая гасит стол) — тогда «Открыть стол →» вместо
@@ -79,6 +97,19 @@ function worldCardHTML(c) {
   `;
 }
 
+// confirmModules — если мир ждёт модулей, которых нет на сервере, показывает
+// мастер установки; false — человек отказался от запуска. Сбой проверки не
+// мешает запуску.
+async function confirmModules(id) {
+  let req;
+  try {
+    req = await fetchWorldRequirements(id);
+  } catch {
+    return true;
+  }
+  return req.missing.length ? runModulesWizard(req) : true;
+}
+
 async function render() {
   let companies;
   try {
@@ -98,6 +129,11 @@ async function render() {
       btn.disabled = true;
       btn.textContent = "Запускаю…";
       try {
+        if (!(await confirmModules(btn.dataset.id))) {
+          btn.disabled = false;
+          btn.textContent = "Запустить";
+          return;
+        }
         await launchCompany(btn.dataset.id);
         location.href = "/dm.html";
       } catch (err) {
@@ -141,6 +177,10 @@ async function render() {
 }
 
 initFullscreenButton(document.getElementById("fullscreenBtn"));
+
+document.getElementById("modulesBtn").onclick = () => {
+  location.href = "/modules.html";
+};
 
 document.getElementById("logoutBtn").onclick = async () => {
   await apiLogout();

@@ -67,7 +67,6 @@ import {
   deleteFoundryModule,
   fetchModules,
   fetchSystems,
-  installModuleFile,
   setWorldModules,
   shutdownServer,
   fetchTutorial,
@@ -84,6 +83,7 @@ import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutorial.js";
 import { dmTourSteps } from "../tutorial-dm.js";
 import { changeWorldSystem, fitsSystem } from "../world-system.js";
+import { showMissingModulesNotice } from "../modules-notice.js";
 import { loadSystemProfile } from "../system-profile.js";
 import { escapeHtml, cssUrl } from "../html.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
@@ -113,6 +113,7 @@ let isDemoGuest = false;
   }
   isDemoGuest = isDemoRole(me.role);
   if (isDemoGuest) hideOwnerOnlyUI();
+  if (!isDemoGuest) showMissingModulesNotice();
   document.getElementById("dmUsername").textContent = me.username;
   // Всё остальное в этом файле — обычные top-level обработчики
   // (onclick/addEventListener), выполняются один раз при загрузке страницы
@@ -2930,7 +2931,6 @@ broadcastRotateBtn.onclick = async () => {
 const worldSystemSelect = document.getElementById("worldSystemSelect");
 const worldSystemBtn = document.getElementById("worldSystemBtn");
 const worldModulesList = document.getElementById("worldModulesList");
-const moduleInstallFile = document.getElementById("moduleInstallFile");
 let worldModulesData = null; // ответ fetchModules
 let worldSystems = []; // ответ fetchSystems
 
@@ -3019,19 +3019,7 @@ async function toggleWorldModule(id, box) {
   }
 }
 
-document.getElementById("moduleInstallBtn").onclick = () => moduleInstallFile.click();
-moduleInstallFile.onchange = async () => {
-  const file = moduleInstallFile.files[0];
-  moduleInstallFile.value = "";
-  if (!file) return;
-  try {
-    const m = await installModuleFile(file);
-    await renderWorldModules();
-    showAlert(`Модуль «${m.title}» ${m.version} установлен. ${m.type === "system" ? "Выбери его системой мира выше." : "Включи его в списке модулей."}`);
-  } catch (err) {
-    showAlert("Модуль не установлен: " + err.message);
-  }
-};
+document.getElementById("moduleShowcaseBtn").onclick = () => window.open("/modules.html", "_blank", "noopener");
 
 // Список того, что ДМ хотя бы раз импортировал в этот мир (см.
 // service.FoundryService.Installed), плюс необязательная проверка новых

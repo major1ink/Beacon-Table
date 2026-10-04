@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#131318" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <title>Beacon Table — Модули</title>
+  <link rel="stylesheet" href="/src/styles/theme.css" />
+  <style>
+    html, body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #page { width: min(1100px, 100%); margin: 0 auto; box-sizing: border-box; padding: calc(22px + var(--safe-t)) calc(20px + var(--safe-r)) calc(30px + var(--safe-b)) calc(20px + var(--safe-l)); }
+
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    h1 { font-size: 20px; margin: 0; }
+    #subtitle { opacity: 0.6; font-size: 12px; margin-top: 4px; }
+    #backLink { color: var(--text-dim); font-size: 12.5px; text-decoration: none; padding: 6px 10px; border-radius: var(--radius); white-space: nowrap; }
+    #backLink:hover { background: var(--surface); color: var(--text); }
+
+    #toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .seg button { background: none; border: none; color: var(--text-dim); font-size: 12.5px; padding: 7px 12px; cursor: pointer; }
+    .seg button:hover { background: var(--surface); color: var(--text); }
+    .seg button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+    #search { flex: 1 1 160px; min-width: 120px; }
+    #toolActions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tool-btn {
+      border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-dim);
+      font-size: 12.5px; font-weight: 600; padding: 7px 12px; cursor: pointer;
+    }
+    .tool-btn:hover { background: var(--surface-hover); color: var(--text); }
+    .tool-btn:disabled { opacity: 0.6; cursor: default; }
+
+    .msg { font-size: 12px; min-height: 16px; margin: 6px 2px 10px; }
+    .msg.error { color: #e74c3c; }
+    .msg.ok { color: var(--green-bright); }
+
+    #layout { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+    #list { display: flex; flex-direction: column; gap: 6px; }
+    #empty { font-size: 13px; opacity: 0.6; padding: 10px 2px; }
+
+    .mod-row {
+      display: flex; flex-direction: column; gap: 5px; text-align: left; width: 100%; box-sizing: border-box;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+      color: var(--text); cursor: pointer; font: inherit;
+    }
+    .mod-row:hover { background: var(--surface-hover); }
+    .mod-row.sel { border-color: var(--accent); background: var(--accent-bg); }
+    .mod-name { font-size: 14px; font-weight: 600; }
+    .mod-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11.5px; color: var(--text-dim); }
+    .pill {
+      display: inline-block; border-radius: var(--radius-pill); padding: 1px 8px; font-size: 11px;
+      background: rgba(255, 255, 255, 0.07); color: var(--text-dim);
+    }
+    .pill.on { background: rgba(31, 107, 58, 0.35); color: var(--green-bright); }
+    .pill.update { background: var(--accent-bg); color: var(--accent); }
+    .pill.warn { background: rgba(165, 115, 15, 0.3); color: #e6b450; }
+
+    #detail { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; min-height: 120px; }
+    #detail h2 { font-size: 18px; margin: 0 0 6px; }
+    #detail h3 { font-size: 12px; margin: 18px 0 8px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.04em; }
+    .detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .detail-desc { font-size: 13.5px; line-height: 1.55; margin: 0 0 6px; white-space: pre-wrap; }
+    .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .act {
+      border: none; border-radius: var(--radius); padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+      background: var(--accent); color: #fff;
+    }
+    .act:hover { background: var(--accent-hover); }
+    .act.alt { background: var(--surface); color: var(--text-dim); border: 1px solid var(--border); }
+    .act.alt:hover { background: var(--surface-hover); color: var(--text); }
+    .act:disabled { opacity: 0.6; cursor: default; }
+    .hint { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+    .list-plain { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+    details.sec { border-top: 1px solid var(--border); padding: 7px 0; }
+    details.sec > summary { cursor: pointer; font-size: 13.5px; }
+    details.sec > summary span { color: var(--text-dim); margin-left: 6px; }
+    .names { columns: 2 220px; column-gap: 18px; margin: 8px 0 4px; padding-left: 18px; font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow-y: auto; }
+
+    .src-row { font-size: 12.5px; margin: 0 0 8px; overflow-wrap: anywhere; }
+    .src-row .err { color: #e74c3c; display: block; font-size: 11.5px; }
+    .field-label { font-size: 12px; color: var(--text-dim); }
+    .modal-input { width: 100%; box-sizing: border-box; }
+
+    /* Телефон: список и карточка идут друг под другом. */
+    @media (max-width: 860px) {
+      #layout { grid-template-columns: minmax(0, 1fr); }
+      .names { columns: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="page">
+    <header>
+      <div>
+        <h1>Модули</h1>
+        <div id="subtitle">Системы и контент для миров. Пока вы смотрите, ничего не скачивается — модуль ставится только по кнопке.</div>
+      </div>
+      <a id="backLink" href="/worlds.html">← К мирам</a>
+    </header>
+
+    <div id="toolbar">
+      <div class="seg" id="tabs">
+        <button type="button" data-tab="available" class="on">Доступные</button>
+        <button type="button" data-tab="installed">Установленные</button>
+      </div>
+      <div class="seg" id="kinds">
+        <button type="button" data-kind="all" class="on">Все</button>
+        <button type="button" data-kind="system">Системы</button>
+        <button type="button" data-kind="content">Контент</button>
+      </div>
+      <input type="search" id="search" placeholder="Поиск" aria-label="Поиск" />
+      <div id="toolActions">
+        <button type="button" class="tool-btn" id="fileBtn">Из файла</button>
+        <button type="button" class="tool-btn" id="urlBtn">По ссылке</button>
+        <button type="button" class="tool-btn" id="sourcesBtn">Каталоги</button>
+        <button type="button" class="tool-btn" id="refreshBtn">Обновить</button>
+      </div>
+      <input type="file" id="fileInput" accept=".btmod,.zip,application/zip" hidden />
+    </div>
+    <div id="status" class="msg"></div>
+
+    <div id="layout">
+      <div id="list"><div id="empty">Загрузка…</div></div>
+      <section id="detail"><p class="hint">Выберите модуль в списке.</p></section>
+    </div>
+  </div>
+
+  <script type="module" src="/src/pages/modules.js"></script>
+</body>
+</html>

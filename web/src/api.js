@@ -67,6 +67,41 @@ export async function installModuleFile(file) {
   if (!res.ok) throw new Error((data && data.error) || res.statusText || "ошибка установки");
   return data;
 }
+// ---- витрина модулей: каталог из интернета (см. internal/modcatalog) ----
+export async function fetchModuleCatalog(refresh) {
+  return apiFetch("/api/module-catalog" + (refresh ? "?refresh=1" : ""));
+}
+export async function fetchModuleSummary(id) {
+  return apiFetch(`/api/module-catalog/${encodeURIComponent(id)}/summary`);
+}
+// installCatalogModule — {installed:[...]} или {requires:[...]}, если нужны
+// другие модули и withRequires не задан.
+export async function installCatalogModule(id, withRequires) {
+  const res = await fetch("/api/module-catalog/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, withRequires: !!withRequires }),
+  });
+  const data = await res.json().catch(() => null);
+  if (res.status === 409 && data && data.requires) return { requires: data.requires };
+  if (!res.ok) throw new Error((data && data.error) || res.statusText || "ошибка установки");
+  return data;
+}
+export async function installModuleURL(url, sha256) {
+  return apiFetch("/api/module-catalog/install-url", { method: "POST", body: JSON.stringify({ url, sha256: sha256 || "" }) });
+}
+export async function fetchModuleSources() {
+  return apiFetch("/api/module-sources");
+}
+export async function setModuleSources(sources) {
+  return apiFetch("/api/module-sources", { method: "PUT", body: JSON.stringify({ sources }) });
+}
+export async function deleteModule(id) {
+  return apiFetch(`/api/modules/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+export async function fetchWorldRequirements(companyId) {
+  return apiFetch(`/api/companies/${companyId}/requirements`);
+}
 export async function setWorldModules(companyId, modules) {
   return apiFetch(`/api/companies/${companyId}/modules`, { method: "PUT", body: JSON.stringify({ modules }) });
 }
