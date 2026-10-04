@@ -84,6 +84,7 @@ export default defineConfig({
     // запросы проксируются на бэкенд, включая апгрейд WebSocket.
     proxy: {
       "/api": "http://localhost:8080",
+      "/system-theme.css": "http://localhost:8080",
       "/upload": "http://localhost:8080",
       "/assets": "http://localhost:8080",
       "/uploads": "http://localhost:8080",

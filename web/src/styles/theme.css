@@ -40,6 +40,8 @@
   --accent: #7c6cf0;
   --accent-hover: #6a5ae0;
   --accent-bg: rgba(124, 108, 240, 0.16);
+  --on-accent: #fff;
+  --heading: #fff;
 
   --danger: #6b2b2b;
   --danger-hover: #8a3535;
@@ -62,6 +64,7 @@
   --shadow-float: 0 16px 40px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.3);
   --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.35);
   --ring-accent: 0 0 0 3px rgba(124, 108, 240, 0.35);
+  --ring-accent: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
 
   /* Вырез, скругления и системные полосы телефона. Работают только при
      viewport-fit=cover в meta viewport — без него браузер сам сжимает
@@ -396,7 +399,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .summon-form input { width: 56px; flex: 0 0 auto; }
 .summon-ask {
   flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 8px 10px; border-radius: 12px; border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 13px; cursor: pointer;
+  padding: 8px 10px; border-radius: 12px; border: 0; background: var(--accent); color: var(--on-accent); font: inherit; font-size: 13px; cursor: pointer;
 }
 .summon-ask:hover:not(:disabled) { background: var(--accent-hover); }
 .summon-ask:disabled { opacity: 0.5; cursor: default; }
@@ -492,7 +495,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .dice-tray .dice-buttons button.has { background: var(--accent-bg); border-color: var(--accent); color: var(--text); }
 .dice-tray .dice-count {
   position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 3px;
-  box-sizing: border-box; border-radius: 999px; background: var(--accent); color: #fff;
+  box-sizing: border-box; border-radius: 999px; background: var(--accent); color: var(--on-accent);
   font-size: 10px; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums;
 }
 .dice-tray .dice-count:empty { display: none; }
@@ -516,7 +519,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .dice-tray .dice-custom input { flex: 1 1 auto; --field-h: 32px; padding: 5px 10px; font-size: 12px; }
 .dice-tray .dice-custom [data-roll-custom] {
   cursor: pointer; flex: 0 0 auto; padding: 6px 13px; border: none; border-radius: var(--radius);
-  background: var(--accent); color: #fff; font: inherit; font-size: 12px;
+  background: var(--accent); color: var(--on-accent); font: inherit; font-size: 12px;
 }
 .dice-tray .dice-custom [data-roll-custom]:hover { background: var(--accent-hover); }
 
@@ -602,7 +605,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .roll-log-badge {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
-  background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 700;
+  background: var(--accent); color: var(--on-accent); font-size: 10.5px; font-weight: 700;
 }
 
 .roll-log-win {
@@ -901,7 +904,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .board-add {
   display: flex; align-items: center; justify-content: center; gap: 7px;
   padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--accent); color: #fff; font: inherit; font-size: 12px; cursor: pointer;
+  background: var(--accent); color: var(--on-accent); font: inherit; font-size: 12px; cursor: pointer;
 }
 .board-add:hover { background: var(--accent-hover); }
 .board-items { display: flex; flex-direction: column; gap: 4px; }
@@ -928,7 +931,7 @@ input[type="checkbox"].switch:disabled { opacity: 0.45; cursor: default; }
 .board-add {
   display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
   padding: 8px 10px; border: none; border-radius: var(--radius);
-  background: var(--accent); color: #fff; font: inherit; font-size: 12px; cursor: pointer;
+  background: var(--accent); color: var(--on-accent); font: inherit; font-size: 12px; cursor: pointer;
 }
 .board-add:hover { background: var(--accent-hover); }
 /* Импорт — действие второго ряда: та же форма, но без акцентной заливки. */

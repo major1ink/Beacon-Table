@@ -147,13 +147,14 @@
        web/src/combat-panel.js: switchCombatTab). */
     .combat-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
     .combat-tabs .combat-tab { flex: 1 1 auto; background: var(--surface); border-radius: 8px; font-size: 12px; padding: 7px 8px; }
-    .combat-tabs .combat-tab.active { background: var(--accent); color: #fff; }
+    .combat-tabs .combat-tab.active { background: var(--accent); color: var(--on-accent); }
     .killed-meta { padding-left: 40px; margin: -3px 0 0; }
     .killed-actions { display: flex; gap: 6px; padding-left: 40px; margin-top: 6px; }
     .killed-actions button { flex: 1 1 auto; font-size: 11px; padding: 6px 8px; }
     .killed-clear-btn { justify-content: center; background: var(--danger); margin-bottom: 10px; }
     .killed-clear-btn:hover { background: var(--danger-hover); }
   </style>
+  <link rel="stylesheet" href="/system-theme.css" />
 </head>
 <body>
   <div id="topBar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1"/></svg>Трекер инициативы<button id="fullscreenBtn" type="button"></button></div>

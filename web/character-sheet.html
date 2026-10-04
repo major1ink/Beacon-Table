@@ -75,7 +75,7 @@
     .schema-resource { display: inline-flex; align-items: center; gap: 4px; }
     .schema-resource .schema-num { width: 64px; }
     .roll-btn { padding: 2px 6px; font-size: 12px; line-height: 1; background: var(--accent-bg); color: var(--accent); }
-    .roll-btn:hover { background: var(--accent); color: #fff; }
+    .roll-btn:hover { background: var(--accent); color: var(--on-accent); }
 
     .ability-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-bottom: 8px; background: var(--surface); }
     .ability-box .ability-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -155,7 +155,7 @@
       display: flex; align-items: center; gap: 5px; padding: 5px 11px; font-size: 12px;
       background: var(--accent-bg); color: var(--accent); font-weight: 600; border-radius: var(--radius-pill);
     }
-    #modeBtn:hover { background: var(--accent); color: #fff; }
+    #modeBtn:hover { background: var(--accent); color: var(--on-accent); }
     #modeBtn svg { display: block; }
 
     .v-stack { display: flex; flex-direction: column; gap: 10px; }
@@ -188,7 +188,7 @@
     .v-hero-portrait-edit {
       position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      background: var(--accent); color: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+      background: var(--accent); color: var(--on-accent); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
     }
     .v-hero-rename {
       flex: 0 0 auto; display: flex; padding: 3px; cursor: pointer;
@@ -307,7 +307,7 @@
       flex: 0 0 auto; padding: 5px 10px; border-radius: 9px; background: var(--surface);
       font-size: 12.5px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;
     }
-    .v-atk-hit:hover { background: var(--accent); color: #fff; }
+    .v-atk-hit:hover { background: var(--accent); color: var(--on-accent); }
     .v-atk-dmg { flex: 0 0 auto; font-size: 12px; color: var(--text-dim); }
 
     /* ---- заклинания ---- */
@@ -424,7 +424,7 @@
     .item-peek-foot button {
       font-size: 11.5px; padding: 5px 10px; border-radius: 8px; background: var(--accent-bg); color: var(--accent); font-weight: 600;
     }
-    .item-peek-foot button:hover { background: var(--accent); color: #fff; }
+    .item-peek-foot button:hover { background: var(--accent); color: var(--on-accent); }
 
     /* ---- телефон (брейкпоинт общий, см. src/styles/theme.css) ----
        Режим чтения уже собран из auto-fit-сеток и складывается сам; чинятся
@@ -480,6 +480,7 @@
       .v-bar { height: 16px; }
     }
   </style>
+  <link rel="stylesheet" href="/system-theme.css" />
 </head>
 <body>
   <div id="topBar">
@@ -499,7 +500,7 @@
   </div>
   <div id="readonlyBanner">✎ Режим ДМ — этот лист принадлежит игроку, изменения сохранятся как обычно.</div>
   <div id="loadingHint">Загрузка…</div>
-  <div id="app">
+  <div id="app" class="sheet-root">
     <div id="viewPanel"></div>
     <div class="tab-panel active" id="tab1"></div>
     <div class="tab-panel" id="tab2"></div>

@@ -135,6 +135,7 @@ function renderInside(i, box) {
   const cached = summaries.get(key);
   if (cached) {
     box.appendChild(sections(cached.counts, cached.names));
+    if (cached.theme) box.append(h("h3", { text: "Оформление" }), swatches(cached.theme));
     if (i.updatable && cached.changelog) box.append(h("h3", { text: "Что нового" }), h("p", { class: "detail-desc", text: cached.changelog }));
     return;
   }
@@ -148,6 +149,19 @@ function renderInside(i, box) {
       if (state.selected !== i.id) return;
       box.replaceChildren(h("p", { class: "hint", text: "Состав не загрузился: " + err.message }));
     });
+}
+
+const SWATCH_LABEL = { bg: "фон", surface: "панель", accent: "акцент", gold: "золото", text: "текст" };
+
+// swatches — цвета оформления системы (summary.theme).
+function swatches(colors) {
+  return h(
+    "div",
+    { class: "swatches" },
+    Object.keys(SWATCH_LABEL)
+      .filter((k) => colors[k])
+      .map((k) => h("span", { class: "sw", title: `${SWATCH_LABEL[k]} ${colors[k]}` }, [h("i", { style: `background:${colors[k]}` }), SWATCH_LABEL[k]])),
+  );
 }
 
 // sections — разделы со счётчиками; список имён строится при раскрытии.
