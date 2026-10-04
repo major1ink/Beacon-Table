@@ -289,3 +289,18 @@ func TestLoadConfigModulesDev(t *testing.T) {
 		t.Fatalf("флаг: %q", cfg.ModulesDev)
 	}
 }
+
+// TestLoadConfigModulesIndex — адрес каталога модулей: из окружения, флаг
+// перебивает.
+func TestLoadConfigModulesIndex(t *testing.T) {
+	withWorkDir(t)
+	t.Setenv(envModulesIndex, " https://example.com/index.json ")
+	cfg, _, err := loadConfig(nil)
+	if err != nil || cfg.ModulesIndex != "https://example.com/index.json" {
+		t.Fatalf("из окружения: %q %v", cfg.ModulesIndex, err)
+	}
+	cfg, _, err = loadConfig([]string{"--modules-index", "http://127.0.0.1:9/index.json"})
+	if err != nil || cfg.ModulesIndex != "http://127.0.0.1:9/index.json" {
+		t.Fatalf("флаг: %q %v", cfg.ModulesIndex, err)
+	}
+}

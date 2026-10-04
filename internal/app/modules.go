@@ -128,6 +128,11 @@ func (m *CompanyManager) WorldModules(ctx context.Context, companyID string) ([]
 	return company.EnabledModules(), nil
 }
 
+// World — мир по id (для витрины: система и список модулей).
+func (m *CompanyManager) World(ctx context.Context, companyID string) (*domain.Company, error) {
+	return m.companies.ByID(ctx, companyID)
+}
+
 func (m *CompanyManager) relaunchIfUses(ctx context.Context, moduleID string) error {
 	w := m.Current()
 	if w == nil || !slices.Contains(w.Company.EnabledModules(), moduleID) {

@@ -26,6 +26,7 @@ import (
 	apiws "beacon-table/internal/api/ws"
 	"beacon-table/internal/app"
 	"beacon-table/internal/backup"
+	"beacon-table/internal/modcatalog"
 	"beacon-table/internal/module"
 	"beacon-table/internal/module/base"
 	"beacon-table/internal/quota"
@@ -226,10 +227,16 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 
 	// Модули контента: встроенный каталог D&D, установленные в
 	// <data>/modules и папки в разработке (--modules-dev).
-	modules := module.NewRegistry(filepath.Join(cfg.DataDir, "modules"), append(builtinModules(systemFiles), base.Module()), cfg.ModulesDev, serverVersion())
+	builtin := append(builtinModules(systemFiles), base.Module())
+	// Временно: проверка мира без встроенного D&D, как после выноса каталога.
+	if os.Getenv("BEACON_NO_BUILTIN_DND") != "" {
+		builtin = []*module.Module{base.Module()}
+	}
+	modules := module.NewRegistry(filepath.Join(cfg.DataDir, "modules"), builtin, cfg.ModulesDev, serverVersion())
 	if len(cfg.ModulesDev) > 0 {
 		slog.Info("Модули в разработке", "папки", cfg.ModulesDev)
 	}
+	catalog := modcatalog.New(modcatalog.Options{IndexURL: cfg.ModulesIndex, Dir: cfg.DataDir, AppVersion: serverVersion(), AllowPrivate: !cfg.BehindProxy})
 	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, modules, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy, uploadQuota)
 	companies.ChatHistory().Set(cfg.ChatHistory)
 
@@ -267,6 +274,7 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 
 	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version, cfg.BehindProxy, db)
 	api.Tutorial = service.NewTutorialService(stateRepo)
+	api.Catalog = catalog
 	// Форма настроек в разделе «Настройки» у ДМ: пишет в тот же beacon.conf
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota, companies.ChatHistory())

@@ -16,6 +16,7 @@ import (
 	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
 	"beacon-table/internal/module"
+	"beacon-table/internal/repository"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
@@ -23,12 +24,13 @@ import (
 type moduleEnv struct {
 	srv    *httptest.Server
 	mgr    *app.CompanyManager
+	store  repository.CompanyRepository
 	world  string
 	cookie *http.Cookie
 	player *http.Cookie
 }
 
-func newModuleEnv(t *testing.T) *moduleEnv {
+func newModuleEnv(t *testing.T, opts ...func(*apihttp.API)) *moduleEnv {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -65,12 +67,15 @@ func newModuleEnv(t *testing.T) *moduleEnv {
 		}
 	}
 	api := apihttp.NewAPI(service.NewAuthService(accounts, sessions), nil, mgr, "0.9.0", false, nil)
+	for _, o := range opts {
+		o(api)
+	}
 	mux := http.NewServeMux()
 	api.RegisterRoutes(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &moduleEnv{
-		srv: srv, mgr: mgr, world: world.ID,
+		srv: srv, mgr: mgr, store: sqlite.NewCompanyStore(db), world: world.ID,
 		cookie: &http.Cookie{Name: domain.SessionCookieName, Value: "sess-owner"},
 		player: &http.Cookie{Name: domain.SessionCookieName, Value: "sess-player"},
 	}

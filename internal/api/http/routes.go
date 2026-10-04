@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"beacon-table/internal/app"
+	"beacon-table/internal/modcatalog"
 	"beacon-table/internal/service"
 )
 
@@ -23,6 +24,9 @@ type API struct {
 	// nil — ручки отвечают 503 (тесты).
 	Tutorial  service.TutorialService
 	Companies *app.CompanyManager
+	// Catalog — витрина модулей (см. module_catalog_handlers.go). nil — ручки
+	// отвечают 503 (тесты).
+	Catalog *modcatalog.Catalog
 	// SecureCookies — сервер стоит за HTTPS-прокси (--behind-proxy), значит
 	// cookie можно и нужно помечать Secure: браузер перестанет отправлять их
 	// по незашифрованному соединению. На голом HTTP флаг оставляют
@@ -133,6 +137,13 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// module_handlers.go.
 	mux.HandleFunc("GET /api/systems", a.handleSystemsList)
 	mux.HandleFunc("GET /api/modules", a.handleModulesList)
+	mux.HandleFunc("GET /api/module-catalog", a.handleCatalogList)
+	mux.HandleFunc("GET /api/module-catalog/{id}/summary", a.handleCatalogSummary)
+	mux.HandleFunc("POST /api/module-catalog/install", a.handleCatalogInstall)
+	mux.HandleFunc("POST /api/module-catalog/install-url", a.handleCatalogInstallURL)
+	mux.HandleFunc("GET /api/module-sources", a.handleSourcesGet)
+	mux.HandleFunc("GET /api/companies/{id}/requirements", a.handleWorldRequirements)
+	mux.HandleFunc("PUT /api/module-sources", a.handleSourcesSet)
 	mux.HandleFunc("POST /api/modules", a.handleModuleInstall)
 	mux.HandleFunc("DELETE /api/modules/{id}", a.handleModuleDelete)
 	mux.HandleFunc("GET /api/companies/{id}/modules", a.handleWorldModulesGet)
