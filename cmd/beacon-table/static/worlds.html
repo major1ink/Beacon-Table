@@ -46,11 +46,11 @@
     header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
     h1 { font-size: 20px; margin: 0; }
     #subtitle { opacity: 0.6; font-size: 12px; margin: 4px 0 20px; }
-    #logoutBtn, #fullscreenBtn {
+    #logoutBtn, #fullscreenBtn, #modulesBtn {
       background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px;
       padding: 6px 10px; border-radius: var(--radius); transition: background .12s ease, color .12s ease;
     }
-    #logoutBtn:hover, #fullscreenBtn:hover { background: var(--surface); color: var(--text); }
+    #logoutBtn:hover, #fullscreenBtn:hover, #modulesBtn:hover { background: var(--surface); color: var(--text); }
     #fullscreenBtn { display: flex; align-items: center; }
 
     #list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
@@ -141,12 +141,15 @@
       .world-actions { flex: 1 1 100%; justify-content: flex-end; }
     }
   </style>
-  <script type="module" crossorigin src="/assets/worlds-yT08PiGG.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/modal-FegUF1c-.js">
+  <script type="module" crossorigin src="/assets/worlds-B3Qoulhu.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/modal-BGzHnmGs.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-DWit7U_M.js">
+  <link rel="modulepreload" crossorigin href="/assets/modules-view-DVqbKZmi.js">
   <link rel="modulepreload" crossorigin href="/assets/native-app-BgGKemc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DCoM7o1p.js">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-CVSO9ZMW.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-DQJbcIpw.js">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-B6yhGpGd.js">
+  <link rel="modulepreload" crossorigin href="/assets/html-X5HfsF80.js">
   <link rel="stylesheet" crossorigin href="/assets/modal-EO9Tt1YC.css">
 </head>
 <body>
@@ -160,6 +163,7 @@
       </div>
       <div id="headerActions">
         <button id="fullscreenBtn" type="button"></button>
+        <button id="modulesBtn" type="button" title="Системы и контент для миров">Модули</button>
         <button id="logoutBtn">Выйти</button>
         <button id="shutdownBtn" title="Остановить программу: мир сохранится, стол закроется у всех">Выключить сервер</button>
       </div>

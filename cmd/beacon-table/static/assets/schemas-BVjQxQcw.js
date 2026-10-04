@@ -1,0 +1,1 @@
+import{h as r}from"./modal-BGzHnmGs.js";const o=["sheet","monster","spell","item","reference"];let t={},n=null;function s(){return n||(n=r().then(e=>(t=e&&typeof e=="object"?e:{},t)).catch(()=>t)),n}function a(e){return t[e]||null}export{o as S,s as l,a as s};
