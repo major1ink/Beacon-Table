@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/theme"
 )
 
 var (
@@ -174,6 +175,11 @@ func (r *ContentReport) checkAssets(fsys fs.FS, man *Manifest) {
 			if _, err := fs.Stat(fsys, path.Join("assets", m[2])); err != nil {
 				r.errorf("%s: нет картинки assets/%s", c.File, m[2])
 			}
+		}
+	}
+	if spec, err := theme.Parse(man.Theme); err == nil {
+		for _, rel := range spec.UsedAssets(man.ID, fsys) {
+			used[rel] = true
 		}
 	}
 	_ = fs.WalkDir(fsys, "assets", func(p string, d fs.DirEntry, err error) error {

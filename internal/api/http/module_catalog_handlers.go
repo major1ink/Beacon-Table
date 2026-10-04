@@ -1,6 +1,8 @@
 package http
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -201,6 +203,23 @@ func (a *API) handleSourcesSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.handleSourcesGet(w, r)
+}
+
+// handleSystemTheme — GET /system-theme.css: оформление системы запущенного
+// мира; подключается <link> на каждой странице стола, поэтому без входа и
+// без вспышки неоформленной страницы.
+func (a *API) handleSystemTheme(w http.ResponseWriter, r *http.Request) {
+	css := a.Companies.SystemThemeCSS()
+	sum := sha256.Sum256([]byte(css))
+	etag := `"` + hex.EncodeToString(sum[:8]) + `"`
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	_, _ = io.WriteString(w, css)
 }
 
 type neededModule struct {

@@ -383,3 +383,61 @@ func TestInstallRequires(t *testing.T) {
 		t.Fatal("контент должен встать после системы")
 	}
 }
+
+func themedSystem(theme string) string {
+	return strings.Replace(manifestJSON("themed", "1.0.0", `"theme":`+theme), `"content"`, `"system"`, 1)
+}
+
+func TestManifestTheme(t *testing.T) {
+	for name, raw := range map[string]string{
+		"у контента":        manifestJSON("a", "1.0.0", `"theme":{"vars":{"accent":"#fff"}}`),
+		"чужая переменная":  themedSystem(`{"vars":{"width":"1px"}}`),
+		"лишнее поле theme": themedSystem(`{"script":"a.js"}`),
+	} {
+		if _, err := ParseManifest([]byte(raw)); err == nil {
+			t.Errorf("%s: ожидали ошибку", name)
+		}
+	}
+	if _, err := ParseManifest([]byte(themedSystem(`{"vars":{"accent":"#a83a32"}}`))); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstallTheme(t *testing.T) {
+	reg := NewRegistry(t.TempDir(), nil, nil, "0.9.0")
+	theme := `{"vars":{"accent":"#a83a32"},"fonts":[{"family":"Title","file":"fonts/t.woff2"}],"styles":["theme/sheet.css"]}`
+	good := map[string]string{
+		"module.json":          themedSystem(theme),
+		"assets/fonts/t.woff2": "font",
+		"theme/sheet.css":      ".stat-table th { color: #c9a227 }",
+	}
+	m, err := reg.Install(makeArchive(t, good))
+	if err != nil {
+		t.Fatal(err)
+	}
+	css, err := m.ThemeCSS()
+	if err != nil || !strings.Contains(css, "--accent:#a83a32") || !strings.Contains(css, ".card-root .stat-table th") || !strings.Contains(css, "/module-assets/themed/fonts/t.woff2") {
+		t.Fatalf("CSS темы: %q %v", css, err)
+	}
+	for name, patch := range map[string]map[string]string{
+		"нет шрифта":  {"assets/fonts/t.woff2": ""},
+		"плохой CSS":  {"theme/sheet.css": "@import url(x.css);"},
+		"внешний url": {"theme/sheet.css": `.a { background: url(https://example.com/x.png) }`},
+	} {
+		files := map[string]string{}
+		for k, v := range good {
+			files[k] = v
+		}
+		for k, v := range patch {
+			if v == "" {
+				delete(files, k)
+			} else {
+				files[k] = v
+			}
+		}
+		other := NewRegistry(t.TempDir(), nil, nil, "0.9.0")
+		if _, err := other.Install(makeArchive(t, files)); err == nil {
+			t.Errorf("%s: ожидали отказ", name)
+		}
+	}
+}

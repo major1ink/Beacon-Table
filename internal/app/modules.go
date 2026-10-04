@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 
 	"beacon-table/internal/domain"
@@ -126,6 +127,26 @@ func (m *CompanyManager) WorldModules(ctx context.Context, companyID string) ([]
 		return nil, err
 	}
 	return company.EnabledModules(), nil
+}
+
+// SystemThemeCSS — оформление системы запущенного мира готовым CSS. Пусто,
+// если мира нет, система «Своя» или у модуля нет темы; сломанная тема не
+// мешает работе стола.
+func (m *CompanyManager) SystemThemeCSS() string {
+	w := m.Current()
+	if w == nil || w.Company.System == domain.SystemCustom {
+		return ""
+	}
+	mod, err := m.modules.Get(w.Company.System)
+	if err != nil {
+		return ""
+	}
+	css, err := mod.ThemeCSS()
+	if err != nil {
+		slog.Warn("Тема системы не применена", "system", w.Company.System, "err", err)
+		return ""
+	}
+	return css
 }
 
 // World — мир по id (для витрины: система и список модулей).

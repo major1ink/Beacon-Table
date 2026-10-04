@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/theme"
 )
 
 // Format — версия СТРУКТУРЫ пакета, которую понимает программа. Не путать с
@@ -90,8 +91,8 @@ type Manifest struct {
 	// LegacyIDs — id карточек в старом формате sys-<slug> (см.
 	// LegacyIDPrefix). Только для модулей, заменяющих встроенный каталог.
 	LegacyIDs bool `json:"legacyIds,omitempty"`
-	// Theme — оформление системы (CSS-переменные, шрифты). Формат задаёт
-	// задача «Оформление игровых систем»; здесь хранится как есть.
+	// Theme — оформление системы: токены, шрифты и свой CSS листа и карточек
+	// (см. internal/theme). Только у системного модуля.
 	Theme json.RawMessage `json:"theme,omitempty"`
 	// Combat — правила боя системы: инициатива, 0 хитов, опыт. Только у
 	// системного модуля; без раздела мир на этой системе играет по правилам
@@ -175,7 +176,23 @@ func (m *Manifest) Validate() error {
 	if err := m.validateModifierTargets(); err != nil {
 		return err
 	}
+	if err := m.validateTheme(); err != nil {
+		return err
+	}
 	return m.validateUnitsAndCurrencies()
+}
+
+// validateTheme — раздел theme: только у системного модуля и по правилам
+// internal/theme (файлы шрифтов и стилей проверяет CheckTheme).
+func (m *Manifest) validateTheme() error {
+	spec, err := theme.Parse(m.Theme)
+	if err != nil {
+		return fmt.Errorf("модуль %s: %w", m.ID, err)
+	}
+	if spec != nil && m.Type != TypeSystem {
+		return fmt.Errorf("оформление (theme) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	return nil
 }
 
 // validateUnitsAndCurrencies — единицы, валюты и броски: только

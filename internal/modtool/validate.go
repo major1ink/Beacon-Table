@@ -46,7 +46,7 @@ var (
 )
 
 // Допустимые файлы и папки верхнего уровня модуля.
-var topDirs = map[string]bool{"schemas": true, "assets": true}
+var topDirs = map[string]bool{"schemas": true, "assets": true, "theme": true}
 
 func init() {
 	for _, k := range module.Kinds {
@@ -72,6 +72,9 @@ func ValidateModule(dir string, opts Options) *Report {
 	checkLayout(r, fsys)
 	if _, err := module.LoadSchemas(fsys, "schemas", man); err != nil {
 		r.errorf("схемы: %v", err)
+	}
+	if err := module.CheckTheme(fsys, man, "assets"); err != nil {
+		r.errorf("%v", err)
 	}
 	content := module.CheckContent(fsys, man)
 	r.Errors = append(r.Errors, content.Errors...)

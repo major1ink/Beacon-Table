@@ -47,10 +47,10 @@ func sameCards(t *testing.T, label string, got, want map[string][]byte) {
 }
 
 // manifestKey — манифест без полей, которые у модуля из репозитория
-// отличаются намеренно (версия, описание, лицензия, минимальная версия программы).
+// отличаются намеренно (версия, описание, лицензия, минимальная версия программы, тема).
 func manifestKey(t *testing.T, man module.Manifest) string {
 	t.Helper()
-	man.Version, man.Description, man.License, man.MinAppVersion = "", "", "", ""
+	man.Version, man.Description, man.License, man.MinAppVersion, man.Theme = "", "", "", "", nil
 	data, err := json.Marshal(man)
 	if err != nil {
 		t.Fatal(err)

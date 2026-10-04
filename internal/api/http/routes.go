@@ -137,6 +137,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// module_handlers.go.
 	mux.HandleFunc("GET /api/systems", a.handleSystemsList)
 	mux.HandleFunc("GET /api/modules", a.handleModulesList)
+	mux.HandleFunc("GET /system-theme.css", a.handleSystemTheme)
 	mux.HandleFunc("GET /api/module-catalog", a.handleCatalogList)
 	mux.HandleFunc("GET /api/module-catalog/{id}/summary", a.handleCatalogSummary)
 	mux.HandleFunc("POST /api/module-catalog/install", a.handleCatalogInstall)

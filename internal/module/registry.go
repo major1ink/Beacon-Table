@@ -18,6 +18,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/schema"
+	"beacon-table/internal/theme"
 )
 
 // Источники модуля.
@@ -252,6 +253,10 @@ func (r *Registry) Install(archive string) (*Module, error) {
 	// Схемы и карточки проверяются до подмены прежней версии: битый модуль
 	// не ставится, а старая версия остаётся.
 	if _, err := loadSchemas(os.DirFS(tmp), man); err != nil {
+		_ = os.RemoveAll(tmp)
+		return nil, &domain.ValidationError{Msg: err.Error()}
+	}
+	if err := CheckTheme(os.DirFS(tmp), man, "assets"); err != nil {
 		_ = os.RemoveAll(tmp)
 		return nil, &domain.ValidationError{Msg: err.Error()}
 	}
@@ -521,4 +526,23 @@ func (m *Module) OpenAsset(rel string) (fs.File, error) {
 		return nil, fs.ErrNotExist
 	}
 	return m.FS.Open(path.Join(m.AssetsDir(), clean))
+}
+
+// CheckTheme проверяет файлы темы модуля (шрифты, стили, картинки из url()).
+func CheckTheme(fsys fs.FS, man *Manifest, assets string) error {
+	spec, err := theme.Parse(man.Theme)
+	if err != nil {
+		return fmt.Errorf("модуль %s: %w", man.ID, err)
+	}
+	_, err = theme.Render(man.ID, spec, fsys, assets)
+	return err
+}
+
+// ThemeCSS — оформление модуля готовым CSS; без темы — пустая строка.
+func (m *Module) ThemeCSS() (string, error) {
+	spec, err := theme.Parse(m.Manifest.Theme)
+	if err != nil {
+		return "", err
+	}
+	return theme.Render(m.Manifest.ID, spec, m.FS, m.AssetsDir())
 }

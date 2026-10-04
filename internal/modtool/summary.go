@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"beacon-table/internal/module"
+	"beacon-table/internal/theme"
 )
 
 // Summary — сводка выпуска модуля (summary.json): манифест и состав, чтобы
@@ -29,6 +30,8 @@ type Summary struct {
 	Names         map[string][]string `json:"names"`
 	Slugs         map[string][]string `json:"slugs"`
 	Changelog     string              `json:"changelog,omitempty"`
+	// Theme — цвета оформления для превью системы в витрине.
+	Theme map[string]string `json:"theme,omitempty"`
 }
 
 // Summarize собирает сводку по папке модуля; модуль предварительно должен
@@ -57,6 +60,9 @@ func Summarize(dir string) (*Summary, error) {
 	for kind := range s.Counts {
 		sort.Strings(s.Names[kind])
 		sort.Strings(s.Slugs[kind])
+	}
+	if spec, err := theme.Parse(man.Theme); err == nil {
+		s.Theme = spec.Preview()
 	}
 	if log, err := fs.ReadFile(fsys, "CHANGELOG.md"); err == nil {
 		s.Changelog = changelogEntry(string(log), man.Version)

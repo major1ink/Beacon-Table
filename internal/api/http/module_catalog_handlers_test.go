@@ -225,3 +225,42 @@ func TestWorldRequirements(t *testing.T) {
 		t.Fatalf("нет мира: %d", code)
 	}
 }
+
+func TestSystemThemeCSS(t *testing.T) {
+	e := newModuleEnv(t)
+	get := func(etag string) (int, string, string) {
+		req, _ := http.NewRequest(http.MethodGet, e.srv.URL+"/system-theme.css", nil)
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
+		resp, err := e.srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(resp.Body)
+		return resp.StatusCode, buf.String(), resp.Header.Get("ETag")
+	}
+	if code, css, _ := get(""); code != http.StatusOK || css != "" {
+		t.Fatalf("«Своя система»: %d %q", code, css)
+	}
+
+	body, ct := moduleUpload(t, map[string]string{
+		"module.json":     `{"format":"beacon-module/v1","id":"themed","type":"system","title":"Тема","version":"1.0.0","theme":{"vars":{"accent":"#a83a32"},"styles":["theme/sheet.css"]}}`,
+		"theme/sheet.css": ".stat-table th { color: #c9a227 }",
+	})
+	if code, out := e.do(t, http.MethodPost, "/api/modules", body, ct, e.cookie); code != http.StatusCreated {
+		t.Fatalf("установка: %d %v", code, out)
+	}
+	if _, err := e.mgr.SetWorldSystem(context.Background(), e.world, "themed"); err != nil {
+		t.Fatal(err)
+	}
+	code, css, etag := get("")
+	if code != http.StatusOK || !strings.Contains(css, "--accent:#a83a32") || !strings.Contains(css, ".card-root .stat-table th") || etag == "" {
+		t.Fatalf("тема системы: %d %q", code, css)
+	}
+	if code, css, _ := get(etag); code != http.StatusNotModified || css != "" {
+		t.Fatalf("повторный запрос с ETag: %d %q", code, css)
+	}
+}
