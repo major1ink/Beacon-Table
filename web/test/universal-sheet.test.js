@@ -10,6 +10,7 @@ import { schemaBases, standStats } from "../src/universal-stats.js";
 import { initiativeBase } from "../src/schema-summary.js";
 import { compileSchema, createEvaluator } from "../src/schema-formula.js";
 import { schemaHasPath, schemaHasWidget } from "../src/schema-layout.js";
+import { schemaJSON, skipNoModules } from "./modules-repo.js";
 
 const sheetSchema = compileSchema(JSON.parse(readFileSync(new URL("../../internal/schema/builtin/sheet.json", import.meta.url), "utf8")));
 const statValue = (stat, mods) => createEvaluator(sheetSchema, { stats: [stat] }, mods).stat(stat.name);
@@ -42,8 +43,8 @@ test("инициатива для стенда: постоянная часть 
   assert.equal(initiativeBase(sheetSchema, { initiative: "3" }, null), 0);
 });
 
-test("схема листа: поле «Вид» в info.race только у D&D 2014, виджет заклинаний у D&D", () => {
-  const sheet = (system) => JSON.parse(readFileSync(new URL(`../../cmd/beacon-table/systemdata/schemas/${system}/sheet.json`, import.meta.url), "utf8"));
+test("схема листа: поле «Вид» в info.race только у D&D 2014, виджет заклинаний у D&D", skipNoModules, () => {
+  const sheet = (system) => schemaJSON(system, "sheet");
   assert.equal(schemaHasPath(sheet("dnd5e-2014"), "info.race"), true);
   assert.equal(schemaHasPath(sheet("dnd5e-2024"), "info.race"), false);
   assert.equal(schemaHasWidget(sheet("dnd5e-2014"), "spellbook"), true);
@@ -53,8 +54,8 @@ test("схема листа: поле «Вид» в info.race только у D&
   assert.equal(schemaHasPath(null, "info.race"), false);
 });
 
-test("основы целей системы для стенда — из полей схемы с modifierTarget", () => {
-  const dnd = (kind) => JSON.parse(readFileSync(new URL(`../../cmd/beacon-table/systemdata/schemas/dnd5e-2024/${kind}.json`, import.meta.url), "utf8"));
+test("основы целей системы для стенда — из полей схемы с modifierTarget", skipNoModules, () => {
+  const dnd = (kind) => schemaJSON("dnd5e-2024", kind);
   const abilities = { str: 14, dex: 8, con: 10, int: 12, wis: 13, cha: 9 };
   const want = { "abilities.str": 14, "abilities.dex": 8, "abilities.con": 10, "abilities.int": 12, "abilities.wis": 13, "abilities.cha": 9 };
   assert.deepEqual(schemaBases(dnd("sheet"), { abilities }), want);

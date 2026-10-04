@@ -1,32 +1,21 @@
-// Схемы карточек D&D (заклинание, предмет, справочник) на всём вшитом
-// каталоге systemdata: каталог, медальон и категории дают то же, что давали
+// Схемы карточек D&D (заклинание, предмет, справочник) на всём каталоге
+// из репозитория модулей: каталог, медальон и категории дают то же, что давали
 // прежние правила D&D.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
 
 import { classifyItemType, classifyReferenceKind, itemGlyphName, kindInfo, kindKey, kindLabel, rarityColor, rarityKey, schoolInfo } from "./legacy-taxonomy.js";
 import { compileSchema } from "../src/schema-formula.js";
+import { cards, schemaJSON, skipNoModules } from "./modules-repo.js";
 import { catalogConfig, categoriesOf, medallionOf, pillsOf } from "../src/schema-list.js";
 
-const root = new URL("../../cmd/beacon-table/systemdata/", import.meta.url);
-const schema = (kind) => compileSchema(JSON.parse(readFileSync(new URL(`schemas/dnd5e-2024/${kind}.json`, root), "utf8")));
+const schema = (kind) => compileSchema(schemaJSON("dnd5e-2024", kind));
 
-function cards(kind) {
-  const out = [];
-  for (const system of readdirSync(new URL(`${kind}/`, root))) {
-    for (const file of readdirSync(new URL(`${kind}/${system}/`, root))) {
-      if (file.endsWith(".json")) out.push(JSON.parse(readFileSync(new URL(`${kind}/${system}/${file}`, root), "utf8")));
-    }
-  }
-  return out;
-}
-
-test("схемы карточек D&D разбираются без ошибок", () => {
+test("схемы карточек D&D разбираются без ошибок", skipNoModules, () => {
   for (const kind of ["spell", "item", "reference"]) assert.deepEqual(schema(kind).errors, [], kind);
 });
 
-test("заклинания: группы, фильтры, буквы, медальон", () => {
+test("заклинания: группы, фильтры, буквы, медальон", skipNoModules, () => {
   const compiled = schema("spell");
   const cfg = catalogConfig(compiled);
   const list = cards("spells");
@@ -45,7 +34,7 @@ test("заклинания: группы, фильтры, буквы, медал
   }
 });
 
-test("предметы: группы по редкости, категории меню, медальон", () => {
+test("предметы: группы по редкости, категории меню, медальон", skipNoModules, () => {
   const compiled = schema("item");
   const cfg = catalogConfig(compiled);
   const cats = categoriesOf(compiled);
@@ -62,7 +51,7 @@ test("предметы: группы по редкости, категории �
   }
 });
 
-test("справочник: группы, категории меню, медальон", () => {
+test("справочник: группы, категории меню, медальон", skipNoModules, () => {
   const compiled = schema("reference");
   const cfg = catalogConfig(compiled);
   const cats = categoriesOf(compiled);

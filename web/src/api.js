@@ -634,7 +634,7 @@ export async function deleteReference(id) {
 // у ДМ (см. internal/service/room_statuses.go).
 //
 // Набор зависит от системы запущенного мира (см.
-// internal/app.CompanyManager.Launch: systemdata/conditions/<system>) —
+// internal/app.CompanyManager.Launch: conditions/ подключённых модулей) —
 // клиенту фильтровать ничего не нужно, сервер и так отдаёт только то, что
 // относится к текущему миру.
 export async function fetchConditions() {

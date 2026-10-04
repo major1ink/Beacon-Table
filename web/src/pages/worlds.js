@@ -107,7 +107,24 @@ async function confirmModules(id) {
   } catch {
     return true;
   }
-  return req.missing.length ? runModulesWizard(req) : true;
+  if (!req.missing.length) return true;
+  // Отказавшись от модулей, человека не спрашивают снова, пока набор недостающих не изменится.
+  const key = "modulesSkipped:" + id;
+  const signature = req.missing.map((m) => m.id).join(",");
+  try {
+    if (localStorage.getItem(key) === signature) return true;
+  } catch {
+    /* без хранилища — спросим снова */
+  }
+  const go = await runModulesWizard(req);
+  if (go) {
+    try {
+      localStorage.setItem(key, signature);
+    } catch {
+      /* не страшно */
+    }
+  }
+  return go;
 }
 
 async function render() {

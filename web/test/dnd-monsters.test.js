@@ -1,35 +1,25 @@
-// Схема существа D&D на всём вшитом бестиарии systemdata: каталог, медальон,
+// Схема существа D&D на всём бестиарии из репозитория модулей: каталог, медальон,
 // подпись и числа дают то же, что давал прежний статблок.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
 
 import { abilityMod, ABILITIES, crColor, fmtMod, monsterGlyphName } from "./legacy-taxonomy.js";
 import { createEvaluator, compileSchema } from "../src/schema-formula.js";
 import { catalogConfig, cardSubtitle, displayValue, medallionOf, pillsOf } from "../src/schema-list.js";
 import { compactStats, coreSummary, initiativeText } from "../src/schema-summary.js";
+import { cards, schemaJSON, skipNoModules } from "./modules-repo.js";
 
-const root = new URL("../../cmd/beacon-table/systemdata/", import.meta.url);
-const schema = (system) => compileSchema(JSON.parse(readFileSync(new URL(`schemas/${system}/monster.json`, root), "utf8")));
-
-function monsters() {
-  const out = [];
-  for (const system of readdirSync(new URL("bestiary/", root))) {
-    for (const file of readdirSync(new URL(`bestiary/${system}/`, root))) {
-      if (file.endsWith(".json")) out.push(JSON.parse(readFileSync(new URL(`bestiary/${system}/${file}`, root), "utf8")));
-    }
-  }
-  return out;
-}
+const schema = (system) => compileSchema(schemaJSON(system, "monster"));
+const monsters = () => cards("bestiary");
 
 const CR_ORDER = ["0", "1/8", "1/4", "1/2", ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
 const baseType = (t) => String(t || "").replace(/\s*\(.*$/, "").replace(/^./, (c) => c.toUpperCase());
 
-test("схемы существа D&D разбираются без ошибок", () => {
+test("схемы существа D&D разбираются без ошибок", skipNoModules, () => {
   for (const system of ["dnd5e-2014", "dnd5e-2024"]) assert.deepEqual(schema(system).errors, [], system);
 });
 
-test("существа: группы, фильтры, плашки, медальон, подпись", () => {
+test("существа: группы, фильтры, плашки, медальон, подпись", skipNoModules, () => {
   const compiled = schema("dnd5e-2024");
   const cfg = catalogConfig(compiled);
   const list = monsters();
@@ -47,7 +37,7 @@ test("существа: группы, фильтры, плашки, медаль
   }
 });
 
-test("существа: КД, хиты и модификаторы как в прежнем статблоке", () => {
+test("существа: КД, хиты и модификаторы как в прежнем статблоке", skipNoModules, () => {
   const compiled = schema("dnd5e-2014");
   for (const m of monsters()) {
     assert.equal(displayValue(compiled, m, "ac_line"), m.acNote ? `${m.ac} (${m.acNote})` : String(m.ac), m.name);
@@ -62,7 +52,7 @@ test("существа: КД, хиты и модификаторы как в п�
   }
 });
 
-test("существа: инициатива по правилу D&D — Ловкость существа", () => {
+test("существа: инициатива по правилу D&D — Ловкость существа", skipNoModules, () => {
   const compiled = schema("dnd5e-2024");
   const rule = { roll: "1d20 + @dex_mod" };
   for (const m of monsters()) {
@@ -71,7 +61,7 @@ test("существа: инициатива по правилу D&D — Лов�
   }
 });
 
-test("существа: плитки для доски и попапа — шесть характеристик с модификаторами", () => {
+test("существа: плитки для доски и попапа — шесть характеристик с модификаторами", skipNoModules, () => {
   const compiled = schema("dnd5e-2024");
   for (const m of monsters()) {
     assert.deepEqual(

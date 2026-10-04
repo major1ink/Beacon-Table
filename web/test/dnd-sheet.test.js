@@ -1,4 +1,4 @@
-// Схемы листа D&D 2024 и 2014 (cmd/beacon-table/systemdata/schemas) считают
+// Схемы листа D&D 2024 и 2014 (из репозитория модулей) считают
 // то же, что считал прежний бланк: модификаторы, спасброски, навыки,
 // пассивное восприятие, заклинательная статистика, грузоподъёмность.
 import test from "node:test";
@@ -7,10 +7,11 @@ import { readFileSync } from "node:fs";
 
 import { applyModifiers } from "../src/modifiers.js";
 import { compileSchema, createEvaluator } from "../src/schema-formula.js";
+import { schemaJSON, skipNoModules } from "./modules-repo.js";
 
 const ABILITY_TARGETS = { str: "abilities.str", dex: "abilities.dex", con: "abilities.con", int: "abilities.int", wis: "abilities.wis", cha: "abilities.cha" };
 
-const load = (id) => JSON.parse(readFileSync(new URL(`../../cmd/beacon-table/systemdata/schemas/${id}/sheet.json`, import.meta.url), "utf8"));
+const load = (id) => schemaJSON(id, "sheet");
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const SKILLS = {
@@ -47,7 +48,7 @@ const MODS = [
 ];
 
 for (const id of ["dnd5e-2024", "dnd5e-2014"]) {
-  test(`${id}: схема листа считает как прежний бланк`, () => {
+  test(`${id}: схема листа считает как прежний бланк`, skipNoModules, () => {
     const compiled = compileSchema(load(id));
     assert.deepEqual(compiled.errors, []);
     for (let seed = 1; seed <= 40; seed++) {
@@ -82,7 +83,7 @@ for (const id of ["dnd5e-2024", "dnd5e-2014"]) {
     }
   });
 
-  test(`${id}: лист без полей системы считается по умолчаниям схемы`, () => {
+  test(`${id}: лист без полей системы считается по умолчаниям схемы`, skipNoModules, () => {
     const compiled = compileSchema(load(id));
     // Пустой лист (перенесён из «Своей системы» или старый) и новый лист
     // 0.9.0 — без характеристик, владений и заклинаний: значения берутся из
@@ -107,7 +108,7 @@ for (const id of ["dnd5e-2024", "dnd5e-2014"]) {
     }
   });
 
-  test(`${id}: броски листа`, () => {
+  test(`${id}: броски листа`, skipNoModules, () => {
     const compiled = compileSchema(load(id));
     const sheet = sheetOf(7);
     sheet.abilities.dex = 16;
@@ -122,7 +123,7 @@ for (const id of ["dnd5e-2024", "dnd5e-2014"]) {
   });
 }
 
-test("схемы 2024 и 2014 различаются подписями вида и расположением личных качеств", () => {
+test("схемы 2024 и 2014 различаются подписями вида и расположением личных качеств", skipNoModules, () => {
   const s24 = load("dnd5e-2024");
   const s14 = load("dnd5e-2014");
   assert.equal(s24.fields.species.path, "info.species");
