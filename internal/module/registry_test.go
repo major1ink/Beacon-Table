@@ -117,27 +117,10 @@ func TestManifestModifierTargets(t *testing.T) {
 	}
 }
 
-func TestManifestImporters(t *testing.T) {
-	system := func(list string) string {
-		return strings.Replace(manifestJSON("sys-x", "1.0.0", `"importers":`+list), `"content"`, `"system"`, 1)
-	}
-	bad := map[string]string{
-		"у контента":    manifestJSON("a", "1.0.0", `"importers":["lss"]`),
-		"дважды":        system(`["lss","lss"]`),
-		"кривой id":     system(`["LSS import"]`),
-		"слишком много": system(`["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q"]`),
-	}
-	for name, raw := range bad {
-		if _, err := ParseManifest([]byte(raw)); err == nil {
-			t.Errorf("%s: ожидали ошибку", name)
-		}
-	}
-	m, err := ParseManifest([]byte(system(`["foundry-dnd5e","lss"]`)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(m.Importers) != 2 || m.Importers[0] != "foundry-dnd5e" {
-		t.Fatalf("импортёры: %v", m.Importers)
+func TestManifestIgnoresOldImporters(t *testing.T) {
+	raw := strings.Replace(manifestJSON("sys-x", "1.0.0", `"importers":["lss"]`), `"content"`, `"system"`, 1)
+	if _, err := ParseManifest([]byte(raw)); err != nil {
+		t.Fatalf("манифест со старым ключом importers: %v", err)
 	}
 }
 

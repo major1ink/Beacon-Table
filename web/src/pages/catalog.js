@@ -45,7 +45,9 @@ import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { schemaHasWidget } from "../schema-layout.js";
 import { catalogConfig, categoriesOf } from "../schema-list.js";
-import { hasImporter, loadSystemProfile, moduleTitle, worldModules } from "../system-profile.js";
+import { loadSystemProfile, moduleTitle, worldModules } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerImport } from "../importer-offer.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
@@ -292,10 +294,10 @@ function applySchemaConfig() {
   cfg = Object.assign({}, cfg, own);
 }
 
-// applyImporters — импорт Foundry (карточки, состояния) есть только у
-// систем с импортёром foundry-dnd5e.
+// applyImporters — импорт Foundry (карточки, состояния) работает в системах,
+// которые понимает foundry-dnd5e; в остальных кнопка предлагает подключить
+// нужную систему.
 function applyImporters() {
-  if (!hasImporter("foundry-dnd5e")) cfg = Object.assign({}, cfg, { mapOne: null, batchMap: null });
   // Заклинание можно добавить на лист, только если у листа есть виджет заклинаний.
   if (!schemaHasWidget(schemaFor("sheet"), "spellbook")) cfg = Object.assign({}, cfg, { extraWidget: null });
   if (!cfg.mapOne && !cfg.batchMap) importLabel.style.display = "none";
@@ -598,6 +600,12 @@ createForm.addEventListener("submit", async (e) => {
 // резолвить родителя по всем документам сразу, см. reference-import.js), для
 // остальных — по документу за раз, внутри своего try (ошибка одного файла не
 // прерывает остальные при массовом импорте).
+importLabel.addEventListener("click", (e) => {
+  if (importerFits("foundry-dnd5e")) return;
+  e.preventDefault();
+  offerImport("foundry-dnd5e");
+});
+
 importFile.addEventListener("change", async (e) => {
   const input = e.target;
   const files = [...input.files];

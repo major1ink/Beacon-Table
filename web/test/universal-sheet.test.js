@@ -1,6 +1,6 @@
 // Лист по схеме «Своей системы»: свободные характеристики с модификаторами
 // stat.<ключ> (schema-formula.js), основы для стенда конструктора
-// (universal-stats.js) и условия видимости импорта (импортёры системы).
+// (universal-stats.js).
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -9,7 +9,6 @@ import { readFileSync } from "node:fs";
 import { schemaBases, standStats } from "../src/universal-stats.js";
 import { initiativeBase } from "../src/schema-summary.js";
 import { compileSchema, createEvaluator } from "../src/schema-formula.js";
-import { hasImporter } from "../src/system-profile.js";
 import { schemaHasPath, schemaHasWidget } from "../src/schema-layout.js";
 
 const sheetSchema = compileSchema(JSON.parse(readFileSync(new URL("../../internal/schema/builtin/sheet.json", import.meta.url), "utf8")));
@@ -41,11 +40,6 @@ test("инициатива для стенда: постоянная часть 
   assert.equal(base({ initiative: "1d20 + @stat.ловкость", stats: [{ name: "Ловкость", value: 4 }] }), 4);
   assert.equal(base({}), 0);
   assert.equal(initiativeBase(sheetSchema, { initiative: "3" }, null), 0);
-});
-
-test("импортёры системы: до загрузки профиля нет ни одного", () => {
-  assert.equal(hasImporter("foundry-dnd5e"), false);
-  assert.equal(hasImporter("lss"), false);
 });
 
 test("схема листа: поле «Вид» в info.race только у D&D 2014, виджет заклинаний у D&D", () => {

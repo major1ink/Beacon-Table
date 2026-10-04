@@ -27,7 +27,9 @@ import { renderMonsterPreview } from "../monster-preview.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { formatWeight, hasImporter, initiativeRule, loadSystemProfile } from "../system-profile.js";
+import { formatWeight, initiativeRule, loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerFold } from "../importer-offer.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
@@ -235,7 +237,7 @@ function renderSchemaView(root, compiled) {
     widgets: { inventory: () => invSection(readOnly), spells: () => spellsSection(readOnly) },
   });
   const folds = [...middle, textBlock("Описание", "description", readOnly ? { readOnly: true, open: false } : {}), compatFold(readOnly, refreshHead)];
-  if (!readOnly && hasImporter("foundry-dnd5e")) folds.push(importSection());
+  if (!readOnly) folds.push(importerFits("foundry-dnd5e") ? importSection() : offerFold("foundry-dnd5e", "Импорт из TTG Club / Foundry VTT"));
   root.appendChild(renderBody(cardBody(folds), [preview]));
 }
 

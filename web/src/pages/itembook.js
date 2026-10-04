@@ -26,7 +26,9 @@ import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { hasImporter, loadSystemProfile } from "../system-profile.js";
+import { loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerFold } from "../importer-offer.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
@@ -217,7 +219,7 @@ function renderSchemaView(root, compiled) {
     widgets: { modifiers: worn },
   });
   const folds = [...middle, descFold(readOnly), compatFold(readOnly, refreshHead)];
-  if (!readOnly && hasImporter("foundry-dnd5e")) folds.push(importSection());
+  if (!readOnly) folds.push(importerFits("foundry-dnd5e") ? importSection() : offerFold("foundry-dnd5e", "Импорт из Foundry VTT"));
   root.appendChild(renderBody(cardBody(folds), [preview]));
 }
 

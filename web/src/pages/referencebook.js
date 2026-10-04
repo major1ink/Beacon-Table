@@ -23,7 +23,9 @@ import { announceOwnHeader } from "../embed.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
-import { hasImporter, loadSystemProfile } from "../system-profile.js";
+import { loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerFold } from "../importer-offer.js";
 
 // ==================== state ====================
 
@@ -210,7 +212,7 @@ function renderSchemaView(root, compiled) {
     desc = h("div", { class: "card-desc" }, [mdBlock("Описание", () => reference.description, (v) => (reference.description = v))]);
   }
   const folds = [...middle, desc, compatFold(readOnly, refreshHead)];
-  if (!readOnly && hasImporter("foundry-dnd5e")) folds.push(importSection());
+  if (!readOnly) folds.push(importerFits("foundry-dnd5e") ? importSection() : offerFold("foundry-dnd5e", "Импорт из Foundry VTT"));
   root.appendChild(renderBody(cardBody(folds), preview ? [preview] : null));
 }
 

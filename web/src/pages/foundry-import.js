@@ -22,7 +22,9 @@ import {
   fetchJournal, fetchJournalEntry, createJournalEntry, updateJournalEntry,
   fetchAdminPregens, createAdminPregen, updateAdminPregen,
 } from "../api.js";
-import { hasImporter, loadSystemProfile } from "../system-profile.js";
+import { loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerBody } from "../importer-offer.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
@@ -65,10 +67,11 @@ const ALL_TARGETS = [
   { id: "scenes", label: "Сцены", server: true },
   { id: "playlists", label: "Плейлисты", server: true },
 ];
-// Карточные разделы (мапперы dnd5e) — только в мире с импортёром
-// foundry-dnd5e; сцены, плейлисты и журнал — в любом.
+// Карточные разделы (мапперы dnd5e) — только в мире системы, которую
+// понимает импортёр foundry-dnd5e; сцены, плейлисты и журнал — в любом.
 const CARD_TARGETS = new Set(["pregens", "monsters", "spells", "items", "references", "conditions"]);
-let TARGETS = ALL_TARGETS;
+let cardsFit = true;
+const TARGETS = ALL_TARGETS;
 const TARGET_BY_ID = Object.fromEntries(ALL_TARGETS.map((t) => [t.id, t]));
 
 // JOURNAL_DEST — куда класть журналы модуля. В Foundry весь сюжет приключения
@@ -225,6 +228,7 @@ function renderTargets() {
   for (const t of TARGETS) {
     const box = h("input", { type: "checkbox" });
     box.checked = selectedTargets.has(t.id);
+    box.disabled = !cardsFit && CARD_TARGETS.has(t.id);
     box.addEventListener("change", () => {
       if (box.checked) selectedTargets.add(t.id);
       else selectedTargets.delete(t.id);
@@ -232,6 +236,7 @@ function renderTargets() {
     });
     targetsEl.appendChild(h("label", {}, [box, t.label]));
   }
+  if (!cardsFit) targetsEl.appendChild(h("div", { style: "flex-basis:100%" }, offerBody("foundry-dnd5e")));
 }
 
 function renderPacks() {
@@ -729,10 +734,8 @@ document.getElementById("closeBtn").onclick = () => {
     return;
   }
   await loadSystemProfile();
-  if (!hasImporter("foundry-dnd5e")) {
-    TARGETS = ALL_TARGETS.filter((t) => !CARD_TARGETS.has(t.id));
-    for (const id of CARD_TARGETS) selectedTargets.delete(id);
-  }
+  cardsFit = importerFits("foundry-dnd5e");
+  if (!cardsFit) for (const id of CARD_TARGETS) selectedTargets.delete(id);
   // ?url= — окно открыто из настроек кнопкой "Обновить" у уже
   // установленного пакета (см. pages/dm.js: openFoundryUpdateWindow):
   // подставляем ссылку на манифест и сразу запускаем разведку, как будто ДМ

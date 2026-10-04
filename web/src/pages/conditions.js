@@ -20,7 +20,9 @@ import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
 import { GLYPHS, glyphNode, glyphSVG, isGlyph } from "../condition-glyphs.js";
 import { renderStatEditor, loadTargets } from "../stat-editor.js";
 import { loadStand, renderStandSelect } from "../stand.js";
-import { hasImporter, loadSystemProfile } from "../system-profile.js";
+import { loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerFold } from "../importer-offer.js";
 import { renderStatusPreview } from "../status-preview.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { initFullscreenButton } from "../fullscreen.js";
@@ -281,7 +283,7 @@ function renderEditView(root) {
 
   const glyphFold = fold({ title: "Значок", summary: isGlyph(condition.icon) ? "из набора" : "эмодзи " + (condition.icon || "❔"), body: [glyphPicker(setIcon)] });
 
-  root.appendChild(renderBody([effects, h("div", { class: "card-folds" }, [rulesFold, applyFold, descFold, compatFold, glyphFold, hasImporter("foundry-dnd5e") ? importSection() : null])], [preview]));
+  root.appendChild(renderBody([effects, h("div", { class: "card-folds" }, [rulesFold, applyFold, descFold, compatFold, glyphFold, importerFits("foundry-dnd5e") ? importSection() : offerFold("foundry-dnd5e", "Импорт из Foundry VTT")])], [preview]));
 }
 
 // foundryLabel — русское имя кода Foundry для выжимки/выпадашки; ключ вида

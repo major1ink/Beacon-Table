@@ -24,7 +24,6 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 		Units:           &domain.SystemUnits{Weight: "камн"},
 		Currencies:      []domain.Currency{{Key: "shells", Label: "Ракушки"}},
 		Rolls:           &domain.SystemRolls{Check: "2d6"},
-		Importers:       []string{"lss"},
 	})), nil, "")
 
 	custom := &domain.Company{System: domain.SystemCustom}
@@ -54,12 +53,12 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 
 	// Единицы и валюты: у системы — свои, у «Своей системы» и мира без
 	// модуля — «кг» и «Деньги».
-	if p := m.SystemProfile(luck); p.Title != "Удача" || p.Units.Weight != "камн" || len(p.Currencies) != 1 || p.Currencies[0].Key != "shells" || p.Rolls.Check != "2d6" || p.Initiative.Roll != "2d6" || len(p.Importers) != 1 || p.Importers[0] != "lss" {
+	if p := m.SystemProfile(luck); p.Title != "Удача" || p.Units.Weight != "камн" || len(p.Currencies) != 1 || p.Currencies[0].Key != "shells" || p.Rolls.Check != "2d6" || p.Initiative.Roll != "2d6" {
 		t.Errorf("профиль системы: %+v", p)
 	}
 	for name, c := range map[string]*domain.Company{"своя": custom, "без модуля": gone, "мир не запущен": nil} {
 		p := m.SystemProfile(c)
-		if p.Units.Weight != "кг" || len(p.Currencies) != 1 || p.Currencies[0].Key != "money" || p.Rolls.Check != "1d20" || p.Initiative.RollField != "initiative" || p.Importers == nil || len(p.Importers) != 0 {
+		if p.Units.Weight != "кг" || len(p.Currencies) != 1 || p.Currencies[0].Key != "money" || p.Rolls.Check != "1d20" || p.Initiative.RollField != "initiative" {
 			t.Errorf("%s: профиль %+v", name, p)
 		}
 	}

@@ -69,7 +69,6 @@ import {
   fetchSystems,
   installModuleFile,
   setWorldModules,
-  setWorldSystem,
   shutdownServer,
   fetchTutorial,
   saveTutorial,
@@ -84,6 +83,7 @@ import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabe
 import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutorial.js";
 import { dmTourSteps } from "../tutorial-dm.js";
+import { changeWorldSystem, fitsSystem } from "../world-system.js";
 import { loadSystemProfile } from "../system-profile.js";
 import { escapeHtml, cssUrl } from "../html.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
@@ -2935,7 +2935,6 @@ let worldModulesData = null; // ответ fetchModules
 let worldSystems = []; // ответ fetchSystems
 
 const systemName = (id) => (worldSystems.find((x) => x.id === id) || {}).title || id;
-const fitsSystem = (m, system) => !m.systems || !m.systems.length || m.systems.includes(system);
 
 async function renderWorldModules() {
   try {
@@ -2964,19 +2963,7 @@ worldSystemSelect.onchange = () => {
   worldSystemBtn.disabled = !worldModulesData || worldSystemSelect.value === worldModulesData.world.system;
 };
 
-worldSystemBtn.onclick = async () => {
-  const { world, modules } = worldModulesData;
-  const next = worldSystemSelect.value;
-  const off = modules.filter((m) => m.type === "content" && world.enabled.includes(m.id) && !fitsSystem(m, next));
-  let text = `Сменить систему мира на «${systemName(next)}»? Поля прежней системы останутся в данных и не будут показываться, пока её не вернёшь. Мир перезапустится, у всех за столом обновится страница.`;
-  if (off.length) text += `\n\nВыключатся модули для другой системы: ${off.map((m) => `«${m.title}»`).join(", ")}.`;
-  if (!(await showConfirm(text, { title: "Система мира", okLabel: "Сменить" }))) return;
-  try {
-    await setWorldSystem(world.id, next);
-  } catch (err) {
-    showAlert("Не удалось сменить систему: " + err.message);
-  }
-};
+worldSystemBtn.onclick = () => changeWorldSystem(worldSystemSelect.value);
 
 function drawWorldModules() {
   const { world, modules } = worldModulesData;

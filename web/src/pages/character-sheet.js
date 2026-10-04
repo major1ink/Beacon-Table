@@ -42,7 +42,9 @@ import { initFullscreenButton } from "../fullscreen.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
-import { coinRows, formatWeight, hasImporter, loadSystemProfile } from "../system-profile.js";
+import { coinRows, formatWeight, loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerImport, offerButtonLabel } from "../importer-offer.js";
 import { renderSchemaEdit, renderSchemaView } from "../schema-sheet.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
 import { schemaHasPath } from "../schema-layout.js";
@@ -204,7 +206,7 @@ function renderEditTabs() {
   }
   clearSchemaTabs();
   renderSchemaEdit(schemaCtx());
-  if (hasImporter("lss")) document.getElementById("tab1").prepend(importSection());
+  document.getElementById("tab1").prepend(importerFits("lss") ? importSection() : offerSection());
 }
 
 // ==================== переиспользуемые секции (обе системы/вкладки) ====================
@@ -232,6 +234,14 @@ async function applyLssFile(rawText, msgEl) {
   msgEl.classList.add("ok");
   renderEditTabs();
   await saveNow(); // сразу, не дожидаясь debounce — иначе теряется при быстром закрытии
+}
+
+function offerSection() {
+  return h("div", { class: "section" }, [
+    h("h3", { text: "Импорт из Long Story Short" }),
+    h("p", { style: "margin:0 0 8px;color:var(--text-dim);font-size:11px;" }, "Этот импорт — для D&D 5e, а мир сейчас играет по другой системе."),
+    h("button", { type: "button", text: offerButtonLabel("lss"), onclick: () => offerImport("lss") }),
+  ]);
 }
 
 function importSection() {
