@@ -13,21 +13,22 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/module"
+	"beacon-table/internal/module/base"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
 
 // modulesManager — менеджер с реестром: встроенный «D&D» в раскладке
-// systemdata (как сейчас в бинарнике) и установленный модуль extra.
+// старой системы D&D и установленный модуль extra.
 func modulesManager(t *testing.T) *CompanyManager {
 	t.Helper()
 	m, root := newTestManager(t)
 	m.dice = service.NewDiceRoller()
 	builtin := fstest.MapFS{
-		"systemdata/bestiary/dnd5e-2024/goblin.json":  {Data: []byte(`{"name":"Гоблин"}`)},
-		"systemdata/conditions/dnd5e-2024/prone.json": {Data: []byte(`{"name":"Лежит","slug":"prone"}`)},
+		"bestiary/goblin.json":  {Data: []byte(`{"name":"Гоблин"}`)},
+		"conditions/prone.json": {Data: []byte(`{"name":"Лежит","slug":"prone"}`)},
 	}
-	dnd := module.Builtin(builtin, "systemdata", "dnd5e-2024", &module.Manifest{
+	dnd := module.Builtin(builtin, &module.Manifest{
 		Format: module.Format, ID: "dnd5e-2024", Type: module.TypeSystem, Title: "D&D", Version: "1.0.0", LegacyIDs: true,
 	})
 	installed := filepath.Join(root, "modules")
@@ -444,5 +445,44 @@ func TestStoppedRoomDoesNotHang(t *testing.T) {
 	}
 	if !late.closed {
 		t.Fatal("опоздавший клиент не отключён")
+	}
+}
+
+func TestEnabledModulesLegacyWorld(t *testing.T) {
+	m := modulesManager(t)
+	root := filepath.Join(t.TempDir(), "modules")
+	srd := filepath.Join(root, "srd")
+	writeFile(t, filepath.Join(srd, "module.json"),
+		`{"format":"beacon-module/v1","id":"srd","type":"content","title":"SRD","version":"1.0.0","legacyIds":true,"systems":["dnd5e-2024"]}`)
+	writeFile(t, filepath.Join(srd, "bestiary", "goblin.json"), `{"name":"Гоблин"}`)
+	other := filepath.Join(root, "other-srd")
+	writeFile(t, filepath.Join(other, "module.json"),
+		`{"format":"beacon-module/v1","id":"other-srd","type":"content","title":"Другой","version":"1.0.0","legacyIds":true,"systems":["dnd5e-2014"]}`)
+	plain := filepath.Join(root, "plain")
+	writeFile(t, filepath.Join(plain, "module.json"), `{"format":"beacon-module/v1","id":"plain","type":"content","title":"Без старых id","version":"1.0.0","systems":["dnd5e-2024"]}`)
+	dnd, err := m.modules.Get("dnd5e-2024")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.modules = module.NewRegistry(root, []*module.Module{dnd, base.Module()}, nil, "")
+
+	legacy := &domain.Company{System: "dnd5e-2024"}
+	if got := m.EnabledModules(legacy); len(got) != 2 || got[0] != "dnd5e-2024" || got[1] != "srd" {
+		t.Fatalf("мир до модулей: %v", got)
+	}
+	if got := legacy.EnabledModules(); len(got) != 1 {
+		t.Fatalf("данные мира не должны меняться: %v", got)
+	}
+	explicit := &domain.Company{System: "dnd5e-2024", Modules: []string{"dnd5e-2024"}}
+	if got := m.EnabledModules(explicit); len(got) != 1 {
+		t.Fatalf("мир со списком: %v", got)
+	}
+	gone := &domain.Company{System: "no-such-system"}
+	if got := m.EnabledModules(gone); len(got) != 2 || got[0] != domain.BaseModuleID || got[1] != "no-such-system" {
+		t.Fatalf("система не установлена: %v", got)
+	}
+	custom := &domain.Company{System: domain.SystemCustom}
+	if got := m.EnabledModules(custom); len(got) != 1 || got[0] != domain.BaseModuleID {
+		t.Fatalf("«Своя система»: %v", got)
 	}
 }

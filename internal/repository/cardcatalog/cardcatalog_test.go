@@ -104,3 +104,24 @@ func TestEmptyCatalogListIsNotNil(t *testing.T) {
 		t.Fatalf("пустой каталог: %v %v", list, err)
 	}
 }
+
+// Система D&D и её контент — два модуля с одним префиксом sys-: карточка
+// контента находится, даже если система подключена раньше и такой папки у неё нет.
+func TestGetSearchesEveryModuleWithSamePrefix(t *testing.T) {
+	ctx := context.Background()
+	fsys := fstest.MapFS{
+		"system/conditions/prone.json": {Data: []byte(`{"name":"Лежит"}`)},
+		"srd/bestiary/goblin.json":     {Data: []byte(`{"name":"Гоблин"}`)},
+	}
+	cat := monsterfile.NewCatalog(monsterfile.NewStore(t.TempDir()),
+		monsterfile.NewModuleStore(fsys, "system/bestiary", "sys-", "dnd5e-2024"),
+		monsterfile.NewModuleStore(fsys, "srd/bestiary", "sys-", "dnd5e-2024-srd"),
+	)
+	g, err := cat.Get(ctx, "sys-goblin")
+	if err != nil || g.Name != "Гоблин" || g.Module != "dnd5e-2024-srd" {
+		t.Fatalf("sys-goblin: %+v %v", g, err)
+	}
+	if _, err := cat.Get(ctx, "sys-nobody"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("нет карточки: %v", err)
+	}
+}

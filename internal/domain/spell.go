@@ -14,8 +14,8 @@ import "time"
 type Spell struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// System — true для карточек каталога "из коробки", зашитого в бинарник
-	// на этапе компиляции (см. internal/repository/spellfile.SystemStore) —
+	// System — true для карточек каталога "из коробки" из модулей
+	// (см. internal/repository/spellfile.SystemStore) —
 	// проставляется сервером при чтении, клиентское значение в Create/Update
 	// игнорируется (см. spellfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в общую библиотеку (см.

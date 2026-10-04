@@ -233,12 +233,9 @@ func TestSourcesPriorityAndRemove(t *testing.T) {
 	root := t.TempDir()
 	builtinMan, _ := ParseManifest([]byte(`{"format":"beacon-module/v1","id":"dnd","type":"system","title":"D&D","version":"0.0.1","legacyIds":true}`))
 	fsys := fstest.MapFS{
-		"systemdata/bestiary/dnd/goblin.json": {Data: []byte(`{"name":"Гоблин"}`)},
+		"bestiary/goblin.json": {Data: []byte(`{"name":"Гоблин"}`)},
 	}
-	builtin := Builtin(fsys, "systemdata", "dnd", builtinMan)
-	if builtin.ContentDir(KindBestiary) != "systemdata/bestiary/dnd" || builtin.AssetsDir() != "systemdata/assets/dnd" {
-		t.Fatalf("раскладка встроенного: %s %s", builtin.ContentDir(KindBestiary), builtin.AssetsDir())
-	}
+	builtin := Builtin(fsys, builtinMan)
 
 	dev := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dev, "module.json"), []byte(strings.Replace(manifestJSON("dnd", "9.9.9"), `"content"`, `"system"`, 1)), 0o600); err != nil {

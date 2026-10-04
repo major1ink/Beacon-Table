@@ -50,6 +50,7 @@ func catalogServer(t *testing.T) (indexURL string, urls map[string]string) {
 	add("rules", "system", "", nil)
 	add("old-pack", "content", `,"systems":["rules"],"legacyIds":true,"requires":[{"id":"rules"}]`, func(e *modtool.IndexEntry) {
 		e.Systems, e.LegacyIDs = []string{"rules"}, true
+		e.Requires = []module.Dependency{{ID: "rules"}}
 	})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
@@ -214,12 +215,18 @@ func TestWorldRequirements(t *testing.T) {
 		t.Fatalf("модуль вне каталога: %d %v", code, out)
 	}
 
-	// После установки системы мир без списка больше не требует контент.
+	// Система поставлена, а контент прежнего каталога мир всё ещё ждёт.
 	if code, _ = do(http.MethodPost, "/api/module-catalog/install", map[string]any{"id": "rules"}, e.cookie); code != http.StatusCreated {
 		t.Fatalf("установка системы: %d", code)
 	}
+	if code, out = do(http.MethodGet, path, nil, e.cookie); code != http.StatusOK || ids(out) != "old-pack" {
+		t.Fatalf("после установки системы: %d %v", code, out)
+	}
+	if code, _ = do(http.MethodPost, "/api/module-catalog/install", map[string]any{"id": "old-pack"}, e.cookie); code != http.StatusCreated {
+		t.Fatalf("установка контента: %d", code)
+	}
 	if code, out = do(http.MethodGet, path, nil, e.cookie); code != http.StatusOK || ids(out) != "" {
-		t.Fatalf("после установки: %d %v", code, out)
+		t.Fatalf("после установки всего: %d %v", code, out)
 	}
 	if code, _ = do(http.MethodGet, "/api/companies/нет/requirements", nil, e.cookie); code != http.StatusNotFound {
 		t.Fatalf("нет мира: %d", code)

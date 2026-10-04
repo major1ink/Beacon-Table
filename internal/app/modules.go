@@ -44,7 +44,7 @@ func (m *CompanyManager) SetWorldModules(ctx context.Context, companyID string, 
 	if err != nil {
 		return nil, err
 	}
-	current := company.EnabledModules()
+	current := m.EnabledModules(company)
 	clean := make([]string, 0, len(ids)+1)
 	if company.System != domain.SystemCustom && !slices.Contains(ids, company.System) {
 		clean = append(clean, company.System)
@@ -90,7 +90,7 @@ func (m *CompanyManager) SetWorldSystem(ctx context.Context, companyID, system s
 	old := defaultModules(company.System)
 	modules := defaultModules(system)
 	disabled := []string{}
-	for _, id := range company.EnabledModules() {
+	for _, id := range m.EnabledModules(company) {
 		if slices.Contains(old, id) || slices.Contains(modules, id) {
 			continue
 		}
@@ -126,7 +126,7 @@ func (m *CompanyManager) WorldModules(ctx context.Context, companyID string) ([]
 	if err != nil {
 		return nil, err
 	}
-	return company.EnabledModules(), nil
+	return m.EnabledModules(company), nil
 }
 
 // SystemThemeCSS — оформление системы запущенного мира готовым CSS. Пусто,
@@ -149,6 +149,36 @@ func (m *CompanyManager) SystemThemeCSS() string {
 	return css
 }
 
+// EnabledModules — модули, чьи карточки видны в мире. Пока модуля системы
+// нет на сервере, мир играет с базовыми состояниями, как «Своя система». У
+// мира, созданного до модулей (список не хранится), к модулю его системы
+// добавляется контент, заменяющий прежний встроенный каталог: установленные
+// модули с legacyIds для этой системы. Считается на лету, данные мира не
+// меняются.
+func (m *CompanyManager) EnabledModules(company *domain.Company) []string {
+	ids := company.EnabledModules()
+	if company.System == "" || company.System == domain.SystemCustom {
+		return ids
+	}
+	ids = slices.Clone(ids)
+	if _, err := m.modules.Get(company.System); err != nil && !slices.Contains(ids, domain.BaseModuleID) {
+		if _, err := m.modules.Get(domain.BaseModuleID); err == nil {
+			ids = append([]string{domain.BaseModuleID}, ids...)
+		}
+	}
+	if company.Modules != nil {
+		return ids
+	}
+	mods, _ := m.modules.List()
+	for _, mod := range mods {
+		man := mod.Manifest
+		if man.LegacyIDs && man.Type == module.TypeContent && slices.Contains(man.Systems, company.System) && !slices.Contains(ids, man.ID) {
+			ids = append(ids, man.ID)
+		}
+	}
+	return ids
+}
+
 // World — мир по id (для витрины: система и список модулей).
 func (m *CompanyManager) World(ctx context.Context, companyID string) (*domain.Company, error) {
 	return m.companies.ByID(ctx, companyID)
@@ -156,7 +186,7 @@ func (m *CompanyManager) World(ctx context.Context, companyID string) (*domain.C
 
 func (m *CompanyManager) relaunchIfUses(ctx context.Context, moduleID string) error {
 	w := m.Current()
-	if w == nil || !slices.Contains(w.Company.EnabledModules(), moduleID) {
+	if w == nil || !slices.Contains(m.EnabledModules(w.Company), moduleID) {
 		return nil
 	}
 	return m.relaunch(ctx, w.Company.ID)
@@ -170,5 +200,7 @@ func (m *CompanyManager) relaunch(ctx context.Context, companyID string) error {
 		return nil
 	}
 	w.Room.ShutdownForReload()
-	return m.Launch(ctx, companyID)
+	// Клиент мог уйти (страница перезагрузилась по world_reload): остановленный
+	// мир обязан подняться снова.
+	return m.Launch(context.WithoutCancel(ctx), companyID)
 }

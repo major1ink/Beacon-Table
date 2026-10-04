@@ -34,8 +34,8 @@ import "time"
 type Condition struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// System — true для карточек каталога «из коробки», зашитого в бинарник
-	// на этапе компиляции (см. internal/repository/conditionfile.SystemStore) —
+	// System — true для карточек каталога «из коробки» из модулей
+	// (см. internal/repository/conditionfile.SystemStore) —
 	// проставляется сервером при чтении, клиентское значение в Create/Update
 	// игнорируется (см. conditionfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в библиотеку и править копию

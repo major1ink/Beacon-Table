@@ -218,10 +218,20 @@ func (c *Catalog[T]) List(ctx context.Context) ([]*T, error) {
 }
 
 func (c *Catalog[T]) Get(ctx context.Context, id string) (*T, error) {
-	if s := c.source(id); s != nil {
-		return s.Get(ctx, id)
+	// Несколько модулей могут делить префикс sys- (система D&D и её контент):
+	// карточку ищем у каждого, пока не найдётся.
+	owned := false
+	for _, s := range c.sources {
+		if !s.Owns(id) {
+			continue
+		}
+		owned = true
+		card, err := s.Get(ctx, id)
+		if !errors.Is(err, domain.ErrNotFound) {
+			return card, err
+		}
 	}
-	if c.fromModule(id) {
+	if owned || c.fromModule(id) {
 		// Модуль выключен или удалён: карточки нет, но это не повод искать
 		// её в библиотеке мира под тем же id.
 		return nil, domain.ErrNotFound

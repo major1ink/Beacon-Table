@@ -15,8 +15,8 @@ import "time"
 type Monster struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// System — true для карточек каталога "из коробки", зашитого в бинарник
-	// на этапе компиляции (см. internal/repository/monsterfile.SystemStore) —
+	// System — true для карточек каталога "из коробки" из модулей
+	// (см. internal/repository/monsterfile.SystemStore) —
 	// в отличие от остального Monster, это не то, что ввёл ДМ, а то, что
 	// проставляет сервер при чтении (см. monsterfile.Catalog); значение,
 	// присланное клиентом в Create/Update, всегда игнорируется. Такие

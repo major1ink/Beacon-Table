@@ -23,8 +23,7 @@ import (
 
 // Источники модуля.
 const (
-	// SourceBuiltin — зашит в бинарник (пока D&D не вынесен в отдельный
-	// репозиторий, см. задачу «Вынос D&D из бинарника»).
+	// SourceBuiltin — зашит в бинарник (сейчас только базовые состояния).
 	SourceBuiltin = "builtin"
 	// SourceInstalled — установлен владельцем в <data>/modules/<id>.
 	SourceInstalled = "installed"
@@ -44,40 +43,17 @@ type Module struct {
 	// Schemas — схемы листа и карточек по видам (schemas/<вид>.json, см.
 	// internal/schema); nil — своих схем у модуля нет.
 	Schemas map[string]*schema.Schema
-
-	// kindDir/assetsDir — раскладка, отличная от стандартной. Нужна только
-	// встроенному каталогу D&D, у которого исторически
-	// systemdata/<вид>/<система>/ и systemdata/assets/<система>/.
-	kindDir   func(kind string) string
-	assetsDir string
 }
 
 // ContentDir — папка с карточками вида kind внутри FS.
-func (m *Module) ContentDir(kind string) string {
-	if m.kindDir != nil {
-		return m.kindDir(kind)
-	}
-	return kind
-}
+func (m *Module) ContentDir(kind string) string { return kind }
 
 // AssetsDir — папка с картинками внутри FS.
-func (m *Module) AssetsDir() string {
-	if m.assetsDir != "" {
-		return m.assetsDir
-	}
-	return "assets"
-}
+func (m *Module) AssetsDir() string { return "assets" }
 
-// Builtin — модуль из каталога, зашитого в бинарник: карточки в
-// <root>/<вид>/<dir>/, картинки в <root>/assets/<dir>/.
-func Builtin(fsys fs.FS, root, dir string, manifest *Manifest) *Module {
-	return &Module{
-		Manifest:  manifest,
-		Source:    SourceBuiltin,
-		FS:        fsys,
-		kindDir:   func(kind string) string { return path.Join(root, kind, dir) },
-		assetsDir: path.Join(root, "assets", dir),
-	}
+// Builtin — модуль, зашитый в бинарник, в стандартной раскладке.
+func Builtin(fsys fs.FS, manifest *Manifest) *Module {
+	return &Module{Manifest: manifest, Source: SourceBuiltin, FS: fsys}
 }
 
 // Ограничения на установку — чтобы битый или злонамеренный архив не забил

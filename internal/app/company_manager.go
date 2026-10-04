@@ -134,7 +134,7 @@ func (m *CompanyManager) Modules() *module.Registry { return m.modules }
 // resolveModules — модули мира company в порядке подключения; ненайденные
 // id — во втором списке.
 func (m *CompanyManager) resolveModules(company *domain.Company) (found []*module.Module, missing []string) {
-	for _, id := range company.EnabledModules() {
+	for _, id := range m.EnabledModules(company) {
 		mod, err := m.modules.Get(id)
 		if err != nil {
 			missing = append(missing, id)

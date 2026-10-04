@@ -40,8 +40,8 @@ type Company struct {
 }
 
 // EnabledModules — модули, чьи карточки видны в мире. У миров, созданных до
-// модулей, список пуст, и тогда подключён модуль их системы — ровно тот
-// каталог «из коробки», который они видели раньше.
+// модулей, список пуст: подключён модуль их системы, а контент прежнего
+// каталога добавляет CompanyManager.EnabledModules.
 func (c *Company) EnabledModules() []string {
 	if c.Modules != nil {
 		return c.Modules

@@ -13,7 +13,7 @@ import (
 	"beacon-table/internal/repository/cardcatalog"
 )
 
-// systemIDPrefix — префикс id карточек встроенного каталога D&D (как до
+// systemIDPrefix — префикс id карточек каталога D&D из модулей (как до
 // модулей: sys-<имя файла>), см. module.LegacyIDPrefix.
 const systemIDPrefix = "sys-"
 
@@ -35,7 +35,7 @@ type SystemStore = cardcatalog.Source[domain.Condition]
 // Catalog — библиотека мира плюс карточки подключённых модулей.
 type Catalog = cardcatalog.Catalog[domain.Condition]
 
-// NewSystemStore — встроенный каталог D&D: id вида sys-<имя файла>.
+// NewSystemStore — каталог D&D 0.8.x: id вида sys-<имя файла>.
 func NewSystemStore(fsys fs.FS, dir string) *SystemStore {
 	return NewModuleStore(fsys, dir, systemIDPrefix, "")
 }

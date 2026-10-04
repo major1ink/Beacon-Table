@@ -17,7 +17,7 @@ func TestWorldTargetsAndRulesFromSystemModule(t *testing.T) {
 		Initiative: domain.InitiativeRule{Roll: "2d6"},
 		ZeroHP:     domain.ZeroHPRule{Character: domain.ZeroHPNone, Other: domain.ZeroHPDead},
 	}
-	m.modules = module.NewRegistry("", append(testSystems(), module.Builtin(fstest.MapFS{}, "systemdata", "luckworld", &module.Manifest{
+	m.modules = module.NewRegistry("", append(testSystems(), module.Builtin(fstest.MapFS{}, &module.Manifest{
 		Format: module.Format, ID: "luckworld", Type: module.TypeSystem, Title: "Удача", Version: "1.0.0",
 		Combat:          rules,
 		ModifierTargets: []domain.ModifierTargetInfo{{Target: "luck", Label: "Удача", System: true}},
@@ -77,11 +77,11 @@ func TestWorldSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	luck := module.Builtin(fstest.MapFS{}, "systemdata", "luckworld", &module.Manifest{
+	luck := module.Builtin(fstest.MapFS{}, &module.Manifest{
 		Format: module.Format, ID: "luckworld", Type: module.TypeSystem, Title: "Удача", Version: "1.0.0",
 	})
 	luck.Schemas = map[string]*schema.Schema{schema.KindSheet: own}
-	legacy := module.Builtin(fstest.MapFS{}, "systemdata", "oldsys", &module.Manifest{
+	legacy := module.Builtin(fstest.MapFS{}, &module.Manifest{
 		Format: module.Format, ID: "oldsys", Type: module.TypeSystem, Title: "Без схем", Version: "1.0.0",
 	})
 	m.modules = module.NewRegistry("", append(testSystems(), luck, legacy), nil, "")

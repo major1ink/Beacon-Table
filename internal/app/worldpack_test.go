@@ -42,7 +42,7 @@ func newTestManager(t *testing.T) (*CompanyManager, string) {
 func testSystems() []*module.Module {
 	out := []*module.Module{base.Module()}
 	for _, id := range []string{domain.SystemDnD5e2014, domain.SystemDnD5e2024} {
-		out = append(out, module.Builtin(fstest.MapFS{}, "systemdata", id, &module.Manifest{
+		out = append(out, module.Builtin(fstest.MapFS{}, &module.Manifest{
 			Format: module.Format, ID: id, Type: module.TypeSystem, Title: id, Version: "1.0.0", LegacyIDs: true,
 		}))
 	}

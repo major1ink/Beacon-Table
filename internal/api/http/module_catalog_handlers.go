@@ -236,8 +236,8 @@ type neededModule struct {
 
 // handleWorldRequirements — GET /api/companies/{id}/requirements: каких
 // модулей мира нет на сервере (система — первой). Мир, созданный до модулей,
-// списка не хранит; пока его система не установлена, ему же нужен и контент
-// прежнего встроенного каталога (модули с legacyIds для его системы).
+// списка не хранит, ему нужен и контент прежнего встроенного каталога
+// (модули с legacyIds для его системы), см. CompanyManager.EnabledModules.
 func (a *API) handleWorldRequirements(w http.ResponseWriter, r *http.Request) {
 	if !a.requireCatalog(w, r) {
 		return
@@ -248,8 +248,8 @@ func (a *API) handleWorldRequirements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entries, sources := a.Catalog.List(r.Context(), false)
-	ids := slices.Clone(company.EnabledModules())
-	if _, ok := a.installedVersion(company.System); company.Modules == nil && company.System != domain.SystemCustom && !ok {
+	ids := a.Companies.EnabledModules(company)
+	if company.Modules == nil && company.System != domain.SystemCustom {
 		for _, e := range entries {
 			if e.LegacyIDs && e.Type == module.TypeContent && slices.Contains(e.Systems, company.System) && !slices.Contains(ids, e.ID) {
 				ids = append(ids, e.ID)
