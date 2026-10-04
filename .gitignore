@@ -16,3 +16,5 @@ beacon.conf
 /graft/
 .mcp.json
 .ignore
+
+CLAUDE.md
