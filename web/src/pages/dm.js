@@ -22,6 +22,7 @@ import { sceneLinksOf } from "../board/links.js";
 import { attachTooltip, hideTooltip, renderWithKeys } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP, RAIL_HELP } from "../tool-help.js";
 import { zoneStyle } from "../vtt/layers/manual-fog.js";
+import { tokenCells } from "../geometry.js";
 import {
   fetchMe,
   apiLogout,
@@ -805,6 +806,8 @@ const tokenMenuAddInitiativeBtn = document.getElementById("tokenMenuAddInitiativ
 const tokenMenuLootBtn = document.getElementById("tokenMenuLootBtn");
 const tokenMenuHiddenRow = document.getElementById("tokenMenuHiddenRow");
 const tokenMenuShapeRow = document.getElementById("tokenMenuShapeRow");
+const tokenMenuSizeRow = document.getElementById("tokenMenuSizeRow");
+const tokenMenuSize = document.getElementById("tokenMenuSize");
 const tokenMenuOwnerRow = document.getElementById("tokenMenuOwnerRow");
 const tokenMenuOwner = document.getElementById("tokenMenuOwner");
 const tokenMenuLightRow = document.getElementById("tokenMenuLightRow");
@@ -1660,6 +1663,9 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLootBtn.style.display = !menuIsMulti && token.dead && menuTokenLoot.length ? "flex" : "none";
   tokenMenuHiddenRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
   tokenMenuShapeRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
+  // В пачке размер берётся с токена под курсором и уходит всем выделенным.
+  tokenMenuSizeRow.style.display = menuIsLightOnly ? "none" : "flex";
+  tokenMenuSize.value = nearestTokenSizeOption(tokenCells(token, vtt.getScene().grid));
   // "Владелец" — привязать существующий токен к персонажу игрока задним
   // числом (единственный путь после импорта мира, где персонажа надо было бы
   // заново перетащить из панели). Не для токенов-лампочек и декораций.
@@ -1799,6 +1805,7 @@ function applyTokenMenuLockState() {
     tokenMenuLootBtn,
     tokenMenuHiddenRow,
     tokenMenuShapeRow,
+    tokenMenuSizeRow,
     tokenMenuVisionRow,
     tokenMenuVisionRangeField,
     tokenMenuLightRow,
@@ -2116,6 +2123,23 @@ tokenMenuShape.onchange = () => {
       detail: { id: menuTokenId, shape: tokenMenuShape.value === "square" ? "square" : "" },
     })
   );
+};
+
+function nearestTokenSizeOption(cells) {
+  let best = tokenMenuSize.options[0].value;
+  for (const opt of tokenMenuSize.options) {
+    if (Math.abs(+opt.value - cells) < Math.abs(+best - cells)) best = opt.value;
+  }
+  return best;
+}
+
+tokenMenuSize.onchange = () => {
+  const tokens = vtt.getScene().tokens || {};
+  const cells = +tokenMenuSize.value;
+  for (const id of menuTokenIds) {
+    if (!tokens[id] || tokens[id].lightOnly) continue;
+    document.dispatchEvent(new CustomEvent("vtt:setTokenSize", { detail: { id, cells } }));
+  }
 };
 
 // sendTokenMenuLight — шлёт одни и те же настройки света на каждый токен в

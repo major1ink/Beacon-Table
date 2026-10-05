@@ -85,6 +85,27 @@ func TestApplyMutationMoveTokenBlockedOutOfTurnForDM(t *testing.T) {
 	}
 }
 
+func TestApplyMutationClampsTokenSize(t *testing.T) {
+	r := testRoom()
+	r.scene.Grid.Size = 50
+
+	r.applyMutation(domain.ClientMsg{Type: "move_token", Token: &domain.Token{ID: "tok-1", Size: 50}})
+	if got := r.scene.Tokens["tok-1"].Size; got != 50 {
+		t.Fatalf("токен 2×2 не должен меняться: size=%v", got)
+	}
+
+	r.applyMutation(domain.ClientMsg{Type: "add_token", Token: &domain.Token{ID: "tok-2", Size: 100000}})
+	if got := r.scene.Tokens["tok-2"].Size; got != maxTokenCells*50/2 {
+		t.Fatalf("размер не ограничен: size=%v", got)
+	}
+
+	r.scene.Grid.Size = 0
+	r.applyMutation(domain.ClientMsg{Type: "move_token", Token: &domain.Token{ID: "tok-1", Size: 100000}})
+	if got := r.scene.Tokens["tok-1"].Size; got != maxTokenCells*48/2 {
+		t.Fatalf("без сетки предел считается от клетки 48: size=%v", got)
+	}
+}
+
 func TestApplyMutationMoveTokenFreeWhenNotInCombat(t *testing.T) {
 	r := testRoom()
 	r.combat.Active = true

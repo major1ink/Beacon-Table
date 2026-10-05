@@ -2946,6 +2946,17 @@ func (r *Room) dropDuplicateCharacterTokens(characterID, keepTokenID string) {
 	}
 }
 
+// maxTokenCells — предел стороны токена в клетках: самые крупные существа
+// занимают 4×4, остальное — запас, чтобы клиент не прислал токен на всю карту.
+const maxTokenCells = 10
+
+func clampTokenSize(size, cell float64) float64 {
+	if cell <= 0 {
+		cell = 48
+	}
+	return min(size, maxTokenCells*cell/2)
+}
+
 func (r *Room) applyMutation(msg domain.ClientMsg) {
 	switch msg.Type {
 	case "move_token", "add_token":
@@ -2970,6 +2981,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 			if msg.Token.CharacterID != "" {
 				r.dropDuplicateCharacterTokens(msg.Token.CharacterID, msg.Token.ID)
 			}
+			msg.Token.Size = clampTokenSize(msg.Token.Size, r.scene.Grid.Size)
 			r.scene.Tokens[msg.Token.ID] = msg.Token
 			r.markDirty(r.scene.ID)
 		}

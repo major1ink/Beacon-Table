@@ -3,6 +3,7 @@ import { canvasPos, screenToWorld, getTransform, zoomAt, resetCamera } from "./c
 import {
   tokenAt,
   snapToGrid,
+  tokenCells,
   wallNear,
   wallVertexNear,
   snapToWallVertex,
@@ -1670,8 +1671,8 @@ export function createInteraction(ctx) {
       }
 
       if (!dragTokenId) return;
-      const snapped = snapToGrid(x, y, ctx.scene.grid);
       const t = ctx.scene.tokens[dragTokenId];
+      const snapped = snapToGrid(x, y, ctx.scene.grid, tokenCells(t, ctx.scene.grid));
       // Токен мог быть заперт (или удалён) уже ПОСЛЕ начала жеста — с
       // другого экрана ДМ или из списка источников света; тогда жест просто
       // прекращается, а не продолжает двигать запертое. Тем же способом
@@ -2306,6 +2307,17 @@ export function createInteraction(ctx) {
       if (!t) return;
       ctx.send({ type: "move_token", token: { ...t, shape } });
     });
+    document.addEventListener("vtt:setTokenSize", (e) => {
+      const { id, cells } = e.detail;
+      const t = ctx.scene.tokens[id];
+      if (!t || isLocked(t)) return;
+      const grid = ctx.scene.grid;
+      const cell = grid && grid.size > 0 ? grid.size : 48;
+      // Чужой ход в бою: сдвиг сервер отбросит вместе с размером, поэтому
+      // токен остаётся на месте и только меняет размер.
+      const p = turnBlocksMove(t) ? t : snapToGrid(t.x, t.y, grid, cells);
+      ctx.send({ type: "move_token", token: { ...t, size: (cells * cell) / 2, x: p.x, y: p.y } });
+    });
     document.addEventListener("vtt:setTokenLight", (e) => {
       const { id, light } = e.detail;
       const t = ctx.scene.tokens[id];
@@ -2567,7 +2579,7 @@ export function createInteraction(ctx) {
         distanceLabel.hide();
         return;
       }
-      const snapped = snapToGrid(x, y, ctx.scene.grid);
+      const snapped = snapToGrid(x, y, ctx.scene.grid, tokenCells(t, ctx.scene.grid));
 
       // Лимит скорости (см. speedLimitFor выше) — только пока идёт бой И
       // сейчас ход именно этого персонажа (вне своего хода в бою движение уже
