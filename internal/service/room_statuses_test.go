@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"beacon-table/internal/domain"
@@ -302,5 +303,28 @@ func TestStatusOnMissingTargetIsNoop(t *testing.T) {
 	r.handleApplyStatus(domain.ClientMsg{StatusSlug: "prone"}) // цель не указана вовсе
 	if len(tokenStatuses(r)) != 0 {
 		t.Errorf("команда без валидной цели ничего не должна менять: %+v", tokenStatuses(r))
+	}
+}
+
+func TestPlaceCombatantTokenSizeFromCard(t *testing.T) {
+	r := testRoom()
+	r.scene.Grid.Size = 50
+	var aboleth domain.Monster
+	if err := json.Unmarshal([]byte(`{"id":"aboleth","name":"Аболет","size":"Большой"}`), &aboleth); err != nil {
+		t.Fatal(err)
+	}
+	r.monsters = &fakeMonsters{list: []*domain.Monster{&aboleth}}
+	r.tokenSize = &domain.TokenSizeRule{Field: "size", Table: map[string]float64{"Большой": 2}}
+	r.combat.Combatants["c1"] = &domain.Combatant{ID: "c1", Name: "Аболет", MonsterID: "aboleth"}
+	r.combat.Combatants["c2"] = &domain.Combatant{ID: "c2", Name: "Безликий"}
+
+	r.handlePlaceCombatantToken("c1", 100, 100)
+	r.handlePlaceCombatantToken("c2", 200, 200)
+
+	if tok := r.scene.Tokens[r.combat.Combatants["c1"].TokenID]; tok == nil || tok.Size != 50 {
+		t.Errorf("Большое существо должно встать 2×2: %+v", tok)
+	}
+	if tok := r.scene.Tokens[r.combat.Combatants["c2"].TokenID]; tok == nil || tok.Size != 25 {
+		t.Errorf("боец без карточки — 1×1: %+v", tok)
 	}
 }

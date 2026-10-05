@@ -95,13 +95,13 @@ func TestApplyMutationClampsTokenSize(t *testing.T) {
 	}
 
 	r.applyMutation(domain.ClientMsg{Type: "add_token", Token: &domain.Token{ID: "tok-2", Size: 100000}})
-	if got := r.scene.Tokens["tok-2"].Size; got != maxTokenCells*50/2 {
+	if got := r.scene.Tokens["tok-2"].Size; got != domain.MaxTokenCells*50/2 {
 		t.Fatalf("размер не ограничен: size=%v", got)
 	}
 
 	r.scene.Grid.Size = 0
 	r.applyMutation(domain.ClientMsg{Type: "move_token", Token: &domain.Token{ID: "tok-1", Size: 100000}})
-	if got := r.scene.Tokens["tok-1"].Size; got != maxTokenCells*48/2 {
+	if got := r.scene.Tokens["tok-1"].Size; got != domain.MaxTokenCells*48/2 {
 		t.Fatalf("без сетки предел считается от клетки 48: size=%v", got)
 	}
 }

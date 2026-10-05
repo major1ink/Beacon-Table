@@ -157,6 +157,17 @@ func (m *CompanyManager) combatRules(company *domain.Company) *domain.CombatRule
 	return domain.CustomCombatRules()
 }
 
+// tokenSizeRule — размер токенов существ мира из модуля его системы; nil — 1×1.
+func (m *CompanyManager) tokenSizeRule(company *domain.Company) *domain.TokenSizeRule {
+	if company.System == domain.SystemCustom {
+		return nil
+	}
+	if mod, err := m.modules.Get(company.System); err == nil {
+		return mod.Manifest.TokenSize
+	}
+	return nil
+}
+
 // ModifierTargets — цели модификаторов мира company: цели ядра и цели,
 // которые объявляет модуль его системы (если он есть на сервере).
 func (m *CompanyManager) ModifierTargets(company *domain.Company) []domain.ModifierTargetInfo {
@@ -171,7 +182,7 @@ func (m *CompanyManager) ModifierTargets(company *domain.Company) []domain.Modif
 }
 
 // SystemProfile — система мира company для клиента: название, вид листа,
-// единица веса, валюты, куб проверки и правило инициативы. Всё это — из модуля системы; «Своя система»,
+// единица веса, валюты, куб проверки, правило инициативы и размер токенов. Всё это — из модуля системы; «Своя система»,
 // модуль не установлен или раздела нет — умолчания «Своей системы»
 // (универсальный лист, «кг», «Деньги»).
 func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemProfile {
@@ -208,6 +219,7 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 	if mod.Manifest.Combat != nil {
 		p.Initiative = mod.Manifest.Combat.Initiative
 	}
+	p.TokenSize = m.tokenSizeRule(company)
 	return p
 }
 
@@ -530,7 +542,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	if err != nil {
 		return err
 	}
-	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory, m.combatRules(company), schemas)
+	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory, m.combatRules(company), m.tokenSizeRule(company), schemas)
 	if err != nil {
 		return err
 	}

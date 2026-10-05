@@ -5,7 +5,8 @@
 // системы» — «кг» и «Деньги»).
 //
 // Куб проверки (rolls.check) — чем бросается голый модификатор в тексте.
-// Правило инициативы (initiative) — формула броска инициативы. Модули
+// Правило инициативы (initiative) — формула броска инициативы. Размер токена
+// (tokenSize) — сторона токена существа в клетках по полю карточки. Модули
 // (modules) — подключённые к миру, в порядке подключения.
 //
 // Загрузка одна на страницу (loadSystemProfile в boot страницы); функции
@@ -14,7 +15,7 @@
 import { fetchSystemProfile } from "./api.js";
 
 // До загрузки куб проверки — «1d20», как у «Своей системы» (domain.CustomRolls).
-let profile = { id: "", title: "", units: { weight: "" }, currencies: [], rolls: { check: "1d20" }, initiative: { roll: "", rollField: "initiative" }, modules: [] };
+let profile = { id: "", title: "", units: { weight: "" }, currencies: [], rolls: { check: "1d20" }, initiative: { roll: "", rollField: "initiative" }, tokenSize: null, modules: [] };
 let loading = null;
 
 export function loadSystemProfile() {
@@ -29,6 +30,7 @@ export function loadSystemProfile() {
             currencies: Array.isArray(p.currencies) ? p.currencies : [],
             rolls: { check: p.rolls && typeof p.rolls.check === "string" ? p.rolls.check : "1d20" },
             initiative: { roll: (p.initiative && p.initiative.roll) || "", rollField: (p.initiative && p.initiative.rollField) || "" },
+            tokenSize: p.tokenSize && p.tokenSize.field && p.tokenSize.table ? p.tokenSize : null,
             modules: Array.isArray(p.modules) ? p.modules : [],
           };
         }
@@ -48,6 +50,22 @@ export const checkDie = () => profile.rolls.check;
 // initiativeRule — правило инициативы системы: поле карточки с формулой
 // (rollField) и запасная формула (roll), см. schema-summary.js: ruleInitiative.
 export const initiativeRule = () => profile.initiative;
+
+// tokenSizeCells — сторона токена карточки card в клетках по правилу rule;
+// значения нет в таблице или правила нет — 1.
+export function tokenSizeCells(rule, card) {
+  if (!rule || !card) return 1;
+  let v = card;
+  for (const key of rule.field.split(".")) v = v && typeof v === "object" ? v[key] : undefined;
+  const want = String(v ?? "").trim().toLowerCase();
+  if (!want) return 1;
+  for (const [k, cells] of Object.entries(rule.table)) {
+    if (k.trim().toLowerCase() === want) return cells;
+  }
+  return 1;
+}
+
+export const cardTokenCells = (card) => tokenSizeCells(profile.tokenSize, card);
 
 // systemId — id системы мира; до загрузки профиля пусто.
 export const systemId = () => profile.id;

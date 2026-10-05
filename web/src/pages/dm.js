@@ -22,7 +22,7 @@ import { sceneLinksOf } from "../board/links.js";
 import { attachTooltip, hideTooltip, renderWithKeys } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP, RAIL_HELP } from "../tool-help.js";
 import { zoneStyle } from "../vtt/layers/manual-fog.js";
-import { tokenCells } from "../geometry.js";
+import { snapToGrid, tokenCells } from "../geometry.js";
 import {
   fetchMe,
   apiLogout,
@@ -85,7 +85,7 @@ import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutoria
 import { dmTourSteps } from "../tutorial-dm.js";
 import { changeWorldSystem, fitsSystem } from "../world-system.js";
 import { showMissingModulesNotice } from "../modules-notice.js";
-import { loadSystemProfile } from "../system-profile.js";
+import { cardTokenCells, loadSystemProfile } from "../system-profile.js";
 import { escapeHtml, cssUrl } from "../html.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
 import { asButton } from "../a11y.js";
@@ -3578,23 +3578,26 @@ sceneCanvasEl.addEventListener("drop", (e) => {
 async function addMonsterToken(monsterId, { x, y }) {
   let m;
   try {
-    m = await fetchMonster(monsterId);
+    [m] = await Promise.all([fetchMonster(monsterId), loadSystemProfile()]);
   } catch (err) {
     showAlert("Не удалось загрузить монстра: " + err.message);
     return;
   }
   counter++;
   const id = "tok-" + Date.now() + "-" + counter;
-  const gridSize = (vtt.getScene().grid && vtt.getScene().grid.size) || 48;
+  const grid = vtt.getScene().grid;
+  const gridSize = (grid && grid.size) || 48;
+  const cells = cardTokenCells(m);
+  const p = snapToGrid(x, y, grid, cells);
   vtt.send({
     type: "add_token",
     token: {
       id,
-      x,
-      y,
+      x: p.x,
+      y: p.y,
       label: m.name,
       image: m.imageUrl || "",
-      size: gridSize / 2,
+      size: (cells * gridSize) / 2,
       shape: "",
       hidden: false,
       monsterId: m.id,

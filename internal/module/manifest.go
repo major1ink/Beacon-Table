@@ -111,6 +111,9 @@ type Manifest struct {
 	// модификатора в тексте). Только у системного модуля; без раздела —
 	// domain.CustomRolls.
 	Rolls *domain.SystemRolls `json:"rolls,omitempty"`
+	// TokenSize — размер токена существа по полю карточки. Только у
+	// системного модуля; без раздела существо встаёт 1×1.
+	TokenSize *domain.TokenSizeRule `json:"tokenSize,omitempty"`
 }
 
 // maxModifierTargets — сколько целей модификаторов может объявить система.
@@ -171,6 +174,14 @@ func (m *Manifest) Validate() error {
 		}
 		if err := m.Combat.Validate(); err != nil {
 			return fmt.Errorf("правила боя модуля %s: %w", m.ID, err)
+		}
+	}
+	if m.TokenSize != nil {
+		if m.Type != TypeSystem {
+			return fmt.Errorf("размер токенов (tokenSize) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+		}
+		if err := domain.ValidateTokenSize(m.TokenSize); err != nil {
+			return fmt.Errorf("модуль %s: %w", m.ID, err)
 		}
 	}
 	if err := m.validateModifierTargets(); err != nil {

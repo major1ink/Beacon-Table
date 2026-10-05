@@ -42,6 +42,8 @@ type SystemProfile struct {
 	Currencies []Currency     `json:"currencies"`
 	Rolls      SystemRolls    `json:"rolls"`
 	Initiative InitiativeRule `json:"initiative"`
+	// TokenSize — размер токена существа по его карточке; nil — 1×1.
+	TokenSize *TokenSizeRule `json:"tokenSize,omitempty"`
 	// Modules — модули мира, которые есть на сервере, в порядке подключения:
 	// по ним клиент строит корни компендиума и подписывает карточки.
 	Modules []WorldModule `json:"modules"`
@@ -133,6 +135,58 @@ func ValidateCurrencies(list []Currency) error {
 			return fmt.Errorf("у валюты %q нет подписи или она длиннее %d символов", c.Key, maxCurrencyLabel)
 		}
 		seen[c.Key] = true
+	}
+	return nil
+}
+
+// MaxTokenCells — предел стороны токена в клетках: самые крупные существа
+// занимают 4×4, остальное — запас.
+const MaxTokenCells = 10
+
+const maxTokenSizes = 64
+
+// TokenSizeRule — сторона токена существа в клетках по значению поля Field
+// его карточки («Большой» → 2). Значения ищутся без учёта регистра.
+type TokenSizeRule struct {
+	Field string             `json:"field"`
+	Table map[string]float64 `json:"table"`
+}
+
+// CellsFor — сторона токена существа src в клетках; без правила или без
+// значения в таблице — 1.
+func (r *TokenSizeRule) CellsFor(src any) float64 {
+	if r == nil {
+		return 1
+	}
+	v, ok := lookupField(fieldsOf(src), r.Field)
+	if !ok {
+		return 1
+	}
+	want := strings.TrimSpace(scalarString(v))
+	for k, cells := range r.Table {
+		if strings.EqualFold(strings.TrimSpace(k), want) {
+			return cells
+		}
+	}
+	return 1
+}
+
+// ValidateTokenSize — раздел tokenSize из module.json: поле, непустая
+// таблица, стороны кратны половине клетки и не больше MaxTokenCells.
+func ValidateTokenSize(r *TokenSizeRule) error {
+	if !fieldPathRe.MatchString(r.Field) {
+		return fmt.Errorf("размер токена: неверное поле %q", r.Field)
+	}
+	if len(r.Table) == 0 || len(r.Table) > maxTokenSizes {
+		return fmt.Errorf("размер токена: в таблице нужно от 1 до %d значений", maxTokenSizes)
+	}
+	for k, cells := range r.Table {
+		if strings.TrimSpace(k) == "" {
+			return fmt.Errorf("размер токена: пустое значение поля в таблице")
+		}
+		if cells < 0.5 || cells > MaxTokenCells || cells*2 != float64(int(cells*2)) {
+			return fmt.Errorf("размер токена %q: %v клеток — нужно от 0.5 до %d с шагом 0.5", k, cells, MaxTokenCells)
+		}
 	}
 	return nil
 }

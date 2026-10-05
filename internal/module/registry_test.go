@@ -438,3 +438,22 @@ func TestInstallTheme(t *testing.T) {
 		}
 	}
 }
+
+func TestManifestTokenSize(t *testing.T) {
+	system := func(extra string) string {
+		return strings.Replace(manifestJSON("sys-x", "1.0.0", extra), `"content"`, `"system"`, 1)
+	}
+	if _, err := ParseManifest([]byte(manifestJSON("a", "1.0.0", `"tokenSize":{"field":"size","table":{"Большой":2}}`))); err == nil {
+		t.Error("размер токенов у контентного модуля должен быть ошибкой")
+	}
+	if _, err := ParseManifest([]byte(system(`"tokenSize":{"field":"size","table":{"Большой":1.3}}`))); err == nil {
+		t.Error("сторона не кратная половине клетки должна быть ошибкой")
+	}
+	m, err := ParseManifest([]byte(system(`"tokenSize":{"field":"size","table":{"Большой":2,"Крошечный":0.5}}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.TokenSize == nil || m.TokenSize.Field != "size" || m.TokenSize.Table["Большой"] != 2 {
+		t.Fatalf("размер токенов разобран не так: %+v", m.TokenSize)
+	}
+}

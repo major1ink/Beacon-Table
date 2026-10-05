@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { snapToGrid, tokenCells } from "../src/geometry.js";
+import { tokenSizeCells } from "../src/system-profile.js";
 
 const grid = { size: 50, offsetX: 10, offsetY: 20 };
 
@@ -26,4 +27,15 @@ test("сторона токена в клетках", () => {
   assert.equal(tokenCells({ size: 25 }, grid), 1);
   assert.equal(tokenCells({}, grid), 1);
   assert.equal(tokenCells({ size: 48 }, null), 2);
+});
+
+test("размер токена по карточке и правилу системы", () => {
+  const rule = { field: "size", table: { Большой: 2, Крошечный: 0.5 } };
+  assert.equal(tokenSizeCells(rule, { size: "Большой" }), 2);
+  assert.equal(tokenSizeCells(rule, { size: "  большой " }), 2);
+  assert.equal(tokenSizeCells(rule, { size: "Крошечный" }), 0.5);
+  assert.equal(tokenSizeCells(rule, { size: "Средний" }), 1);
+  assert.equal(tokenSizeCells(rule, {}), 1);
+  assert.equal(tokenSizeCells(null, { size: "Большой" }), 1);
+  assert.equal(tokenSizeCells({ field: "extra.size", table: { Огромный: 3 } }, { extra: { size: "Огромный" } }), 3);
 });

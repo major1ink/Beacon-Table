@@ -135,6 +135,8 @@ type Room struct {
 	// rules — правила боя системы мира (инициатива, 0 хитов, опыт), см.
 	// combatRules.
 	rules *domain.CombatRules
+	// tokenSize — сторона токена существа по его карточке; nil — 1×1.
+	tokenSize *domain.TokenSizeRule
 	// schemas — схемы листа и карточек системы мира по видам (см.
 	// schemaFor): по ним сервер считает ссылки @поле в формуле инициативы.
 	schemas map[string]*schema.Schema
@@ -267,7 +269,7 @@ type Room struct {
 // conditionRepo — см. Room.characters/Room.monsters/Room.items/
 // Room.conditions, только для чтения (кроме точечных мутаций инвентаря
 // персонажа при луте, см. handleHubTakeItem/handleLootTakeItem).
-func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit, rules *domain.CombatRules, schemas map[string]*schema.Schema) (*Room, error) {
+func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit, rules *domain.CombatRules, tokenSize *domain.TokenSizeRule, schemas map[string]*schema.Schema) (*Room, error) {
 	rs, err := sceneRepo.Load(context.Background())
 	if err != nil {
 		return nil, err
@@ -292,6 +294,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		items:          itemRepo,
 		conditions:     conditionRepo,
 		rules:          rules,
+		tokenSize:      tokenSize,
 		schemas:        schemas,
 		scenes:         rs.Scenes,
 		sceneOrder:     rs.SceneOrder,
@@ -342,6 +345,18 @@ func (r *Room) combatRules() *domain.CombatRules {
 		return domain.CustomCombatRules()
 	}
 	return r.rules
+}
+
+// monsterTokenSize — радиус токена существа monsterID по правилу системы;
+// карточки нет — 1×1.
+func (r *Room) monsterTokenSize(monsterID string, cell float64) float64 {
+	cells := 1.0
+	if monsterID != "" && r.monsters != nil && r.tokenSize != nil {
+		if m, err := r.monsters.Get(context.Background(), monsterID); err == nil {
+			cells = r.tokenSize.CellsFor(m)
+		}
+	}
+	return cells * cell / 2
 }
 
 // schemaFor — схема вида kind (schema.KindSheet, KindMonster…) системы мира.
@@ -2456,7 +2471,7 @@ func (r *Room) handlePlaceCombatantToken(id string, x, y float64) {
 		r.dropDuplicateCharacterTokens(cmb.CharacterID, tokenID)
 	}
 	r.scene.Tokens[tokenID] = &domain.Token{
-		ID: tokenID, X: x, Y: y, Size: gridSize / 2,
+		ID: tokenID, X: x, Y: y, Size: r.monsterTokenSize(cmb.MonsterID, gridSize),
 		Label: cmb.Name, Image: cmb.Image, Color: cmb.Color,
 		OwnerID: cmb.OwnerID, CharacterID: cmb.CharacterID, MonsterID: cmb.MonsterID,
 		// Метки состояний, повешенные на бойца ДО того, как он попал на
@@ -2946,15 +2961,12 @@ func (r *Room) dropDuplicateCharacterTokens(characterID, keepTokenID string) {
 	}
 }
 
-// maxTokenCells — предел стороны токена в клетках: самые крупные существа
-// занимают 4×4, остальное — запас, чтобы клиент не прислал токен на всю карту.
-const maxTokenCells = 10
-
+// clampTokenSize — чтобы клиент не прислал токен на всю карту.
 func clampTokenSize(size, cell float64) float64 {
 	if cell <= 0 {
 		cell = 48
 	}
-	return min(size, maxTokenCells*cell/2)
+	return min(size, domain.MaxTokenCells*cell/2)
 }
 
 func (r *Room) applyMutation(msg domain.ClientMsg) {

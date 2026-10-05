@@ -67,3 +67,52 @@ func TestValidateCurrencies(t *testing.T) {
 		t.Error("слишком длинная единица веса должна быть ошибкой")
 	}
 }
+
+func TestValidateTokenSize(t *testing.T) {
+	ok := &TokenSizeRule{Field: "size", Table: map[string]float64{"Крошечный": 0.5, "Большой": 2, "Огромный": 3}}
+	if err := ValidateTokenSize(ok); err != nil {
+		t.Fatal(err)
+	}
+	bad := map[string]*TokenSizeRule{
+		"без поля":       {Table: map[string]float64{"Большой": 2}},
+		"кривое поле":    {Field: "size class", Table: map[string]float64{"Большой": 2}},
+		"пустая таблица": {Field: "size"},
+		"пустой ключ":    {Field: "size", Table: map[string]float64{" ": 2}},
+		"ноль клеток":    {Field: "size", Table: map[string]float64{"Пыль": 0}},
+		"не кратно 0.5":  {Field: "size", Table: map[string]float64{"Большой": 1.3}},
+		"больше предела": {Field: "size", Table: map[string]float64{"Колосс": MaxTokenCells + 1}},
+	}
+	for name, r := range bad {
+		if err := ValidateTokenSize(r); err == nil {
+			t.Errorf("%s: ожидали ошибку", name)
+		}
+	}
+}
+
+func TestTokenSizeCellsFor(t *testing.T) {
+	rule := &TokenSizeRule{Field: "size", Table: map[string]float64{"Большой": 2, "Крошечный": 0.5}}
+	card := func(raw string) *Monster {
+		var m Monster
+		if err := json.Unmarshal([]byte(raw), &m); err != nil {
+			t.Fatal(err)
+		}
+		return &m
+	}
+	cases := map[string]struct {
+		rule *TokenSizeRule
+		raw  string
+		want float64
+	}{
+		"по таблице":          {rule, `{"name":"Аболет","size":"Большой"}`, 2},
+		"регистр и пробелы":   {rule, `{"name":"Аболет","size":"  большой "}`, 2},
+		"половина клетки":     {rule, `{"name":"Мышь","size":"Крошечный"}`, 0.5},
+		"нет в таблице":       {rule, `{"name":"Гоблин","size":"Средний"}`, 1},
+		"нет поля":            {rule, `{"name":"Тень"}`, 1},
+		"система без правила": {nil, `{"name":"Аболет","size":"Большой"}`, 1},
+	}
+	for name, c := range cases {
+		if got := c.rule.CellsFor(card(c.raw)); got != c.want {
+			t.Errorf("%s: %v клеток, ожидали %v", name, got, c.want)
+		}
+	}
+}
