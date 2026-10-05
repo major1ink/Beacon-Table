@@ -1,5 +1,0 @@
-import{s as y}from"./system-profile-yXmhmH9w.js";import{q as u,g as h,s as d,a as w,r as p}from"./modal-U7RhbM9s.js";const c={title:"D&D 5e",systems:["dnd5e-2014","dnd5e-2024"],offer:"dnd5e-2024"},a={"foundry-dnd5e":c,lss:c},I=s=>a[s],$=(s,e=y())=>!!a[s]&&a[s].systems.includes(e),g=(s,e)=>!s.systems||!s.systems.length||s.systems.includes(e);async function b(s,e=""){let n,r;try{[n,r]=await Promise.all([u(),h()])}catch(t){return await d("Не удалось сменить систему: "+t.message),!1}const{world:o,modules:f}=n,m=(r.find(t=>t.id===s)||{}).title||s,i=f.filter(t=>t.type==="content"&&o.enabled.includes(t.id)&&!g(t,s));let l=(e?e+`
-
-`:"")+`Сменить систему мира на «${m}»? Поля прежней системы останутся в данных и не будут показываться, пока её не вернёшь. Мир перезапустится, у всех за столом обновится страница.`;if(i.length&&(l+=`
-
-Выключатся модули для другой системы: ${i.map(t=>`«${t.title}»`).join(", ")}.`),!await w(l,{title:"Система мира",okLabel:"Сменить"}))return!1;try{return await p(o.id,s),!0}catch(t){return await d("Не удалось сменить систему: "+t.message),!1}}export{$ as a,b as c,g as f,I as i};
