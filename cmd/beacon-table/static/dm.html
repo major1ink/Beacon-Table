@@ -1700,6 +1700,9 @@
     <!-- ручка ширины панели: тянуть мышью, двойной клик — вернуть 300px -->
     <div id="panelResizer" role="separator" aria-orientation="vertical" aria-label="Ширина панели" tabindex="0"></div>
 
+    <!-- колонка со статблоком бойца (sheet-dock.js), наполняет pages/dm.js -->
+    <aside id="sheetDock"></aside>
+
     <div id="canvasWrap">
       <canvas id="scene"></canvas>
       <div id="statusBar">
@@ -1740,10 +1743,6 @@
     <label id="tokenMenuShapeRow">Форма: <select id="tokenMenuShape">
       <option value="circle">○ Круг</option>
       <option value="square">▢ Квадрат (без обрезки)</option>
-    <!-- Колонка со статблоком бойца (см. web/src/sheet-dock.js): пустая до
-         первого открытия, наполняется из pages/dm.js -->
-    <aside id="sheetDock"></aside>
-
     </select></label>
     <label id="tokenMenuSizeRow">Размер: <select id="tokenMenuSize">
       <option value="0.5">½ клетки</option>
