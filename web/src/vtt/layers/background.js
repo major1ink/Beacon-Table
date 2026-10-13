@@ -2,7 +2,8 @@ import { Assets, Container, Sprite, Texture } from "pixi.js";
 import { isVideoUrl } from "../../geometry.js";
 import { worldSize } from "../camera.js";
 import { createVideoTexture } from "../video-texture.js";
-import { releaseVideoStage } from "../gl-video-uploader.js";
+import { describeVideo, frameIsBlack, videoReadsDirect } from "../video-diag.js";
+import { releaseVideoStage, useDirectUpload } from "../gl-video-uploader.js";
 
 // Фон карты (картинка или зацикленное mp4/webm) — самый частый источник
 // нагрузки в старом Canvas2D-движке: каждый кадр видео заново декодировался
@@ -23,6 +24,10 @@ export function createBackgroundLayer(ctx) {
   let lastMapStartedAt = null;
   let cancelFrameWait = null; // ожидание первого кадра текущего видео-фона
   let frameWatchdog = null; // таймер "кадры так и не поехали"
+  let videoDiagTimer = null; // сведения о видео для отчёта о баге
+  let blackCheckTimer = null; // проверка "кадр чёрный"
+  let videoMode = "staged"; // как кадры доходят до экрана: staged, direct или dom
+  let domTick = null;
   let lastRecoveryAt = 0; // анти-петля пересоздания видео при реально битом файле (см. ниже)
 
   // Новый <video> на каждый видео-фон, а не один переиспользуемый на всю
@@ -57,6 +62,10 @@ export function createBackgroundLayer(ctx) {
       clearInterval(frameWatchdog);
       frameWatchdog = null;
     }
+    clearTimeout(videoDiagTimer);
+    clearTimeout(blackCheckTimer);
+    leaveDomVideo();
+    videoMode = "staged";
     // Текстура кадра держит GL-память и ссылку на <video>: без destroy каждая
     // смена сцены оставляла по текстуре (до 33 МБ видеопамяти на 4K-карте).
     if (mapVideoTexture) {
@@ -71,6 +80,51 @@ export function createBackgroundLayer(ctx) {
     releaseVideoStage(mapVideo);
     mapVideo = null;
     ctx.mapVideoEl = null;
+  }
+
+  // На телевизорах видео идёт на аппаратный слой, и drawImage отдаёт из него
+  // чёрный кадр. Лесенка: обычная заливка → прямая заливка в WebGL → на
+  // трансляции обычный <video> позади прозрачного холста.
+  function fixBlackVideo(v) {
+    if (mapVideo !== v) return;
+    const force = new URLSearchParams(location.search).get("videoMode");
+    if (!force && frameIsBlack(v) !== "да") return;
+    if (force !== "dom" && videoReadsDirect(v)) {
+      useDirectUpload(v);
+      if (mapVideoTexture) mapVideoTexture.source.update();
+      videoMode = "direct";
+      return;
+    }
+    if (ctx.role === "tv") enterDomVideo(v);
+  }
+
+  function enterDomVideo(v) {
+    const wrap = ctx.canvas.parentElement;
+    if (!wrap) return;
+    v.style.cssText = "position:absolute;left:0;top:0;z-index:-1;pointer-events:none;object-fit:fill;transform-origin:0 0;";
+    wrap.insertBefore(v, ctx.canvas);
+    ctx.canvas.style.background = "transparent";
+    if (currentSprite) currentSprite.visible = false;
+    // destroy(true) выгрузил бы и сам <video>, поэтому текстуру только отключаем
+    if (mapVideoTexture) mapVideoTexture.source.autoUpdate = false;
+    domTick = () => {
+      const { w, h } = worldSize(ctx.scene);
+      const { x, y } = ctx.world.position;
+      const s = ctx.world.scale.x;
+      v.style.width = `${w}px`;
+      v.style.height = `${h}px`;
+      v.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+    };
+    ctx.app.ticker.add(domTick);
+    videoMode = "dom";
+  }
+
+  function leaveDomVideo() {
+    if (!domTick) return;
+    ctx.app.ticker.remove(domTick);
+    domTick = null;
+    ctx.canvas.style.background = "";
+    if (mapVideo) mapVideo.remove();
   }
 
   // resizeSprite растягивает спрайт на мировой размер сцены. Вызывать её
@@ -117,6 +171,11 @@ export function createBackgroundLayer(ctx) {
       ctx.registerUnlockable(v);
       if (!ctx.audioUnlocked) ctx.showUnlockPrompt();
 
+      // через 10 с отдаём состояние видео странице, трансляция кладёт его в отчёт о баге
+      videoDiagTimer = setTimeout(() => {
+        if (mapVideo === v) document.dispatchEvent(new CustomEvent("vtt:videoDiag", { detail: { ...describeVideo(v), videoMode } }));
+      }, 10000);
+
       // Спрайт заводим сразу (чтобы порядок слоёв не зависел от того, когда
       // приедет видео), но ПУСТЫМ: текстуру навешиваем только после первого
       // ПОКАЗАННОГО кадра — раньше нельзя, иначе карта навсегда останется
@@ -138,6 +197,7 @@ export function createBackgroundLayer(ctx) {
         }
         mapVideoTexture = texture;
         currentSprite.texture = texture;
+        blackCheckTimer = setTimeout(() => fixBlackVideo(v), 4000);
         // Подсказка загрузчику (gl-video-uploader.js: stageStep): экранных
         // пикселей на пиксель кадра при текущем зуме.
         const sprite = currentSprite;

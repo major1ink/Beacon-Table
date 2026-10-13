@@ -6,7 +6,7 @@
 // Сам ничего не отправляет — сервер отчёты не принимает и не хранит: стол
 // живёт в локальной сети, канала «наружу» у него нет.
 import { openModal, showAlert } from "./modal.js";
-import { fetchVersion } from "./api.js";
+import { fetchVersion, fetchBroadcastDiag } from "./api.js";
 import { copyToClipboard } from "./clipboard.js";
 import { downloadFile } from "./html.js";
 
@@ -90,6 +90,7 @@ async function collectTech() {
     `- Окно: ${window.innerWidth}×${window.innerHeight}, dpr ${window.devicePixelRatio}`,
     `- Время: ${new Date().toLocaleString("ru-RU")}`,
   ];
+  lines.push(...(await broadcastScreens()));
   if (errorLog.length > 0) {
     lines.push("", "Последние ошибки в консоли:", "```");
     for (const e of errorLog) lines.push(`[${timeOf(e.at)}] ${e.kind}: ${e.line}`);
@@ -98,6 +99,53 @@ async function collectTech() {
     lines.push("", "Ошибок в консоли не было.");
   }
   return lines.join("\n");
+}
+
+// INFO_LABELS — подписи к сведениям экрана трансляции в порядке вывода.
+const INFO_LABELS = [
+  ["cookieEnabled", "cookieEnabled"],
+  ["docCookie", "document.cookie"],
+  ["localStorage", "localStorage"],
+  ["sessionStorage", "sessionStorage"],
+  ["serverCookie", "cookie от сервера"],
+  ["accessAfterApproval", "доступ после подтверждения"],
+  ["login", "вход"],
+  ["modules", "ES-модули"],
+  ["video", "видео-фон"],
+  ["videoMode", "способ показа видео"],
+  ["videoBlack", "кадр чёрный"],
+  ["videoCodecs", "кодеки видео"],
+  ["webgl2", "WebGL2"],
+  ["webgl", "WebGL"],
+  ["gpu", "видеокарта"],
+  ["webglError", "ошибка WebGL"],
+  ["screen", "экран"],
+  ["window", "окно"],
+  ["dpr", "dpr"],
+];
+
+// broadcastScreens — что сервер знает об экранах трансляции. Адрес экрана в
+// отчёт не пишем: он уходит в публичный issue. У игрока блока нет.
+async function broadcastScreens() {
+  let screens;
+  try {
+    screens = await fetchBroadcastDiag();
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(screens) || screens.length === 0) return [];
+  const lines = ["", "Экраны трансляции:", "```"];
+  for (const s of screens) {
+    let state = "стол запустился";
+    if (!s.started) state = s.timedOut ? "стол НЕ запустился (не дождались)" : "стол не запустился";
+    lines.push(`${s.userAgent || "браузер не назвался"}`);
+    lines.push(`  загрузок страницы: ${s.loads}, ${state}, последний раз ${new Date(s.lastSeen).toLocaleTimeString("ru-RU")}`);
+    const info = INFO_LABELS.filter(([k]) => s.info && s.info[k]).map(([k, label]) => `${label}: ${s.info[k]}`);
+    if (info.length) lines.push("  " + info.join(", "));
+    for (const e of s.errors || []) lines.push("  ! " + e);
+  }
+  lines.push("```");
+  return lines;
 }
 
 // buildBody — тело issue по разделам .github/ISSUE_TEMPLATE/bug_report.md.
@@ -181,6 +229,15 @@ function textarea(parent, label, placeholder, rows) {
   return ta;
 }
 
+// openInNewTab открывает ссылку в новой вкладке, false — окно заблокировано.
+// Без noopener в window.open: с ним браузер всегда возвращает null, и блокировку не отличить.
+export function openInNewTab(url) {
+  const win = window.open(url, "_blank");
+  if (!win) return false;
+  win.opener = null;
+  return true;
+}
+
 // openBugReport — диалог. Версию спрашиваем у сервера асинхронно, поэтому
 // окно открывается сразу, а блок техданных дозаполняется. scene — {name,
 // url} дампа сцены у ДМ: баги света и стен без самой сцены не повторить.
@@ -212,7 +269,7 @@ export async function openBugReport({ scene } = {}) {
       const techWrap = document.createElement("details");
       const sum = document.createElement("summary");
       sum.style.cssText = "cursor:pointer;font-size:12px;opacity:0.8;";
-      sum.textContent = "Технические данные (версия, браузер, ошибки в консоли)";
+      sum.textContent = "Технические данные (версия, браузер, ошибки в консоли, экраны трансляции)";
       techBox = document.createElement("textarea");
       techBox.className = "bt-modal-textarea";
       techBox.readOnly = true;
@@ -323,8 +380,7 @@ export async function openBugReport({ scene } = {}) {
     // window.open тут вернул бы пустую вкладку.
     location.href = url;
   } else {
-    const win = window.open(url, "_blank", "noopener");
-    if (!win) {
+    if (!openInNewTab(url)) {
       showAlert("Браузер заблокировал новое окно. Разрешите всплывающие окна для этого адреса или скопируйте отчёт кнопкой «Скопировать отчёт».");
       return;
     }

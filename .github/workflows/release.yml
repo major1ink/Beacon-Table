@@ -34,7 +34,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Десктопные сборки (окно вместо браузера) — в тот же релиз, см. desktop.yml.
   desktop:
     needs: goreleaser
     permissions:
@@ -44,7 +43,6 @@ jobs:
       tag: ${{ github.ref_name }}
 
   mirror-site:
-    # Зеркало забирает релиз целиком — ждём и десктопные файлы.
     needs: [goreleaser, desktop]
     runs-on: ubuntu-latest
     steps:

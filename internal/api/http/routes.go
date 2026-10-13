@@ -69,6 +69,10 @@ type API struct {
 	// (см. localhost_handlers.go).
 	firstRunMu sync.Mutex
 	firstRun   *FirstRun
+	// broadcastDiag — журнал экранов трансляции для отчёта о баге.
+	broadcastDiag broadcastDiag
+	// LANOrigins — адреса стола в локальной сети, например «http://192.168.1.5:8080».
+	LANOrigins func() []string
 }
 
 // NewAPI собирает REST-хендлеры поверх Auth и Broadcast (оба глобальны) и
@@ -122,6 +126,13 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/broadcast/requests", a.handleBroadcastRequestList)
 	mux.HandleFunc("POST /api/broadcast/requests/{id}/approve", a.handleBroadcastRequestApprove)
 	mux.HandleFunc("POST /api/broadcast/requests/{id}/reject", a.handleBroadcastRequestReject)
+	// Короткие адреса трансляции.
+	mux.HandleFunc("GET "+broadcastShortPath, a.handleBroadcastShortcut)
+	mux.HandleFunc("GET /broadcast", a.handleBroadcastShortcut)
+	// Проба cookie и журнал экранов трансляции.
+	mux.HandleFunc("GET /api/broadcast/probe", a.handleBroadcastProbe)
+	mux.HandleFunc("POST /api/broadcast/diag", a.handleBroadcastDiagPost)
+	mux.HandleFunc("GET /api/broadcast/diag", a.handleBroadcastDiagList)
 
 	// Миры (компании) — управляет только ДМ, см. company_handlers.go.
 	mux.HandleFunc("GET /api/companies", a.handleCompaniesList)

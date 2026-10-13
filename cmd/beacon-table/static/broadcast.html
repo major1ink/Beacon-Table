@@ -1,13 +1,18 @@
 <!doctype html>
 <html lang="ru">
 <head>
+  <script type="module" crossorigin src="/assets/polyfills-mtQRlc-4.js"></script>
+
   <meta charset="utf-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Трансляция</title>
+  <!-- сторож страницы: сведения о браузере и ошибки для отчёта о баге -->
+  <script src="/broadcast-guard.js"></script>
   <style>
     html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
-    #canvasWrap { position: fixed; inset: 0; }
+    /* не inset: 0, его нет в Chromium до 87 */
+    #canvasWrap { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
     canvas { display: block; width: 100%; height: 100%; background: #333; }
 
     /* ---- HUD зума/полноэкранного режима — тот же стиль плавающей
@@ -32,22 +37,10 @@
     #zoomHud button.active { background: #e74c3c; }
   </style>
   <link rel="stylesheet" href="/system-theme.css" />
-  <script type="module" crossorigin src="/assets/broadcast-go6R_NkZ.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/modal-Br-jf2Z7.js">
-  <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
-  <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/back-stack-C8cwVhaZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/native-app-BgGKemc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-dPIPXT8e.js">
-  <link rel="modulepreload" crossorigin href="/assets/combatant-card-C_2-6ofw.js">
-  <link rel="modulepreload" crossorigin href="/assets/art-C_0F73pv.js">
-  <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
-  <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-DGwR3vWh.js">
-  <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-C5P5sacn.js">
-  <link rel="modulepreload" crossorigin href="/assets/dice-fx-0YPNsORB.js">
-  <link rel="stylesheet" crossorigin href="/assets/modal-ClirD79q.css">
+  <script type="module" crossorigin src="/assets/broadcast-BJ1BCtzw.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/broadcast-Cs9e5Ktw.css">
+  <script type="module">import.meta.url;import("_").catch(()=>1);(async function*(){})().next();if(location.protocol!="file:"){window.__vite_is_modern_browser=true}</script>
+  <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
 </head>
 <body>
   <div id="canvasWrap">
@@ -58,5 +51,8 @@
       <button id="zoomInBtn" title="Приблизить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
   </div>
+  <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
+  <script nomodule crossorigin id="vite-legacy-polyfill" src="/assets/polyfills-legacy-By9E79GW.js"></script>
+  <script nomodule crossorigin id="vite-legacy-entry" data-src="/assets/broadcast-legacy-bsHMAcK3.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
 </body>
 </html>

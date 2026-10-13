@@ -63,7 +63,7 @@ export default defineConfig({
         modules: resolve(__dirname, "modules.html"),
         dm: resolve(__dirname, "dm.html"),
         player: resolve(__dirname, "player.html"),
-        broadcast: resolve(__dirname, "broadcast.html"),
+        // broadcast.html собирается отдельно, см. vite.broadcast.config.js
         journal: resolve(__dirname, "journal.html"),
         board: resolve(__dirname, "board.html"),
         characterSheet: resolve(__dirname, "character-sheet.html"),

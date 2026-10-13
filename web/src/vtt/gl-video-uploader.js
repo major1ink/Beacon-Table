@@ -56,8 +56,8 @@ const glUploadVideoResourceSafe = {
     }
 
     // Текстура может быть меньше кадра: UV у Pixi в долях, спрайт этого не
-    // заметит (см. stageStep).
-    const step = stageStep(source);
+    // заметит (см. stageStep). При прямой заливке размер полный.
+    const step = directVideos.has(source.resource) ? 1 : stageStep(source);
     const width = Math.max(1, Math.round(source.pixelWidth * step));
     const height = Math.max(1, Math.round(source.pixelHeight * step));
 
@@ -101,7 +101,7 @@ function stageStep(source) {
 const stages = new WeakMap();
 
 function stagedFrame(video, width, height) {
-  if (!(video instanceof HTMLVideoElement)) return video;
+  if (!(video instanceof HTMLVideoElement) || directVideos.has(video)) return video;
   let canvas = stages.get(video);
   if (!canvas) {
     canvas = document.createElement("canvas");
@@ -115,6 +115,15 @@ function stagedFrame(video, width, height) {
   c2d.clearRect(0, 0, width, height); // у webm-токенов с альфой кадры иначе накладываются
   c2d.drawImage(video, 0, 0, width, height);
   return canvas;
+}
+
+// Видео, кадры которых заливаются в WebGL напрямую, без 2D-canvas: на телевизорах
+// drawImage(video) отдаёт чёрный кадр, а прямая заливка иногда работает.
+const directVideos = new WeakSet();
+
+export function useDirectUpload(video) {
+  directVideos.add(video);
+  releaseVideoStage(video);
 }
 
 // releaseVideoStage — отпустить промежуточный canvas выброшенного видео

@@ -5,10 +5,13 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Beacon Table — Трансляция</title>
+  <!-- сторож страницы: сведения о браузере и ошибки для отчёта о баге -->
+  <script src="/broadcast-guard.js"></script>
   <link rel="stylesheet" href="/src/styles/theme.css" />
   <style>
     html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
-    #canvasWrap { position: fixed; inset: 0; }
+    /* не inset: 0, его нет в Chromium до 87 */
+    #canvasWrap { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
     canvas { display: block; width: 100%; height: 100%; background: #333; }
 
     /* ---- HUD зума/полноэкранного режима — тот же стиль плавающей
