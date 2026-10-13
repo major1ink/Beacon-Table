@@ -18,6 +18,8 @@
 // плавающем окне-iframe, второй уровень вложенности не нужен (см.
 // floating-window.js: все окна — прямые дети топ-документа).
 import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchJournal } from "./api.js";
+// Страница, открытая отдельным окном, открывает карточки у себя — слушатель там.
+import "./floating-window.js";
 
 const KIND_CONFIG = {
   item: { fetchAll: fetchItems, urlFor: (id) => `/itembook.html?id=${id}`, keyPrefix: "item" },

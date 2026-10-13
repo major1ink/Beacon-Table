@@ -18,6 +18,8 @@
 // floating-window.js: postToOpenWindows("catalog-", ...) — топ-документ
 // форвардит "beacon:*Saved" сюда же.
 import { fetchMe } from "../api.js";
+// Вынесенный список открывает карточки у себя — слушатель там.
+import "../floating-window.js";
 import { icon } from "../icons.js";
 import {
   fetchBestiary, createMonster, updateMonster, deleteMonster, fetchMonster,

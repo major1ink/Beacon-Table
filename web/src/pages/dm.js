@@ -287,7 +287,7 @@ document.getElementById("screenBtn").onclick = () =>
     width: 1100,
     height: 720,
     popoutFeatures: "width=1100,height=720",
-    desktopPopout: () => window.beaconDesktop.openScreen && window.beaconDesktop.openScreen(),
+    desktopFill: true,
   });
 
 // hideOwnerOnlyUI — убрать со стола то, что доступно только хозяину сервера:
@@ -4521,9 +4521,8 @@ document.addEventListener("vtt:openNoteMarker", async (e) => {
 //   ручного закрытия/открытия.
 window.addEventListener("message", async (e) => {
   if (e.origin !== location.origin || !e.data) return;
-  if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
-  } else if (e.data.type === "beacon:openCombatantCard") {
+  // "beacon:openFloatingWindow" открывает сам floating-window.js.
+  if (e.data.type === "beacon:openCombatantCard") {
     // Клик по бойцу в трекере, вынесенном в плавающее окно (iframe
     // combat-tracker.html): своей колонки у него нет — показываем в нашей
     // (см. combatant-card.js: openCombatantCard).

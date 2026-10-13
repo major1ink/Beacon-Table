@@ -684,9 +684,8 @@ trackOpenClass(charsOverlay, "open", () => charsOverlay.classList.remove("open")
 // pages/dm.js — идентичный блок, те же два моста, см. комментарий там).
 window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data) return;
-  if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
-  } else if (e.data.type === "beacon:characterSaved") {
+  // "beacon:openFloatingWindow" открывает сам floating-window.js.
+  if (e.data.type === "beacon:characterSaved") {
     // Имя/аватар поменяли в листе — список и чипы дока держат свою копию.
     renderChars();
   } else if (

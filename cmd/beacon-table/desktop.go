@@ -26,6 +26,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"golang.org/x/net/idna"
 )
 
 //go:embed desktop_launcher.html
@@ -62,6 +63,8 @@ func desktopWindow(open func(dir string) (server, error)) {
 		// Экран выбора отдаёт сам десктоп: сервера стола в этот момент
 		// может не быть вовсе.
 		Assets: application.AssetOptions{Handler: l, DisableLogging: true},
+		// Вынос окон: событию Wails по голому имени не передать адрес.
+		RawMessageHandler: l.onMessage,
 	})
 	l.app = app
 	l.win = app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -70,7 +73,7 @@ func desktopWindow(open func(dir string) (server, error)) {
 		Width:      1440,
 		Height:     900,
 		StartState: application.WindowStateMaximised,
-		JS:         desktopJS(),
+		JS:         desktopJS(false),
 		// Кнопки стола зовут десктоп голым именем события (см. desktopJS).
 		// Любой скрипт страницы может сделать то же, поэтому по событию
 		// десктоп только открывает окно трансляции на уже выбранном сервере.
@@ -93,11 +96,6 @@ func desktopWindow(open func(dir string) (server, error)) {
 	app.Event.On(broadcastEvent, func(e *application.CustomEvent) {
 		if e.Sender == mainWindow {
 			l.toggleBroadcast()
-		}
-	})
-	app.Event.On(screenEvent, func(e *application.CustomEvent) {
-		if e.Sender == mainWindow {
-			l.openScreen()
 		}
 	})
 	// Настройки десктопа со страницы стола: запрос текущих и смена
@@ -135,7 +133,6 @@ const (
 	desktopAppID   = "ru.beacontable.BeaconTable"
 	mainWindow     = "main"
 	broadcastEvent = "beacon:broadcast"
-	screenEvent    = "beacon:screen"
 	stateEvent     = "beacon:state"
 	closeEvent     = "beacon:close:"
 	closeTray      = "tray"
@@ -164,14 +161,14 @@ type launcher struct {
 	win   *application.WebviewWindow
 	stop  chan struct{}
 
-	mu     sync.Mutex
-	prefs  desktopPrefs
-	served chan struct{}              // стол поднят здесь; второй раз его не поднимаем
-	origin string                     // сервер, выбранный на экране запуска
-	folder string                     // папка стола, если он поднят здесь
-	cast   *application.WebviewWindow // окно трансляции, пока открыто
-	screen *application.WebviewWindow // вынесенная ширма ведущего
-	tray   tray
+	mu      sync.Mutex
+	prefs   desktopPrefs
+	served  chan struct{}              // стол поднят здесь; второй раз его не поднимаем
+	origin  string                     // сервер, выбранный на экране запуска
+	folder  string                     // папка стола, если он поднят здесь
+	cast    *application.WebviewWindow // окно трансляции, пока открыто
+	popouts map[string]*popout         // вынесенные окна по ключу плавающего окна
+	tray    tray
 
 	closeToTray atomic.Bool // копия prefs.closeToTray() для хука закрытия окна
 }
@@ -278,36 +275,205 @@ func (l *launcher) toggleBroadcast() {
 	l.castChanged(true)
 }
 
-// openScreen — ширма ведущего отдельным окном, на втором мониторе, если он есть:
-// window.open в окне приложения не работает.
-func (l *launcher) openScreen() {
+// Сообщения страниц десктопу (не "wails:…" — те разбирает сам Wails).
+const (
+	popoutMsg  = "beacon:popout:" // + JSON popoutRequest: вынести плавающее окно
+	tableMsg   = "beacon:table:"  // + JSON: из вынесенного окна столу, как window.opener.postMessage
+	closeMsg   = "beacon:close"   // window.close() вынесенного окна
+	popoutName = "popout:"
+	maxPopouts = 24
+)
+
+type popoutRequest struct {
+	Key    string `json:"key"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Fill   bool   `json:"fill"` // на втором экране — развернуть (ширма)
+}
+
+type popout struct {
+	win *application.WebviewWindow
+	url string
+}
+
+// onMessage — сообщения страниц. Писать их может любой скрипт в окне,
+// поэтому слушаем только страницы выбранного сервера, а открываем только
+// его же пути.
+func (l *launcher) onMessage(w application.Window, msg string, info *application.OriginInfo) {
+	if info == nil {
+		return
+	}
+	l.mu.Lock()
+	ours := l.origin != "" && originOf(info.Origin) == originOf(l.origin)
+	l.mu.Unlock()
+	if !ours {
+		return
+	}
+	popoutWindow := strings.HasPrefix(w.Name(), popoutName)
+	switch {
+	case strings.HasPrefix(msg, popoutMsg):
+		var req popoutRequest
+		if json.Unmarshal([]byte(strings.TrimPrefix(msg, popoutMsg)), &req) == nil {
+			l.popout(originOf(info.Origin), req)
+		}
+	case strings.HasPrefix(msg, tableMsg) && popoutWindow:
+		if js, ok := tableMessageJS(strings.TrimPrefix(msg, tableMsg)); ok {
+			l.win.ExecJS(js)
+		}
+	case msg == closeMsg && popoutWindow:
+		go w.Close()
+	}
+}
+
+// popout — плавающее окно стола отдельным окном приложения, на втором
+// мониторе, если он есть: window.open в окне приложения не работает.
+// Повторный вынос того же окна поднимает уже открытое.
+func (l *launcher) popout(origin string, req popoutRequest) {
+	target, ok := popoutURL(origin, req.URL)
+	if !ok || !popoutKey(req.Key) {
+		return
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.screen != nil {
-		l.screen.Focus()
+	if p := l.popouts[req.Key]; p != nil {
+		navigate := p.url != target
+		p.url = target
+		// Без замка: окно ждёт поток GTK.
+		go func() {
+			if navigate {
+				p.win.SetURL(target)
+			}
+			p.win.Focus()
+		}()
 		return
 	}
-	if l.origin == "" {
+	if len(l.popouts) >= maxPopouts {
 		return
+	}
+	title := "Beacon Table"
+	if t := []rune(strings.TrimSpace(req.Title)); len(t) > 0 {
+		title += " — " + string(t[:min(len(t), 80)])
 	}
 	opts := application.WebviewWindowOptions{
-		Name:   "gm-screen",
-		Title:  "Beacon Table — ширма",
-		URL:    l.origin + "/gm-screen.html",
-		Width:  1100,
-		Height: 720,
+		Name:            popoutName + req.Key,
+		Title:           title,
+		URL:             target,
+		Width:           clampSize(req.Width, 1040),
+		Height:          clampSize(req.Height, 880),
+		JS:              desktopJS(true),
+		InitialPosition: application.WindowCentered,
 	}
 	if s := secondScreen(l.app); s != nil && canPlaceWindows() {
 		opts.Screen = s
-		opts.StartState = application.WindowStateMaximised
+		if req.Fill {
+			opts.StartState = application.WindowStateMaximised
+		}
 	}
-	l.screen = l.app.Window.NewWithOptions(opts)
-	go reloadOnCrash(l.screen)
-	l.screen.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+	p := &popout{win: l.app.Window.NewWithOptions(opts), url: target}
+	if l.popouts == nil {
+		l.popouts = map[string]*popout{}
+	}
+	l.popouts[req.Key] = p
+	go reloadOnCrash(p.win)
+	p.win.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 		l.mu.Lock()
-		l.screen = nil
+		if l.popouts[req.Key] == p {
+			delete(l.popouts, req.Key)
+		}
 		l.mu.Unlock()
 	})
+}
+
+// originOf — схема и хост так, как их видит WebKit: домен в punycode, без
+// порта по умолчанию. Иначе стол на кириллическом домене не узнал бы свои
+// же страницы. "" — не адрес.
+func originOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if net.ParseIP(host) == nil {
+		if host, err = idna.Lookup.ToASCII(host); err != nil {
+			return ""
+		}
+	}
+	port := u.Port()
+	if (u.Scheme == "http" && port == "80") || (u.Scheme == "https" && port == "443") {
+		port = ""
+	}
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return u.Scheme + "://" + host
+}
+
+// popoutURL — адрес вынесенного окна: только путь на том же сервере, никаких
+// чужих адресов, даже если страница попросит.
+func popoutURL(origin, path string) (string, bool) {
+	if origin == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || len(path) > 2048 {
+		return "", false
+	}
+	for _, r := range path {
+		if r < 0x20 || r == 0x7f || r == '\\' {
+			return "", false
+		}
+	}
+	u, err := url.Parse(path)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil {
+		return "", false
+	}
+	target := origin + path
+	if originOf(target) != origin {
+		return "", false
+	}
+	return target, true
+}
+
+// popoutKey — ключ плавающего окна становится именем окна Wails.
+func popoutKey(key string) bool {
+	if key == "" || len(key) > 128 {
+		return false
+	}
+	for _, r := range key {
+		ok := r <= unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("-_:.", r))
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func clampSize(v, def int) int {
+	if v <= 0 {
+		return def
+	}
+	return max(360, min(v, 3840))
+}
+
+// tableMessageJS — сообщение вынесенного окна столу: в браузере оно шло бы
+// через window.opener, здесь его передаёт десктоп. Переразбираем JSON, чтобы
+// в ExecJS попал только объект с типом "beacon:…".
+func tableMessageJS(raw string) (string, bool) {
+	if len(raw) > 256<<10 {
+		return "", false
+	}
+	var msg map[string]any
+	if json.Unmarshal([]byte(raw), &msg) != nil {
+		return "", false
+	}
+	if t, _ := msg["type"].(string); !strings.HasPrefix(t, "beacon:") {
+		return "", false
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return "", false
+	}
+	return "window.postMessage(" + string(b) + ", location.origin)", true
 }
 
 // castChanged — сказать столу в главном окне, открыта ли трансляция: от
@@ -360,12 +526,15 @@ func launcherURL() string {
 // desktopJS — то, что десктоп добавляет в каждую страницу окна:
 //   - window.beaconDesktop: стол по нему узнаёт, что он в десктопе, и
 //     показывает кнопки, которых нет в браузере (событие "beacon:desktop" —
-//     на Linux скрипт приходит уже после загрузки страницы);
+//     на Linux скрипт приходит уже после загрузки страницы); popout —
+//     вынести плавающее окно отдельным окном приложения;
+//   - в вынесенном окне (popout) — toTable вместо window.opener и рабочий
+//     window.close(): сам WebKit окно приложения не закроет;
 //   - кнопку «к выбору сервера» на любой странице, которая не стол: ошибка
 //     WebKit (сервер не ответил, упал посреди игры), заглушка прокси и т. п.,
 //     иначе окну из неё некуда деться. Страницы стола узнаём по собранным
 //     стилям из /assets/ — их нет ни у страниц ошибок, ни у экрана запуска.
-func desktopJS() string {
+func desktopJS(popout bool) string {
 	return fmt.Sprintf(`(() => {
   const home = %q;
   const send = (msg) => {
@@ -375,13 +544,17 @@ func desktopJS() string {
   if (!window.beaconDesktop) {
     window.beaconDesktop = {
       toggleBroadcast: () => send("wails:event:emit:%s"),
-      openScreen: () => send("wails:event:emit:%s"),
       // Ответ приходит событием "beacon:desktop-state".
       requestState: () => send("wails:event:emit:%s"),
       setCloseAction: (action) => {
         if (action === %q || action === %q) send("wails:event:emit:%s" + action);
       },
+      popout: (spec) => send(%q + JSON.stringify(spec)),
     };
+    if (%t) {
+      window.beaconDesktop.toTable = (msg) => send(%q + JSON.stringify(msg));
+      window.close = () => send(%q);
+    }
     document.dispatchEvent(new Event("beacon:desktop"));
   }
   const back = () => {
@@ -396,7 +569,7 @@ func desktopJS() string {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", back);
   else back();
-})();`, launcherURL(), broadcastEvent, screenEvent, stateEvent, closeTray, closeQuit, closeEvent)
+})();`, launcherURL(), broadcastEvent, stateEvent, closeTray, closeQuit, closeEvent, popoutMsg, popout, tableMsg, closeMsg)
 }
 
 // shutdown — окно закрыто: поднятый стол должен сохранить мир до выхода.
