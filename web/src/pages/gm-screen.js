@@ -142,15 +142,19 @@ let rulesCache = null;
 async function loadRules() {
   const [conds, refs] = await Promise.all([fetchConditions().catch(() => []), fetchReferences().catch(() => [])]);
   const rules = (refs || []).filter((r) => (r.tags || []).some((tag) => tag.trim().toLowerCase() === RULE_TAG));
-  rules.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  rules.sort((a, b) => shortName(a.name).localeCompare(shortName(b.name), "ru"));
   conds.sort((a, b) => a.name.localeCompare(b.name, "ru"));
   rulesCache = { conds, rules };
   return rulesCache;
 }
 
-function sourceBadge(card) {
-  if (card.system) return el("span", { class: "src", text: moduleTitle(card.module) });
-  return el("span", { class: "src world", text: "Мир" });
+// Английское название в скобках, как в карточках модулей, на ширме лишнее.
+const shortName = (name) => name.replace(/\s*\[[^\]]*\]\s*$/, "");
+
+function sourceLine(card) {
+  if (!card.system) return el("div", { class: "attribution", text: "Библиотека мира" });
+  const attribution = moduleAttribution(card.module);
+  return el("div", { class: "attribution", text: moduleTitle(card.module), title: attribution ? "Источник: " + attribution : "" });
 }
 
 async function renderRules() {
@@ -178,10 +182,7 @@ async function renderRules() {
     enhanceRolls(body, (formula, label) => sendRoll(formula, `${r.name} — ${label}`));
     const open = el("button", { class: "icon-btn", type: "button", title: "Открыть в справочнике", html: icon("external-link", { size: 14 }) });
     open.onclick = () => openInHost("reference-" + r.id, r.name, `/referencebook.html?id=${r.id}`);
-    const cell = el("article", { class: "cell" }, [el("div", { class: "cell-head" }, [el("h3", { text: r.name }), sourceBadge(r), open]), body]);
-    const attribution = r.system && moduleAttribution(r.module);
-    if (attribution) cell.append(el("div", { class: "attribution", text: "Источник: " + attribution }));
-    grid.append(cell);
+    grid.append(el("article", { class: "cell" }, [el("div", { class: "cell-head" }, [el("h3", { text: shortName(r.name) }), open]), body, sourceLine(r)]));
   }
 
   if (!rules.length || gm) {
