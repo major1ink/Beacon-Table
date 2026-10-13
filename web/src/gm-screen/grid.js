@@ -2,6 +2,7 @@
 import { icon } from "../icons.js";
 import { showPrompt } from "../modal.js";
 import { ctx, data, el, isRule, newCellId, shortName } from "./shared.js";
+import { hasRollTable } from "../random-table.js";
 import { conditionsList, counterWidget, journalBody, openJournalButton, openReferenceButton, referenceBody, rollWidget, timerWidget } from "./cells.js";
 
 const ROW_H = 150;
@@ -206,6 +207,11 @@ function addPanel(tab) {
       for (const w of WIDGETS) list.append(item(w.glyph, w.title, { kind: w.kind, w: w.w, h: w.h, seconds: w.seconds }));
     }
     const match = (s) => !q || String(s || "").toLowerCase().includes(q);
+    const tables = q ? [] : refs.filter((r) => hasRollTable(r.description)).slice(0, 40);
+    if (tables.length) {
+      group("Таблицы");
+      for (const r of tables) list.append(item("dice", shortName(r.name), { kind: "reference", ref: r.id, w: 1, h: 2 }));
+    }
     const cards = refs.filter((r) => (q ? match(r.name) : isRule(r))).slice(0, 40);
     if (cards.length) {
       group(q ? "Справочник" : "Правила");

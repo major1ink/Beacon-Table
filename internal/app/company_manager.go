@@ -147,6 +147,21 @@ func (m *CompanyManager) resolveModules(company *domain.Company) (found []*modul
 	return found, missing
 }
 
+// baseTables — встроенный базовый модуль, если его нет среди модулей мира: его
+// случайные таблицы нужны ширме в любом мире, а состояния — только «Своей системе».
+func (m *CompanyManager) baseTables(mods []*module.Module) *module.Module {
+	for _, mod := range mods {
+		if mod.Manifest.ID == domain.BaseModuleID {
+			return nil
+		}
+	}
+	bm, err := m.modules.Get(domain.BaseModuleID)
+	if err != nil {
+		return nil
+	}
+	return bm
+}
+
 // combatRules — правила боя мира: из системного модуля его системы, а если
 // система — «Своя», модуля нет на сервере или он правил не задаёт —
 // правила «Своей системы».
@@ -199,6 +214,10 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 	mods, _ := m.resolveModules(company)
 	for _, mod := range mods {
 		p.Modules = append(p.Modules, domain.WorldModule{ID: mod.Manifest.ID, Title: mod.Manifest.Title, Type: mod.Manifest.Type, Attribution: mod.Manifest.Attribution, Counts: mod.Counts()})
+	}
+	if bm := m.baseTables(mods); bm != nil {
+		counts := map[string]int{module.KindReferences: bm.Counts()[module.KindReferences]}
+		p.Modules = append(p.Modules, domain.WorldModule{ID: bm.Manifest.ID, Title: bm.Manifest.Title, Type: bm.Manifest.Type, Counts: counts})
 	}
 	if company.System == domain.SystemCustom {
 		return p
@@ -516,6 +535,9 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		itemSrc = append(itemSrc, itemfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindItems), prefix, id))
 		referenceSrc = append(referenceSrc, referencefile.NewModuleStore(mod.FS, mod.ContentDir(module.KindReferences), prefix, id))
 		conditionSrc = append(conditionSrc, conditionfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindConditions), prefix, id))
+	}
+	if bm := m.baseTables(mods); bm != nil {
+		referenceSrc = append(referenceSrc, referencefile.NewModuleStore(bm.FS, bm.ContentDir(module.KindReferences), bm.Manifest.IDPrefix(), bm.Manifest.ID))
 	}
 	monsterRepo := monsterfile.NewCatalog(monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")), monsterSrc...)
 	spellRepo := spellfile.NewCatalog(spellfile.NewStore(filepath.Join(dataRoot, "spells")), spellSrc...)

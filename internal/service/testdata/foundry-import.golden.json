@@ -20,7 +20,8 @@
     "playlists": 1,
     "pregens": 1,
     "scenes": 1,
-    "skipped": 2
+    "skipped": 1,
+    "tables": 1
    },
    "type": "Adventure"
   },
@@ -84,7 +85,7 @@
    "count": 1,
    "error": "",
    "targets": {
-    "skipped": 1
+    "tables": 1
    },
    "type": "RollTable"
   }
@@ -288,6 +289,13 @@
       "name": "Пробный персонаж 1",
       "type": "character"
      }
+    ],
+    "tables": [
+     {
+      "from": "вложение",
+      "name": "Случайные встречи",
+      "type": null
+     }
     ]
    },
    "notes": [
@@ -297,7 +305,7 @@
      "content": "# Вход в пещеру\n\n## Описание\n\n\u003cp\u003eЗдесь живут \u003ca class=\"catalog-ref\" data-kind=\"monster\" data-name=\"Гоблин-воитель [Goblin Warrior]\"\u003eгоблины\u003c/a\u003e. Спасбросок спасбросок: Лов (СЛ 15), урон 2d6 (огонь), проверка: Мдр (СЛ 12). Сбивает с ног: Лежит. Меч: \u003ca class=\"catalog-ref\" data-kind=\"item\" data-name=\"Длинный меч [Longsword]\"\u003eДлинный меч [Longsword]\u003c/a\u003e. Карта: \u003ca class=\"catalog-ref\" data-kind=\"scene\" data-name=\"Пещера гоблинов\"\u003eПещера гоблинов\u003c/a\u003e. Бросок 1d20+5.\u003c/p\u003e\u003cimg src=\"/uploads/notes/foundry/ag-fifthpendium/2ce14b34-cave.webp\"\u003e\n\n## Карта\n\n![](/uploads/notes/foundry/ag-fifthpendium/2ce14b34-cave.webp)\n"
     }
    ],
-   "skipped": 2,
+   "skipped": 1,
    "warnings": null
   },
   "items": {
@@ -584,9 +592,16 @@
    "applied": {},
    "assets": 0,
    "assetsMissing": 0,
-   "docs": {},
+   "docs": {
+    "tables": [
+     {
+      "name": "Случайные встречи",
+      "type": null
+     }
+    ]
+   },
    "notes": null,
-   "skipped": 1,
+   "skipped": 0,
    "warnings": null
   }
  },

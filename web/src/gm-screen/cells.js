@@ -6,6 +6,7 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { initDiceRoller, formatRolls } from "../dice.js";
 import { showPrompt } from "../modal.js";
+import { tablesIn, rowFor } from "../random-table.js";
 import { ctx, el, openInHost, sendRoll, serverNow, shortName, sourceLine } from "./shared.js";
 
 export function conditionsList(conds) {
@@ -31,6 +32,7 @@ export function openReferenceButton(card) {
 export function referenceBody(card) {
   const body = el("div", { class: "note-render", html: renderNoteHtml(card.description || "") });
   enhanceRolls(body, (formula, label) => sendRoll(formula, `${shortName(card.name)} — ${label}`));
+  wireTableRolls(body, shortName(card.name));
   return [body, sourceLine(card)];
 }
 
@@ -51,6 +53,7 @@ export async function journalBody(id) {
   const md = (entry.content || "").replace(/^\s*#\s+[^\n]*\n?/, "");
   const body = el("div", { class: "note-render", html: renderNoteHtml(md) });
   enhanceRolls(body, (formula, label) => sendRoll(formula, `${entry.title} — ${label}`));
+  wireTableRolls(body, entry.title || "Таблица");
   return { entry, body };
 }
 
@@ -133,7 +136,70 @@ function drawRolls(view) {
   }
 }
 
+// ---- случайные таблицы ----
+
+// Ждущие результата броски по таблицам: «формула|подпись» → что сделать с итогом.
+const tableRolls = new Map();
+
+// wireTableRolls — кнопка «Бросить» у каждой случайной таблицы в тексте и
+// переключатель «скрытно/открыто»; открытый результат уходит в чат.
+function wireTableRolls(body, title) {
+  const tables = tablesIn(body);
+  if (!tables.length) return;
+  const mode = el("button", { class: "table-mode", type: "button" });
+  const drawMode = () => {
+    const hidden = screenHidden.get();
+    mode.innerHTML = icon(hidden ? "eye-off" : "eye", { size: 12 }) + (hidden ? " Скрытно" : " Открыто, в чат");
+    mode.classList.toggle("open", !hidden);
+  };
+  mode.onclick = () => {
+    screenHidden.set(!screenHidden.get());
+    drawMode();
+  };
+  drawMode();
+  tables[0].el.before(mode);
+  tables.forEach((t, i) => {
+    const label = tables.length > 1 ? `${title}, таблица ${i + 1}` : title;
+    const result = el("div", { class: "table-result", hidden: true });
+    const btn = el("button", { class: "table-roll", type: "button", title: `Бросить ${t.formula}`, html: icon("dice", { size: 13 }) });
+    btn.onclick = () => {
+      const hidden = screenHidden.get();
+      const key = t.formula + "|" + label;
+      tableRolls.set(key, (msg) => {
+        const row = rowFor(t, msg.total);
+        const text = row ? row.text : "нет такой строки";
+        result.hidden = false;
+        result.textContent = `${msg.total} → ${text}`;
+        for (const tr of t.el.querySelectorAll("tr.hit")) tr.classList.remove("hit");
+        const idx = row ? t.rows.indexOf(row) : -1;
+        const trs = [...t.el.querySelectorAll("tr")].slice(1).filter((tr) => /^\s*\d/.test(tr.children[0]?.textContent || ""));
+        if (trs[idx]) {
+          trs[idx].classList.add("hit");
+          trs[idx].scrollIntoView({ block: "nearest" });
+        }
+        result.scrollIntoView({ block: "nearest" });
+        if (!hidden && ctx.socket) ctx.socket.send({ type: "chat_send", text: `${label}: ${msg.total} — ${text}` });
+      });
+      const msg = { type: "roll_dice", formula: t.formula, label };
+      if (ctx.socket) ctx.socket.send(hidden ? { ...msg, hidden: true } : msg);
+    };
+    const th = t.el.querySelector("tr")?.children[0];
+    if (th) {
+      // Кость в заголовке — не отдельный бросок, а кнопка таблицы.
+      th.textContent = th.textContent.trim();
+      th.append(" ", btn);
+    }
+    t.el.before(result);
+  });
+}
+
 export function onRoll(msg) {
+  const tableDone = tableRolls.get(msg.formula + "|" + msg.label);
+  if (tableDone) {
+    tableRolls.delete(msg.formula + "|" + msg.label);
+    tableDone(msg);
+    return;
+  }
   const i = pendingRolls.indexOf(msg.formula + "|" + msg.label);
   if (i < 0) return;
   pendingRolls.splice(i, 1);

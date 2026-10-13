@@ -37,6 +37,7 @@ const REFERENCE_KINDS = [
   { key: "черта", glyph: "sparkle", color: "#4a8ef0" },
   { key: "черта класса", glyph: "sparkle", color: "#4a8ef0" },
   { key: "правило", glyph: "hourglass", color: "#b08d57" },
+  { key: "таблица", glyph: "box", color: "#8a9bb0" },
 ];
 
 export const kindKey = lower;
@@ -67,6 +68,7 @@ export function classifyReferenceKind(kind) {
   if (k === "вид") return "species";
   if (k === "происхождение") return "background";
   if (k === "правило") return "rule";
+  if (k === "таблица") return "table";
   return "trait";
 }
 

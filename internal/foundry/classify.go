@@ -16,6 +16,7 @@ const (
 	TargetNotes      = "notes"      // журналы Foundry → журнал стола (domain.JournalEntry)
 	TargetScenes     = "scenes"     // domain.SceneState
 	TargetPlaylists  = "playlists"  // domain.Playlist
+	TargetTables     = "tables"     // RollTable → карточка справочника с бросаемой таблицей
 	// TargetSkipped — распознали, но переносить некуда: таблицы случайных
 	// значений, макросы, колоды карт. Показываем числом в отчёте, чтобы ДМ
 	// видел, что пак не потерялся молча.
@@ -208,7 +209,9 @@ func Classify(d Doc, packType string) string {
 		return TargetScenes
 	case "playlist":
 		return TargetPlaylists
-	case "rolltable", "macro", "cards", "folder":
+	case "rolltable":
+		return TargetTables
+	case "macro", "cards", "folder":
 		return TargetSkipped
 	}
 
@@ -220,6 +223,8 @@ func Classify(d Doc, packType string) string {
 		return TargetScenes
 	case d["sounds"] != nil && d["playing"] != nil:
 		return TargetPlaylists
+	case d["results"] != nil && d["formula"] != nil:
+		return TargetTables
 	case d["prototypeToken"] != nil || d["token"] != nil:
 		return actorTarget(docType)
 	case looksLikeEffect(d):
