@@ -491,6 +491,22 @@ export async function fetchJournalEntry(id) {
 export async function fetchJournalMembers() {
   return apiFetch("/api/journal/members");
 }
+// fetchJournalGraph — граф связей журнала ({nodes, edges}); as — id игрока,
+// глазами которого смотрит ДМ.
+export async function fetchJournalGraph({ as = "" } = {}) {
+  return apiFetch("/api/journal/graph" + (as ? "?as=" + encodeURIComponent(as) : ""));
+}
+// ---- лента сессии (service.SessionLogService) ----
+export async function fetchSessions() {
+  return apiFetch("/api/sessions");
+}
+// as — id игрока, глазами которого смотрит ДМ.
+export async function fetchSessionEvents(id, { as = "" } = {}) {
+  return apiFetch(`/api/sessions/${encodeURIComponent(id)}` + (as ? "?as=" + encodeURIComponent(as) : ""));
+}
+export async function makeSessionSummary(id) {
+  return apiFetch(`/api/sessions/${encodeURIComponent(id)}/summary`, { method: "POST" });
+}
 export async function createJournalEntry({ content, folder = "", def = "none", access = {} } = {}) {
   return apiFetch("/api/journal", {
     method: "POST",

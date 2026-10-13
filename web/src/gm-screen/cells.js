@@ -303,20 +303,3 @@ setInterval(() => {
     else if (t.cell.endsAt) t.draw();
   }
 }, 250);
-
-// ---- счётчик ----
-
-export function counterWidget(cell) {
-  const value = el("div", { class: "counter-value serif", text: String(cell.value || 0) });
-  const step = (d) => () => {
-    cell.value = (cell.value || 0) + d;
-    value.textContent = String(cell.value);
-    ctx.saveQuiet();
-  };
-  if (!ctx.gm) return el("div", { class: "counter" }, [value]);
-  return el("div", { class: "counter" }, [
-    el("button", { class: "counter-btn", type: "button", text: "−", "aria-label": "Меньше", onclick: step(-1) }),
-    value,
-    el("button", { class: "counter-btn", type: "button", text: "+", "aria-label": "Больше", onclick: step(1) }),
-  ]);
-}

@@ -47,3 +47,20 @@ func TestChatStore_TrimKeepsNewestPerCompany(t *testing.T) {
 		t.Fatal("Clear задел чужой мир")
 	}
 }
+
+func TestChatStore_KeepsSystemFlag(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	s := NewChatStore(db, "company-a")
+	if err := s.Add(ctx, &domain.ChatMessage{ID: "n1", At: 1, FromName: "Ритуал", To: domain.ChatToDM, ToName: "ДМ", Text: "готово", System: true}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	got, err := s.List(ctx)
+	if err != nil || len(got) != 1 || !got[0].System {
+		t.Fatalf("сообщение ширмы после перезапуска стало обычным: %+v (err %v)", got, err)
+	}
+}

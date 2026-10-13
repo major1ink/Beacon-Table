@@ -59,7 +59,7 @@ func (a *API) handleScreenSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	world.Room.NotifyLibraryChanged("screen")
-	world.Room.SetScreenTimers(sc.PublicTimers())
+	world.Room.SetScreen(sc)
 	sc.ServerNow = time.Now().UnixMilli()
 	writeJSON(w, http.StatusOK, sc)
 }

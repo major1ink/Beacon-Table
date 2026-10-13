@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Вкладки ширмы. rules/notes собираются сами, grid — ячейки ведущего.
 const (
@@ -19,6 +22,9 @@ const (
 	ScreenCellRoll       = "roll"
 	ScreenCellTimer      = "timer"
 	ScreenCellCounter    = "counter"
+	// Лента сессии и граф связей журнала — виды без настроек.
+	ScreenCellFeed  = "feed"
+	ScreenCellGraph = "graph"
 )
 
 // Screen — ширма ведущего, одна на мир.
@@ -56,8 +62,78 @@ type ScreenCell struct {
 	Seconds int   `json:"seconds,omitempty"`
 	EndsAt  int64 `json:"endsAt,omitempty"`
 	Left    int64 `json:"left,omitempty"`
-	// Public — таймер видят игроки и трансляция.
-	Public bool `json:"public,omitempty"`
+	// Public — таймер или счётчик видят игроки и трансляция; NoTitle — без подписи.
+	Public  bool `json:"public,omitempty"`
+	NoTitle bool `json:"noTitle,omitempty"`
+
+	// Счётчик: Auto — событие стола, которое он считает сам (ScreenAuto*),
+	// пусто — только руками. Who — чьё событие: ScreenWhoPlayers/Monsters,
+	// пусто — любое. Roll/RollMin — какой бросок считать.
+	Auto    string `json:"auto,omitempty"`
+	Who     string `json:"who,omitempty"`
+	Roll    string `json:"roll,omitempty"`
+	RollMin int    `json:"rollMin,omitempty"`
+	// Target — порог: при достижении Notice уходит в чат (NoticeTo), потом
+	// счёт начинается заново (Repeat) или стоит (Done) до сброса.
+	Target     int    `json:"target,omitempty"`
+	Notice     string `json:"notice,omitempty"`
+	NoticeTo   string `json:"noticeTo,omitempty"`
+	Repeat     bool   `json:"repeat,omitempty"`
+	Done       bool   `json:"done,omitempty"`
+	ShowTarget bool   `json:"showTarget,omitempty"`
+}
+
+// События стола, которые умеет считать счётчик.
+const (
+	ScreenAutoRound  = "round"  // новый раунд боя
+	ScreenAutoTurn   = "turn"   // ход бойца
+	ScreenAutoKilled = "killed" // боец выбыл
+	ScreenAutoRoll   = "roll"   // бросок
+	ScreenAutoScene  = "scene"  // показана другая сцена
+	ScreenAutoCombat = "combat" // начат бой
+)
+
+const (
+	ScreenWhoPlayers  = "players"
+	ScreenWhoMonsters = "monsters"
+
+	ScreenRollNat20 = "nat20"
+	ScreenRollNat1  = "nat1"
+	ScreenRollMin   = "min"
+
+	ScreenNoticeAll = "all"
+	ScreenNoticeDM  = "dm"
+)
+
+// ScreenEvent — событие стола для счётчиков. Player — персонаж или игрок, а
+// не противник; D20/Total — грани d20 и итог броска.
+type ScreenEvent struct {
+	Kind   string
+	Player bool
+	D20    []int
+	Total  int
+}
+
+// Counts — засчитать ли событие этому счётчику.
+func (c *ScreenCell) Counts(ev ScreenEvent) bool {
+	if c.Kind != ScreenCellCounter || c.Auto != ev.Kind || c.Done {
+		return false
+	}
+	switch {
+	case c.Who == ScreenWhoPlayers && !ev.Player, c.Who == ScreenWhoMonsters && ev.Player:
+		return false
+	}
+	if ev.Kind != ScreenAutoRoll {
+		return true
+	}
+	switch c.Roll {
+	case ScreenRollNat20:
+		return slices.Contains(ev.D20, 20)
+	case ScreenRollNat1:
+		return slices.Contains(ev.D20, 1)
+	default:
+		return ev.Total >= c.RollMin
+	}
 }
 
 // ScreenTimer — таймер ширмы, открытый игрокам и трансляции.
@@ -69,16 +145,65 @@ type ScreenTimer struct {
 	Left    int64  `json:"left,omitempty"`
 }
 
-// PublicTimers — открытые таймеры со всех вкладок.
-func (s *Screen) PublicTimers() []ScreenTimer {
-	out := []ScreenTimer{}
+// ScreenCounter — счётчик ширмы, открытый игрокам и трансляции.
+type ScreenCounter struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Value  int    `json:"value"`
+	Target int    `json:"target,omitempty"`
+}
+
+// ScreenPublic — что с ширмы видят игроки и трансляция.
+type ScreenPublic struct {
+	Timers   []ScreenTimer   `json:"timers"`
+	Counters []ScreenCounter `json:"counters"`
+}
+
+// Public — открытые таймеры и счётчики со всех вкладок.
+func (s *Screen) Public() ScreenPublic {
+	out := ScreenPublic{Timers: []ScreenTimer{}, Counters: []ScreenCounter{}}
 	if s == nil {
 		return out
 	}
 	for _, t := range s.Tabs {
 		for _, c := range t.Cells {
-			if c.Kind == ScreenCellTimer && c.Public {
-				out = append(out, ScreenTimer{ID: c.ID, Title: c.Title, Seconds: c.Seconds, EndsAt: c.EndsAt, Left: c.Left})
+			if !c.Public {
+				continue
+			}
+			title := c.Title
+			switch {
+			case c.NoTitle:
+				title = ""
+			case title == "" && c.Kind == ScreenCellTimer:
+				title = "Таймер"
+			case title == "":
+				title = "Счётчик"
+			}
+			switch c.Kind {
+			case ScreenCellTimer:
+				out.Timers = append(out.Timers, ScreenTimer{ID: c.ID, Title: title, Seconds: c.Seconds, EndsAt: c.EndsAt, Left: c.Left})
+			case ScreenCellCounter:
+				pc := ScreenCounter{ID: c.ID, Title: title, Value: c.Value}
+				if c.ShowTarget {
+					pc.Target = c.Target
+				}
+				out.Counters = append(out.Counters, pc)
+			}
+		}
+	}
+	return out
+}
+
+// AutoKinds — события, которые считает хоть один счётчик.
+func (s *Screen) AutoKinds() map[string]bool {
+	out := map[string]bool{}
+	if s == nil {
+		return out
+	}
+	for _, t := range s.Tabs {
+		for _, c := range t.Cells {
+			if c.Kind == ScreenCellCounter && c.Auto != "" && !c.Done {
+				out[c.Auto] = true
 			}
 		}
 	}

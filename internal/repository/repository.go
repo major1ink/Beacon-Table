@@ -285,6 +285,15 @@ type ScreenRepository interface {
 	Save(ctx context.Context, s *domain.Screen) error
 }
 
+// SessionLogRepository — ленты сессий, файл .jsonl на сессию (sessionfile).
+// Строки только дописываются.
+type SessionLogRepository interface {
+	// IDs — сессии по возрастанию (id начинается с даты).
+	IDs(ctx context.Context) ([]string, error)
+	Events(ctx context.Context, id string) ([]domain.SessionEvent, error)
+	Append(ctx context.Context, id string, ev domain.SessionEvent) error
+}
+
 // MonsterRepository — библиотека карточек бестиария ДМ, файл-на-монстра (см.
 // internal/repository/monsterfile) — тот же принцип, что и JournalRepository,
 // но контент структурированный JSON (domain.Monster), а не markdown.

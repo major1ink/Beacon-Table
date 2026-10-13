@@ -35,6 +35,7 @@ import (
 	"beacon-table/internal/repository/referencefile"
 	"beacon-table/internal/repository/scenefile"
 	"beacon-table/internal/repository/screenfile"
+	"beacon-table/internal/repository/sessionfile"
 	"beacon-table/internal/repository/spellfile"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/schema"
@@ -62,6 +63,8 @@ type ActiveWorld struct {
 	Journal service.JournalService
 	Boards  service.BoardService
 	Screen  service.ScreenService
+	// Sessions — ленты сессий (world/sessions).
+	Sessions service.SessionLogService
 	// BoardSync — живые доски мира (см. service.BoardHub): по горутине на
 	// доску, открытую сейчас хотя бы одним окном.
 	BoardSync *service.BoardHub
@@ -579,9 +582,9 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 
 	journal := service.NewJournalService(journalRepo)
 	screen := service.NewScreenService(screenRepo, journal)
-	if sc, err := screen.Get(ctx, domain.JournalViewer{IsDM: true}); err == nil {
-		room.SetScreenTimers(sc.PublicTimers())
-	}
+	room.UseScreen(ctx, screen)
+	sessions := service.NewSessionLogService(ctx, sessionfile.NewStore(filepath.Join(dataRoot, "sessions")), journal)
+	room.UseSessions(sessions)
 	boards := service.NewBoardService(boardRepo)
 	boardSync := service.NewBoardHub(boardRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
@@ -607,6 +610,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Journal:    journal,
 		Boards:     boards,
 		Screen:     screen,
+		Sessions:   sessions,
 		BoardSync:  boardSync,
 		Playlists:  playlists,
 		Assets:     assets,

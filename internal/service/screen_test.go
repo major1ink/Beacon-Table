@@ -121,3 +121,57 @@ func TestScreenGridCellsAreClamped(t *testing.T) {
 		t.Fatalf("повтор id или счётчик: %+v", counter)
 	}
 }
+
+func TestScreenCounterSettingsNormalized(t *testing.T) {
+	svc := NewScreenService(screenfile.NewStore(t.TempDir()), newTestJournal(t))
+	saved, err := svc.Save(context.Background(), dm, counterScreen(
+		domain.ScreenCell{ID: "a", Kind: domain.ScreenCellCounter, Auto: "weather", Who: "gods", Roll: "nat20", Target: -4, Notice: "x", NoticeTo: "everyone"},
+		domain.ScreenCell{ID: "b", Kind: domain.ScreenCellCounter, Auto: domain.ScreenAutoRoll, Roll: "big", RollMin: 15, Target: 3, Notice: "  Хватит  "},
+		domain.ScreenCell{ID: "c", Kind: domain.ScreenCellRoll, Auto: domain.ScreenAutoRound, Target: 3, Public: true, NoTitle: true},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b, c := saved.Tabs[0].Cells[0], saved.Tabs[0].Cells[1], saved.Tabs[0].Cells[2]
+	if a.Auto != "" || a.Who != "" || a.Roll != "" || a.Target != 0 || a.Notice != "" || a.NoticeTo != domain.ScreenNoticeDM {
+		t.Fatalf("неизвестное условие и пустой порог: %+v", a)
+	}
+	if b.Roll != domain.ScreenRollMin || b.RollMin != 15 || b.Notice != "Хватит" {
+		t.Fatalf("бросок с итогом: %+v", b)
+	}
+	if c.Auto != "" || c.Target != 0 || c.Public || c.NoTitle {
+		t.Fatalf("не счётчик: %+v", c)
+	}
+}
+
+func TestScreenSaveKeepsServerCounterValue(t *testing.T) {
+	ctx := context.Background()
+	svc := NewScreenService(screenfile.NewStore(t.TempDir()), newTestJournal(t))
+	cell := domain.ScreenCell{ID: "a", Kind: domain.ScreenCellCounter, Auto: domain.ScreenAutoScene, Target: 1}
+	if _, err := svc.Save(ctx, dm, counterScreen(cell)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Count(ctx, domain.ScreenEvent{Kind: domain.ScreenAutoScene}); err != nil {
+		t.Fatal(err)
+	}
+	// Окно ширмы ещё не знает о подсчёте и шлёт старое значение.
+	saved, err := svc.Save(ctx, dm, counterScreen(cell))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := saved.Tabs[0].Cells[0]; got.Value != 1 || !got.Done {
+		t.Fatalf("значение сервера затёрто: %+v", got)
+	}
+	cell.Target = 5
+	saved, _ = svc.Save(ctx, dm, counterScreen(cell))
+	if got := saved.Tabs[0].Cells[0]; got.Value != 1 || got.Done {
+		t.Fatalf("новый порог — считать снова: %+v", got)
+	}
+}
+
+func TestD20Faces(t *testing.T) {
+	got := d20Faces("2d6+1d20-d20+3", []int{4, 5, 20, 1})
+	if len(got) != 2 || got[0] != 20 || got[1] != 1 {
+		t.Fatalf("грани d20: %v", got)
+	}
+}

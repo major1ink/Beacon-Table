@@ -272,6 +272,13 @@ function openJournalWindow(entryId, section) {
 
 document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
+// Сессии и граф — тот же журнал, но своим окном, чтобы не уводить открытую запись.
+function openJournalView(view, title) {
+  openFloatingWindow({ key: "journal-" + view, title, url: "/journal.html?view=" + view, width: 1000, height: 700, popoutFeatures: "width=1000,height=700" });
+}
+document.getElementById("sessionsBtn").onclick = () => openJournalView("sessions", "Сессии");
+document.getElementById("graphBtn").onclick = () => openJournalView("graph", "Граф связей");
+
 document.getElementById("screenBtn").onclick = () =>
   openFloatingWindow({
     key: "gm-screen",
@@ -5248,6 +5255,8 @@ for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-
 attachTooltip(railToolsBtn, () => (toolsFlyoutOpen ? null : RAIL_HELP.tools));
 attachTooltip(document.getElementById("journalBtn"), RAIL_HELP.journal);
 attachTooltip(document.getElementById("screenBtn"), RAIL_HELP.screen);
+attachTooltip(document.getElementById("sessionsBtn"), RAIL_HELP.sessions);
+attachTooltip(document.getElementById("graphBtn"), RAIL_HELP.graph);
 attachTooltip(railMoreBtn, () => (railMenu.hidden ? RAIL_HELP.more : null));
 
 // ---- ширина панели: тянется мышью за #panelResizer ----

@@ -102,8 +102,8 @@ export function createNet(ctx, audio) {
       // приходит и свежеподключившемуся (Room.run). null = убрать показ.
       document.dispatchEvent(new CustomEvent("vtt:showcase", { detail: data.showcase || null }));
     } else if (data.type === "screen_timers") {
-      // Таймеры ширмы, открытые игрокам и трансляции (см. screen-timers.js).
-      document.dispatchEvent(new CustomEvent("vtt:screenTimers", { detail: { timers: data.timers || [], offset: (data.serverNow || Date.now()) - Date.now() } }));
+      // Таймеры и счётчики ширмы, открытые игрокам и трансляции (см. screen-timers.js).
+      document.dispatchEvent(new CustomEvent("vtt:screenTimers", { detail: { timers: data.timers || [], counters: data.counters || [], offset: (data.serverNow || Date.now()) - Date.now() } }));
     } else if (data.type === "roll_result") {
       document.dispatchEvent(new CustomEvent("vtt:rollResult", { detail: data }));
     } else if (data.type === "chat_history" || data.type === "chat_message") {

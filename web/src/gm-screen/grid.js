@@ -3,7 +3,9 @@ import { icon } from "../icons.js";
 import { showPrompt } from "../modal.js";
 import { ctx, data, el, isRule, newCellId, shortName } from "./shared.js";
 import { hasRollTable } from "../random-table.js";
-import { conditionsList, counterWidget, journalBody, openJournalButton, openReferenceButton, referenceBody, rollWidget, timerWidget } from "./cells.js";
+import { conditionsList, journalBody, openJournalButton, openReferenceButton, referenceBody, rollWidget, timerWidget } from "./cells.js";
+import { counterWidget } from "./counter.js";
+import { feedWidget, graphWidget, openFeedButton, openGraphButton } from "./session-cells.js";
 
 const ROW_H = 150;
 const GAP = 12;
@@ -13,6 +15,8 @@ const WIDGETS = [
   { kind: "roll", title: "Бросок", glyph: "dice", w: 1, h: 3 },
   { kind: "timer", title: "Таймер", glyph: "clock", w: 1, h: 1, seconds: 300 },
   { kind: "counter", title: "Счётчик", glyph: "plus", w: 1, h: 1 },
+  { kind: "feed", title: "Лента сессии", glyph: "clock", w: 2, h: 3 },
+  { kind: "graph", title: "Граф связей", glyph: "graph", w: 2, h: 3 },
 ];
 
 const defaultTitle = (cell) => (WIDGETS.find((w) => w.kind === cell.kind) || {}).title || "";
@@ -114,6 +118,14 @@ async function fillCell(cell, title, head, body) {
       break;
     case "counter":
       body.append(counterWidget(cell));
+      break;
+    case "feed":
+      if (!ctx.editing) head.append(openFeedButton());
+      body.append(feedWidget());
+      break;
+    case "graph":
+      if (!ctx.editing) head.append(openGraphButton());
+      body.append(graphWidget());
       break;
     case "reference": {
       const card = (await data.references()).find((r) => r.id === cell.ref);

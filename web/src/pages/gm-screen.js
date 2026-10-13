@@ -8,7 +8,9 @@ import { loadSystemProfile } from "../system-profile.js";
 import { openModal, showPrompt, showAlert, showConfirm } from "../modal.js";
 import { ctx, data, el, isRule, newCellId, openInHost, RULE_TAG, shortName } from "../gm-screen/shared.js";
 import { conditionsList, journalBody, onRoll, openReferenceButton, referenceBody } from "../gm-screen/cells.js";
+import { onSessionMessage } from "../gm-screen/session-cells.js";
 import { renderGrid } from "../gm-screen/grid.js";
+import { onCounters } from "../gm-screen/counter.js";
 
 const tabsEl = document.getElementById("tabs");
 const bodyEl = document.getElementById("body");
@@ -414,6 +416,8 @@ function syncClock(sc) {
     onAuthFailed: () => document.getElementById("authFailedOverlay").classList.add("open"),
     onMessage: async (msg) => {
       if (msg.type === "roll_result") onRoll(msg);
+      else if (msg.type === "session_state" || msg.type === "session_event") onSessionMessage(msg);
+      else if (msg.type === "screen_counters") onCounters(msg.counters);
       else if (msg.type === "journal_changed") {
         data.forget("journal");
         if (shows("notes", "journal")) render();

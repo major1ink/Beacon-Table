@@ -309,6 +309,8 @@ const PLAYER_DRAW_HELP = {
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
   // выезжающей плашке бокового меню.
   vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow, { tip: PANEL_HELP.journal });
+  vtt.sideMenu.addButton(icon("list", { size: 16 }), "Сессии", () => openJournalView("sessions", "Сессии"), { tip: PANEL_HELP.sessions, more: true });
+  vtt.sideMenu.addButton(icon("graph", { size: 16 }), "Граф связей", () => openJournalView("graph", "Граф связей"), { tip: PANEL_HELP.graph, more: true });
   vtt.sideMenu.addButton(icon("backpack", { size: 16 }), "Хаб", openLootHub, { tip: PANEL_HELP.hub });
   initScreenButton(vtt.sideMenu.addButton(icon("book-text", { size: 16 }), "Шпаргалка ведущего", () => openScreenWindow(), { tip: PANEL_HELP.screen }));
 
@@ -364,6 +366,11 @@ function openJournalWindow(entryId) {
     height: 640,
     popoutFeatures: "width=900,height=640",
   });
+}
+
+// Сессии и граф — тот же журнал, но своим окном.
+function openJournalView(view, title) {
+  openFloatingWindow({ key: "journal-" + view, title, url: "/journal.html?view=" + view, width: 1000, height: 700, popoutFeatures: "width=1000,height=700" });
 }
 
 function openScreenWindow(tabId) {

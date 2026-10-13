@@ -73,7 +73,7 @@ function matchByName(list, name, folder) {
 // либо ВЫНЕСЕННОЕ кнопкой 🗗 отдельное окно браузера (window.parent — оно
 // само, а топ-документ — это window.opener, см. floating-window.js). Без
 // разбора этого случая ссылки в вынесенном окне журнала молча не работали.
-function hostWindow() {
+export function hostWindow() {
   if (window.opener && window.opener !== window) return window.opener;
   return window.parent;
 }
