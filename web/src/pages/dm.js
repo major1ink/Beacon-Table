@@ -87,6 +87,7 @@ import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutoria
 import { dmTourSteps } from "../tutorial-dm.js";
 import { changeWorldSystem, fitsSystem } from "../world-system.js";
 import { showMissingModulesNotice } from "../modules-notice.js";
+import { openModulesShowcase } from "../modules-link.js";
 import { cardTokenCells, loadSystemProfile } from "../system-profile.js";
 import { escapeHtml, cssUrl, downloadFile } from "../html.js";
 import { setArtBackground } from "../art.js";
@@ -3067,7 +3068,7 @@ async function toggleWorldModule(id, box) {
   }
 }
 
-document.getElementById("moduleShowcaseBtn").onclick = () => window.open("/modules.html", "_blank", "noopener");
+document.getElementById("moduleShowcaseBtn").onclick = () => openModulesShowcase();
 
 // Список того, что ДМ хотя бы раз импортировал в этот мир (см.
 // service.FoundryService.Installed), плюс необязательная проверка новых

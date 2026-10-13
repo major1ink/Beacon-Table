@@ -20,6 +20,8 @@ import { glyphNode } from "../condition-glyphs.js";
 import { loadSystemProfile, moduleTitle, moduleAttribution } from "../system-profile.js";
 import { openModal, showPrompt, showAlert } from "../modal.js";
 import { withRollMode } from "../roll-mode.js";
+import { initDiceRoller, formatRolls } from "../dice.js";
+import { openFloatingWindow } from "../floating-window.js";
 
 // Правило для ширмы — карточка справочника с этим тегом.
 const RULE_TAG = "ширма";
@@ -54,8 +56,11 @@ const el = (tag, attrs = {}, kids = []) => {
 
 const hostWindow = () => (window.opener && window.opener !== window ? window.opener : window.parent);
 
+// Окно десктопа живёт без стола — карточки открываем прямо в нём.
 function openInHost(key, title, url, navigate = false) {
-  hostWindow().postMessage({ type: "beacon:openFloatingWindow", key, title, url, navigate }, location.origin);
+  const host = hostWindow();
+  if (host === window) openFloatingWindow({ key, title, url, navigate, width: 900, height: 640 });
+  else host.postMessage({ type: "beacon:openFloatingWindow", key, title, url, navigate }, location.origin);
 }
 
 function sendRoll(formula, label, hidden) {
@@ -333,48 +338,55 @@ function pickNote(tab, entries) {
 
 // ---- «Инструменты» ----
 
-function renderTools() {
-  const grid = el("div", { class: "tools-grid" });
-  const formula = el("input", { class: "field", id: "hiddenFormula", value: localStorage.getItem("beacon:screenFormula") || "1d20", autocomplete: "off" });
-  const label = el("input", { class: "field", id: "hiddenLabel", placeholder: "Например: Скрытность гоблинов", autocomplete: "off", style: "font-size:13px" });
-  label.value = rollLabel;
-  label.oninput = () => (rollLabel = label.value);
-  const roll = () => {
-    const f = formula.value.trim();
-    if (!f) return;
+// Свой режим скрытности у ширмы, по умолчанию скрыто: общий режим стола не трогаем.
+const screenHidden = {
+  get: () => {
     try {
-      localStorage.setItem("beacon:screenFormula", f);
+      return localStorage.getItem("beacon:screenRollOpen") !== "1";
+    } catch {
+      return true;
+    }
+  },
+  set: (on) => {
+    try {
+      if (on) localStorage.removeItem("beacon:screenRollOpen");
+      else localStorage.setItem("beacon:screenRollOpen", "1");
     } catch {
       /* приватный режим */
     }
-    sendRoll(f, label.value.trim() || "Скрытый бросок", true);
-  };
-  formula.onkeydown = (e) => e.key === "Enter" && roll();
-  label.onkeydown = (e) => e.key === "Enter" && roll();
-  const quick = el("div", { class: "quick" });
-  for (const f of ["1d20", "2d6", "1d100", "1d6", "1d4"]) {
-    const b = el("button", { type: "button", text: f });
-    b.onclick = () => {
-      formula.value = f;
-      roll();
-    };
-    quick.append(b);
-  }
-  const btn = el("button", { class: "primary", type: "button", html: icon("dice", { size: 17 }) + " Бросить скрытно" });
-  btn.onclick = roll;
+  },
+};
+
+// Броски, отправленные отсюда: результат показываем только их.
+const pendingRolls = [];
+
+function renderTools() {
+  const grid = el("div", { class: "tools-grid" });
+  const label = el("input", { class: "field", id: "rollLabel", placeholder: "Например: Скрытность гоблинов", autocomplete: "off", style: "font-size:13px" });
+  label.value = rollLabel;
+  label.oninput = () => (rollLabel = label.value);
+  const tray = el("div");
+  initDiceRoller(
+    tray,
+    (msg) => {
+      pendingRolls.push(msg.formula + "|" + msg.label);
+      if (pendingRolls.length > 20) pendingRolls.shift();
+      if (socket) socket.send(msg);
+    },
+    { hiddenToggle: true, hiddenState: screenHidden, decorate: (msg) => ({ ...msg, label: Array.from(rollLabel.trim() || "Бросок с ширмы").slice(0, 80).join("") }) }
+  );
+  tray.querySelector("[data-hidden]")?.append(" Скрытно");
 
   rollsEl = el("div", { style: "display:flex;flex-direction:column;gap:8px" });
   renderRolls();
 
   grid.append(
     el("article", { class: "cell" }, [
-      el("div", { class: "cell-head" }, [el("h3", { text: "Скрытый бросок" })]),
-      el("label", { class: "label", for: "hiddenFormula", text: "Формула" }),
-      formula,
-      quick,
-      el("label", { class: "label", for: "hiddenLabel", text: "Что бросаем" }),
+      el("div", { class: "cell-head" }, [el("h3", { text: "Бросок" })]),
+      el("label", { class: "label", for: "rollLabel", text: "Что бросаем" }),
       label,
-      btn,
+      el("div", { class: "label", text: "Кубы: клик — добавить, правый клик — убрать" }),
+      tray,
       rollsEl,
     ])
   );
@@ -390,14 +402,14 @@ function renderRolls() {
         el("div", { class: "total", text: String(last.total) }),
         el("div", {}, [
           el("div", { text: `${last.label || last.formula}` }),
-          el("div", { class: "dim", style: "font-size:12px", text: `${last.formula} · ${(last.rolls || []).join(", ")}${last.modifier ? ` ${last.modifier > 0 ? "+" : "−"} ${Math.abs(last.modifier)}` : ""}` }),
+          el("div", { class: "dim", style: "font-size:12px", text: `${formatRolls(last.formula, last.rolls)}${last.modifier ? ` ${last.modifier > 0 ? "+" : "−"} ${Math.abs(last.modifier)}` : ""}${last.hidden ? " · скрыто" : ""}` }),
         ]),
       ])
-    : el("p", { class: "dim", style: "margin:0", text: "Результат увидите только вы, на трансляцию кубы не уходят." });
+    : el("p", { class: "dim", style: "margin:0", text: "Скрытый бросок видите только вы, на трансляцию кубы не уходят." });
 
   const recent = el("div");
   for (const r of hiddenRolls.slice(1, 8)) {
-    recent.append(el("div", { class: "roll-row" }, [el("span", { style: "flex:1", text: r.label || "Бросок" }), el("span", { class: "dim", text: r.formula }), el("b", { text: String(r.total) })]));
+    recent.append(el("div", { class: "roll-row" }, [el("span", { style: "flex:1", text: r.label || "Бросок" }), r.hidden ? el("span", { class: "dim", title: "Скрытый", html: icon("eye-off", { size: 12 }) }) : null, el("span", { class: "dim", text: r.formula }), el("b", { text: String(r.total) })]));
   }
 
   rollsEl.append(result);
@@ -405,7 +417,9 @@ function renderRolls() {
 }
 
 function onRoll(data) {
-  if (!gm || !data.hidden || data.fromRole !== "dm") return;
+  const i = pendingRolls.indexOf(data.formula + "|" + data.label);
+  if (!gm || data.fromRole !== "dm" || i < 0) return;
+  pendingRolls.splice(i, 1);
   hiddenRolls.unshift(data);
   hiddenRolls.length = Math.min(hiddenRolls.length, 20);
   if (rollsEl && rollsEl.isConnected) renderRolls();

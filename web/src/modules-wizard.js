@@ -5,6 +5,7 @@ import { installCatalogModule, installModuleFile } from "./api.js";
 import { el as h } from "./card-shell.js";
 import { openModal } from "./modal.js";
 import { TYPE_LABEL, formatSize } from "./modules-view.js";
+import { openModulesShowcase } from "./modules-link.js";
 
 let styled = false;
 function injectStyle() {
@@ -134,7 +135,15 @@ export function runModulesWizard(req) {
           h("div", { class: "wiz-tools" }, [
             h("button", { type: "button", class: "act wiz-act", text: "Установить всё", onclick: installAll }),
             h("button", { type: "button", class: "act alt wiz-act", text: "Из файла", onclick: () => fileInput.click() }),
-            h("a", { class: "hint", href: "/modules.html", target: "_blank", rel: "noopener", text: "Открыть витрину" }),
+            h("a", {
+              class: "hint",
+              href: "/modules.html",
+              text: "Открыть витрину",
+              onclick: (e) => {
+                e.preventDefault();
+                openModulesShowcase();
+              },
+            }),
           ]),
           fileInput,
           statusEl,

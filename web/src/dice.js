@@ -99,7 +99,9 @@ export function formatRolls(formula, rolls) {
 }
 
 // hiddenToggle — кнопка скрытых бросков (roll-mode.js); role — чья панель, для подсказки.
-export function initDiceRoller(controlsContainer, send, { hiddenToggle = false, role = "dm" } = {}) {
+// hiddenState {get, set} — свой режим вместо общего; decorate — дописать в бросок (подпись).
+export function initDiceRoller(controlsContainer, send, { hiddenToggle = false, role = "dm", hiddenState = null, decorate = null } = {}) {
+  const hidden = hiddenState || { get: isRollHidden, set: setRollHidden };
   controlsContainer.classList.add("dice-tray");
   controlsContainer.innerHTML = `
     <div class="dice-buttons">${DICE.map(
@@ -159,7 +161,8 @@ export function initDiceRoller(controlsContainer, send, { hiddenToggle = false, 
   // следующий бросок случайно складывался с прошлым.
   function roll(formula) {
     if (!formula) return;
-    send(withRollMode({ type: "roll_dice", formula }));
+    const msg = decorate ? decorate({ type: "roll_dice", formula }) : { type: "roll_dice", formula };
+    send(hiddenState ? (hidden.get() ? { ...msg, hidden: true } : msg) : withRollMode(msg));
     clear();
   }
 
@@ -180,15 +183,17 @@ export function initDiceRoller(controlsContainer, send, { hiddenToggle = false, 
   if (hiddenBtn) {
     const who = role === "dm" ? "только ДМ" : "только вы и ДМ";
     const renderHidden = () => {
-      const on = isRollHidden();
+      const on = hidden.get();
       hiddenBtn.classList.toggle("has", on);
       hiddenBtn.setAttribute("aria-pressed", String(on));
-      hiddenBtn.title = on
-        ? `Скрытые броски включены: результат видят ${who}, трансляция — нет. Действует и на броски с листа, из карточек и книг`
-        : `Скрытые броски: результат увидят ${who}`;
+      if (hiddenState) hiddenBtn.title = on ? `Скрытно: результат видят ${who}, трансляция — нет` : "Открыто: результат увидят все";
+      else
+        hiddenBtn.title = on
+          ? `Скрытые броски включены: результат видят ${who}, трансляция — нет. Действует и на броски с листа, из карточек и книг`
+          : `Скрытые броски: результат увидят ${who}`;
     };
     hiddenBtn.onclick = () => {
-      setRollHidden(!isRollHidden());
+      hidden.set(!hidden.get());
       renderHidden();
     };
     // Режим могли переключить в другом окне того же стола.
