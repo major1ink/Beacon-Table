@@ -242,6 +242,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/boards/{id}/access", a.handleBoardAccess)
 	mux.HandleFunc("DELETE /api/boards/{id}", a.handleBoardDelete)
 
+	mux.HandleFunc("GET /api/screen", a.handleScreenGet)
+	mux.HandleFunc("PUT /api/screen", a.handleScreenSave)
+
 	mux.HandleFunc("GET /api/journal-folders", a.handleJournalFoldersList)
 	mux.HandleFunc("POST /api/journal-folders", a.handleJournalFolderCreate)
 	mux.HandleFunc("PUT /api/journal-folders", a.handleJournalFolderRename)

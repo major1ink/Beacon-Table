@@ -105,6 +105,8 @@ export function openFloatingWindow({
   popoutFeatures = "width=1040,height=880",
   width = 1040,
   height = 880,
+  // desktopPopout — вынос в окно десктопа: window.open там не работает.
+  desktopPopout = null,
 }) {
   injectStyle();
   const existing = openWindows.get(key);
@@ -229,7 +231,8 @@ export function openFloatingWindow({
     // внутри это то же самое, что закрытие, поэтому спрашиваем так же.
     if (!(await confirmClose())) return;
     await flushIframe(); // новое окно грузится с сервера — сначала дописать несохранённое
-    window.open(url, key, popoutFeatures);
+    if (desktopPopout && window.beaconDesktop) desktopPopout();
+    else window.open(url, key, popoutFeatures);
     close();
   };
 

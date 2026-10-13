@@ -513,6 +513,14 @@ export async function deleteJournalEntry(id) {
   return apiFetch(`/api/journal/${id}`, { method: "DELETE" });
 }
 
+// ---- ширма ведущего: игроку сервер отдаёт только открытые ему вкладки ----
+export async function fetchScreen() {
+  return apiFetch("/api/screen");
+}
+export async function saveScreen(screen) {
+  return apiFetch("/api/screen", { method: "PUT", body: JSON.stringify(screen) });
+}
+
 // ---- доски стола (ДМ и игроки) — web/board.html ----
 // Права те же, что у записей журнала, и теми же словами (см. domain.Sharing):
 // "default" — что достаётся всем за столом, "access" — точечные выдачи.

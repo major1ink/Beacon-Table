@@ -271,6 +271,17 @@ function openJournalWindow(entryId, section) {
 
 document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
+document.getElementById("screenBtn").onclick = () =>
+  openFloatingWindow({
+    key: "gm-screen",
+    title: "Ширма",
+    url: "/gm-screen.html",
+    width: 1100,
+    height: 720,
+    popoutFeatures: "width=1100,height=720",
+    desktopPopout: () => window.beaconDesktop.openScreen && window.beaconDesktop.openScreen(),
+  });
+
 // hideOwnerOnlyUI — убрать со стола то, что доступно только хозяину сервера:
 // список миров, вкладки «Трансляция» и «Сервер» в настройках. Права на
 // сервере проверяет он сам (см. requireOwner), здесь — только внешний вид.
@@ -5235,6 +5246,7 @@ for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-
 }
 attachTooltip(railToolsBtn, () => (toolsFlyoutOpen ? null : RAIL_HELP.tools));
 attachTooltip(document.getElementById("journalBtn"), RAIL_HELP.journal);
+attachTooltip(document.getElementById("screenBtn"), RAIL_HELP.screen);
 attachTooltip(railMoreBtn, () => (railMenu.hidden ? RAIL_HELP.more : null));
 
 // ---- ширина панели: тянется мышью за #panelResizer ----

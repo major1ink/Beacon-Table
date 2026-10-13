@@ -18,6 +18,7 @@ import {
   deleteCharacterApi,
   fetchPregens,
   claimPregen,
+  fetchScreen,
 } from "../api.js";
 import { icon } from "../icons.js";
 import { initFullscreenButton } from "../fullscreen.js";
@@ -308,6 +309,7 @@ const PLAYER_DRAW_HELP = {
   // выезжающей плашке бокового меню.
   vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow, { tip: PANEL_HELP.journal });
   vtt.sideMenu.addButton(icon("backpack", { size: 16 }), "Хаб", openLootHub, { tip: PANEL_HELP.hub });
+  initScreenButton(vtt.sideMenu.addButton(icon("book-text", { size: 16 }), "Шпаргалка ведущего", () => openScreenWindow(), { tip: PANEL_HELP.screen }));
 
   vtt.sideMenu.addSeparator();
 
@@ -359,6 +361,40 @@ function openJournalWindow(entryId) {
     width: 900,
     height: 640,
     popoutFeatures: "width=900,height=640",
+  });
+}
+
+function openScreenWindow(tabId) {
+  openFloatingWindow({
+    key: "gm-screen",
+    title: "Шпаргалка ведущего",
+    url: "/gm-screen.html" + (tabId ? "?tab=" + encodeURIComponent(tabId) : ""),
+    navigate: !!tabId,
+    width: 1000,
+    height: 680,
+    popoutFeatures: "width=1000,height=680",
+  });
+}
+
+// Кнопка видна, пока ведущий что-то открыл; новая открытая вкладка сразу всплывает окном.
+function initScreenButton(btn) {
+  let shared = null;
+  const refresh = async () => {
+    let tabs = [];
+    try {
+      tabs = (await fetchScreen()).tabs || [];
+    } catch {
+      return;
+    }
+    btn.style.display = tabs.length ? "" : "none";
+    const fresh = shared ? tabs.find((t) => !shared.has(t.id)) : null;
+    shared = new Set(tabs.map((t) => t.id));
+    if (fresh) openScreenWindow(fresh.id);
+  };
+  btn.style.display = "none";
+  refresh();
+  document.addEventListener("vtt:libraryChanged", (e) => {
+    if (e.detail.kind === "screen") refresh();
   });
 }
 

@@ -95,6 +95,11 @@ func desktopWindow(open func(dir string) (server, error)) {
 			l.toggleBroadcast()
 		}
 	})
+	app.Event.On(screenEvent, func(e *application.CustomEvent) {
+		if e.Sender == mainWindow {
+			l.openScreen()
+		}
+	})
 	// Настройки десктопа со страницы стола: запрос текущих и смена
 	// «при закрытии окна» (см. desktopJS и раздел «Интерфейс ДМ»).
 	app.Event.On(stateEvent, func(e *application.CustomEvent) {
@@ -130,6 +135,7 @@ const (
 	desktopAppID   = "ru.beacontable.BeaconTable"
 	mainWindow     = "main"
 	broadcastEvent = "beacon:broadcast"
+	screenEvent    = "beacon:screen"
 	stateEvent     = "beacon:state"
 	closeEvent     = "beacon:close:"
 	closeTray      = "tray"
@@ -164,6 +170,7 @@ type launcher struct {
 	origin string                     // сервер, выбранный на экране запуска
 	folder string                     // папка стола, если он поднят здесь
 	cast   *application.WebviewWindow // окно трансляции, пока открыто
+	screen *application.WebviewWindow // вынесенная ширма ведущего
 	tray   tray
 
 	closeToTray atomic.Bool // копия prefs.closeToTray() для хука закрытия окна
@@ -271,6 +278,38 @@ func (l *launcher) toggleBroadcast() {
 	l.castChanged(true)
 }
 
+// openScreen — ширма ведущего отдельным окном, на втором мониторе, если он есть:
+// window.open в окне приложения не работает.
+func (l *launcher) openScreen() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.screen != nil {
+		l.screen.Focus()
+		return
+	}
+	if l.origin == "" {
+		return
+	}
+	opts := application.WebviewWindowOptions{
+		Name:   "gm-screen",
+		Title:  "Beacon Table — ширма",
+		URL:    l.origin + "/gm-screen.html",
+		Width:  1100,
+		Height: 720,
+	}
+	if s := secondScreen(l.app); s != nil && canPlaceWindows() {
+		opts.Screen = s
+		opts.StartState = application.WindowStateMaximised
+	}
+	l.screen = l.app.Window.NewWithOptions(opts)
+	go reloadOnCrash(l.screen)
+	l.screen.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+		l.mu.Lock()
+		l.screen = nil
+		l.mu.Unlock()
+	})
+}
+
 // castChanged — сказать столу в главном окне, открыта ли трансляция: от
 // этого зависит надпись на кнопке.
 func (l *launcher) castChanged(open bool) {
@@ -336,6 +375,7 @@ func desktopJS() string {
   if (!window.beaconDesktop) {
     window.beaconDesktop = {
       toggleBroadcast: () => send("wails:event:emit:%s"),
+      openScreen: () => send("wails:event:emit:%s"),
       // Ответ приходит событием "beacon:desktop-state".
       requestState: () => send("wails:event:emit:%s"),
       setCloseAction: (action) => {
@@ -356,7 +396,7 @@ func desktopJS() string {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", back);
   else back();
-})();`, launcherURL(), broadcastEvent, stateEvent, closeTray, closeQuit, closeEvent)
+})();`, launcherURL(), broadcastEvent, screenEvent, stateEvent, closeTray, closeQuit, closeEvent)
 }
 
 // shutdown — окно закрыто: поднятый стол должен сохранить мир до выхода.

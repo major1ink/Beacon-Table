@@ -34,6 +34,7 @@ import (
 	"beacon-table/internal/repository/monsterfile"
 	"beacon-table/internal/repository/referencefile"
 	"beacon-table/internal/repository/scenefile"
+	"beacon-table/internal/repository/screenfile"
 	"beacon-table/internal/repository/spellfile"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/schema"
@@ -60,6 +61,7 @@ type ActiveWorld struct {
 
 	Journal service.JournalService
 	Boards  service.BoardService
+	Screen  service.ScreenService
 	// BoardSync — живые доски мира (см. service.BoardHub): по горутине на
 	// доску, открытую сейчас хотя бы одним окном.
 	BoardSync *service.BoardHub
@@ -196,7 +198,7 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 	}
 	mods, _ := m.resolveModules(company)
 	for _, mod := range mods {
-		p.Modules = append(p.Modules, domain.WorldModule{ID: mod.Manifest.ID, Title: mod.Manifest.Title, Type: mod.Manifest.Type, Counts: mod.Counts()})
+		p.Modules = append(p.Modules, domain.WorldModule{ID: mod.Manifest.ID, Title: mod.Manifest.Title, Type: mod.Manifest.Type, Attribution: mod.Manifest.Attribution, Counts: mod.Counts()})
 	}
 	if company.System == domain.SystemCustom {
 		return p
@@ -493,6 +495,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
 	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
 	boardRepo := boardfile.NewStore(filepath.Join(dataRoot, "boards"))
+	screenRepo := screenfile.NewStore(filepath.Join(dataRoot, "screen"))
 	// Карточки модулей: у каждого вида — источник на каждый подключённый
 	// модуль, в порядке подключения (см. cardcatalog.Catalog).
 	mods, missingMods := m.resolveModules(company)
@@ -577,6 +580,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Conditions: conditions,
 		Journal:    journal,
 		Boards:     boards,
+		Screen:     service.NewScreenService(screenRepo, journal),
 		BoardSync:  boardSync,
 		Playlists:  playlists,
 		Assets:     assets,

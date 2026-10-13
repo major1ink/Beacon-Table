@@ -99,6 +99,7 @@ function renderDetail(i) {
   if (i.description) detailEl.appendChild(h("p", { class: "detail-desc", text: i.description }));
   const facts = [i.author && "Автор: " + i.author, i.license && "Лицензия: " + i.license, i.installedVersion && "Установлена версия " + i.installedVersion].filter(Boolean);
   if (facts.length) detailEl.appendChild(h("p", { class: "hint", text: facts.join(" · ") }));
+  if (i.attribution) detailEl.appendChild(h("p", { class: "hint", text: "Источник текста: " + i.attribution }));
   if (!i.compatible) detailEl.appendChild(h("p", { class: "hint", text: `Нужна программа не ниже ${i.minAppVersion}, сейчас ${appVersion || "старше"} — обновите Beacon Table.` }));
 
   if (i.systems.length && i.type === "content") {

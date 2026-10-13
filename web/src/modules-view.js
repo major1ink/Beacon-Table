@@ -29,6 +29,7 @@ export function mergeModules(entries, installed) {
     description: e.description || "",
     author: e.author || "",
     license: e.license || "",
+    attribution: e.attribution || "",
     systems: e.systems || [],
     requires: e.requires || [],
     minAppVersion: e.minAppVersion || "",
@@ -41,6 +42,7 @@ export function mergeModules(entries, installed) {
     const known = byId.get(m.id);
     if (known) {
       known.source = m.source;
+      known.attribution ||= m.attribution || "";
       known.counts = m.counts || null;
       continue;
     }
@@ -56,6 +58,7 @@ export function mergeModules(entries, installed) {
       description: m.description || "",
       author: m.author || "",
       license: m.license || "",
+      attribution: m.attribution || "",
       systems: m.systems || [],
       requires: m.requires || [],
       minAppVersion: m.minAppVersion || "",

@@ -54,6 +54,8 @@ type WorldModule struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 	Type  string `json:"type"`
+	// Attribution — откуда взят текст модуля.
+	Attribution string `json:"attribution,omitempty"`
 	// Counts — карточек каждого вида в модуле: клиент не показывает разделы,
 	// которых в модуле нет.
 	Counts map[string]int `json:"counts"`

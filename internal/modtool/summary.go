@@ -22,6 +22,7 @@ type Summary struct {
 	Description   string              `json:"description,omitempty"`
 	Author        string              `json:"author,omitempty"`
 	License       string              `json:"license,omitempty"`
+	Attribution   string              `json:"attribution,omitempty"`
 	MinAppVersion string              `json:"minAppVersion,omitempty"`
 	Systems       []string            `json:"systems,omitempty"`
 	Requires      []module.Dependency `json:"requires,omitempty"`
@@ -48,7 +49,7 @@ func Summarize(dir string) (*Summary, error) {
 	}
 	s := &Summary{
 		ID: man.ID, Version: man.Version, Title: man.Title, Type: man.Type,
-		Description: man.Description, Author: man.Author, License: man.License,
+		Description: man.Description, Author: man.Author, License: man.License, Attribution: man.Attribution,
 		MinAppVersion: man.MinAppVersion, Systems: man.Systems, Requires: man.Requires, LegacyIDs: man.LegacyIDs,
 		Counts: map[string]int{}, Names: map[string][]string{}, Slugs: map[string][]string{},
 	}

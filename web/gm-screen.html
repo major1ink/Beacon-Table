@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Beacon Table — Ширма</title>
+  <link rel="stylesheet" href="/src/styles/theme.css" />
+  <style>
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px; line-height: 1.45; display: flex; flex-direction: column;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    [hidden] { display: none !important; }
+    .dim { color: var(--text-dim); }
+    .serif { font-family: var(--font-serif); }
+
+    #topBar { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel-bg); flex-wrap: wrap; }
+    #tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tab { height: 36px; padding: 0 14px; border: 0; border-radius: var(--radius); background: transparent; color: var(--text-dim); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .tab:hover { color: var(--text); }
+    .tab.on { background: var(--surface); color: var(--heading); }
+    .tab .shared-eye { color: var(--green-bright); display: flex; }
+    #topBar .spacer { flex: 1 1 auto; }
+    .badge { font-size: 11.5px; font-weight: 500; padding: 4px 10px; border-radius: var(--radius-pill); background: var(--surface); color: var(--text-dim); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    #shareBtn { height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 12px 0 9px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
+    #shareBtn .knob { width: 28px; height: 16px; border-radius: 999px; background: var(--surface-hover); position: relative; transition: background .12s; }
+    #shareBtn .knob i { position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: left .12s; }
+    #shareBtn[aria-pressed="true"] { border-color: rgba(127,214,148,.35); background: rgba(31,107,58,.25); color: #bdf0c9; }
+    #shareBtn[aria-pressed="true"] .knob { background: #2f9a55; }
+    #shareBtn[aria-pressed="true"] .knob i { left: 14px; }
+    #sharedStrip { display: none; align-items: center; gap: 8px; padding: 7px 14px; background: rgba(31,107,58,.14); border-bottom: 1px solid rgba(127,214,148,.15); color: #c9eed3; font-size: 12.5px; }
+    #sharedStrip.open { display: flex; }
+
+    #body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .empty-state { padding: 40px 20px; text-align: center; color: var(--text-dim); }
+
+    /* ---- «Правила» ---- */
+    .rules-grid { columns: 280px; column-gap: 12px; padding: 14px 16px 6px; }
+    .rules-grid .cell { break-inside: avoid; margin-bottom: 12px; }
+    .cell { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .cell-head { display: flex; align-items: center; gap: 8px; }
+    .cell-head h3 { margin: 0; flex: 1; min-width: 0; font-family: var(--font-serif); font-size: 21px; font-weight: 700; color: var(--heading); line-height: 1.1; }
+    .src { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--accent-bg); color: #cfc8ff; white-space: nowrap; }
+    .src.world { background: rgba(181,137,31,.2); color: #ecc970; }
+    .icon-btn { width: 30px; height: 30px; flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--text-dim); display: flex; align-items: center; justify-content: center; padding: 0; }
+    .icon-btn:hover { background: var(--surface); color: var(--text); }
+    .cell .note-render { font-size: 13px; line-height: 1.5; }
+    .cell .note-render > :first-child { margin-top: 0; }
+    .cell .note-render > :last-child { margin-bottom: 0; }
+    .attribution { font-size: 11px; color: var(--text-dim); }
+    .cond-row { display: flex; gap: 8px; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05); min-width: 0; background: none; border-left: 0; border-right: 0; border-top: 0; text-align: left; width: 100%; color: inherit; }
+    .cond-row:hover b { color: var(--accent); }
+    .cond-row .cond-glyph { width: 18px; height: 18px; flex: none; display: flex; align-items: center; justify-content: center; }
+    .cond-row .cond-glyph svg { width: 16px; height: 16px; }
+    .cond-row b { color: var(--heading); font-weight: 600; white-space: nowrap; }
+    .cond-row span.dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .cell.add { border-style: dashed; border-color: rgba(255,255,255,.16); background: transparent; }
+    .ghost-btn { height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,.14); background: transparent; align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+    .ghost-btn:hover { background: var(--surface); }
+
+    /* ---- «Заметки» ---- */
+    .notes { display: flex; height: 100%; min-height: 0; }
+    .notes aside { width: 260px; flex: none; border-right: 1px solid var(--border); padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+    .pin { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: var(--radius); border: 1px solid transparent; background: transparent; text-align: left; }
+    .pin:hover { background: var(--surface); }
+    .pin.on { background: var(--surface); border-color: rgba(124,108,240,.45); }
+    .pin .t { display: flex; align-items: center; gap: 6px; color: var(--heading); font-weight: 600; }
+    .pin small { font-size: 11.5px; color: var(--text-dim); }
+    .notes article { flex: 1; min-width: 0; padding: 18px 26px; overflow-y: auto; }
+    .note-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+    .note-head h1 { flex: 1; margin: 0; font-family: var(--font-serif); font-size: 28px; color: var(--heading); line-height: 1.1; }
+    .note-render { font-size: 14px; line-height: 1.65; overflow-wrap: break-word; }
+    .note-render h1, .note-render h2, .note-render h3 { margin: 1em 0 .4em; line-height: 1.3; }
+    .note-render h1 { font-size: 1.5em; }
+    .note-render h2 { font-size: 1.25em; }
+    .note-render p { margin: .6em 0; }
+    .note-render a { color: var(--accent); text-decoration: none; }
+    .note-render blockquote { margin: .6em 0; padding: 2px 14px; border-left: 3px solid var(--accent); opacity: .85; }
+    .note-render ul, .note-render ol { margin: .4em 0; padding-left: 1.5em; }
+    .note-render table { border-collapse: collapse; width: 100%; }
+    .note-render th, .note-render td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+    .note-render th { color: var(--text-dim); font-weight: 500; font-size: .9em; }
+    .note-render img { max-width: 100%; border-radius: 6px; }
+    .note-render code { background: var(--surface); border-radius: 4px; padding: 1px 5px; }
+
+    /* ---- «Инструменты» ---- */
+    .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; padding: 14px 16px; align-items: start; }
+    .field { height: 40px; box-sizing: border-box; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); color: var(--heading); padding: 0 12px; font: inherit; font-size: 15px; width: 100%; }
+    .label { font-size: 12px; color: var(--text-dim); }
+    .primary { height: 40px; border-radius: var(--radius); border: 0; background: var(--accent); color: var(--on-accent); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .primary:hover { background: var(--accent-hover); }
+    .quick { display: flex; gap: 6px; flex-wrap: wrap; }
+    .quick button { height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+    .roll-result { border-radius: var(--radius); background: var(--bg); padding: 12px 14px; display: flex; align-items: center; gap: 14px; }
+    .roll-result .total { font-family: var(--font-serif); font-size: 50px; font-weight: 700; color: var(--heading); line-height: 1; min-width: 48px; text-align: center; }
+    .roll-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+    .roll-row:last-child { border-bottom: 0; }
+    .roll-row b { color: var(--heading); min-width: 26px; text-align: right; }
+
+    #authFailedOverlay { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(10,10,14,0.92); align-items: center; justify-content: center; text-align: center; font-size: 14px; padding: 20px; }
+    #authFailedOverlay.open { display: flex; }
+
+    @media (max-width: 640px) {
+      .notes { flex-direction: column; }
+      .notes aside { width: auto; border-right: 0; border-bottom: 1px solid var(--border); max-height: 40%; }
+    }
+  </style>
+  <link rel="stylesheet" href="/system-theme.css" />
+</head>
+<body>
+  <div id="topBar">
+    <div id="tabs" role="tablist" aria-label="Вкладки ширмы"></div>
+    <div class="spacer"></div>
+    <span id="modeBadge" class="badge" hidden></span>
+    <button id="shareBtn" type="button" aria-pressed="false" hidden><span class="knob" aria-hidden="true"><i></i></span>Видят игроки</button>
+  </div>
+  <div id="sharedStrip"></div>
+  <div id="body"></div>
+
+  <div id="authFailedOverlay">Сессия истекла или недействительна. Закрой окно и войди заново.</div>
+
+  <script type="module" src="/src/pages/gm-screen.js"></script>
+</body>
+</html>
