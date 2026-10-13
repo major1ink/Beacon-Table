@@ -2,17 +2,23 @@ package domain
 
 import "time"
 
-// Вкладки ширмы. Ячейки пока заданы видом вкладки; свободная сетка — этап 2.
+// Вкладки ширмы. rules/notes собираются сами, grid — ячейки ведущего.
 const (
 	ScreenTabRules = "rules" // состояния и правила из справочника
 	ScreenTabNotes = "notes" // закреплённые записи журнала
-	ScreenTabTools = "tools" // скрытый бросок и прочее только для ведущего
+	ScreenTabGrid  = "grid"  // ячейки, расставленные ведущим
+	// ScreenTabTools — прежние «Инструменты», при чтении становятся сеткой.
+	ScreenTabTools = "tools"
 )
 
 // Виды ячеек ширмы.
 const (
-	ScreenCellJournal   = "journal"
-	ScreenCellReference = "reference"
+	ScreenCellJournal    = "journal"
+	ScreenCellReference  = "reference"
+	ScreenCellConditions = "conditions"
+	ScreenCellRoll       = "roll"
+	ScreenCellTimer      = "timer"
+	ScreenCellCounter    = "counter"
 )
 
 // Screen — ширма ведущего, одна на мир.
@@ -26,13 +32,28 @@ type ScreenTab struct {
 	Kind  string `json:"kind"`
 	Title string `json:"title"`
 	// Shared — вкладку видят игроки, только для чтения.
-	Shared bool         `json:"shared,omitempty"`
-	Cells  []ScreenCell `json:"cells,omitempty"`
+	Shared bool `json:"shared,omitempty"`
+	// Columns — ширина сетки в колонках (только grid).
+	Columns int          `json:"columns,omitempty"`
+	Cells   []ScreenCell `json:"cells,omitempty"`
 }
 
 type ScreenCell struct {
+	ID   string `json:"id,omitempty"`
 	Kind string `json:"kind"`
-	Ref  string `json:"ref"`
+	// Ref — id карточки или записи журнала.
+	Ref   string `json:"ref,omitempty"`
+	Title string `json:"title,omitempty"`
+	// W/H — сколько колонок и строк сетки занимает ячейка.
+	W int `json:"w,omitempty"`
+	H int `json:"h,omitempty"`
+	// Value — значение счётчика.
+	Value int `json:"value,omitempty"`
+	// Таймер: Seconds — длительность; EndsAt — когда кончится (unix ms), пока
+	// идёт; Left — сколько осталось (ms), пока стоит на паузе.
+	Seconds int   `json:"seconds,omitempty"`
+	EndsAt  int64 `json:"endsAt,omitempty"`
+	Left    int64 `json:"left,omitempty"`
 }
 
 // DefaultScreen — раскладка, с которой ширма открывается впервые.
@@ -40,11 +61,12 @@ func DefaultScreen() *Screen {
 	return &Screen{Tabs: []ScreenTab{
 		{ID: "rules", Kind: ScreenTabRules, Title: "Правила"},
 		{ID: "notes", Kind: ScreenTabNotes, Title: "Заметки"},
-		{ID: "tools", Kind: ScreenTabTools, Title: "Инструменты"},
+		ToolsTab("tools", "Инструменты"),
 	}}
 }
 
-// Shareable — можно ли показать вкладку игрокам: инструменты только ведущему.
-func (t ScreenTab) Shareable() bool {
-	return t.Kind != ScreenTabTools
+// ToolsTab — сетка с ячейкой броска.
+func ToolsTab(id, title string) ScreenTab {
+	return ScreenTab{ID: id, Kind: ScreenTabGrid, Title: title, Columns: 3,
+		Cells: []ScreenCell{{ID: "roll", Kind: ScreenCellRoll, W: 1, H: 3}}}
 }

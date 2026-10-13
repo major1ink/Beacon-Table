@@ -97,10 +97,58 @@
     .roll-row:last-child { border-bottom: 0; }
     .roll-row b { color: var(--heading); min-width: 26px; text-align: right; }
 
+    /* ---- правка и своя сетка ---- */
+    #editBtn { height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
+    #editBtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    #editBar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--accent-bg); flex-wrap: wrap; }
+    #editBar[hidden] { display: none; }
+    .stepper { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .stepper button { width: 32px; height: 32px; border: 0; background: var(--surface); font-weight: 600; }
+    .stepper span { min-width: 28px; text-align: center; color: var(--heading); font-weight: 600; }
+    .ghost-btn.danger { color: #f0a0a0; border-color: rgba(240,160,160,.3); align-self: center; }
+    .icon-btn:disabled { opacity: .35; cursor: default; }
+
+    .grid-wrap { display: flex; min-height: 100%; }
+    .grid-tab { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-auto-rows: 150px; grid-auto-flow: dense; gap: 12px; padding: 14px 16px; align-content: start; }
+    .gcell { grid-column: span var(--w); grid-row: span var(--h); overflow: hidden; position: relative; }
+    .gcell-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+    .gcell.edit { border-style: dashed; border-color: rgba(255,255,255,.2); cursor: grab; user-select: none; }
+    .gcell.dragging { opacity: .4; }
+    .gcell.drop-before { box-shadow: -4px 0 0 0 var(--accent); }
+    .gcell .grip { color: var(--text-dim); display: flex; }
+    .gcell h3.rename { cursor: text; text-decoration: underline dotted rgba(255,255,255,.3); text-underline-offset: 4px; }
+    .gcell .resize { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; border-radius: 6px; background: var(--surface-hover); color: #cfc8ff; display: flex; align-items: center; justify-content: center; cursor: nwse-resize; touch-action: none; }
+    .add-panel { width: 280px; flex: none; border-left: 1px solid var(--border); background: var(--rail-bg); padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+    .add-title { font-size: 19px; font-weight: 700; color: var(--heading); }
+    .add-group { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); margin: 8px 0 2px; }
+    .add-list { display: flex; flex-direction: column; gap: 2px; }
+    .add-item { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 4px 8px; border-radius: 8px; border: 0; background: transparent; text-align: left; cursor: grab; }
+    .add-item:hover { background: var(--surface); }
+    .add-ic { width: 26px; height: 26px; border-radius: 7px; background: var(--surface); color: #cfc8ff; display: flex; align-items: center; justify-content: center; flex: none; }
+    .add-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .add-item small { color: var(--text-dim); font-size: 11px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .roll-widget { display: flex; flex-direction: column; gap: 8px; }
+    .roll-view { display: flex; flex-direction: column; gap: 6px; }
+    .timer { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .timer-display { border: 0; background: none; font-size: 40px; font-weight: 700; color: var(--heading); line-height: 1; padding: 0 4px; font-variant-numeric: tabular-nums; }
+    .timer-display:disabled { cursor: default; opacity: 1; }
+    .timer-display.running { color: var(--green-bright); }
+    .timer-display.done { color: #f0a0a0; animation: blink 1s steps(2) infinite; }
+    @keyframes blink { 50% { opacity: .35; } }
+    .timer-controls { display: flex; flex-direction: column; gap: 4px; }
+    .counter { flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px; }
+    .counter-value { font-size: 44px; font-weight: 700; color: var(--heading); min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
+    .counter-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 20px; }
+
     #authFailedOverlay { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(10,10,14,0.92); align-items: center; justify-content: center; text-align: center; font-size: 14px; padding: 20px; }
     #authFailedOverlay.open { display: flex; }
 
     @media (max-width: 640px) {
+      .grid-tab { grid-template-columns: 1fr; }
+      .gcell { grid-column: auto; }
+      .grid-wrap { flex-direction: column; }
+      .add-panel { width: auto; border-left: 0; border-top: 1px solid var(--border); }
       .notes { flex-direction: column; }
       .notes aside { width: auto; border-right: 0; border-bottom: 1px solid var(--border); max-height: 40%; }
     }
@@ -113,7 +161,9 @@
     <div class="spacer"></div>
     <span id="modeBadge" class="badge" hidden></span>
     <button id="shareBtn" type="button" aria-pressed="false" hidden><span class="knob" aria-hidden="true"><i></i></span>Видят игроки</button>
+    <button id="editBtn" type="button" aria-pressed="false" hidden></button>
   </div>
+  <div id="editBar" hidden></div>
   <div id="sharedStrip"></div>
   <div id="body"></div>
 

@@ -33,22 +33,16 @@ func TestScreenPlayerSeesOnlySharedTabsAndReadableNotes(t *testing.T) {
 			}
 		}
 	}
-	saved, err := svc.Save(ctx, dm, sc)
-	if err != nil {
+	if _, err := svc.Save(ctx, dm, sc); err != nil {
 		t.Fatal(err)
-	}
-	for _, tab := range saved.Tabs {
-		if tab.Kind == domain.ScreenTabTools && tab.Shared {
-			t.Fatal("инструменты нельзя открыть игрокам")
-		}
 	}
 
 	got, err := svc.Get(ctx, gwen)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Tabs) != 2 {
-		t.Fatalf("игроку должны прийти «Правила» и «Заметки»: %+v", got.Tabs)
+	if len(got.Tabs) != 3 {
+		t.Fatalf("игроку должны прийти все открытые вкладки: %+v", got.Tabs)
 	}
 	for _, tab := range got.Tabs {
 		if tab.Kind != domain.ScreenTabNotes {
@@ -79,8 +73,13 @@ func TestScreenDefaultAndValidation(t *testing.T) {
 	ctx := context.Background()
 	svc := NewScreenService(screenfile.NewStore(t.TempDir()), newTestJournal(t))
 	got, err := svc.Get(ctx, dm)
-	if err != nil || len(got.Tabs) != 3 {
-		t.Fatalf("новая ширма — раскладка по умолчанию: %+v, %v", got, err)
+	if err != nil || len(got.Tabs) != 3 || got.Tabs[2].Kind != domain.ScreenTabGrid {
+		t.Fatalf("новая ширма — раскладка по умолчанию, «Инструменты» сеткой: %+v, %v", got, err)
+	}
+	old := domain.Screen{Tabs: []domain.ScreenTab{{ID: "tools", Kind: domain.ScreenTabTools, Title: "Мои кубы"}}}
+	migrated, err := svc.Save(ctx, dm, old)
+	if err != nil || migrated.Tabs[0].Kind != domain.ScreenTabGrid || len(migrated.Tabs[0].Cells) != 1 || migrated.Tabs[0].Title != "Мои кубы" {
+		t.Fatalf("прежние «Инструменты» должны стать сеткой с броском: %+v, %v", migrated, err)
 	}
 	bad := domain.Screen{Tabs: []domain.ScreenTab{{ID: "x", Kind: "map", Title: "Карта"}}}
 	var verr *domain.ValidationError
@@ -93,5 +92,32 @@ func TestScreenDefaultAndValidation(t *testing.T) {
 	}}
 	if _, err := svc.Save(ctx, dm, dup); !errors.As(err, &verr) {
 		t.Fatalf("повтор id вкладки прошёл: %v", err)
+	}
+}
+
+func TestScreenGridCellsAreClamped(t *testing.T) {
+	svc := NewScreenService(screenfile.NewStore(t.TempDir()), newTestJournal(t))
+	sc := domain.Screen{Tabs: []domain.ScreenTab{{
+		ID: "my", Kind: domain.ScreenTabGrid, Title: "Бой", Columns: 9,
+		Cells: []domain.ScreenCell{
+			{ID: "a", Kind: domain.ScreenCellTimer, W: 20, H: 0, Seconds: 60, Left: 999_999, Value: 5},
+			{ID: "a", Kind: domain.ScreenCellCounter, Value: 3},
+			{Kind: domain.ScreenCellReference},
+		},
+	}}}
+	saved, err := svc.Save(context.Background(), dm, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tab := saved.Tabs[0]
+	if tab.Columns != 6 || len(tab.Cells) != 2 {
+		t.Fatalf("колонки и пустая ссылка: %+v", tab)
+	}
+	timer, counter := tab.Cells[0], tab.Cells[1]
+	if timer.W != 6 || timer.H != 1 || timer.Left != 60_000 || timer.Value != 0 {
+		t.Fatalf("таймер не ужат: %+v", timer)
+	}
+	if counter.ID == "a" || counter.Value != 3 {
+		t.Fatalf("повтор id или счётчик: %+v", counter)
 	}
 }
