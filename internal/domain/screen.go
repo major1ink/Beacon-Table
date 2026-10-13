@@ -25,6 +25,8 @@ const (
 type Screen struct {
 	Tabs      []ScreenTab `json:"tabs"`
 	UpdatedAt time.Time   `json:"updatedAt"`
+	// ServerNow — часы сервера (unix ms) в ответе: таймеры считаются по ним.
+	ServerNow int64 `json:"serverNow,omitempty"`
 }
 
 type ScreenTab struct {
@@ -54,6 +56,33 @@ type ScreenCell struct {
 	Seconds int   `json:"seconds,omitempty"`
 	EndsAt  int64 `json:"endsAt,omitempty"`
 	Left    int64 `json:"left,omitempty"`
+	// Public — таймер видят игроки и трансляция.
+	Public bool `json:"public,omitempty"`
+}
+
+// ScreenTimer — таймер ширмы, открытый игрокам и трансляции.
+type ScreenTimer struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Seconds int    `json:"seconds"`
+	EndsAt  int64  `json:"endsAt,omitempty"`
+	Left    int64  `json:"left,omitempty"`
+}
+
+// PublicTimers — открытые таймеры со всех вкладок.
+func (s *Screen) PublicTimers() []ScreenTimer {
+	out := []ScreenTimer{}
+	if s == nil {
+		return out
+	}
+	for _, t := range s.Tabs {
+		for _, c := range t.Cells {
+			if c.Kind == ScreenCellTimer && c.Public {
+				out = append(out, ScreenTimer{ID: c.ID, Title: c.Title, Seconds: c.Seconds, EndsAt: c.EndsAt, Left: c.Left})
+			}
+		}
+	}
+	return out
 }
 
 // DefaultScreen — раскладка, с которой ширма открывается впервые.

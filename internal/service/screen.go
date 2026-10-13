@@ -185,7 +185,7 @@ func normalizeCells(t domain.ScreenTab) ([]domain.ScreenCell, error) {
 		c.Value = clampInt(c.Value, -maxScreenCounter, maxScreenCounter, c.Value)
 		c.Seconds = clampInt(c.Seconds, 0, maxScreenTimer, 0)
 		if c.Kind != domain.ScreenCellTimer {
-			c.Seconds, c.EndsAt, c.Left = 0, 0, 0
+			c.Seconds, c.EndsAt, c.Left, c.Public = 0, 0, 0, false
 		}
 		if c.Kind != domain.ScreenCellCounter {
 			c.Value = 0

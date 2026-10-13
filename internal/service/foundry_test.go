@@ -78,6 +78,7 @@ func (f *fakeRoom) NotifyCharacterSheetChanged(string)    {}
 func (f *fakeRoom) NotifyPlaylistsChanged()               {}
 func (f *fakeRoom) NotifyCharactersChanged()              {}
 func (f *fakeRoom) NotifyLibraryChanged(string)           {}
+func (f *fakeRoom) SetScreenTimers([]domain.ScreenTimer)  {}
 func (f *fakeRoom) SpawnPlayerToken(context.Context, string, string, string, string) (bool, error) {
 	return false, nil
 }

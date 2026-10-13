@@ -6,7 +6,7 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { glyphNode } from "../condition-glyphs.js";
 import { initDiceRoller, formatRolls } from "../dice.js";
 import { showPrompt } from "../modal.js";
-import { ctx, el, openInHost, sendRoll, shortName, sourceLine } from "./shared.js";
+import { ctx, el, openInHost, sendRoll, serverNow, shortName, sourceLine } from "./shared.js";
 
 export function conditionsList(conds) {
   const list = el("div");
@@ -150,7 +150,7 @@ export function onRoll(msg) {
 const timers = new Set();
 
 function timerLeft(cell) {
-  if (cell.endsAt) return Math.max(0, cell.endsAt - Date.now());
+  if (cell.endsAt) return Math.max(0, cell.endsAt - serverNow());
   if (cell.left) return cell.left;
   return (cell.seconds || 0) * 1000;
 }
@@ -175,6 +175,18 @@ export function timerWidget(cell) {
   const display = el("button", { class: "timer-display serif", type: "button", disabled: !ctx.gm, title: ctx.gm ? "Задать время" : "" });
   const play = el("button", { class: "icon-btn", type: "button" });
   const reset = el("button", { class: "icon-btn", type: "button", title: "Сбросить", html: icon("repeat", { size: 15 }) });
+  const shown = el("button", { class: "icon-btn", type: "button" });
+  const drawShown = () => {
+    shown.innerHTML = icon(cell.public ? "eye" : "eye-off", { size: 15 });
+    shown.title = cell.public ? "Видят игроки и трансляция — скрыть" : "Показать игрокам и на трансляции";
+    shown.classList.toggle("on", !!cell.public);
+  };
+  drawShown();
+  shown.onclick = () => {
+    cell.public = !cell.public;
+    drawShown();
+    ctx.saveQuiet();
+  };
   const view = { cell, display, play };
   const draw = () => {
     const left = timerLeft(cell);
@@ -188,12 +200,12 @@ export function timerWidget(cell) {
   timers.add(view);
   play.onclick = () => {
     if (cell.endsAt) {
-      cell.left = Math.max(0, cell.endsAt - Date.now());
+      cell.left = Math.max(0, cell.endsAt - serverNow());
       cell.endsAt = 0;
     } else {
       const left = cell.left || (cell.seconds || 0) * 1000;
       if (!left) return;
-      cell.endsAt = Date.now() + left;
+      cell.endsAt = serverNow() + left;
       cell.left = 0;
     }
     draw();
@@ -216,7 +228,7 @@ export function timerWidget(cell) {
     ctx.saveQuiet();
   };
   draw();
-  return el("div", { class: "timer" }, [display, ctx.gm ? el("div", { class: "timer-controls" }, [play, reset]) : null]);
+  return el("div", { class: "timer" }, [display, ctx.gm ? el("div", { class: "timer-controls" }, [play, reset, shown]) : null]);
 }
 
 setInterval(() => {

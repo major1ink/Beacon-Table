@@ -28,6 +28,7 @@ import { mountScenePicker } from "../scene-picker.js";
 import { mountSummonPanel } from "../summon-panel.js";
 import { mountPlayerTokenMenu } from "../player-token-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
+import { initScreenTimers } from "../screen-timers.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createDrawOptions } from "../draw-options.js";
 import { createBoardList } from "../board-list.js";
@@ -339,6 +340,7 @@ const PLAYER_DRAW_HELP = {
   // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
   // управляет ДМ.
   initShowcaseOverlay({ role: "player" });
+  initScreenTimers({ role: "player" });
 
   document.addEventListener("vtt:authFailed", () => {
     document.getElementById("authFailedOverlay").classList.add("open");

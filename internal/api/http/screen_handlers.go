@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"beacon-table/internal/domain"
 )
@@ -34,6 +35,7 @@ func (a *API) handleScreenGet(w http.ResponseWriter, r *http.Request) {
 		writeScreenErr(w, err)
 		return
 	}
+	sc.ServerNow = time.Now().UnixMilli()
 	writeJSON(w, http.StatusOK, sc)
 }
 
@@ -57,5 +59,7 @@ func (a *API) handleScreenSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	world.Room.NotifyLibraryChanged("screen")
+	world.Room.SetScreenTimers(sc.PublicTimers())
+	sc.ServerNow = time.Now().UnixMilli()
 	writeJSON(w, http.StatusOK, sc)
 }

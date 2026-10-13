@@ -556,6 +556,10 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	}
 
 	journal := service.NewJournalService(journalRepo)
+	screen := service.NewScreenService(screenRepo, journal)
+	if sc, err := screen.Get(ctx, domain.JournalViewer{IsDM: true}); err == nil {
+		room.SetScreenTimers(sc.PublicTimers())
+	}
 	boards := service.NewBoardService(boardRepo)
 	boardSync := service.NewBoardHub(boardRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
@@ -580,7 +584,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Conditions: conditions,
 		Journal:    journal,
 		Boards:     boards,
-		Screen:     service.NewScreenService(screenRepo, journal),
+		Screen:     screen,
 		BoardSync:  boardSync,
 		Playlists:  playlists,
 		Assets:     assets,

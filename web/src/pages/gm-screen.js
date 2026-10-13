@@ -188,6 +188,7 @@ async function save() {
   try {
     const saved = await saveScreen(ctx.screen);
     savedAt = saved.updatedAt;
+    syncClock(saved);
     return saved;
   } finally {
     inflight--;
@@ -207,6 +208,7 @@ async function reloadIfForeign() {
   const sc = await fetchScreen().catch(() => null);
   if (!sc || sc.updatedAt === savedAt) return;
   ctx.screen = sc;
+  syncClock(sc);
   render();
 }
 
@@ -390,6 +392,11 @@ function shows(tabKind, ...cellKinds) {
 async function loadScreen() {
   const sc = await fetchScreen();
   ctx.screen = sc && Array.isArray(sc.tabs) ? sc : { tabs: [] };
+  syncClock(ctx.screen);
+}
+
+function syncClock(sc) {
+  if (sc && sc.serverNow) ctx.clock = sc.serverNow - Date.now();
 }
 
 (async function boot() {

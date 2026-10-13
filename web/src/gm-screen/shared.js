@@ -12,6 +12,8 @@ export const ctx = {
   screen: { tabs: [] },
   socket: null,
   editing: false,
+  // clock — поправка к Date.now() до часов сервера: по ним считаются таймеры.
+  clock: 0,
   render: () => {},
   persist: async () => {},
   // saveQuiet — сохранить без перерисовки (счётчик, таймер).
@@ -69,6 +71,8 @@ export const data = {
     for (const k of keys) delete cache[k];
   },
 };
+
+export const serverNow = () => Date.now() + ctx.clock;
 
 export function newCellId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);

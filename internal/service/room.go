@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"beacon-table/internal/domain"
@@ -69,6 +70,8 @@ type RoomService interface {
 	// раньше это делала только перезагрузка страницы. kind нужен, чтобы
 	// клиент не дёргал сервер за всем разом из-за правки одной карточки.
 	NotifyLibraryChanged(kind string)
+	// SetScreenTimers — открытые таймеры ширмы для игроков и трансляции.
+	SetScreenTimers(timers []domain.ScreenTimer)
 	// SpawnPlayerToken ставит на активную сцену токен персонажа игрока —
 	// нужен входу в публичное демо игроком, где ДМ-а, который перетащил бы
 	// фишку на карту, может не быть вовсе (см. room_guest.go).
@@ -266,6 +269,11 @@ type Room struct {
 	// в state сцены не пишется, шлётся всем и досылается свежеподключившимся
 	// (см. showcasePayload/broadcastShowcase). nil = ничего не показывается.
 	showcase *domain.ShowcaseState
+
+	// timers — открытые таймеры ширмы (см. room_timers.go); пишутся из HTTP.
+	timersMu      sync.Mutex
+	timers        []domain.ScreenTimer
+	timersChanged chan struct{}
 }
 
 // NewRoom поднимает комнату из sceneRepo (все сцены с прошлого запуска,
@@ -324,6 +332,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		playlistsChanged:      make(chan struct{}, 4),
 		charactersChanged:     make(chan struct{}, 4),
 		libraryChanged:        make(chan string, 16),
+		timersChanged:         make(chan struct{}, 1),
 		announce:              make(chan string, 4),
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
@@ -536,6 +545,7 @@ func (r *Room) run() {
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
 			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
 			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
+			c.Send(r.timersPayload())   // открытые таймеры ширмы
 			r.sendChatHistory(c)        // чат стола, только видимое этому клиенту
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
@@ -578,6 +588,9 @@ func (r *Room) run() {
 				}
 			}
 			req.reply <- owns
+
+		case <-r.timersChanged:
+			r.broadcastTimers()
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
