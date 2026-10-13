@@ -8,6 +8,7 @@
 import { openModal, showAlert } from "./modal.js";
 import { fetchVersion } from "./api.js";
 import { copyToClipboard } from "./clipboard.js";
+import { downloadFile } from "./html.js";
 
 const REPO_URL = "https://github.com/major1ink/Beacon-Table";
 export const SUPPORT_EMAIL = "info@beacontable.ru";
@@ -181,8 +182,9 @@ function textarea(parent, label, placeholder, rows) {
 }
 
 // openBugReport — диалог. Версию спрашиваем у сервера асинхронно, поэтому
-// окно открывается сразу, а блок техданных дозаполняется.
-export async function openBugReport() {
+// окно открывается сразу, а блок техданных дозаполняется. scene — {name,
+// url} дампа сцены у ДМ: баги света и стен без самой сцены не повторить.
+export async function openBugReport({ scene } = {}) {
   let tech = "собираю…";
   let what, steps, expected, withTech, techBox;
   let target = "github";
@@ -259,6 +261,21 @@ export async function openBugReport() {
         targetRow.appendChild(opt);
       }
       body.appendChild(targetRow);
+
+      if (scene) {
+        const sceneRow = document.createElement("div");
+        sceneRow.style.cssText = "display:flex;flex-direction:column;align-items:flex-start;gap:6px;font-size:12px;";
+        const hint = document.createElement("span");
+        hint.style.cssText = "opacity:0.75;text-align:left;";
+        hint.textContent = `Если баг на карте — скачайте дамп сцены «${scene.name}» и приложите файл к issue или письму. В нём стены, токены, свет и туман, без картинок и без данных других сцен.`;
+        const dumpBtn = document.createElement("button");
+        dumpBtn.type = "button";
+        dumpBtn.className = "bt-modal-btn";
+        dumpBtn.textContent = "Скачать дамп сцены";
+        dumpBtn.onclick = () => downloadFile(scene.url);
+        sceneRow.append(hint, dumpBtn);
+        body.appendChild(sceneRow);
+      }
 
       // Для тех, кому не подходит ни то, ни другое: отчёт в буфер, дальше как удобно.
       const copyBtn = document.createElement("button");

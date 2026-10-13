@@ -489,3 +489,6 @@ func (s *Store) SaveMeta(ctx context.Context, currentSceneID string, order []str
 	}
 	return os.Rename(tmp, s.roomMetaFile)
 }
+
+// Sanitize — sanitizeScene для сцены, пришедшей не с диска (импорт файлом).
+func Sanitize(s *domain.SceneState) { sanitizeScene(s) }

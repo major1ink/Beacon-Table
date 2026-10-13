@@ -1182,6 +1182,8 @@
           <h3>Сцена</h3>
           <div class="panel-header-actions">
             <button id="sceneCreateBtn" class="panel-add-btn" type="button" title="Новая сцена"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Сцена</button>
+            <button id="sceneImportBtn" class="panel-add-btn" type="button" title="Добавить сцену из файла экспорта (.beacon-scene.zip)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg> Импорт</button>
+            <input id="sceneImportInput" type="file" accept=".zip,application/zip" hidden />
             <button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
           </div>
         </header>
@@ -1274,6 +1276,7 @@
 
             <div class="section-divider"></div>
             <button id="modalSaveBtn" class="primary-btn">Сохранить изменения</button>
+            <button id="sceneExportBtn" class="tool-btn" title="Сцена одним файлом: стены, токены, свет, туман и её картинки — перенести в другой мир или приложить к отчёту о баге"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><polyline points="7 11 12 16 17 11"/><path d="M4 20h16"/></svg> Экспорт сцены в файл</button>
             <button id="sceneDeleteBtn" class="tool-btn" title="Удалить текущую сцену"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить эту сцену</button>
           </div>
           <div id="sceneDropdown"></div>

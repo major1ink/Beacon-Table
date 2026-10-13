@@ -85,6 +85,9 @@ type RoomService interface {
 	// ListScenes — все сцены комнаты в порядке переключателя ДМ: карточки
 	// сцен на доске (см. web/src/pages/board.js).
 	ListScenes(ctx context.Context) ([]domain.SceneCard, error)
+	// SceneCopy — полная копия сцены id для экспорта в файл; нет такой —
+	// domain.ErrNotFound.
+	SceneCopy(ctx context.Context, id string) (*domain.SceneState, error)
 	// PlayerOwnsMonster — у игрока есть свой токен этого существа (призванный
 	// фамильяр): тогда ему можно прочитать карточку бестиария, которая в
 	// остальном только для ДМ (см. api/http: handleMonsterGet).
@@ -181,6 +184,8 @@ type Room struct {
 	// listScenes — «дай список сцен» из HTTP-хендлера (см. ListScenes):
 	// свой канал по той же причине, что и spawnToken выше.
 	listScenes chan chan []domain.SceneCard
+	// sceneCopy — «дай копию сцены» из HTTP-хендлера (см. SceneCopy).
+	sceneCopy chan sceneCopyReq
 	// ownsMonster — «есть ли у игрока токен этого существа» из HTTP-хендлера
 	// (см. PlayerOwnsMonster) — тот же приём.
 	ownsMonster chan ownsMonsterReq
@@ -311,6 +316,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		spawnToken:     make(chan spawnTokenReq),
 		dropTokens:     make(chan dropTokensReq),
 		listScenes:     make(chan chan []domain.SceneCard),
+		sceneCopy:      make(chan sceneCopyReq),
 		ownsMonster:    make(chan ownsMonsterReq),
 		journalChanged: make(chan string, 32),
 
@@ -558,6 +564,9 @@ func (r *Room) run() {
 
 		case reply := <-r.listScenes:
 			reply <- r.sceneCards()
+
+		case req := <-r.sceneCopy:
+			req.reply <- copyScene(r.scenes[req.id])
 
 		case req := <-r.ownsMonster:
 			owns := false
@@ -1789,6 +1798,47 @@ func (r *Room) ListScenes(ctx context.Context) ([]domain.SceneCard, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+type sceneCopyReq struct {
+	id    string
+	reply chan *domain.SceneState
+}
+
+// SceneCopy — см. RoomService; ctx — как у ListScenes.
+func (r *Room) SceneCopy(ctx context.Context, id string) (*domain.SceneState, error) {
+	req := sceneCopyReq{id: id, reply: make(chan *domain.SceneState, 1)}
+	select {
+	case r.sceneCopy <- req:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	select {
+	case s := <-req.reply:
+		if s == nil {
+			return nil, domain.ErrNotFound
+		}
+		return s, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// copyScene — глубокая копия через JSON: сцену дальше читают вне горутины
+// комнаты, пока та продолжает её менять.
+func copyScene(s *domain.SceneState) *domain.SceneState {
+	if s == nil {
+		return nil
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	var out domain.SceneState
+	if json.Unmarshal(b, &out) != nil {
+		return nil
+	}
+	return &out
 }
 
 type ownsMonsterReq struct {

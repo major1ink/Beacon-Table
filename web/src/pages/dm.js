@@ -72,6 +72,8 @@ import {
   shutdownServer,
   fetchTutorial,
   saveTutorial,
+  sceneExportUrl,
+  importScene,
 } from "../api.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
@@ -86,7 +88,7 @@ import { dmTourSteps } from "../tutorial-dm.js";
 import { changeWorldSystem, fitsSystem } from "../world-system.js";
 import { showMissingModulesNotice } from "../modules-notice.js";
 import { cardTokenCells, loadSystemProfile } from "../system-profile.js";
-import { escapeHtml, cssUrl } from "../html.js";
+import { escapeHtml, cssUrl, downloadFile } from "../html.js";
 import { setArtBackground } from "../art.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
 import { asButton } from "../a11y.js";
@@ -2466,7 +2468,10 @@ async function loadSettingsTab(tab) {
   }
 }
 
-document.getElementById("bugReportBtn").onclick = () => openBugReport();
+document.getElementById("bugReportBtn").onclick = () => {
+  const s = sceneList.find((x) => x.id === viewSceneId);
+  openBugReport({ scene: s ? { name: s.name, url: sceneExportUrl(s.id, false) } : null });
+};
 
 async function renderAppVersion() {
   const el = document.getElementById("appVersion");
@@ -6357,6 +6362,23 @@ fGridOpacity.oninput = () => {
 gridEditorBtn.onclick = () => {
   closeSidePanel();
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "grid-edit" }));
+};
+
+// ---- экспорт / импорт сцены файлом (см. handleSceneExport) ----
+document.getElementById("sceneExportBtn").onclick = () => downloadFile(sceneExportUrl(settingsSceneId));
+
+const sceneImportInput = document.getElementById("sceneImportInput");
+document.getElementById("sceneImportBtn").onclick = () => sceneImportInput.click();
+sceneImportInput.onchange = async () => {
+  const file = sceneImportInput.files[0];
+  sceneImportInput.value = "";
+  if (!file) return;
+  try {
+    const s = await importScene(file);
+    showAlert(`Сцена «${s.name}» добавлена в конец списка.`, { title: "Импорт сцены" });
+  } catch (err) {
+    showAlert(err.message, { title: "Импорт сцены" });
+  }
 };
 
 // ---- удаление / сохранение (сцена, чьё подменю открыто) ----

@@ -225,6 +225,8 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/board-images", a.handleBoardImages)
 	// Сцены стола для карточек на доске (см. handleSceneList).
 	mux.HandleFunc("GET /api/scenes", a.handleSceneList)
+	mux.HandleFunc("GET /api/scenes/{id}/export", a.handleSceneExport)
+	mux.HandleFunc("POST /api/scenes/import", a.handleSceneImport)
 	mux.HandleFunc("PUT /api/boards/{id}/name", a.handleBoardRename)
 	mux.HandleFunc("PUT /api/boards/{id}/access", a.handleBoardAccess)
 	mux.HandleFunc("DELETE /api/boards/{id}", a.handleBoardDelete)

@@ -145,6 +145,24 @@ export async function importCompany(file) {
   return res.json();
 }
 
+// sceneExportUrl — сцена одним .zip (см. handleSceneExport); media=false —
+// без картинок и звуков, дамп для отчёта о баге.
+export function sceneExportUrl(id, media = true) {
+  return `/api/scenes/${encodeURIComponent(id)}/export` + (media ? "" : "?media=0");
+}
+
+// importScene — .zip из sceneExportUrl новой сценой запущенного мира.
+export async function importScene(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/scenes/import", { method: "POST", body: form });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error((data && data.error) || res.statusText || "ошибка импорта");
+  }
+  return res.json();
+}
+
 // fetchVersion — версия сервера (short commit hash из VCS-метаданных сборки,
 // см. cmd/beacon-table/version.go), для раздела "Настройки" на экранах ДМ и
 // игрока. Публичный эндпойнт, авторизация не нужна.
