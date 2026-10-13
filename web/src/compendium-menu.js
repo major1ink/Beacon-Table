@@ -10,7 +10,7 @@
 import { icon } from "./icons.js";
 import { openFloatingWindow } from "./floating-window.js";
 import { loadSchemas, schemaFor } from "./schemas.js";
-import { loadSystemProfile, worldModules } from "./system-profile.js";
+import { loadSystemProfile, moduleHas, worldModules } from "./system-profile.js";
 
 // USER_SOURCE — источник «Пользовательские»: карточки библиотеки мира.
 export const USER_SOURCE = "user";
@@ -103,15 +103,18 @@ function kindNodes(body, source, role, { kind, type, single, group }) {
   for (const name of labels) into.appendChild(leafNode(name, () => openCategory({ type, source, category: name, role, label: name })));
 }
 
+// buildRoot — корень источника; у модуля только разделы, где есть карточки,
+// а пустой модуль (только правила или только существа у игрока) — null.
 function buildRoot(source, label, role, startOpen) {
   const { wrap, body } = collapsible(label, { className: "compendium-root", startOpen });
+  const has = (type) => source === USER_SOURCE || moduleHas(source, type);
   for (const cat of FLAT_CATEGORIES) {
     if (cat.dmOnly && role !== "dm") continue;
-    body.appendChild(leafNode(cat.label, () => openCategory({ type: cat.type, source, role, label: cat.label })));
-    if (cat.id === "spells") kindNodes(body, source, role, { kind: "reference", type: "reference", single: "Справочник" });
+    if (has(cat.type)) body.appendChild(leafNode(cat.label, () => openCategory({ type: cat.type, source, role, label: cat.label })));
+    if (cat.id === "spells" && has("reference")) kindNodes(body, source, role, { kind: "reference", type: "reference", single: "Справочник" });
   }
-  kindNodes(body, source, role, { kind: "item", type: "items", single: "Предметы", group: "Снаряжение" });
-  return wrap;
+  if (has("items")) kindNodes(body, source, role, { kind: "item", type: "items", single: "Предметы", group: "Снаряжение" });
+  return body.childElementCount ? wrap : null;
 }
 
 // foundryImportNode — импорт целого пакета Foundry VTT по ссылке на манифест
@@ -156,7 +159,10 @@ export function mountCompendiumMenu(panelEl, { role, canImport = true }) {
 
   function renderTree() {
     treeWrap.innerHTML = "";
-    for (const m of worldModules()) treeWrap.appendChild(buildRoot(m.id, m.title, role, false));
+    for (const m of worldModules()) {
+      const root = buildRoot(m.id, m.title, role, false);
+      if (root) treeWrap.appendChild(root);
+    }
     treeWrap.appendChild(buildRoot(USER_SOURCE, "Пользовательские", role, true));
     if (role === "dm" && canImport) treeWrap.appendChild(foundryImportNode());
   }

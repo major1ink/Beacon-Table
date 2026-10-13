@@ -45,7 +45,7 @@ import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { schemaHasWidget } from "../schema-layout.js";
 import { catalogConfig, categoriesOf } from "../schema-list.js";
-import { loadSystemProfile, moduleTitle, worldModules } from "../system-profile.js";
+import { loadSystemProfile, moduleHas, moduleTitle, worldModules } from "../system-profile.js";
 import { importerFits } from "../importers.js";
 import { offerImport } from "../importer-offer.js";
 
@@ -343,7 +343,8 @@ function toggleSide(sec, value, btn) {
 
 // initSourceFilter — «Модуль»: модули мира, «Пользовательские», «Все».
 function initSourceFilter() {
-  const options = [...worldModules().map((m) => [m.id, m.title]), [USER_SOURCE, "Пользовательские"], [ALL_SOURCES, "Все"]];
+  const modules = worldModules().filter((m) => m.id === source || moduleHas(m.id, type));
+  const options = [...modules.map((m) => [m.id, m.title]), [USER_SOURCE, "Пользовательские"], [ALL_SOURCES, "Все"]];
   const wrap = document.createElement("div");
   const head = document.createElement("p");
   head.className = "side-title";

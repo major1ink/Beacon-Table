@@ -78,6 +78,17 @@ export function moduleTitle(id) {
   return m ? m.title : id;
 }
 
+// CATALOG_KIND — тип окна каталога → папка карточек модуля (module.Kinds).
+const CATALOG_KIND = { creatures: "bestiary", spells: "spells", items: "items", reference: "references", conditions: "conditions" };
+
+// moduleHas — есть ли в модуле id карточки для окна каталога type. Модуль
+// без счётчиков (старый сервер) — считаем, что есть.
+export function moduleHas(id, type) {
+  const m = profile.modules.find((x) => x.id === id);
+  if (!m || !m.counts) return true;
+  return (m.counts[CATALOG_KIND[type]] || 0) > 0;
+}
+
 // formatWeight — «2.5 фнт» / «2.5 кг»; без единицы — просто число.
 export function formatWeight(value) {
   const unit = weightUnit();

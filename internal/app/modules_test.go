@@ -486,3 +486,26 @@ func TestEnabledModulesLegacyWorld(t *testing.T) {
 		t.Fatalf("«Своя система»: %v", got)
 	}
 }
+
+func TestSystemProfileModuleCounts(t *testing.T) {
+	ctx := context.Background()
+	m := modulesManager(t)
+	c, err := m.Create(ctx, "D&D", domain.SystemDnD5e2024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.SetWorldModules(ctx, c.ID, []string{"extra"}); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = m.companies.ByID(ctx, c.ID)
+	counts := map[string]map[string]int{}
+	for _, mod := range m.SystemProfile(c).Modules {
+		counts[mod.ID] = mod.Counts
+	}
+	if counts["dnd5e-2024"][module.KindConditions] != 1 || counts["dnd5e-2024"][module.KindSpells] != 0 {
+		t.Errorf("система: %v", counts["dnd5e-2024"])
+	}
+	if counts["extra"][module.KindBestiary] != 1 || counts["extra"][module.KindConditions] != 0 {
+		t.Errorf("контент: %v", counts["extra"])
+	}
+}
