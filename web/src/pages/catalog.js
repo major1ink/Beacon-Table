@@ -38,7 +38,8 @@ import { glyphNode } from "../condition-glyphs.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
 import { initFullscreenButton } from "../fullscreen.js";
-import { escapeHtml, cssUrl } from "../html.js";
+import { escapeHtml } from "../html.js";
+import { setArtBackground } from "../art.js";
 import { asButton } from "../a11y.js";
 import { announceOwnHeader } from "../embed.js";
 import { loadSchemas, schemaFor } from "../schemas.js";
@@ -460,7 +461,7 @@ function buildRow(x) {
   if (cfg.avatar) {
     const avatar = document.createElement("div");
     avatar.className = "catalog-avatar";
-    if (x.imageUrl) avatar.style.backgroundImage = cssUrl(x.imageUrl);
+    if (x.imageUrl) setArtBackground(avatar, x.imageUrl);
     else if (cfg.avatarNode) avatar.appendChild(cfg.avatarNode(x));
     else avatar.innerHTML = icon(cfg.avatarIcon || "image", { size: 14 });
     row.appendChild(avatar);

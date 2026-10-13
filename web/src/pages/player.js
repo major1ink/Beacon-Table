@@ -35,6 +35,7 @@ import { isPlayer } from "../roles.js";
 import { uploadAvatarFile } from "../avatar-cropper.js";
 import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { cssUrl } from "../html.js";
+import { setArtBackground } from "../art.js";
 import { initVisualViewport } from "../visual-viewport.js";
 import { initWakeLock } from "../wake-lock.js";
 import { trackOpenClass } from "../back-stack.js";
@@ -551,7 +552,7 @@ async function renderChars() {
     row.className = "char-row";
     const avatar = document.createElement("div");
     avatar.className = "char-avatar";
-    if (c.avatarUrl) avatar.style.backgroundImage = cssUrl(c.avatarUrl);
+    if (c.avatarUrl) setArtBackground(avatar, c.avatarUrl);
     else avatar.textContent = "—";
     const name = document.createElement("div");
     name.className = "char-name";

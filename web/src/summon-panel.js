@@ -1,3 +1,4 @@
+import { artNode } from "./art.js";
 import { icon } from "./icons.js";
 
 // Панель «Призыв» игрока: существа, которые ДМ разрешил призывать
@@ -68,11 +69,7 @@ export function mountSummonPanel(panelEl, { send }) {
       row.className = "scene-row row-card scene-pick summon-row" + (m.id === selectedId ? " active" : "");
       row.setAttribute("aria-pressed", String(m.id === selectedId));
       if (m.imageUrl) {
-        const img = document.createElement("img");
-        img.src = m.imageUrl;
-        img.alt = "";
-        img.className = "summon-art";
-        row.appendChild(img);
+        row.appendChild(artNode(m.imageUrl, "summon-art"));
       }
       const name = document.createElement("span");
       name.className = "scene-name";

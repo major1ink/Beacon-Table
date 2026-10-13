@@ -8,6 +8,7 @@
 // (setName/setGlyph/setPills, setSummary) — чтобы на каждый ввод не
 // перестраивать всю форму и не ронять фокус.
 import { icon } from "./icons.js";
+import { artNode } from "./art.js";
 
 export function el(tag, attrs, children) {
   const e = document.createElement(tag);
@@ -75,7 +76,7 @@ export function renderHero({ glyph, imageUrl, color, name, namePlaceholder, leve
     },
     setGlyph(g, img) {
       medal.innerHTML = "";
-      if (img) medal.appendChild(el("img", { src: img, alt: "" }));
+      if (img) medal.appendChild(artNode(img));
       else if (g && g.nodeType) medal.appendChild(g);
       else medal.appendChild(el("span", { text: g || "❔" }));
       if (levels > 1) medal.appendChild(el("span", { class: "card-medal-lvl", text: "1–" + levels }));

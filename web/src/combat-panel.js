@@ -26,7 +26,7 @@ import { icon } from "./icons.js";
 import { showLootTakeModal } from "./loot-take-modal.js";
 import { showAlert, showConfirm } from "./modal.js";
 import { renderStatusChips, openStatusPalette, refreshStatusPalette } from "./status-palette.js";
-import { cssUrl } from "./html.js";
+import { setArtBackground } from "./art.js";
 import { asButton } from "./a11y.js";
 import { moduleTitle } from "./system-profile.js";
 
@@ -112,7 +112,7 @@ export function initCombatPanel({ send, els }) {
 
       const avatar = document.createElement("div");
       avatar.className = "combat-avatar";
-      if (cmb.image) avatar.style.backgroundImage = cssUrl(cmb.image);
+      if (cmb.image) setArtBackground(avatar, cmb.image);
       else avatar.style.background = cmb.color || "#555";
 
       const name = document.createElement("div");
@@ -415,7 +415,7 @@ export function initCombatPanel({ send, els }) {
       top.className = "combat-row-top";
       const avatar = document.createElement("div");
       avatar.className = "combat-avatar";
-      if (k.image) avatar.style.backgroundImage = cssUrl(k.image);
+      if (k.image) setArtBackground(avatar, k.image);
       else avatar.style.background = k.color || "#555";
       const name = document.createElement("div");
       name.className = "combat-name";
@@ -627,7 +627,7 @@ export function initCombatPanel({ send, els }) {
       row.className = "combat-search-row";
       const avatar = document.createElement("div");
       avatar.className = "combat-avatar";
-      if (m.image) avatar.style.backgroundImage = cssUrl(m.image);
+      if (m.image) setArtBackground(avatar, m.image);
       else avatar.style.background = "#555";
       const name = document.createElement("div");
       name.className = "combat-name";

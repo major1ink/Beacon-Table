@@ -87,6 +87,7 @@ import { changeWorldSystem, fitsSystem } from "../world-system.js";
 import { showMissingModulesNotice } from "../modules-notice.js";
 import { cardTokenCells, loadSystemProfile } from "../system-profile.js";
 import { escapeHtml, cssUrl } from "../html.js";
+import { setArtBackground } from "../art.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
 import { asButton } from "../a11y.js";
 import { initVisualViewport } from "../visual-viewport.js";
@@ -3251,7 +3252,7 @@ function pregenPoolRow(p) {
 
   const avatar = document.createElement("div");
   avatar.className = "dmchar-avatar";
-  if (p.avatarUrl) avatar.style.backgroundImage = cssUrl(p.avatarUrl);
+  if (p.avatarUrl) setArtBackground(avatar, p.avatarUrl);
   else avatar.textContent = "—";
 
   const name = document.createElement("div");
@@ -3382,7 +3383,7 @@ function assignedCharRow(c, pregen) {
   handle.innerHTML = icon("grip-vertical", { size: 14 });
   const avatar = document.createElement("div");
   avatar.className = "dmchar-avatar";
-  if (c.avatarUrl) avatar.style.backgroundImage = cssUrl(c.avatarUrl);
+  if (c.avatarUrl) setArtBackground(avatar, c.avatarUrl);
   else avatar.textContent = "—";
   const name = document.createElement("div");
   name.className = "dmchar-name";
@@ -4642,7 +4643,7 @@ function openSpellStatusPicker(payload) {
     cb.value = t.id;
     const av = document.createElement("span");
     av.className = "picker-avatar";
-    if (t.image) av.style.backgroundImage = cssUrl(t.image);
+    if (t.image) setArtBackground(av, t.image);
     else av.style.background = t.color || "#555";
     const name = document.createElement("span");
     name.textContent = t.label || "Без имени";

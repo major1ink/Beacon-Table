@@ -24,7 +24,7 @@
 import { deathSavesFor } from "../combat-rules.js";
 import { combatantCardTarget, combatantCardHint, openCombatantCard } from "../combatant-card.js";
 import { icon } from "../icons.js";
-import { cssUrl } from "../html.js";
+import { setArtBackground } from "../art.js";
 import { asButton } from "../a11y.js";
 
 const PORTRAIT = 30;
@@ -203,7 +203,7 @@ export function createCombatBar(ctx) {
         (current
           ? "box-shadow:0 0 0 2px var(--glass-bg-strong,#16161d),0 0 0 4px " + CUR + ";"
           : "box-shadow:0 0 0 1px rgba(255,255,255,0.15) inset;");
-      if (cmb.image) portrait.style.backgroundImage = cssUrl(cmb.image);
+      if (cmb.image) setArtBackground(portrait, cmb.image);
       else portrait.style.background = cmb.color || "#555";
       portraitBox.appendChild(portrait);
 
