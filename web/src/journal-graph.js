@@ -44,6 +44,32 @@ function folderColor(folder) {
   return FOLDER_COLORS[i % (FOLDER_COLORS.length - 1)];
 }
 
+// mergeMutual — связь без направления («семья», «враг»), объявленная в обеих
+// записях, — одна связь, а не две линии и две строки. У типа с обратной
+// подписью («подчинённый») направление и есть смысл — его не трогаем.
+export function mergeMutual(edges) {
+  const seen = new Map();
+  const out = [];
+  for (const e of edges) {
+    const t = e.type && RELATION_TYPES[e.type];
+    if (!t || t.reverse) {
+      out.push(e);
+      continue;
+    }
+    const key = [e.from, e.to].sort().join("\0") + "\0" + e.type;
+    const prev = seen.get(key);
+    if (prev) {
+      // Игрок видит связь, если читает хоть одну из записей, где она объявлена.
+      prev.secret = prev.secret && e.secret;
+      continue;
+    }
+    const copy = { ...e };
+    seen.set(key, copy);
+    out.push(copy);
+  }
+  return out;
+}
+
 function setFolderOrder(nodes) {
   folderOrder = [...new Set(nodes.map((n) => topFolder(n.folder)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
 }
@@ -126,16 +152,17 @@ export function layoutGraph(nodes, edges, fixed = new Map()) {
 }
 
 // separate — силы держат узлы порознь лишь в среднем; карточки, налезшие
-// друг на друга, раздвигаем по оси наименьшего перекрытия.
+// друг на друга, раздвигаем по оси наименьшего перекрытия. Размер узла — w/h,
+// если задан (карточки доски шире), иначе экранный.
 function separate(list) {
-  const gx = NODE_W + 28;
-  const gy = NODE_H + 26;
   for (let pass = 0; pass < 60; pass++) {
     let moved = false;
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const a = list[i];
         const b = list[j];
+        const gx = ((a.w || NODE_W) + (b.w || NODE_W)) / 2 + 28;
+        const gy = ((a.h || NODE_H) + (b.h || NODE_H)) / 2 + 26;
         const ox = gx - Math.abs(a.x - b.x);
         const oy = gy - Math.abs(a.y - b.y);
         if (ox <= 0 || oy <= 0) continue;
@@ -254,6 +281,7 @@ export function mountJournalGraph(root, { isDM = false, members = [], onOpen, on
       graph = { nodes: [], edges: [] };
       emptyEl.textContent = "Не удалось загрузить граф: " + err.message;
     }
+    graph.edges = mergeMutual(graph.edges || []);
     if (selected && !graph.nodes.some((n) => n.id === selected)) selected = "";
     setFolderOrder(graph.nodes);
     pos = layoutGraph(graph.nodes, graph.edges, fixed);
@@ -638,6 +666,40 @@ export function mountJournalGraph(root, { isDM = false, members = [], onOpen, on
 const BOARD_FILLS = ["#d0bfff", "#b2f2bb", "#ffc9c9", "#a5d8ff", "#ffec99", "#99e9f2", "#eebefa", "#e9ecef"];
 const BOARD_STROKES = { союзник: "#2f9e44", враг: "#e03131", семья: "#9c36b5", подчинённый: "#1971c2" };
 
+// Карточка доски по длине названия: шире до BOARD_MAX_W, дальше перенос по
+// словам. Шрифт — как у текста доски (fontFamily 2, 16 px); в тестах canvas
+// нет — тогда оценка по числу букв.
+const BOARD_MAX_W = 320;
+let measureCtx;
+function textWidth(s) {
+  if (measureCtx === undefined) {
+    measureCtx = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null;
+    if (measureCtx) measureCtx.font = "16px Helvetica, Arial, sans-serif";
+  }
+  return measureCtx ? measureCtx.measureText(s).width : Array.from(s).length * 9;
+}
+
+function nodeBox(title) {
+  const lines = [];
+  let line = "";
+  for (const word of String(title || "").split(/\s+/).filter(Boolean)) {
+    const next = line ? line + " " + word : word;
+    if (line && textWidth(next) > BOARD_MAX_W - 24) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  lines.push(line);
+  const widest = Math.max(...lines.map(textWidth));
+  return { lines, w: Math.min(BOARD_MAX_W, Math.max(NODE_W, Math.ceil(widest) + 24)), h: Math.max(NODE_H, lines.length * 20 + 20) };
+}
+
+// edgePoint — где луч из центра прямоугольника в сторону (dx, dy) выходит за его край.
+function edgePoint(cx, cy, w, h, dx, dy) {
+  const t = Math.min(dx ? w / 2 / Math.abs(dx) : Infinity, dy ? h / 2 / Math.abs(dy) : Infinity);
+  return [cx + dx * t, cy + dy * t];
+}
+
 export function boardScene(graph, positions) {
   const elements = [];
   const now = Date.now();
@@ -682,20 +744,25 @@ export function boardScene(graph, positions) {
     autoResize: true,
     ...extra,
   });
-  // Доска открывается в начале координат — граф сдвигаем туда.
-  const pts = graph.nodes.map((n) => positions.get(n.id)).filter(Boolean);
-  const minX = pts.length ? Math.min(...pts.map((p) => p.x)) : 0;
-  const minY = pts.length ? Math.min(...pts.map((p) => p.y)) : 0;
-  const dx = 40 + NODE_W / 2 - minX;
-  const dy = 90 + NODE_H / 2 - minY;
-  const folders = [...new Set(graph.nodes.map((n) => topFolder(n.folder)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
-  const legend = Object.keys(BOARD_STROKES).join(", ");
-  elements.push(text("legend", 40, 30, 600, `Граф связей: цвет стрелки — тип связи (${legend}), пунктир — просто ссылка`, { fontSize: 14 }));
-
-  const rectOf = new Map();
+  // Карточки на доске шире экранных — раздвигаем их заново под свой размер.
+  const boxes = [];
   for (const n of graph.nodes) {
     const p = positions.get(n.id);
-    if (!p) continue;
+    if (p) boxes.push({ node: n, x: p.x, y: p.y, ...nodeBox(n.title) });
+  }
+  separate(boxes);
+  // Доска открывается в начале координат — граф сдвигаем туда.
+  const minX = boxes.length ? Math.min(...boxes.map((b) => b.x - b.w / 2)) : 0;
+  const minY = boxes.length ? Math.min(...boxes.map((b) => b.y - b.h / 2)) : 0;
+  const dx = 40 - minX;
+  const dy = 90 - minY;
+  const folders = [...new Set(graph.nodes.map((n) => topFolder(n.folder)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
+  const legend = Object.keys(BOARD_STROKES).join(", ");
+  const legendText = `Граф связей: цвет стрелки — тип связи (${legend}), пунктир — просто ссылка`;
+  elements.push(text("legend", 40, 30, Math.ceil((textWidth(legendText) * 14) / 16) + 16, legendText, { fontSize: 14 }));
+
+  const rectOf = new Map();
+  for (const { node: n, x, y, w, h, lines } of boxes) {
     const id = "n" + hash(n.id).toString(36);
     const textId = id + "t";
     const f = folders.indexOf(topFolder(n.folder));
@@ -703,10 +770,10 @@ export function boardScene(graph, positions) {
       ...base(),
       id,
       type: "rectangle",
-      x: p.x + dx - NODE_W / 2,
-      y: p.y + dy - NODE_H / 2,
-      width: NODE_W,
-      height: NODE_H,
+      x: x + dx - w / 2,
+      y: y + dy - h / 2,
+      width: w,
+      height: h,
       backgroundColor: BOARD_FILLS[f < 0 ? BOARD_FILLS.length - 1 : f % (BOARD_FILLS.length - 1)],
       roundness: { type: 3 },
       boundElements: [{ type: "text", id: textId }],
@@ -715,31 +782,48 @@ export function boardScene(graph, positions) {
     rectOf.set(n.id, rect);
     elements.push(
       rect,
-      text(textId, rect.x + 8, rect.y + 10, NODE_W - 16, n.title, { textAlign: "center", verticalAlign: "middle", containerId: id })
+      text(textId, rect.x + 8, rect.y + (h - lines.length * 20) / 2, w - 16, lines.join("\n"), {
+        originalText: n.title,
+        height: lines.length * 20,
+        textAlign: "center",
+        verticalAlign: "middle",
+        containerId: id,
+      })
     );
   }
   for (const e of graph.edges) {
     const a = rectOf.get(e.from);
     const b = rectOf.get(e.to);
     if (!a || !b) continue;
-    const ax = a.x + NODE_W / 2;
-    const ay = a.y + NODE_H / 2;
-    const bx = b.x + NODE_W / 2;
-    const by = b.y + NODE_H / 2;
+    // Стрелка — от края до края с зазором привязки, а не из центра в центр:
+    // иначе наконечник ложится на подпись.
+    const ax = a.x + a.width / 2;
+    const ay = a.y + a.height / 2;
+    const bx = b.x + b.width / 2;
+    const by = b.y + b.height / 2;
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const gx = ((bx - ax) / len) * 4;
+    const gy = ((by - ay) / len) * 4;
+    const [sx, sy] = edgePoint(ax, ay, a.width, a.height, bx - ax, by - ay);
+    const [ex, ey] = edgePoint(bx, by, b.width, b.height, ax - bx, ay - by);
+    const x1 = sx + gx;
+    const y1 = sy + gy;
+    const x2 = ex - gx;
+    const y2 = ey - gy;
     const id = "e" + seed;
     elements.push({
       ...base(),
       id,
       type: "arrow",
-      x: ax,
-      y: ay,
-      width: Math.abs(bx - ax),
-      height: Math.abs(by - ay),
+      x: x1,
+      y: y1,
+      width: Math.abs(x2 - x1),
+      height: Math.abs(y2 - y1),
       strokeColor: e.type ? BOARD_STROKES[e.type] || "#f08c00" : "#868e96",
       strokeStyle: e.type ? "solid" : "dashed",
       points: [
         [0, 0],
-        [bx - ax, by - ay],
+        [x2 - x1, y2 - y1],
       ],
       startBinding: { elementId: a.id, focus: 0, gap: 4 },
       endBinding: { elementId: b.id, focus: 0, gap: 4 },

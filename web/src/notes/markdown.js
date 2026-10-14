@@ -4,6 +4,7 @@
 import { marked } from "marked";
 import { sanitizeHtml } from "../html.js";
 import { extractRelationBlocks, restoreRelationBlocks } from "./relations.js";
+import { rollMacroText } from "../foundry-text.js";
 
 // wikiLinkRe — [[Заголовок]] или [[Заголовок|Текст ссылки]]. Не жадный (.+?),
 // чтобы "[[A]] и [[B]]" на одной строке не схлопнулись в одну ссылку.
@@ -16,6 +17,8 @@ import { extractRelationBlocks, restoreRelationBlocks } from "./relations.js";
 // импорта модуля, см. web/src/foundry-text.js — ломался на кликабельную
 // ссылку в никуда вида "[r 2d6](wikilink:%2Fr%202d6)".
 const wikiLinkRe = /\[\[(?!\/)([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
+// rollMacroRe — бросок Foundry в тексте записи: [[/r 2d6]]{подпись}.
+const rollMacroRe = /\[\[(\/[^\]]+)\]\](?:\{([^}]*)\})?/g;
 
 // noteTitleFromContent — первая непустая строка вида "# Заголовок" (без "# "),
 // иначе "Без названия". Та же логика, что и на сервере
@@ -140,7 +143,9 @@ export function wikiCreateTarget(target, notes, fromFolder = "") {
 // см. wireWikiLinks ниже (marked ничего не знает про список заметок).
 export function renderNoteHtml(rawMarkdown) {
   const { text, panels } = extractRelationBlocks(rawMarkdown);
-  const withLinks = text.replace(wikiLinkRe, (_, target, display) => {
+  // Импорт модуля переводит броски на сервере, а набранные руками — здесь.
+  const withRolls = text.replace(rollMacroRe, (m, inner, label) => rollMacroText(inner, label) ?? m);
+  const withLinks = withRolls.replace(wikiLinkRe, (_, target, display) => {
     const t = target.trim();
     // Подпись по умолчанию — только заголовок: путь в тексте заметки был бы
     // шумом, он остаётся в подсказке при наведении.

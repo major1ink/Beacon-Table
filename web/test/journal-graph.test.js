@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { layoutGraph, boardScene } from "../src/journal-graph.js";
+import { layoutGraph, boardScene, mergeMutual } from "../src/journal-graph.js";
 
 const nodes = Array.from({ length: 12 }, (_, i) => ({ id: "n" + i, title: "Запись " + i, folder: i % 2 ? "NPC" : "Места" }));
 const edges = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id, type: i % 3 ? "" : "союзник" }));
@@ -31,4 +31,42 @@ test("доска: карточка со ссылкой на запись и ст
   assert.equal(arrow.startBinding.elementId, rects[0].id);
   assert.equal(arrow.endBinding.elementId, rects[1].id);
   assert.ok(rects[1].boundElements.some((b) => b.id === arrow.id));
+});
+
+test("связь, объявленная в обеих записях, — одна; направленная и другой тип — отдельно", () => {
+  const merged = mergeMutual([
+    { from: "margo", to: "anselm", type: "семья", secret: true },
+    { from: "anselm", to: "margo", type: "семья", secret: false },
+    { from: "anselm", to: "margo", type: "враг" },
+    { from: "margo", to: "tobias", type: "подчинённый" },
+    { from: "tobias", to: "margo", type: "подчинённый" },
+    { from: "margo", to: "tobias", type: "" },
+  ]);
+  assert.deepEqual(
+    merged.map((e) => `${e.from}>${e.to}:${e.type}`),
+    ["margo>anselm:семья", "anselm>margo:враг", "margo>tobias:подчинённый", "tobias>margo:подчинённый", "margo>tobias:"]
+  );
+  assert.equal(merged[0].secret, false, "видна игрокам через открытую запись");
+});
+
+test("доска: длинное название — широкая карточка без наложений, стрелка от края до края", () => {
+  const long = nodes.map((n, i) => ({ ...n, title: i % 3 ? n.title : "Сессия 10 — 29 сентября 2026, пещера кузнеца и колокольня" }));
+  const scene = boardScene({ nodes: long, edges }, layoutGraph(long, edges));
+  const rects = scene.elements.filter((e) => e.type === "rectangle");
+  const wide = rects.find((r) => r.link.includes("Сессия 10"));
+  const label = scene.elements.find((e) => e.containerId === wide.id);
+  assert.ok(wide.width > 176 && wide.width <= 320, "ширина по названию");
+  assert.ok(label.text.includes("\n") && wide.height > 40, "длинное название переносится");
+  for (let i = 0; i < rects.length; i++)
+    for (let j = i + 1; j < rects.length; j++) {
+      const [a, b] = [rects[i], rects[j]];
+      const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+      assert.ok(apart, `карточки ${a.link} и ${b.link} наложились`);
+    }
+  const byId = new Map(rects.map((r) => [r.id, r]));
+  for (const arrow of scene.elements.filter((e) => e.type === "arrow")) {
+    const r = byId.get(arrow.startBinding.elementId);
+    const inside = arrow.x > r.x + 1 && arrow.x < r.x + r.width - 1 && arrow.y > r.y + 1 && arrow.y < r.y + r.height - 1;
+    assert.ok(!inside, "стрелка начинается не внутри карточки");
+  }
 });

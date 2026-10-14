@@ -37,6 +37,9 @@ type Kind[T any] struct {
 	SetLibrary func(card *T)
 	// Less — порядок выдачи списка.
 	Less func(a, b *T) bool
+	// Unique — убрать из списка дубли (необязательно). Получает карточки
+	// модулей в порядке подключения, за ними — библиотеку мира.
+	Unique func(list []*T) []*T
 }
 
 // Source — карточки одного вида из одного модуля: папка dir в fsys, по
@@ -213,6 +216,9 @@ func (c *Catalog[T]) List(ctx context.Context) ([]*T, error) {
 		c.kind.SetLibrary(card)
 	}
 	all = append(all, userList...)
+	if c.kind.Unique != nil {
+		all = c.kind.Unique(all)
+	}
 	sort.SliceStable(all, func(i, j int) bool { return c.kind.Less(all[i], all[j]) })
 	return all, nil
 }

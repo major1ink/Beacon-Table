@@ -75,6 +75,7 @@ export function counterWidget(cell) {
     if (cell.target && (ctx.gm || cell.showTarget)) value.append(el("small", { text: "/ " + cell.target }));
     value.classList.toggle("reached", !!cell.target && (cell.done || (cell.value || 0) >= cell.target));
     note.textContent = cell.done ? "Порог взят — счёт стоит" : counterSummary(cell);
+    note.title = note.textContent; // в узкой ячейке подпись обрезается многоточием
     note.hidden = !note.textContent;
   };
   views.add({ value, draw });
@@ -108,10 +109,10 @@ export function counterWidget(cell) {
   };
   const gear = el("button", { class: "icon-btn", type: "button", title: "Что считать и когда сообщить", html: icon("gear", { size: 15 }) });
   gear.onclick = () => counterSettings(cell);
-  return el("div", { class: "counter" }, [
-    el("button", { class: "counter-btn", type: "button", text: "−", "aria-label": "Меньше", onclick: step(-1) }),
+  return el("div", { class: "counter counter-gm" }, [
+    el("button", { class: "counter-btn counter-minus", type: "button", text: "−", "aria-label": "Меньше", onclick: step(-1) }),
     main,
-    el("button", { class: "counter-btn", type: "button", text: "+", "aria-label": "Больше", onclick: step(1) }),
+    el("button", { class: "counter-btn counter-plus", type: "button", text: "+", "aria-label": "Больше", onclick: step(1) }),
     el("div", { class: "timer-controls" }, [reset, shown, gear]),
   ]);
 }

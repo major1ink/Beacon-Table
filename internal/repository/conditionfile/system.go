@@ -27,6 +27,36 @@ var kind = cardcatalog.Kind[domain.Condition]{
 	Less: func(a, b *domain.Condition) bool {
 		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 	},
+	Unique: uniqueSlugs,
+}
+
+// uniqueSlugs — slug ключ метки на токене и ссылки из заклинания, поэтому
+// карточка на slug одна: своя из библиотеки мира, иначе модуля (первого по
+// порядку подключения), базовые состояния — последними. Без этого базовый
+// модуль, включённый рядом с системой, давал пары «Испуг» / «Испуган».
+func uniqueSlugs(list []*domain.Condition) []*domain.Condition {
+	rank := func(c *domain.Condition) int {
+		switch {
+		case !c.System:
+			return 0
+		case c.Module == domain.BaseModuleID:
+			return 2
+		}
+		return 1
+	}
+	best := map[string]*domain.Condition{}
+	for _, c := range list {
+		if b, ok := best[c.Slug]; c.Slug != "" && (!ok || rank(c) < rank(b)) {
+			best[c.Slug] = c
+		}
+	}
+	out := make([]*domain.Condition, 0, len(list))
+	for _, c := range list {
+		if c.Slug == "" || best[c.Slug] == c {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // SystemStore — карточки одного модуля.

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -26,8 +27,10 @@ type SessionLogService interface {
 	Append(ctx context.Context, ev domain.SessionEvent) (domain.SessionEvent, bool)
 	List(ctx context.Context) ([]domain.SessionInfo, error)
 	Events(ctx context.Context, id string, isDM bool, playerID string) ([]domain.SessionEvent, error)
-	// Summary — итог сессии записью журнала ведущего; возвращает её id.
-	Summary(ctx context.Context, id string) (string, error)
+	// Summary — итог сессии записью журнала ведущего; возвращает её id и
+	// changed — создана или переписана ли запись. Итог уже есть — та же
+	// запись: rebuild пересобирает её текст из ленты, иначе она не меняется.
+	Summary(ctx context.Context, id string, rebuild bool) (entryID string, changed bool, err error)
 }
 
 type sessionLog struct {
@@ -169,19 +172,34 @@ func (s *sessionLog) Events(ctx context.Context, id string, isDM bool, playerID 
 	return out, nil
 }
 
-func (s *sessionLog) Summary(ctx context.Context, id string) (string, error) {
+func (s *sessionLog) Summary(ctx context.Context, id string, rebuild bool) (string, bool, error) {
 	evs, err := s.repo.Events(ctx, id)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if len(evs) == 0 {
-		return "", domain.ErrNotFound
+		return "", false, domain.ErrNotFound
 	}
 	info := sessionInfo(id, evs)
 	dm := domain.JournalViewer{IsDM: true, Name: "ДМ"}
+	if info.SummaryID != "" {
+		_, err := s.journal.Get(ctx, dm, info.SummaryID)
+		switch {
+		case err == nil && !rebuild:
+			return info.SummaryID, false, nil
+		case err == nil:
+			if _, err := s.journal.Update(ctx, dm, info.SummaryID, SessionMarkdown(info, evs)); err != nil {
+				return "", false, err
+			}
+			return info.SummaryID, true, nil
+		case !errors.Is(err, domain.ErrNotFound):
+			return "", false, err
+		}
+		// Запись итога удалили из журнала — делаем новую.
+	}
 	e, err := s.journal.Create(ctx, dm, JournalDraft{Folder: "Сессии", Content: SessionMarkdown(info, evs), Default: domain.JournalNone})
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	// Итог дописывается и в закончившуюся ленту — прямо в её файл.
 	s.mu.Lock()
@@ -192,7 +210,7 @@ func (s *sessionLog) Summary(ctx context.Context, id string) (string, error) {
 	}
 	err = s.repo.Append(ctx, id, domain.SessionEvent{Seq: seq, At: s.now().UnixMilli(), Kind: domain.SessionSummary, Scene: evs[len(evs)-1].Scene, Text: "Итог в журнале", Ref: e.ID})
 	s.mu.Unlock()
-	return e.ID, err
+	return e.ID, true, err
 }
 
 // SessionMarkdown — итог сессии: разделы по сценам, бой по раундам.

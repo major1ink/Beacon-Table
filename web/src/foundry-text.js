@@ -40,6 +40,18 @@ function withLabel(formula, label) {
   return `${label} (${formula})`;
 }
 
+// rollMacroText — бросок Foundry, набранный или вставленный в запись журнала
+// руками: "[[/r 2d6]]{Урон}" → "Урон (2d6)", формулу кликабельной делает
+// inline-rolls.js. В отличие от cleanRoll ничего не выбрасывает: формула
+// остаётся и без подписи, незнакомая команда — null, макрос остаётся как есть.
+export function rollMacroText(inner, rawLabel) {
+  const m = /^\/(\S+)\s+([\s\S]+)$/.exec((inner || "").trim());
+  if (!m || !ROLL_COMMANDS.has(m[1].toLowerCase())) return null;
+  // "/r 1d20+5 # Атака" — после "#" Foundry пишет подпись броска.
+  const [formula, flavor = ""] = m[2].split("#");
+  return withLabel(formula.trim(), (rawLabel || "").trim() || flavor.trim());
+}
+
 // applyLookupFormat — модификатор регистра из [[lookup @path FORMAT]]
 // (capitalize/lowercase/uppercase — Foundry core). Прочее не трогаем.
 function applyLookupFormat(value, fmt) {

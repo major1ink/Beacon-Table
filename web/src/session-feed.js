@@ -84,13 +84,15 @@ export function mountSessionFeed(root, { isDM = false, members = [], send, onOpe
   const title = el("div", "sf-title");
   const summaryBtn = el("button", "sf-btn");
   summaryBtn.type = "button";
-  summaryBtn.innerHTML = icon("scroll", { size: 15 }) + "<span>Сделать итог в журнал</span>";
+  const rebuildBtn = el("button", "sf-btn", "Пересобрать");
+  rebuildBtn.type = "button";
+  rebuildBtn.title = "Собрать итог из ленты заново";
   const asSel = el("select", "sf-as");
   asSel.title = "Как ленту видит игрок";
   const startBtn = el("button", "sf-btn sf-start");
   startBtn.type = "button";
   head.append(title);
-  if (isDM && !compact) head.append(asSel, summaryBtn);
+  if (isDM && !compact) head.append(asSel, summaryBtn, rebuildBtn);
   if (isDM) head.append(startBtn);
   const chips = el("div", "sf-chips");
   const hint = el("div", "sf-hint", "Так ленту видит игрок: без скрытых бросков, без заметок ведущего, у врагов вместо чисел хитов — «ранен», «тяжело ранен».");
@@ -190,7 +192,11 @@ export function mountSessionFeed(root, { isDM = false, members = [], send, onOpe
     title.textContent = s ? s.title : "Лента сессии";
     startBtn.textContent = active ? "Закончить сессию" : "Начать сессию";
     startBtn.classList.toggle("danger", !!active);
+    // В шапке прошлой сессии «Закончить» читалось бы как конец открытой.
+    startBtn.style.display = !active || compact || viewing === active.id ? "" : "none";
     summaryBtn.style.display = s ? "" : "none";
+    summaryBtn.innerHTML = icon("scroll", { size: 15 }) + `<span>${s && s.summaryId ? "Открыть итог" : "Сделать итог в журнал"}</span>`;
+    rebuildBtn.style.display = s && s.summaryId ? "" : "none";
     hint.style.display = as ? "" : "none";
     noteRow.style.display = active && (compact || viewing === active.id) && !as ? "" : "none";
   }
@@ -261,18 +267,28 @@ export function mountSessionFeed(root, { isDM = false, members = [], send, onOpe
     noteInput.value = "";
   };
 
-  summaryBtn.onclick = async () => {
+  async function summary(rebuild) {
     if (!viewing) return;
-    summaryBtn.disabled = true;
+    summaryBtn.disabled = rebuildBtn.disabled = true;
     try {
-      const res = await makeSessionSummary(viewing);
+      const res = await makeSessionSummary(viewing, { rebuild });
       await refresh();
       if (onOpenEntry) onOpenEntry(res.id);
     } catch (err) {
       title.title = err.message;
     } finally {
-      summaryBtn.disabled = false;
+      summaryBtn.disabled = rebuildBtn.disabled = false;
     }
+  }
+  summaryBtn.onclick = () => summary(false);
+  rebuildBtn.onclick = async () => {
+    const s = sessions.find((x) => x.id === viewing);
+    const ok = await showConfirm(`Пересобрать итог «${s ? s.title : ""}»?`, {
+      title: "Итог сессии",
+      okLabel: "Пересобрать",
+      hint: "Текст записи соберётся из ленты заново — ваши правки в ней пропадут.",
+    });
+    if (ok) summary(true);
   };
 
   // onMessage — сообщения сокета стола: состояние сессии и новые события.

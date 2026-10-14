@@ -109,7 +109,8 @@ function renderNote(element) {
     createElement("div", { className: "board-note-title", key: "t" }, title),
     html
       ? createElement("div", {
-          className: "board-note-body",
+          // note-render — оформление блока связей и врезок из theme.css.
+          className: "board-note-body note-render",
           key: "b",
           dangerouslySetInnerHTML: { __html: html },
         })

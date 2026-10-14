@@ -504,8 +504,8 @@ export async function fetchSessions() {
 export async function fetchSessionEvents(id, { as = "" } = {}) {
   return apiFetch(`/api/sessions/${encodeURIComponent(id)}` + (as ? "?as=" + encodeURIComponent(as) : ""));
 }
-export async function makeSessionSummary(id) {
-  return apiFetch(`/api/sessions/${encodeURIComponent(id)}/summary`, { method: "POST" });
+export async function makeSessionSummary(id, { rebuild = false } = {}) {
+  return apiFetch(`/api/sessions/${encodeURIComponent(id)}/summary${rebuild ? "?rebuild=1" : ""}`, { method: "POST" });
 }
 export async function createJournalEntry({ content, folder = "", def = "none", access = {} } = {}) {
   return apiFetch("/api/journal", {

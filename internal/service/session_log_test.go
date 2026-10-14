@@ -112,7 +112,7 @@ func TestSessionSummaryToJournal(t *testing.T) {
 	s.Append(ctx, domain.SessionEvent{Kind: domain.SessionTurn, Scene: "Колокольня", Round: 1, Text: "Ход: Гоблин"})
 	s.End(ctx)
 
-	id, err := s.Summary(ctx, info.ID)
+	id, _, err := s.Summary(ctx, info.ID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,5 +131,47 @@ func TestSessionSummaryToJournal(t *testing.T) {
 	list, _ := s.List(ctx)
 	if list[0].SummaryID != id {
 		t.Fatalf("итог не отмечен в списке: %+v", list[0])
+	}
+}
+
+// Итог уже есть — кнопка ведёт в ту же запись, правки ведущего не теряются;
+// пересборка переписывает её, удалённая запись делается заново.
+func TestSessionSummaryReusesEntry(t *testing.T) {
+	ctx := context.Background()
+	s, journal := newTestSessionLog(t, t.TempDir())
+	dm := domain.JournalViewer{IsDM: true}
+	info, _, _ := s.Start(ctx, "")
+	s.Append(ctx, domain.SessionEvent{Kind: domain.SessionNote, Text: "Тобиас врёт"})
+	s.End(ctx)
+
+	first, changed, err := s.Summary(ctx, info.ID, false)
+	if err != nil || !changed {
+		t.Fatalf("первый итог: %v %v", changed, err)
+	}
+	if _, err := journal.Update(ctx, dm, first, "# Сессия 1\n\nПравка ведущего"); err != nil {
+		t.Fatal(err)
+	}
+	again, changed, _ := s.Summary(ctx, info.ID, false)
+	e, _ := journal.Get(ctx, dm, first)
+	if again != first || changed || !strings.Contains(e.Content, "Правка ведущего") {
+		t.Fatalf("повторный итог: %s %v %q", again, changed, e.Content)
+	}
+	rebuilt, changed, _ := s.Summary(ctx, info.ID, true)
+	e, _ = journal.Get(ctx, dm, first)
+	if rebuilt != first || !changed || !strings.Contains(e.Content, "Тобиас врёт") {
+		t.Fatalf("пересборка: %s %v %q", rebuilt, changed, e.Content)
+	}
+	all, _ := journal.List(ctx, dm)
+	if len(all) != 1 {
+		t.Fatalf("записей итога: %d", len(all))
+	}
+
+	if err := journal.Delete(ctx, dm, first); err != nil {
+		t.Fatal(err)
+	}
+	fresh, changed, _ := s.Summary(ctx, info.ID, false)
+	list, _ := s.List(ctx)
+	if fresh == first || !changed || list[0].SummaryID != fresh {
+		t.Fatalf("итог после удаления: %s %v %+v", fresh, changed, list[0])
 	}
 }

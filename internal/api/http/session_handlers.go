@@ -70,11 +70,13 @@ func (a *API) handleSessionSummary(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id, err := world.Sessions.Summary(r.Context(), r.PathValue("id"))
+	id, changed, err := world.Sessions.Summary(r.Context(), r.PathValue("id"), r.URL.Query().Get("rebuild") == "1")
 	if err != nil {
 		writeSessionErr(w, err)
 		return
 	}
-	notifyJournal(world, id)
-	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	if changed {
+		notifyJournal(world, id)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
