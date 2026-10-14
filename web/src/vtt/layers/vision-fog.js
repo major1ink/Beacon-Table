@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import { cutMulti, fillMulti } from "../light-geometry.js";
-import { computeVisionPlanWithFallback } from "../vision-plan.js";
+import { computeVisionPlanWithFallback, viewerIsDM } from "../vision-plan.js";
 import { worldSize } from "../camera.js";
 
 // ---- освещение (см. README, раздел про свет) ----
@@ -100,7 +100,7 @@ export function createVisionFogLayer(ctx) {
   // экране просто остаётся ПРЕДЫДУЩИЙ (корректный) кадр, без единого мига,
   // пока следующий пересчёт (следующий кадр драга) не спасёт положение сам.
   function rebuild() {
-    const { plan, error, unchanged } = computeVisionPlanWithFallback(ctx.scene, ctx.isDM, memo);
+    const { plan, error, unchanged } = computeVisionPlanWithFallback(ctx.scene, viewerIsDM(ctx), memo);
     // unchanged — вход расчёта бит в бит тот же, что в прошлый раз (см.
     // planInputKey): на экране уже нарисовано ровно это, перерисовывать
     // Graphics незачем.
@@ -218,7 +218,7 @@ export function createVisionFogLayer(ctx) {
       buildings: s.buildings,
       fogAreas: s.fogAreas,
     };
-    worker.postMessage({ id: generation, scene, isDM: ctx.isDM, force });
+    worker.postMessage({ id: generation, scene, isDM: viewerIsDM(ctx), force });
   }
 
   function onWorkerResult(e) {
@@ -239,7 +239,7 @@ export function createVisionFogLayer(ctx) {
   // показывает ни кадра без тумана.
   function blackout() {
     clearAll();
-    if (ctx.isDM || ctx.scene.fogOfWar === false) return;
+    if (viewerIsDM(ctx) || ctx.scene.fogOfWar === false) return;
     const { w, h } = worldSize(ctx.scene);
     darkness.rect(0, 0, w, h).fill({ color: DARK_COLOR, alpha: DARK_ALPHA });
   }

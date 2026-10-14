@@ -240,12 +240,12 @@
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
     /* Плашка "сцена · игроки · ДМ" стоит в нижнем правом углу, в одном ряду
-       с зумом (#zoomHud правее её, отсюда right: 150px = 10 + ширина зума
-       132 + зазор 8). Раньше она жила в верхнем левом углу, но там её
+       с зумом (#zoomHud правее её, отсюда right: 182px = 10 + ширина зума
+       164 + зазор 8). Раньше она жила в верхнем левом углу, но там её
        зажало между колонкой со статблоком и полосой хода — а низ справа
        занят только зумом и от боя не зависит вообще. */
     #statusBar {
-      position: absolute; right: 150px; bottom: 10px; z-index: 5;
+      position: absolute; right: 182px; bottom: 10px; z-index: 5;
       background: var(--glass-bg);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;
@@ -524,7 +524,18 @@
       border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
     }
     #zoomHud button { width: 28px; height: 28px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-    #zoomHud #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
+    #zoomHud #fullscreenBtn.open, #zoomHud #viewAsPlayerBtn.open { background: var(--accent-bg); color: var(--accent); }
+    /* Плашка над зумом, пока карта показана глазами игроков: чтобы ведущий не
+       забыл выключить. Клик — обратно к виду ведущего. */
+    #viewAsPlayerBadge {
+      position: absolute; right: 10px; bottom: 54px; z-index: 5;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: var(--radius-pill);
+      background: var(--accent-bg); color: var(--accent);
+      border: 1px solid var(--accent); box-shadow: var(--shadow-soft);
+      font-size: 12px; font-weight: 600;
+    }
+    #viewAsPlayerBadge[hidden] { display: none; }
 
     /* ---- переключатель сцен (панель "Сцена") ---- */
     /* Без «хватки» — порядок сцен не перетаскивается; корзина только под курсором. */
@@ -1099,8 +1110,8 @@
       /* Плашка уезжает из правого нижнего угла — там зум. */
       #statusBar {
         left: 66px; right: auto; bottom: 6px;
-        /* 66 слева + ~168 на HUD зума справа + зазоры. */
-        max-width: calc(100vw - 246px);
+        /* 66 слева + ~210 на HUD зума справа + зазоры. */
+        max-width: calc(100vw - 288px);
         padding: 5px 11px; font-size: 11px;
       }
       /* В 150px помещаются имя сцены и «👥 3»; слова и логин ДМ — нет. */
@@ -1108,6 +1119,7 @@
       /* HUD и плашка просвечивали сквозь панель и не нажимались. */
       body.panel-open #zoomHud, body.panel-open #statusBar { display: none !important; }
       #zoomHud { right: 6px; bottom: 6px; }
+      #viewAsPlayerBadge { right: 6px; bottom: 60px; }
       #zoomHud button { width: 38px; height: 38px; }
 
       /* Меню открываются у пальца (долгое нажатие, см. interaction.js) —
@@ -1691,7 +1703,9 @@
         <span class="status-sep">·</span>
         <span id="dmUsername"></span>
       </div>
+      <button id="viewAsPlayerBadge" type="button" hidden title="Вернуть вид ведущего">Как видит игрок</button>
       <div id="zoomHud">
+        <button id="viewAsPlayerBtn" type="button" aria-pressed="false"></button>
         <button id="fullscreenBtn" type="button"></button>
         <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         <button id="zoomResetBtn" title="Сбросить вид"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>

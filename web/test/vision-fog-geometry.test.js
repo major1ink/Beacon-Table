@@ -20,7 +20,7 @@
 // при любой расстановке токенов и источников света.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeVisionPlan, computeVisionPlanWithFallback, computeLightLayer, QUANTUM_LADDER, LIGHT_STEPS } from "../src/vtt/vision-plan.js";
+import { computeVisionPlan, computeVisionPlanWithFallback, computeLightLayer, QUANTUM_LADDER, LIGHT_STEPS, viewerIsDM } from "../src/vtt/vision-plan.js";
 import { computeVisibilityPolygon, weldWalls, wallBlocksLight, distToSegment } from "../src/geometry.js";
 import { unionAll, subtractNested, differenceMulti, quantizePoints, gridUnitsToWorld } from "../src/vtt/light-geometry.js";
 import { manorWalls, manorWorld, manorGrid } from "./fixtures/walls-manor.js";
@@ -912,4 +912,16 @@ test("сварка стен сводит близкие концы в серед
   assert.deepEqual([walls[1].x1, walls[1].y1], [103, 0]);
   assert.deepEqual([walls[1].x2, walls[1].y2], [106, 100], "точный стык сдвинулся");
   assert.deepEqual([walls[3].x2, walls[3].y2], [0, 40], "проём заварен");
+});
+
+// «Как видит игрок» в окне ведущего: тот же расчёт, что у игрока, — тьма,
+// свет и обзор всей партии; без режима у ведущего тьмы нет.
+test("ведущий в режиме «как видит игрок» получает план игрока", () => {
+  const scene = makeScene([{ x: 800, y: 800, light: { enabled: true, bright: 20, dim: 40 } }, { x: 1600, y: 900 }], "");
+  const asPlayer = viewerIsDM({ isDM: true, viewAsPlayer: true });
+  assert.equal(asPlayer, false);
+  assert.equal(viewerIsDM({ isDM: true }), true);
+  assert.equal(viewerIsDM({ isDM: false, viewAsPlayer: false }), false);
+  assert.deepEqual(computeVisionPlan(scene, asPlayer, WORKING_QUANTUM), computeVisionPlan(scene, false, WORKING_QUANTUM));
+  assert.ok(!computeVisionPlan(scene, asPlayer, WORKING_QUANTUM).skip);
 });

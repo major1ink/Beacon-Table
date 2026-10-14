@@ -224,6 +224,13 @@ function ladderFrom(preferred) {
   return [preferred, ...QUANTUM_LADDER.filter((q) => q !== preferred)];
 }
 
+// viewerIsDM — считать ли видимость как у ведущего, без тьмы. В режиме «как
+// видит игрок» (ctx.viewAsPlayer, кнопка в окне ведущего) расчёт тот же, что
+// у игроков и на трансляции: обзор всей партии.
+export function viewerIsDM(ctx) {
+  return !!ctx.isDM && !ctx.viewAsPlayer;
+}
+
 // computeVisionPlan — один проход расчёта на заданном кванте. МОЖЕТ КИНУТЬ
 // исключение (polygon-clipping на вырожденной геометрии) — это нормально и
 // ожидаемо, ловит computeVisionPlanWithFallback выше.

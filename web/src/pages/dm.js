@@ -316,6 +316,24 @@ function hideOwnerOnlyUI() {
 // сам заход на worlds.html его не трогает.
 // Полный экран (см. src/fullscreen.js) — в HUD зума.
 initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
+
+// «Как видит игрок»: тьма, свет и туман в окне ведущего — как у игроков и на
+// трансляции (vtt/index.js: vtt:viewAsPlayer). Только вид: сцену можно
+// править, игроки ничего не замечают; после перезагрузки режим выключен.
+const viewAsPlayerBtn = document.getElementById("viewAsPlayerBtn");
+const viewAsPlayerBadge = document.getElementById("viewAsPlayerBadge");
+viewAsPlayerBadge.insertAdjacentHTML("afterbegin", icon("eye", { size: 13 }));
+function setViewAsPlayer(on) {
+  viewAsPlayerBtn.innerHTML = icon(on ? "eye-off" : "eye", { size: 15 });
+  viewAsPlayerBtn.title = on ? "Вернуть вид ведущего" : "Как видит игрок: тьма, свет и туман глазами партии";
+  viewAsPlayerBtn.classList.toggle("open", on);
+  viewAsPlayerBtn.setAttribute("aria-pressed", String(on));
+  viewAsPlayerBadge.hidden = !on;
+  document.dispatchEvent(new CustomEvent("vtt:viewAsPlayer", { detail: { active: on } }));
+}
+setViewAsPlayer(false);
+viewAsPlayerBtn.onclick = () => setViewAsPlayer(viewAsPlayerBadge.hidden);
+viewAsPlayerBadge.onclick = () => setViewAsPlayer(false);
 initVisualViewport();
 initWakeLock();
 
