@@ -53,14 +53,14 @@ export const GLYPHS = {
   lock: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
   hourglass: '<path d="M6 3h12M6 21h12"/><path d="M8 3c0 5 4 6 4 9s-4 4-4 9"/><path d="M16 3c0 5-4 6-4 9s4 4 4 9"/>',
   chain: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
-  // предметы без арта (см. item-glyph.js)
+  // предметы без арта (глифы медальона схемы)
   box: '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
   bow: '<path d="M4 4c8 2 14 8 16 16"/><path d="M4 4l16 16"/><path d="M14 6l4-2-2 4"/>',
   wand: '<path d="M4 20L16 8"/><path d="M15 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/><path d="M19 11l.5 1 1 .5-1 .5-.5 1-.5-1-1-.5 1-.5z"/>',
   scroll: '<path d="M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8"/><path d="M6 4a2 2 0 0 0-2 2v2h4V6a2 2 0 0 0-2-2z"/><path d="M8 20a2 2 0 0 1-2-2v-2h12v2a2 2 0 0 1-2 2"/><path d="M10 9h6M10 13h6"/>',
   ring: '<circle cx="12" cy="14" r="6"/><path d="M9 6l3-3 3 3-3 2z"/>',
   coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>',
-  // существа без арта (см. monster-block.js: monsterGlyphName)
+  // существа без арта (глифы медальона схемы)
   paw: '<circle cx="7" cy="8" r="1.6"/><circle cx="12" cy="6" r="1.6"/><circle cx="17" cy="8" r="1.6"/><path d="M12 11c-3 0-5.5 2.5-5.5 5a3 3 0 0 0 3 3c1 0 1.5-.5 2.5-.5s1.5.5 2.5.5a3 3 0 0 0 3-3c0-2.5-2.5-5-5.5-5z"/>',
   horns: '<path d="M4 3c0 5 2 8 5 9M20 3c0 5-2 8-5 9"/><circle cx="12" cy="14" r="6"/><circle cx="10" cy="13" r=".8" fill="currentColor"/><circle cx="14" cy="13" r=".8" fill="currentColor"/><path d="M10 16.5c1 .8 3 .8 4 0"/>',
   dragon: '<path d="M3 12c3-6 8-8 12-7l3-2-1 4c2 2 3 4 3 7-3-1-5-1-7 0-1-2-3-3-5-3l-2 3z"/><path d="M8 12l-3 7 6-3"/><circle cx="15" cy="9" r=".8" fill="currentColor"/>',

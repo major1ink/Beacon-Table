@@ -20,6 +20,7 @@ const maxAPIBody = 1 << 20
 var bigBodyAPIPaths = map[string]bool{
 	"/api/companies/import": true,
 	"/api/boards/import":    true,
+	"/api/scenes/import":    true,
 }
 
 // multipartMemoryBudget — второй аргумент http.Request.ParseMultipartForm:

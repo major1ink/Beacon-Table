@@ -19,7 +19,7 @@
     button { cursor: pointer; border: none; border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; padding: 8px 10px; transition: background .12s ease; }
     button:hover:not(:disabled) { background: var(--surface-hover); }
     button:disabled { opacity: 0.5; cursor: default; }
-    button.primary { background: var(--accent); color: #fff; }
+    button.primary { background: var(--accent); color: var(--on-accent); }
     .hint { opacity: 0.6; font-size: 11px; line-height: 1.5; margin: 0; }
     .error { color: var(--danger, #e06c75); }
 
@@ -123,6 +123,7 @@
       100% { margin-left: 100%; }
     }
   </style>
+  <link rel="stylesheet" href="/system-theme.css" />
 </head>
 <body>
   <div id="topBar">

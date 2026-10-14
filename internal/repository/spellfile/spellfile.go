@@ -68,10 +68,9 @@ func (s *Store) List(ctx context.Context) ([]*domain.Spell, error) {
 		}
 		spells = append(spells, &sp)
 	}
+	// По имени, как у остальных библиотек: круг — поле D&D, порядок и
+	// группы в списках задаёт клиент (схема системы или каталог D&D).
 	sort.Slice(spells, func(i, j int) bool {
-		if spells[i].Level != spells[j].Level {
-			return spells[i].Level < spells[j].Level
-		}
 		return strings.ToLower(spells[i].Name) < strings.ToLower(spells[j].Name)
 	})
 	return spells, nil

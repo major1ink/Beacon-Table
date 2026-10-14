@@ -18,7 +18,7 @@
 // FOUNDRY_ALIASES — коды, которые НЕ совпадают с нашим slug'ом один в один.
 // Всё, что здесь не перечислено, используется как есть (наши slug'и
 // каталога «из коробки» намеренно взяты равными кодам dnd5e —
-// cmd/beacon-table/systemdata/conditions/<system>/<slug>.json).
+// conditions/<slug>.json в модуле системы).
 import { GLYPH_FOR_SLUG } from "./condition-glyphs.js";
 
 const FOUNDRY_ALIASES = {

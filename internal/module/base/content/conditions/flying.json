@@ -1,0 +1,11 @@
+{
+  "name": "Летит",
+  "slug": "flying",
+  "source": "Базовые состояния",
+  "icon": "feather",
+  "color": "#00a8a8",
+  "description": "Существо в воздухе.",
+  "tags": [
+    "состояние"
+  ]
+}

@@ -34,13 +34,17 @@ import "time"
 type Condition struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// System — true для карточек каталога «из коробки», зашитого в бинарник
-	// на этапе компиляции (см. internal/repository/conditionfile.SystemStore) —
+	// System — true для карточек каталога «из коробки» из модулей
+	// (см. internal/repository/conditionfile.SystemStore) —
 	// проставляется сервером при чтении, клиентское значение в Create/Update
 	// игнорируется (см. conditionfile.Catalog). Такие карточки нельзя
 	// редактировать/удалять — только клонировать в библиотеку и править копию
 	// (кнопка «Клонировать», см. web/src/pages/conditions.js).
-	System          bool   `json:"system,omitempty"`
+	System bool `json:"system,omitempty"`
+	// Module — id модуля, из которого пришла карточка (см. internal/module);
+	// проставляется сервером при чтении, как и System. Пусто у карточек
+	// библиотеки мира.
+	Module          string `json:"module,omitempty"`
 	Source          string `json:"source,omitempty"` // "PHB'24", "самодельное"...
 	FoundryModuleID string `json:"foundryModuleId,omitempty"`
 
@@ -127,6 +131,10 @@ type Condition struct {
 	Tags      []string `json:"tags,omitempty"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Extra — ключи JSON, которых эта структура не знает (поля схемы
+	// игровой системы и т.п.): хранятся и отдаются как есть, см. domain.Extra.
+	Extra Extra `json:"-"`
 }
 
 // DefaultConditionSlug — ключ карточки без кода Foundry: из ID, потому что

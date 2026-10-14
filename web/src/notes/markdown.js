@@ -3,6 +3,8 @@
 // карточек библиотек, чтобы все поверхности вели себя одинаково.
 import { marked } from "marked";
 import { sanitizeHtml } from "../html.js";
+import { extractRelationBlocks, restoreRelationBlocks } from "./relations.js";
+import { rollMacroText } from "../foundry-text.js";
 
 // wikiLinkRe — [[Заголовок]] или [[Заголовок|Текст ссылки]]. Не жадный (.+?),
 // чтобы "[[A]] и [[B]]" на одной строке не схлопнулись в одну ссылку.
@@ -15,6 +17,8 @@ import { sanitizeHtml } from "../html.js";
 // импорта модуля, см. web/src/foundry-text.js — ломался на кликабельную
 // ссылку в никуда вида "[r 2d6](wikilink:%2Fr%202d6)".
 const wikiLinkRe = /\[\[(?!\/)([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
+// rollMacroRe — бросок Foundry в тексте записи: [[/r 2d6]]{подпись}.
+const rollMacroRe = /\[\[(\/[^\]]+)\]\](?:\{([^}]*)\})?/g;
 
 // noteTitleFromContent — первая непустая строка вида "# Заголовок" (без "# "),
 // иначе "Без названия". Та же логика, что и на сервере
@@ -138,7 +142,10 @@ export function wikiCreateTarget(target, notes, fromFolder = "") {
 // них не ломается. Резолвинг цели -> заметка и сама навигация — на клиенте,
 // см. wireWikiLinks ниже (marked ничего не знает про список заметок).
 export function renderNoteHtml(rawMarkdown) {
-  const withLinks = (rawMarkdown || "").replace(wikiLinkRe, (_, target, display) => {
+  const { text, panels } = extractRelationBlocks(rawMarkdown);
+  // Импорт модуля переводит броски на сервере, а набранные руками — здесь.
+  const withRolls = text.replace(rollMacroRe, (m, inner, label) => rollMacroText(inner, label) ?? m);
+  const withLinks = withRolls.replace(wikiLinkRe, (_, target, display) => {
     const t = target.trim();
     // Подпись по умолчанию — только заголовок: путь в тексте заметки был бы
     // шумом, он остаётся в подсказке при наведении.
@@ -155,7 +162,7 @@ export function renderNoteHtml(rawMarkdown) {
   });
   // Очистка обязательна: marked пропускает сырой HTML как есть, а тексты
   // сюда приходят от игроков и из чужих модулей Foundry (см. src/html.js).
-  return sanitizeHtml(marked.parse(withLinks, { breaks: true }));
+  return restoreRelationBlocks(sanitizeHtml(marked.parse(withLinks, { breaks: true })), panels);
 }
 
 // scrollToHeading — прокрутить containerEl к заголовку (h1–h4) с текстом

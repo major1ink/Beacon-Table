@@ -6,11 +6,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"beacon-table/internal/app"
 	"beacon-table/internal/domain"
+	"beacon-table/internal/module"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
 )
@@ -90,11 +90,11 @@ func testDemoTable(t *testing.T) *app.CompanyManager {
 	accounts := sqlite.NewAccountStore(db)
 	sessions := sqlite.NewSessionStore(db, accounts)
 	mgr := app.NewCompanyManager(db, companies, accounts, sessions, service.NewDiceRoller(),
-		fstest.MapFS{}, filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
+		module.NewRegistry("", nil, nil, ""), filepath.Join(dir, "data"), filepath.Join(dir, "uploads"), "/uploads/", true, nil)
 	if err := mgr.Bootstrap(ctx); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	company, err := mgr.Create(ctx, "Демо", domain.SystemDnD5e2024)
+	company, err := mgr.Create(ctx, "Демо", domain.SystemCustom)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

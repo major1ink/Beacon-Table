@@ -72,12 +72,17 @@ cd web && npm install && npm run lint
 
 ## Игровой контент (bestiary/spells/items/references)
 
-Каталог "из коробки" (`cmd/beacon-table/systemdata/`) может содержать
-**только** контент, лицензированный под SRD 5.1/5.2 (OGL 1.0a / CC-BY-4.0).
-Ничего из платных книг WotC (Player's Handbook, Monster Manual, DMG 2024/2014
-и т.д.) сюда не добавляется — ни текст статблоков, ни артворк. См.
-[`cmd/beacon-table/systemdata/README.md`](cmd/beacon-table/systemdata/README.md)
-для деталей и формата файлов.
+Контент D&D живёт не здесь, а в отдельных модулях репозитория
+[beacon-table-modules](https://github.com/major1ink/beacon-table-modules)
+(формат и правки — в его README). Он может содержать **только** материал,
+лицензированный под SRD 5.1/5.2 (OGL 1.0a / CC-BY-4.0). Ничего из платных книг
+WotC (Player's Handbook, Monster Manual, DMG 2024/2014 и т.д.) туда не
+добавляется — ни текст статблоков, ни артворк.
+
+Тесты, которым нужен настоящий каталог (`internal/modtool`, `internal/app`,
+`web/test/dnd-*.test.js`), читают репозиторий модулей из соседней папки
+`beacon-table-modules` или из `BEACON_MODULES_REPO`; без него они
+пропускаются.
 
 Если добавляете карточку — сначала сверьтесь, что она (по имени/содержанию)
 входит в официальный SRD 5.2: https://www.dndbeyond.com/srd.

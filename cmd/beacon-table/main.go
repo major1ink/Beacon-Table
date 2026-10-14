@@ -26,6 +26,9 @@ import (
 	apiws "beacon-table/internal/api/ws"
 	"beacon-table/internal/app"
 	"beacon-table/internal/backup"
+	"beacon-table/internal/modcatalog"
+	"beacon-table/internal/module"
+	"beacon-table/internal/module/base"
 	"beacon-table/internal/quota"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/service"
@@ -34,25 +37,9 @@ import (
 //go:embed static
 var staticFiles embed.FS
 
-// systemFiles — каталог монстров/заклинаний/предметов "из коробки", зашитый
-// в бинарник на этапе компиляции (см. internal/repository/monsterfile.SystemStore/
-// spellfile.SystemStore/itemfile.SystemStore), под подпапкой на систему
-// (systemdata/bestiary/<system>/…, см. cmd/beacon-table/systemdata/README.md) —
-// правится только правкой файлов в systemdata/ и пересборкой, а не через
-// API/UI, в отличие от пользовательской библиотеки в dataDir. Отдельная
-// директива embed от staticFiles (не заворачиваем сюда же) — разное
-// назначение и время жизни, static раздаётся как есть http.FS'ом, а
-// systemdata парсится JSON'ом в конкретные структуры.
-//
-//go:embed systemdata
-var systemFiles embed.FS
-
 // Пути раздачи — не настройка: адреса внутри приложения, на них завязаны
 // ссылки в базе (см. app.CompanyManager.rootsFor) и код фронтенда.
-const (
-	uploadsURL      = "/uploads/"
-	systemAssetsURL = "/system-assets/"
-)
+const uploadsURL = "/uploads/"
 
 func main() {
 	// Подкоманда `beacon-table backup` — один бэкап и выход, аргументы после
@@ -222,7 +209,14 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 			"на мир", quota.FormatSize(cfg.UploadsWorldQuota))
 	}
 
-	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, systemFiles, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy, uploadQuota)
+	// Модули контента: базовые состояния из бинарника, установленные в
+	// <data>/modules и папки в разработке (--modules-dev).
+	modules := module.NewRegistry(filepath.Join(cfg.DataDir, "modules"), []*module.Module{base.Module()}, cfg.ModulesDev, serverVersion())
+	if len(cfg.ModulesDev) > 0 {
+		slog.Info("Модули в разработке", "папки", cfg.ModulesDev)
+	}
+	catalog := modcatalog.New(modcatalog.Options{IndexURL: cfg.ModulesIndex, Dir: cfg.DataDir, AppVersion: serverVersion(), AllowPrivate: !cfg.BehindProxy})
+	companies := app.NewCompanyManager(db, companyRepo, accountRepo, sessionRepo, dice, modules, cfg.DataDir, cfg.UploadsDir, uploadsURL, !cfg.BehindProxy, uploadQuota)
 	companies.ChatHistory().Set(cfg.ChatHistory)
 
 	authSvc := service.NewAuthService(accountRepo, sessionRepo)
@@ -259,6 +253,7 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 
 	api := apihttp.NewAPI(authSvc, broadcastSvc, companies, version, cfg.BehindProxy, db)
 	api.Tutorial = service.NewTutorialService(stateRepo)
+	api.Catalog = catalog
 	// Форма настроек в разделе «Настройки» у ДМ: пишет в тот же beacon.conf
 	// и применяет на лету то, что можно (см. settings.go).
 	api.Settings = newSettingsStore(cfg, os.Args[1:], logLevel, uploadQuota, companies.ChatHistory())
@@ -305,11 +300,7 @@ func (a server) serve(ln net.Listener, stop <-chan struct{}, ready func()) {
 		http.StripPrefix(uploadsURL, http.FileServer(apihttp.NoDirListing{FS: http.Dir(cfg.UploadsDir)})),
 	))
 
-	systemAssets, err := fs.Sub(systemFiles, "systemdata/assets")
-	if err != nil {
-		fatal("Не удалось открыть встроенный каталог", "err", err)
-	}
-	mux.Handle(systemAssetsURL, http.StripPrefix(systemAssetsURL, http.FileServer(http.FS(systemAssets))))
+	mux.Handle(moduleAssetsURL, moduleAssetsHandler(modules))
 
 	api.RegisterRoutes(mux)
 	gateway := apiws.RegisterRoutes(mux, companies, authSvc, broadcastSvc, apiws.Options{

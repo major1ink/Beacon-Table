@@ -23,6 +23,11 @@ tasks:
     cmds:
       - go build -o {{.BIN}} ./cmd/beacon-table
 
+  build:btmod:
+    desc: Собрать btmod — проверку и упаковку модулей контента (для репозитория модулей)
+    cmds:
+      - go build -o btmod ./cmd/btmod
+
   build:desktop:
     desc: Собрать десктоп (своё окно вместо браузера; на Linux нужны libgtk-3-dev и libwebkit2gtk-4.1-dev)
     # gtk3, а не GTK4 по умолчанию Wails: на webkitgtk-6.0 WebGL стола на NVIDIA

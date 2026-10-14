@@ -2,17 +2,19 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository/memory"
+	"beacon-table/internal/schema"
 	"beacon-table/internal/service"
 )
 
 func TestCharacterService_CreateListUpdateDelete(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "  Elminster  ", "http://example.com/a.png")
 	if err != nil {
@@ -51,7 +53,7 @@ func TestCharacterService_CreateListUpdateDelete(t *testing.T) {
 // злоумышленнику, что id вообще существует.
 func TestCharacterService_OwnershipEnforced(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Drizzt", "")
 	if err != nil {
@@ -68,7 +70,7 @@ func TestCharacterService_OwnershipEnforced(t *testing.T) {
 
 func TestCharacterService_Create_EmptyName(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	_, err := svc.Create(ctx, "acc-1", "   ", "")
 	var verr *domain.ValidationError
@@ -78,27 +80,53 @@ func TestCharacterService_Create_EmptyName(t *testing.T) {
 }
 
 // TestCharacterService_Create_DefaultSheet — новый персонаж сразу получает
-// domain.DefaultCharacterSheet() (характеристики по 10, уровень 1), а не
-// нулевой CharacterSheet{} — иначе первый рендер листа делил бы на модификатор
-// от несуществующей характеристики.
+// domain.DefaultCharacterSheet(), а не нулевой CharacterSheet{}: у него есть
+// словарь денег. Значения системы (уровень, характеристики) кладёт схема
+// мира, см. TestCharacterService_Create_SchemaDefaults.
 func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Bruenor", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if c.Sheet.Abilities.Str != 10 || c.Sheet.Info.Level != 1 {
-		t.Fatalf("ожидали дефолтный лист (STR=10, уровень=1), получили %+v", c.Sheet)
+	if c.Sheet.Coins == nil {
+		t.Fatalf("ожидали дефолтный лист с деньгами, получили %+v", c.Sheet)
 	}
 
 	got, err := svc.Get(ctx, c.ID, "acc-1")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.Sheet.Abilities.Str != 10 {
+	if got.Sheet.Coins == nil {
 		t.Fatalf("Get вернул другой лист: %+v", got.Sheet)
+	}
+}
+
+// TestCharacterService_Create_SchemaDefaults — значения нового листа
+// (уровень, характеристики) кладёт схема листа мира: default у полей.
+func TestCharacterService_Create_SchemaDefaults(t *testing.T) {
+	ctx := context.Background()
+	sheet, err := schema.Parse([]byte(`{"format":"beacon-schema/v1","kind":"sheet","fields":{
+		"dex":{"type":"number","path":"abilities.dex","label":"Ловкость","default":10},
+		"level":{"type":"number","path":"info.level","label":"Уровень","default":1}
+	},"layout":[{"fields":["dex","level"]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := service.NewCharacterService(memory.NewCharacterStore(), func(kind string) *schema.Schema {
+		if kind == schema.KindSheet {
+			return sheet
+		}
+		return nil
+	})
+	c, err := svc.Create(ctx, "acc-1", "Bruenor", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if string(c.Sheet.Extra["abilities"]) != `{"dex":10}` || string(c.Sheet.Extra["info"]) != `{"level":1}` || c.Sheet.Coins == nil {
+		t.Fatalf("умолчания схемы: %v", c.Sheet.Extra)
 	}
 }
 
@@ -106,7 +134,7 @@ func TestCharacterService_Create_DefaultSheet(t *testing.T) {
 // а владение проверяется так же, как и у Update/Delete.
 func TestCharacterService_UpdateSheet(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewCharacterService(memory.NewCharacterStore())
+	svc := service.NewCharacterService(memory.NewCharacterStore(), nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Drizzt", "")
 	if err != nil {
@@ -114,9 +142,7 @@ func TestCharacterService_UpdateSheet(t *testing.T) {
 	}
 
 	sheet := domain.DefaultCharacterSheet()
-	sheet.Abilities.Dex = 20
-	sheet.Info.Level = 5
-	sheet.Weapons = []domain.WeaponRow{{Name: "Скимитары", Bonus: "+9", Damage: "1к6 колющий"}}
+	sheet.Extra = domain.Extra{"abilities": json.RawMessage(`{"dex":20}`), "info": json.RawMessage(`{"level":5}`), "weapons": json.RawMessage(`[{"name":"Скимитары"}]`)}
 	if err := svc.UpdateSheet(ctx, c.ID, "acc-1", sheet); err != nil {
 		t.Fatalf("UpdateSheet: %v", err)
 	}
@@ -125,7 +151,7 @@ func TestCharacterService_UpdateSheet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.Sheet.Abilities.Dex != 20 || got.Sheet.Info.Level != 5 || len(got.Sheet.Weapons) != 1 {
+	if string(got.Sheet.Extra["abilities"]) != `{"dex":20}` || string(got.Sheet.Extra["info"]) != `{"level":5}` || got.Sheet.Extra["weapons"] == nil {
 		t.Fatalf("лист не сохранился как ожидалось: %+v", got.Sheet)
 	}
 
@@ -147,7 +173,7 @@ func TestCharacterService_UpdateSheet(t *testing.T) {
 func TestCharacterService_UpdateInventoryItem_EquipSplitsAndMerges(t *testing.T) {
 	ctx := context.Background()
 	store := memory.NewCharacterStore()
-	svc := service.NewCharacterService(store)
+	svc := service.NewCharacterService(store, nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Дриззт", "")
 	if err != nil {
@@ -204,7 +230,7 @@ func TestCharacterService_UpdateInventoryItem_EquipSplitsAndMerges(t *testing.T)
 func TestCharacterService_UpdateInventoryItem_ZeroQuantityRemovesEntry(t *testing.T) {
 	ctx := context.Background()
 	store := memory.NewCharacterStore()
-	svc := service.NewCharacterService(store)
+	svc := service.NewCharacterService(store, nil)
 
 	c, err := svc.Create(ctx, "acc-1", "Дриззт", "")
 	if err != nil {

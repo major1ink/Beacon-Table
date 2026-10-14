@@ -6,6 +6,7 @@ import (
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/schema"
 )
 
 // PregenService — пул «готовых персонажей» мира (см. domain.Pregen).
@@ -54,10 +55,11 @@ type PregenService interface {
 type pregenService struct {
 	pregens    repository.PregenRepository
 	characters repository.CharacterRepository
+	schemaOf   SchemaOf
 }
 
-func NewPregenService(pregens repository.PregenRepository, characters repository.CharacterRepository) PregenService {
-	return &pregenService{pregens: pregens, characters: characters}
+func NewPregenService(pregens repository.PregenRepository, characters repository.CharacterRepository, schemaOf SchemaOf) PregenService {
+	return &pregenService{pregens: pregens, characters: characters, schemaOf: schemaOf}
 }
 
 func (s *pregenService) List(ctx context.Context) ([]*domain.Pregen, error) {
@@ -77,7 +79,9 @@ func (s *pregenService) Import(ctx context.Context, name string) (*domain.Pregen
 	if err != nil {
 		return nil, err
 	}
-	p := &domain.Pregen{ID: newID(), Name: name, Sheet: domain.DefaultCharacterSheet()}
+	sheet := domain.DefaultCharacterSheet()
+	applyDefaults(s.schemaOf, schema.KindSheet, &sheet)
+	p := &domain.Pregen{ID: newID(), Name: name, Sheet: sheet}
 	if err := s.pregens.Create(ctx, p); err != nil {
 		return nil, err
 	}
@@ -89,8 +93,8 @@ func (s *pregenService) Update(ctx context.Context, id, name, avatarURL, source 
 	if err != nil {
 		return nil, err
 	}
-	avatarURL = clampRunes(strings.TrimSpace(avatarURL), maxSheetShortText)
-	source = clampRunes(strings.TrimSpace(source), maxSheetShortText)
+	avatarURL = clampRunes(strings.TrimSpace(avatarURL), maxText)
+	source = clampRunes(strings.TrimSpace(source), maxText)
 	sheet = sanitizeSheet(sheet)
 	found, err := s.pregens.Update(ctx, id, name, avatarURL, source, sheet)
 	if err != nil {

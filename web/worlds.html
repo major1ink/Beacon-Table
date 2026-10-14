@@ -47,11 +47,11 @@
     header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
     h1 { font-size: 20px; margin: 0; }
     #subtitle { opacity: 0.6; font-size: 12px; margin: 4px 0 20px; }
-    #logoutBtn, #fullscreenBtn {
+    #logoutBtn, #fullscreenBtn, #modulesBtn {
       background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px;
       padding: 6px 10px; border-radius: var(--radius); transition: background .12s ease, color .12s ease;
     }
-    #logoutBtn:hover, #fullscreenBtn:hover { background: var(--surface); color: var(--text); }
+    #logoutBtn:hover, #fullscreenBtn:hover, #modulesBtn:hover { background: var(--surface); color: var(--text); }
     #fullscreenBtn { display: flex; align-items: center; }
 
     #list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
@@ -67,7 +67,7 @@
       cursor: pointer; white-space: nowrap; transition: background .12s ease;
     }
     .launch-btn { background: var(--accent-bg); color: var(--accent); }
-    .launch-btn:hover { background: var(--accent); color: #fff; }
+    .launch-btn:hover { background: var(--accent); color: var(--on-accent); }
     .launch-btn:disabled { opacity: 0.6; cursor: default; }
     .open-btn { background: var(--green); color: #fff; }
     .open-btn:hover { background: var(--green-hover); }
@@ -142,6 +142,7 @@
       .world-actions { flex: 1 1 100%; justify-content: flex-end; }
     }
   </style>
+  <link rel="stylesheet" href="/system-theme.css" />
 </head>
 <body>
   <div id="splash"></div>
@@ -154,6 +155,7 @@
       </div>
       <div id="headerActions">
         <button id="fullscreenBtn" type="button"></button>
+        <button id="modulesBtn" type="button" title="Системы и контент для миров">Модули</button>
         <button id="logoutBtn">Выйти</button>
         <button id="shutdownBtn" title="Остановить программу: мир сохранится, стол закроется у всех">Выключить сервер</button>
       </div>
@@ -180,10 +182,8 @@
       <h2>Создать мир</h2>
       <form id="createForm">
         <input type="text" id="worldName" placeholder="Название мира" maxlength="80" required />
-        <select id="worldSystem" aria-label="Система мира">
-          <option value="dnd5e-2024">D&amp;D 2024</option>
-          <option value="dnd5e-2014">D&amp;D 5e (2014)</option>
-        </select>
+        <!-- Системы — с сервера: «Своя система» и системные модули (см. worlds.js: loadSystems). -->
+        <select id="worldSystem" aria-label="Система мира"></select>
         <button type="submit">Создать</button>
       </form>
       <div id="createMsg" class="msg"></div>

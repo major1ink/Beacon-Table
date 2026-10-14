@@ -12,7 +12,6 @@
 // молча при встрече с незнакомым/будущим значением.
 
 import { foundryStatusToSlug, conditionName } from "./foundry-conditions.js";
-import { schoolFromFoundry } from "./spell-school.js";
 import { effectRounds } from "./condition-import.js";
 import { cleanFoundryText } from "./foundry-text.js";
 
@@ -71,6 +70,7 @@ const DURATION_UNITS_RU = {
   spec: "Особая",
 };
 
+const SCHOOL_RU = { abj: "Ограждение", con: "Вызов", div: "Прорицание", enc: "Очарование", evo: "Воплощение", ill: "Иллюзия", nec: "Некромантия", trs: "Преобразование" };
 const ABILITY_RU = { str: "Сил", dex: "Лов", con: "Тел", int: "Инт", wis: "Мдр", cha: "Хар" };
 
 // DAMAGE_TYPE_RU — та же таблица, что в item-import.js (см. комментарий там
@@ -323,7 +323,7 @@ export function mapFoundrySpellJson(raw) {
     name,
     source: buildSource(sys.source),
     level: Number.isFinite(sys.level) ? sys.level : 0,
-    school: schoolFromFoundry(sys.school),
+    school: ru(SCHOOL_RU, sys.school),
     castTime: buildCastTime(sys.activation),
     ritual: components.ritual,
     range: buildRange(sys.range, sys.target),

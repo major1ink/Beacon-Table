@@ -239,12 +239,12 @@
     canvas { display: block; width: 100%; height: 100%; background: #222; cursor: grab; }
 
     /* Плашка "сцена · игроки · ДМ" стоит в нижнем правом углу, в одном ряду
-       с зумом (#zoomHud правее её, отсюда right: 150px = 10 + ширина зума
-       132 + зазор 8). Раньше она жила в верхнем левом углу, но там её
+       с зумом (#zoomHud правее её, отсюда right: 182px = 10 + ширина зума
+       164 + зазор 8). Раньше она жила в верхнем левом углу, но там её
        зажало между колонкой со статблоком и полосой хода — а низ справа
        занят только зумом и от боя не зависит вообще. */
     #statusBar {
-      position: absolute; right: 150px; bottom: 10px; z-index: 5;
+      position: absolute; right: 182px; bottom: 10px; z-index: 5;
       background: var(--glass-bg);
       border: 1px solid var(--glass-border); box-shadow: var(--shadow-soft);
       border-radius: var(--radius-pill); padding: 7px 14px;
@@ -257,7 +257,7 @@
     #sceneShowBtn {
       display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
       padding: 3px 9px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600;
-      background: var(--accent); color: #fff; border: 0; cursor: pointer;
+      background: var(--accent); color: var(--on-accent); border: 0; cursor: pointer;
     }
     #sceneShowBtn:hover { background: var(--accent-hover); }
     /* Этажи здания (SceneState.Building): ▲▼ рядом с именем открытой сцены. */
@@ -455,7 +455,7 @@
     #fogAreaMenu .fog-menu-label { font-size: 11px; color: var(--text-dim); padding: 6px 4px 3px; }
     #fogAreaMenu .fog-menu-lights { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-bottom: 6px; }
     #fogAreaMenu .fog-menu-lights button { margin: 0; justify-content: center; font-size: 12px; padding: 5px 4px; }
-    #fogAreaMenu .fog-menu-lights button.on { background: var(--accent); color: #fff; }
+    #fogAreaMenu .fog-menu-lights button.on { background: var(--accent); color: var(--on-accent); }
 
     /* ---- список зон тумана в панели "Туман": та же строка, что у света ---- */
     #fogZoneList { display: flex; flex-direction: column; gap: 4px; }
@@ -523,7 +523,18 @@
       border-radius: var(--radius-pill); padding: 4px; display: flex; gap: 4px;
     }
     #zoomHud button { width: 28px; height: 28px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-    #zoomHud #fullscreenBtn.open { background: var(--accent-bg); color: var(--accent); }
+    #zoomHud #fullscreenBtn.open, #zoomHud #viewAsPlayerBtn.open { background: var(--accent-bg); color: var(--accent); }
+    /* Плашка над зумом, пока карта показана глазами игроков: чтобы ведущий не
+       забыл выключить. Клик — обратно к виду ведущего. */
+    #viewAsPlayerBadge {
+      position: absolute; right: 10px; bottom: 54px; z-index: 5;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: var(--radius-pill);
+      background: var(--accent-bg); color: var(--accent);
+      border: 1px solid var(--accent); box-shadow: var(--shadow-soft);
+      font-size: 12px; font-weight: 600;
+    }
+    #viewAsPlayerBadge[hidden] { display: none; }
 
     /* ---- переключатель сцен (панель "Сцена") ---- */
     /* Без «хватки» — порядок сцен не перетаскивается; корзина только под курсором. */
@@ -659,7 +670,7 @@
     /* Плашка инструмента «зона для игроков» — та же, что у редактора сетки. */
     #viewZoneHint {
       display: none; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-      z-index: 15; background: var(--accent); color: #fff; padding: 10px 18px; border-radius: var(--radius-pill);
+      z-index: 15; background: var(--accent); color: var(--on-accent); padding: 10px 18px; border-radius: var(--radius-pill);
       box-shadow: var(--shadow-float); font-size: 13px; align-items: center; gap: 7px;
     }
     #viewZoneHint.open { display: flex; }
@@ -890,7 +901,7 @@
        либо #combatKilledTab, оба сидят рядом в одном panel-body. */
     .combat-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
     .combat-tabs .combat-tab { flex: 1 1 auto; background: var(--surface); border-radius: 8px; font-size: 12px; padding: 7px 8px; }
-    .combat-tabs .combat-tab.active { background: var(--accent); color: #fff; }
+    .combat-tabs .combat-tab.active { background: var(--accent); color: var(--on-accent); }
     /* строка трупа на вкладке "Убитые" — переиспользует .combat-row/
        .combat-row-top/.combat-avatar/.combat-name трекера (тот же внешний
        вид карточки бойца), добавляет только опыт и пару кнопок действий. */
@@ -1098,8 +1109,8 @@
       /* Плашка уезжает из правого нижнего угла — там зум. */
       #statusBar {
         left: 66px; right: auto; bottom: 6px;
-        /* 66 слева + ~168 на HUD зума справа + зазоры. */
-        max-width: calc(100vw - 246px);
+        /* 66 слева + ~210 на HUD зума справа + зазоры. */
+        max-width: calc(100vw - 288px);
         padding: 5px 11px; font-size: 11px;
       }
       /* В 150px помещаются имя сцены и «👥 3»; слова и логин ДМ — нет. */
@@ -1107,6 +1118,7 @@
       /* HUD и плашка просвечивали сквозь панель и не нажимались. */
       body.panel-open #zoomHud, body.panel-open #statusBar { display: none !important; }
       #zoomHud { right: 6px; bottom: 6px; }
+      #viewAsPlayerBadge { right: 6px; bottom: 60px; }
       #zoomHud button { width: 38px; height: 38px; }
 
       /* Меню открываются у пальца (долгое нажатие, см. interaction.js) —
@@ -1116,36 +1128,43 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="/assets/dm-1ZSVVWQP.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/icons-EEhtOvQG.js">
+  <link rel="stylesheet" href="/system-theme.css" />
+  <script type="module" crossorigin src="/assets/dm-CiztXPqc.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/modal-B967srPi.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-DdPMya_n.js">
   <link rel="modulepreload" crossorigin href="/assets/tooltip-DWlYhOSE.js">
-  <link rel="modulepreload" crossorigin href="/assets/back-stack-C8cwVhaZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/modal-BupxowQC.js">
-  <link rel="modulepreload" crossorigin href="/assets/fullscreen-DeSbpYTt.js">
-  <link rel="modulepreload" crossorigin href="/assets/floating-window-C8D5KWcr.js">
-  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-MUzW9dbZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/floating-window-DDZOo2xz.js">
+  <link rel="modulepreload" crossorigin href="/assets/system-profile-DxhuWe_P.js">
+  <link rel="modulepreload" crossorigin href="/assets/loot-take-modal-DQZjOMhH.js">
+  <link rel="modulepreload" crossorigin href="/assets/card-shell-C__ABNxX.js">
   <link rel="modulepreload" crossorigin href="/assets/a11y-BN9NYDBm.js">
-  <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-BflqHKY6.js">
+  <link rel="modulepreload" crossorigin href="/assets/ws-reconnect-DGwR3vWh.js">
   <link rel="modulepreload" crossorigin href="/assets/condition-glyphs--FpfEy0z.js">
   <link rel="modulepreload" crossorigin href="/assets/roll-mode-Du2DQb6G.js">
-  <link rel="modulepreload" crossorigin href="/assets/roll-log-CIYUEYXp.js">
-  <link rel="modulepreload" crossorigin href="/assets/compendium-taxonomy-BHoDJPfw.js">
-  <link rel="modulepreload" crossorigin href="/assets/wake-lock-DiL2ByL8.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-links-huSmG2wX.js">
-  <link rel="modulepreload" crossorigin href="/assets/inline-rolls-B_OhHAvL.js">
-  <link rel="modulepreload" crossorigin href="/assets/markdown-D8ZoJHIA.js">
-  <link rel="modulepreload" crossorigin href="/assets/hp-bar-BLhQlGnT.js">
-  <link rel="modulepreload" crossorigin href="/assets/card-shell-PbtjGTK9.js">
-  <link rel="modulepreload" crossorigin href="/assets/modifiers-BwOrXNES.js">
-  <link rel="modulepreload" crossorigin href="/assets/stat-editor-MqqPyBmO.js">
-  <link rel="modulepreload" crossorigin href="/assets/status-palette-BG9jpAIa.js">
-  <link rel="modulepreload" crossorigin href="/assets/combat-panel-C6tlurfA.js">
+  <link rel="modulepreload" crossorigin href="/assets/dice-BoHfTDxQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/schemas-DC1fQa4J.js">
+  <link rel="modulepreload" crossorigin href="/assets/wake-lock-CvvA4tnJ.js">
+  <link rel="modulepreload" crossorigin href="/assets/roll-log-BpvVHCT5.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-links-DlyRlYBr.js">
+  <link rel="modulepreload" crossorigin href="/assets/modifiers-CcIVkJQq.js">
+  <link rel="modulepreload" crossorigin href="/assets/schema-formula-88LgdP2j.js">
+  <link rel="modulepreload" crossorigin href="/assets/inline-rolls-MVYsINNh.js">
+  <link rel="modulepreload" crossorigin href="/assets/foundry-text-D5lPLdXR.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-y6woQK1n.js">
+  <link rel="modulepreload" crossorigin href="/assets/schema-list-D1L9WZJg.js">
+  <link rel="modulepreload" crossorigin href="/assets/schema-summary-CLzcw8mh.js">
+  <link rel="modulepreload" crossorigin href="/assets/hp-bar-n-aufNHg.js">
+  <link rel="modulepreload" crossorigin href="/assets/stat-editor-BoZz-OpT.js">
+  <link rel="modulepreload" crossorigin href="/assets/status-palette-YSLnxxc4.js">
+  <link rel="modulepreload" crossorigin href="/assets/combat-panel-BEdQWad3.js">
   <link rel="modulepreload" crossorigin href="/assets/links-BRiZG_yV.js">
-  <link rel="modulepreload" crossorigin href="/assets/item-picker--pUmsLin.js">
-  <link rel="modulepreload" crossorigin href="/assets/roles-Bkc_idsg.js">
-  <link rel="modulepreload" crossorigin href="/assets/tutorial-CDJCQLWN.js">
-  <link rel="stylesheet" crossorigin href="/assets/icons-EO9Tt1YC.css">
+  <link rel="modulepreload" crossorigin href="/assets/fullscreen-CSLRxjqQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/item-picker-DrNzG68o.js">
+  <link rel="modulepreload" crossorigin href="/assets/roles-qYFhsont.js">
+  <link rel="modulepreload" crossorigin href="/assets/tutorial-CwJGlLwJ.js">
+  <link rel="modulepreload" crossorigin href="/assets/world-system-BsJ_Djod.js">
+  <link rel="modulepreload" crossorigin href="/assets/modules-link-VrCpC4pe.js">
+  <link rel="stylesheet" crossorigin href="/assets/modal-C2iGBia4.css">
 </head>
 <body>
   <div id="appBody">
@@ -1163,6 +1182,9 @@
         <div class="rail-sep"></div>
         <button class="rail-btn" id="charactersBtn" data-section="characters"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="8.3" r="2.4"/><path d="M15.6 14.3c2.5.5 4.3 2.7 4.3 5.2"/></svg></span></button>
         <button class="rail-btn" id="journalBtn"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4a2 2 0 012-2h11v18H7a2 2 0 00-2 2V4z"/><path d="M5 20a2 2 0 012-2h11"/><circle cx="11.5" cy="8" r="1.8"/><path d="M8.5 13c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg></span></button>
+        <button class="rail-btn" id="screenBtn"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h5v14H3zM9.5 4h5v16h-5zM16 5h5v14h-5z"/></svg></span></button>
+        <button class="rail-btn" id="sessionsBtn"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 12h16M4 18h9"/><circle cx="19" cy="6" r="2"/><circle cx="17" cy="18" r="2"/></svg></span></button>
+        <button class="rail-btn" id="graphBtn"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="9" cy="18" r="2.5"/><path d="M8.4 6.4l7.1 1.2M6.6 8.4l1.8 7.2M16.4 10l-5.6 6"/></svg></span></button>
         <button class="rail-btn" id="lootBtn" data-section="loot"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9l2-5h14l2 5"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="9.5" y1="11.5" x2="14.5" y2="11.5"/></svg></span></button>
         <button class="rail-btn" id="playlistsBtn" data-section="playlists"><span class="rail-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/><path d="M9 18V5l11-2v13"/></svg></span></button>
       </div>
@@ -1211,6 +1233,8 @@
           <h3>Сцена</h3>
           <div class="panel-header-actions">
             <button id="sceneCreateBtn" class="panel-add-btn" type="button" title="Новая сцена"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Сцена</button>
+            <button id="sceneImportBtn" class="panel-add-btn" type="button" title="Добавить сцену из файла экспорта (.beacon-scene.zip)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg> Импорт</button>
+            <input id="sceneImportInput" type="file" accept=".zip,application/zip" hidden />
             <button class="panel-close" data-close aria-label="Закрыть раздел"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
           </div>
         </header>
@@ -1303,6 +1327,7 @@
 
             <div class="section-divider"></div>
             <button id="modalSaveBtn" class="primary-btn">Сохранить изменения</button>
+            <button id="sceneExportBtn" class="tool-btn" title="Сцена одним файлом: стены, токены, свет, туман и её картинки — перенести в другой мир или приложить к отчёту о баге"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><polyline points="7 11 12 16 17 11"/><path d="M4 20h16"/></svg> Экспорт сцены в файл</button>
             <button id="sceneDeleteBtn" class="tool-btn" title="Удалить текущую сцену"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Удалить эту сцену</button>
           </div>
           <div id="sceneDropdown"></div>
@@ -1420,7 +1445,7 @@
             </div>
             <div class="section-divider"></div>
             <div id="combatList"></div>
-            <p class="hint">Существ и персонажей можно добавить и через ПКМ на токене на карте → «⚔️ Добавить в инициативу». Боец без токена (добавлен через «+ Добавить») — перетащи его карточку из списка ниже на карту, чтобы поставить токен. Инициатива считается автоматически (1к20 + модификатор Ловкости); правка вручную — без переброски. КД и HP подтягиваются из листа/статблока и правятся вручную; видит их и правит только ДМ.</p>
+            <p class="hint">Существ и персонажей можно добавить и через ПКМ на токене на карте → «⚔️ Добавить в инициативу». Боец без токена (добавлен через «+ Добавить») — перетащи его карточку из списка ниже на карту, чтобы поставить токен. Инициатива бросается по правилам системы мира; если бросать нечем, боец встаёт с 0 — впиши число вручную (правка без переброски). КД и HP подтягиваются из листа/статблока и правятся вручную; видит их и правит только ДМ.</p>
           </div>
           <div id="combatKilledTab" style="display:none;">
             <button type="button" id="combatKilledClearBtn" class="tool-btn killed-clear-btn" style="display:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> Очистить убитых</button>
@@ -1495,9 +1520,8 @@
             <div class="set-group">
               <div class="set-group-title">Интерфейс ДМ</div>
               <div class="field-block">
-                <div class="checkbox-row"><label><input type="checkbox" class="switch" id="showBuiltinCardsToggle" /> Показывать встроенные карточки</label></div>
                 <div class="checkbox-row"><label><input type="checkbox" class="switch" id="summonAllToggle" /> Игроки могут призывать любых существ библиотеки</label></div>
-                <div class="hint">Своих и импортированных из Foundry; встроенных — только если включены встроенные карточки выше. ДМ подтверждает каждый призыв. Пока выключено — только карточки с флагом «Можно призывать» на самой карточке.</div>
+                <div class="hint">Своих, импортированных из Foundry и из модулей мира. ДМ подтверждает каждый призыв. Пока выключено — только карточки с флагом «Можно призывать» на самой карточке.</div>
                 <p class="hint">Вшитый каталог «из коробки» в справочнике и пикерах. Пока выключено, видна только библиотека этого мира; свои карточки не затрагивает.</p>
               </div>
               <div class="field-block">
@@ -1603,8 +1627,24 @@
             </div>
           </div>
 
-          <!-- Модули: что импортировано из Foundry. -->
+          <!-- Модули: система мира, модули контента и пакеты Foundry. -->
           <div class="set-tab-panel" data-settab-panel="modules">
+            <div class="field-block">
+              <span class="field-label">Система мира</span>
+              <div class="field-label-row">
+                <select id="worldSystemSelect" aria-label="Система мира"></select>
+                <button id="worldSystemBtn" type="button" disabled>Сменить</button>
+              </div>
+              <p class="hint">Данные при смене не теряются: поля прежней системы остаются в листах и карточках и снова покажутся, если вернуть её.</p>
+            </div>
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Модули контента</span>
+                <button id="moduleShowcaseBtn" type="button">Открыть витрину</button>
+              </div>
+              <p class="hint">Карточки включённых модулей видны в компендиуме, трекере и луте. Модули, сделанные для другой системы, в этом мире не включаются.</p>
+              <div id="worldModulesList"></div>
+            </div>
             <div class="field-block">
               <div class="field-label-row">
                 <span class="field-label">Модули Foundry VTT</span>
@@ -1684,6 +1724,9 @@
     <!-- ручка ширины панели: тянуть мышью, двойной клик — вернуть 300px -->
     <div id="panelResizer" role="separator" aria-orientation="vertical" aria-label="Ширина панели" tabindex="0"></div>
 
+    <!-- колонка со статблоком бойца (sheet-dock.js), наполняет pages/dm.js -->
+    <aside id="sheetDock"></aside>
+
     <div id="canvasWrap">
       <canvas id="scene"></canvas>
       <div id="statusBar">
@@ -1695,7 +1738,9 @@
         <span class="status-sep">·</span>
         <span id="dmUsername"></span>
       </div>
+      <button id="viewAsPlayerBadge" type="button" hidden title="Вернуть вид ведущего">Как видит игрок</button>
       <div id="zoomHud">
+        <button id="viewAsPlayerBtn" type="button" aria-pressed="false"></button>
         <button id="fullscreenBtn" type="button"></button>
         <button id="zoomOutBtn" title="Отдалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         <button id="zoomResetBtn" title="Сбросить вид"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/></svg></button>
@@ -1724,10 +1769,13 @@
     <label id="tokenMenuShapeRow">Форма: <select id="tokenMenuShape">
       <option value="circle">○ Круг</option>
       <option value="square">▢ Квадрат (без обрезки)</option>
-    <!-- Колонка со статблоком бойца (см. web/src/sheet-dock.js): пустая до
-         первого открытия, наполняется из pages/dm.js -->
-    <aside id="sheetDock"></aside>
-
+    </select></label>
+    <label id="tokenMenuSizeRow">Размер: <select id="tokenMenuSize">
+      <option value="0.5">½ клетки</option>
+      <option value="1">1×1</option>
+      <option value="2">2×2</option>
+      <option value="3">3×3</option>
+      <option value="4">4×4</option>
     </select></label>
     <!-- Зрение токена (domain.TokenVision) — рядом со светом, но это другое:
          свет видят все, тёмное зрение — только партия. -->

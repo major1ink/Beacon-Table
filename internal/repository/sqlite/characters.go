@@ -31,20 +31,13 @@ func NewCharacterStore(db *sql.DB, companyID, system string) *CharacterStore {
 
 // decodeSheet — пустая строка (старые строки до sheet_json) или битый JSON
 // не должны валить чтение персонажа: откатываемся на пустой лист. Разбираем
-// ПОВЕРХ DefaultCharacterSheet(), а не в зеро-значение var sheet
-// domain.CharacterSheet{} — json.Unmarshal трогает только поля, реально
-// присутствующие в raw, остальные остаются как есть. Так неполный (но
-// валидный) JSON вроде "{}" — легаси-строки до появления
-// DefaultCharacterSheet(), см. git-историю — тоже откатывается на
-// характеристики по 10 (модификатор +0), а не на Go zero-value (Str/Dex/…=0,
-// модификатор -5 — именно так дважды свалилась инициатива в трекере: 1d20-5
-// для персонажа с пустым листом, у которого Ловкость фактически 0, хотя
-// "±0 по умолчанию" ожидался бы любым, кто ни разу не открывал лист).
+// ПОВЕРХ DefaultCharacterSheet(), а не в зеро-значение: json.Unmarshal трогает
+// только поля, реально присутствующие в raw, так что у неполного (но
+// валидного) JSON вроде "{}" остаются деньги-словарь и прочие умолчания ядра.
 //
-// Формат sheet_json один и тот же для обеих систем (D&D 5e 2014/2024) —
-// см. domain.CharacterSheet: поля Race/PersonalityTraits/Ideals/Bonds/Flaws
-// (2014) и Species/Background (2024) просто сосуществуют в одной структуре,
-// декодировать по-разному в зависимости от Character.System не нужно.
+// Формат sheet_json один и тот же у всех систем — см. domain.CharacterSheet:
+// поля системы лежат в Extra под своими ключами, декодировать по-разному в
+// зависимости от Character.System не нужно.
 func decodeSheet(raw string) domain.CharacterSheet {
 	if raw == "" {
 		return domain.DefaultCharacterSheet()

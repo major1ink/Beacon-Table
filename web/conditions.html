@@ -29,7 +29,7 @@
     #saveStatus.saving { color: var(--amber); }
     #saveStatus.error { color: #e74c3c; }
     #closeBtn, #fullscreenBtn, #editToggleBtn, #deleteBtn { width: 30px; height: 30px; padding: 0; display: flex; align-items: center; justify-content: center; }
-    #editToggleBtn.active { background: var(--accent); color: #fff; }
+    #editToggleBtn.active { background: var(--accent); color: var(--on-accent); }
     #deleteBtn:hover { background: var(--danger); color: #fff; }
     .sys-pill { font-size: 10.5px; color: var(--amber); background: rgba(165,115,15,0.16); border-radius: var(--radius-pill); padding: 3px 10px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
     #cloneBtn { display: none; align-items: center; gap: 6px; padding: 4px 10px; font-size: 11px; white-space: nowrap; }
@@ -73,6 +73,7 @@
       #app { padding-bottom: env(safe-area-inset-bottom); }
     }
   </style>
+  <link rel="stylesheet" href="/system-theme.css" />
 </head>
 <body>
   <div id="topBar">

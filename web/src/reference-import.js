@@ -61,9 +61,7 @@ function mapOne(raw, classNameByIdentifier) {
     const parentName = classNameByIdentifier[sys.classIdentifier] || sys.classIdentifier || "";
     return { name, kind: "архетип", parentName, source, imageUrl, description: cleanFoundryText(sys.description && sys.description.value, name) };
   }
-  // Вид и предыстория — те же узлы дерева компендиума, что «Виды» и
-  // «Предыстории» (см. compendium-taxonomy.js: REFERENCE_GROUPS), и такие же
-  // текстовые карточки, как класс: у dnd5e это документы Item подтипов
+  // Вид и предыстория — такие же текстовые карточки, как класс: у dnd5e это документы Item подтипов
   // race/species (имя поменялось в редакции 2024) и background. Приезжают
   // при импорте пака целиком (см. web/src/pages/foundry-import.js) — в
   // одиночном экспорте с ttg.club их не бывает, поэтому появились позже

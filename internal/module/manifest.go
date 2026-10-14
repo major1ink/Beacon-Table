@@ -1,0 +1,312 @@
+// Package module — модули контента Beacon Table: пакеты с карточками
+// (бестиарий, заклинания, предметы, справочник, состояния) и, у системных
+// модулей, описанием игровой системы. Ядро программы не знает ни одной
+// игровой системы — всё, что к ней относится, приходит модулем (см. задачу
+// «Модули контента»).
+//
+// Модуль — только данные, без исполняемого кода: модули приходят из
+// интернета, и JS из модуля выполнялся бы в браузере у игроков.
+//
+// Раскладка модуля (папка или .btmod = zip той же папки):
+//
+//	module.json
+//	bestiary/<slug>.json   spells/…   items/…   references/…   conditions/…
+//	assets/…               — картинки карточек, раздаются по /module-assets/<id>/
+//
+// Карточка — тот же JSON, что у карточки библиотеки мира, без "id" и
+// "updatedAt": id проставляет сервер из имени файла (см. Module.IDPrefix).
+package module
+
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"beacon-table/internal/domain"
+	"beacon-table/internal/theme"
+)
+
+// Format — версия СТРУКТУРЫ пакета, которую понимает программа. Не путать с
+// Manifest.Version — версией содержимого модуля.
+const Format = "beacon-module/v1"
+
+// Типы модулей.
+const (
+	// TypeSystem — игровая система: её выбирают при создании мира. Может
+	// нести и карточки (D&D 5e приносит свой SRD-каталог).
+	TypeSystem = "system"
+	// TypeContent — дополнительный контент под одну или несколько систем.
+	TypeContent = "content"
+)
+
+// Виды карточек — они же имена папок внутри модуля.
+const (
+	KindBestiary   = "bestiary"
+	KindSpells     = "spells"
+	KindItems      = "items"
+	KindReferences = "references"
+	KindConditions = "conditions"
+)
+
+// Kinds — все виды карточек, которые модуль может нести.
+var Kinds = []string{KindBestiary, KindSpells, KindItems, KindReferences, KindConditions}
+
+// LegacyIDPrefix — префикс id карточек каталога «из коробки» до модулей
+// (sys-<имя файла>). Модули D&D, вынесенные из бинарника, объявляют
+// "legacyIds": true и сохраняют его — ссылки на токенах, в инвентаре и
+// лутах миров 0.8.x продолжают открывать те же карточки.
+const LegacyIDPrefix = "sys-"
+
+// idSeparator — между id модуля и slug'ом карточки: "srd-extra--goblin".
+// В id модуля два дефиса подряд запрещены (см. validID), а id карточек
+// библиотеки — 32 hex-символа, так что спутать не с чем.
+const idSeparator = "--"
+
+// Dependency — модуль, без которого этот не имеет смысла (контент под
+// систему требует саму систему).
+type Dependency struct {
+	ID string `json:"id"`
+	// MinVersion — не ниже какой версии нужна зависимость; пусто — любая.
+	MinVersion string `json:"minVersion,omitempty"`
+}
+
+// Manifest — module.json.
+type Manifest struct {
+	Format  string `json:"format"`
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	Version string `json:"version"`
+	// MinAppVersion — не ниже какой версии Beacon Table модуль работает.
+	MinAppVersion string `json:"minAppVersion,omitempty"`
+	// Systems — для каких игровых систем модуль (id системных модулей). У
+	// системного модуля — обычно он сам.
+	Systems     []string     `json:"systems,omitempty"`
+	Requires    []Dependency `json:"requires,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Author      string       `json:"author,omitempty"`
+	License     string       `json:"license,omitempty"`
+	// Attribution — откуда взят текст (перевод, переводчик, ссылка).
+	Attribution string `json:"attribution,omitempty"`
+	// LegacyIDs — id карточек в старом формате sys-<slug> (см.
+	// LegacyIDPrefix). Только для модулей, заменяющих встроенный каталог.
+	LegacyIDs bool `json:"legacyIds,omitempty"`
+	// Theme — оформление системы: токены, шрифты и свой CSS листа и карточек
+	// (см. internal/theme). Только у системного модуля.
+	Theme json.RawMessage `json:"theme,omitempty"`
+	// Combat — правила боя системы: инициатива, 0 хитов, опыт. Только у
+	// системного модуля; без раздела мир на этой системе играет по правилам
+	// «Своей системы» (domain.CustomCombatRules).
+	Combat *domain.CombatRules `json:"combat,omitempty"`
+	// ModifierTargets — цели модификаторов, которые объявляет система
+	// сверх целей ядра и свободных характеристик (у D&D — abilities.*).
+	// Только у системного модуля.
+	ModifierTargets []domain.ModifierTargetInfo `json:"modifierTargets,omitempty"`
+	// Units — единицы системы (вес); Currencies — валюты листа в порядке
+	// показа. Только у системного модуля; без них — умолчания «Своей
+	// системы» (domain.CustomUnits/CustomCurrencies).
+	Units      *domain.SystemUnits `json:"units,omitempty"`
+	Currencies []domain.Currency   `json:"currencies,omitempty"`
+	// Rolls — броски, которые ядро делает само (куб проверки для голого
+	// модификатора в тексте). Только у системного модуля; без раздела —
+	// domain.CustomRolls.
+	Rolls *domain.SystemRolls `json:"rolls,omitempty"`
+	// TokenSize — размер токена существа по полю карточки. Только у
+	// системного модуля; без раздела существо встаёт 1×1.
+	TokenSize *domain.TokenSizeRule `json:"tokenSize,omitempty"`
+}
+
+// maxModifierTargets — сколько целей модификаторов может объявить система.
+const maxModifierTargets = 64
+
+var validID = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// ParseManifest разбирает и проверяет module.json.
+func ParseManifest(data []byte) (*Manifest, error) {
+	var m Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("module.json не разбирается: %w", err)
+	}
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// Validate — то, без чего модуль нельзя ни установить, ни подключить.
+func (m *Manifest) Validate() error {
+	if m.Format != Format {
+		if m.Format == "" {
+			return fmt.Errorf("в module.json нет \"format\" — это точно модуль Beacon Table?")
+		}
+		return fmt.Errorf("формат модуля %q не поддерживается (нужен %q) — обнови программу", m.Format, Format)
+	}
+	if !validID.MatchString(m.ID) || len(m.ID) > 64 || m.ID+"-" == LegacyIDPrefix {
+		return fmt.Errorf("id модуля %q: только латиница в нижнем регистре, цифры и одиночные дефисы, до 64 символов", m.ID)
+	}
+	if m.Type != TypeSystem && m.Type != TypeContent {
+		return fmt.Errorf("тип модуля %q: нужен %q или %q", m.Type, TypeSystem, TypeContent)
+	}
+	if strings.TrimSpace(m.Title) == "" {
+		return fmt.Errorf("у модуля %s нет названия (title)", m.ID)
+	}
+	if _, err := ParseVersion(m.Version); err != nil {
+		return fmt.Errorf("версия модуля %s: %w", m.ID, err)
+	}
+	if m.MinAppVersion != "" {
+		if _, err := ParseVersion(m.MinAppVersion); err != nil {
+			return fmt.Errorf("minAppVersion модуля %s: %w", m.ID, err)
+		}
+	}
+	for _, d := range m.Requires {
+		if !validID.MatchString(d.ID) {
+			return fmt.Errorf("зависимость модуля %s: неверный id %q", m.ID, d.ID)
+		}
+		if d.MinVersion != "" {
+			if _, err := ParseVersion(d.MinVersion); err != nil {
+				return fmt.Errorf("зависимость %s модуля %s: %w", d.ID, m.ID, err)
+			}
+		}
+	}
+	if m.Combat != nil {
+		if m.Type != TypeSystem {
+			return fmt.Errorf("правила боя (combat) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+		}
+		if err := m.Combat.Validate(); err != nil {
+			return fmt.Errorf("правила боя модуля %s: %w", m.ID, err)
+		}
+	}
+	if m.TokenSize != nil {
+		if m.Type != TypeSystem {
+			return fmt.Errorf("размер токенов (tokenSize) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+		}
+		if err := domain.ValidateTokenSize(m.TokenSize); err != nil {
+			return fmt.Errorf("модуль %s: %w", m.ID, err)
+		}
+	}
+	if err := m.validateModifierTargets(); err != nil {
+		return err
+	}
+	if err := m.validateTheme(); err != nil {
+		return err
+	}
+	return m.validateUnitsAndCurrencies()
+}
+
+// validateTheme — раздел theme: только у системного модуля и по правилам
+// internal/theme (файлы шрифтов и стилей проверяет CheckTheme).
+func (m *Manifest) validateTheme() error {
+	spec, err := theme.Parse(m.Theme)
+	if err != nil {
+		return fmt.Errorf("модуль %s: %w", m.ID, err)
+	}
+	if spec != nil && m.Type != TypeSystem {
+		return fmt.Errorf("оформление (theme) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	return nil
+}
+
+// validateUnitsAndCurrencies — единицы, валюты и броски: только
+// у системного модуля.
+func (m *Manifest) validateUnitsAndCurrencies() error {
+	if m.Units == nil && len(m.Currencies) == 0 && m.Rolls == nil {
+		return nil
+	}
+	if m.Type != TypeSystem {
+		return fmt.Errorf("единицы, валюты и броски (units, currencies, rolls) задаёт только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	if m.Rolls != nil {
+		if err := domain.ValidateRolls(m.Rolls); err != nil {
+			return fmt.Errorf("модуль %s: %w", m.ID, err)
+		}
+	}
+	if m.Units != nil {
+		if err := domain.ValidateUnits(m.Units); err != nil {
+			return fmt.Errorf("модуль %s: %w", m.ID, err)
+		}
+	}
+	if err := domain.ValidateCurrencies(m.Currencies); err != nil {
+		return fmt.Errorf("модуль %s: %w", m.ID, err)
+	}
+	return nil
+}
+
+// validateModifierTargets — цели системы: синтаксис, подпись, без повторов
+// и без пересечения с целями ядра и свободными характеристиками. Период
+// у целей системы не бывает — он осмыслен только у текущих хитов.
+func (m *Manifest) validateModifierTargets() error {
+	if len(m.ModifierTargets) == 0 {
+		return nil
+	}
+	if m.Type != TypeSystem {
+		return fmt.Errorf("цели модификаторов (modifierTargets) объявляет только системный модуль, а %s — %q", m.ID, m.Type)
+	}
+	if len(m.ModifierTargets) > maxModifierTargets {
+		return fmt.Errorf("модуль %s: целей модификаторов больше %d", m.ID, maxModifierTargets)
+	}
+	seen := map[string]bool{}
+	for i := range m.ModifierTargets {
+		t := &m.ModifierTargets[i]
+		switch {
+		case !domain.ValidModifierTarget(t.Target):
+			return fmt.Errorf("модуль %s: неверная цель модификатора %q", m.ID, t.Target)
+		case domain.IsCoreModifierTarget(t.Target) || strings.HasPrefix(t.Target, domain.StatTargetPrefix):
+			return fmt.Errorf("модуль %s: цель %q уже есть в ядре", m.ID, t.Target)
+		case seen[t.Target]:
+			return fmt.Errorf("модуль %s: цель %q объявлена дважды", m.ID, t.Target)
+		case strings.TrimSpace(t.Label) == "":
+			return fmt.Errorf("модуль %s: у цели %q нет подписи", m.ID, t.Target)
+		}
+		seen[t.Target] = true
+		t.Periodic = false
+		t.System = true
+	}
+	return nil
+}
+
+// IDPrefix — префикс id карточек этого модуля.
+func (m *Manifest) IDPrefix() string {
+	if m.LegacyIDs {
+		return LegacyIDPrefix
+	}
+	return m.ID + idSeparator
+}
+
+// Version — semver без пререлизов: major.minor.patch.
+type Version [3]int
+
+// ParseVersion принимает "1.2.3" (и "v1.2.3"); суффикс после "-" или "+"
+// (1.2.3-beta, 0.8.6+dirty) отбрасывается — сравниваем только числа.
+func ParseVersion(s string) (Version, error) {
+	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
+	if i := strings.IndexAny(s, "-+"); i >= 0 {
+		s = s[:i]
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return Version{}, fmt.Errorf("%q — не версия вида 1.2.3", s)
+	}
+	var v Version
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return Version{}, fmt.Errorf("%q — не версия вида 1.2.3", s)
+		}
+		v[i] = n
+	}
+	return v, nil
+}
+
+// Less — v раньше other.
+func (v Version) Less(other Version) bool {
+	for i := range v {
+		if v[i] != other[i] {
+			return v[i] < other[i]
+		}
+	}
+	return false
+}
+
+func (v Version) String() string { return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2]) }

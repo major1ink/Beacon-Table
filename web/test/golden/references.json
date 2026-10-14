@@ -1,0 +1,66 @@
+[
+ {
+  "name": "Чемпион [Champion]",
+  "kind": "архетип",
+  "parentName": "fighter",
+  "source": "PHB 2024",
+  "imageUrl": "modules/ag-fifthpendium/assets/subclasses/fighter/champion.webp",
+  "description": "<blockquote><p> Текст описания. </p></blockquote><p> Текст описания. </p><table><thead><tr><td><p style=\"text-align:center\">Уровень Воина</p></td><td><p>Особенность</p></td></tr></thead><tbody><tr><td><p style=\"text-align:center\">3</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrImprovedCr]</p><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrRemarkable]</p></td></tr><tr><td><p style=\"text-align:center\">7</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrAdditional]</p></td></tr><tr><td><p style=\"text-align:center\">10</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrHeroicWarr]</p></td></tr><tr><td><p style=\"text-align:center\">15</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrSuperiorCr]</p></td></tr><tr><td><p style=\"text-align:center\">18</p></td><td><p>@UUID[Compendium.ag-fifthpendium.classes.Item.phbftrSurvivor00]</p></td></tr></tbody></table>"
+ },
+ {
+  "name": "Второе дыхание [Second Wind]",
+  "kind": "черта класса",
+  "parentName": "",
+  "source": "PHB 2024",
+  "imageUrl": "modules/ag-icons/abilities/fighter/hand-grip-sigil.webp",
+  "description": "<p><strong>Требования:</strong> Воин 1</p><p> Текст описания. 1d10 + ваш уровень Воина.</p><p> Текст описания. </p><p> Текст описания. «Особенности Воина».</p>"
+ },
+ {
+  "name": "Варвар",
+  "kind": "класс",
+  "parentName": "",
+  "source": "PHB 2024",
+  "imageUrl": "modules/ag-fifthpendium/assets/classes/barbarian.webp",
+  "description": "<blockquote><p> Текст описания. </p></blockquote><h3>Ключевые атрибуты Варвара</h3><table\n class=\"core-class-traits\"><tbody><tr><th scope=\"row\"\n data-colwidth=\"231\"><p> Текст описания. </p></th><td><p>Сила</p></td></tr><tr><th\n data-colwidth=\"231\"><p><strong>Кость здоровья</strong></p></th><td><p>D12\n за уровень Варвара</p></td></tr><tr><th\n data-colwidth=\"231\"><p><strong>Умения в\n испытаниях</strong></p></th><td><p>Сила и\n Выносливость</p></td></tr><tr><th data-colwidth=\"231\"><p><strong>Умения в\n навыках</strong></p></th><td><p><em>Выберите 2:</em> Текст описания. </p></td></tr><tr><th\n data-colwidth=\"231\"><p><strong>Умения в\n оружии</strong></p></th><td><p> Текст описания. </p></td></tr><tr><th data-colwidth=\"231\"><p><strong>Обращение с\n бронёй</strong></p></th><td><p> Текст описания. </p></td></tr><tr><th data-colwidth=\"231\"><p><strong> Текст описания. </strong></p></th><td><p><em>Выберите A или Б:</em> (A)\n Секира,\n 4 Ручных\n топора,\n Комплект\n первопроходца, и ; (Б) </p></td></tr></tbody></table><p> Текст описания. </p><p> Текст описания. </p><p> Текст описания. </p><h2>Выбор Варвара…</h2><h3>На 1-м\n уровне</h3><ul><li><p> Текст описания. </p></li><li><p> Текст описания. </p></li></ul><h3> Текст описания. </h3><ul><li><p> Текст описания. </p></li><li><p> Текст описания. </p></li></ul>"
+ },
+ {
+  "name": "Бдительный [Alert]",
+  "kind": "черта класса",
+  "parentName": "",
+  "source": "PHB 2024",
+  "imageUrl": "modules/ag-icons/debuffs/hearing.webp",
+  "description": "<p><strong>Умение в Инициативе.</strong> Текст описания. </p><p><strong>Обмен Инициативой.</strong> Текст описания. </p>"
+ },
+ {
+  "name": "Послушник [Acolyte]",
+  "kind": "происхождение",
+  "parentName": "",
+  "source": "PHB 2024",
+  "imageUrl": "modules/ag-fifthpendium/assets/backgrounds/acolyte.webp",
+  "description": "<p><strong>Характеристики:</strong> Текст описания. </p><p><strong>Черта:</strong> Посвящённый в магию (Жрец).</p><p><strong>Умения в навыках:</strong> Текст описания. </p><p><strong>Умения в инструментах:</strong> Инструменты каллиграфа.</p><p><strong>Экипировка:</strong> Выберите А или Б: (А) Инструменты каллиграфа, Книга (молитвенник), Символ религии, Пергамент (10 листов), Мантия, 8 ЗМ; (Б) 50 ЗМ.</p><p> Текст описания. </p>"
+ },
+ {
+  "name": "Эльф [Elf]",
+  "kind": "вид",
+  "parentName": "",
+  "source": "PHB 2024",
+  "imageUrl": "modules/ag-fifthpendium/assets/species/elfs.webp",
+  "description": "<p> Текст описания. </p><p> Текст описания. </p><p> Текст описания. </p><p> Текст описания. </p><h3>Высшие эльфы</h3><p> Текст описания. </p><h3>Дроу</h3><p> Текст описания. </p><h3>Лесные эльфы</h3><p> Текст описания. </p><p>@Embed[Compendium.ag-fifthpendium.phb.JournalEntry.phbCh4ArtHandout.JournalEntryPage.TtvnRE5XYEc7Udiq cite=false]</p><h3>Особенности Эльфов</h3><p><strong>Тип существа: </strong>Гуманоид.</p><p><strong>Размер: </strong>Средний (рост от 5 до 6 футов)</p><p><strong>Скорость:</strong> 30 футов.</p><p> Текст описания. </p><p><strong>Ночное зрение.</strong> У вас Ночное зрение на расстоянии 60 футов.</p><p><strong>Эльфийская родословная.</strong> Текст описания. </p><p> Текст описания. </p><p><strong>Наследие фей. </strong> Текст описания. </p><p><strong>Острое восприятие.</strong> Текст описания. </p><p><strong>Транс.</strong> Текст описания. </p><table><caption><p>Эльфийские рода</p></caption><thead><tr><th><p>Род</p></th><th><p>1-й уровень</p></th><th><p>3-й уровень</p></th><th><p>5-й уровень</p></th></tr></thead><tbody><tr><td><p>Высший эльф</p></td><td><p>Вы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPrestidigi] Текст описания. списка заклинаний Волшебника.</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi]</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplMistyStep0]</p></td></tr><tr><td><p>Дроу</p></td><td><p> Текст описания. @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDancingLig].</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplFaerieFire]</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDarkness00]</p></td></tr><tr><td><p>Лесной эльф</p></td><td><p>Ваша Скорость увеличивается до 35 футов. Вы знаете фокус @UUID[Compendium.ag-fifthpendium.spells.Item.phbsplDruidcraft].</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplLongstride]</p></td><td><p>@UUID[Compendium.ag-fifthpendium.spells.Item.phbsplPasswithou]</p></td></tr></tbody></table>"
+ },
+ {
+  "name": "Высший эльф [High Elf]",
+  "kind": "черта класса",
+  "parentName": "",
+  "source": "PHB 2024",
+  "imageUrl": "modules/ag-fifthpendium/assets/species/elf-high.webp",
+  "description": "<p><strong>Требования:</strong> Эльф</p><p> Текст описания. </p><table><caption><p>Высший эльф</p></caption><thead><tr><th><p>1-й уровень</p></th><th><p>3-й уровень</p></th><th><p>5-й уровень</p></th></tr></thead><tbody><tr><td><p>Вы знаете фокус Мелкие фокусы.</p><p> Текст описания. списка заклинаний Волшебника.</p></td><td><p>Обнаружение магии</p></td><td><p>Туманный шаг</p></td></tr></tbody></table>"
+ },
+ {
+  "name": "Оружейная палата [Armory]",
+  "kind": "помещение бастиона",
+  "parentName": "",
+  "source": "DMG 2024",
+  "imageUrl": "icons/environment/settlement/target-dummy.webp",
+  "description": "<p><em>Тип: особое · Размер: просторное · Требуемый уровень: 5</em></p><p> Текст описания. </p><p><strong> Текст описания. </strong> Текст описания. Кузница [Smithy] Текст описания. </p><p> Текст описания. 1d8 вместо каждого 1d6 Текст описания. </p>"
+ }
+]

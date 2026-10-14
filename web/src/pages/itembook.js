@@ -18,18 +18,21 @@ import { enhanceRolls } from "../inline-rolls.js";
 import { wireCatalogLinks } from "../catalog-links.js";
 import { renderStatEditor, loadTargets } from "../stat-editor.js";
 import { loadStand, renderStandSelect } from "../stand.js";
-import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
-import { renderKvTable } from "../kv-table.js";
+import { el as hh, labeled, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { renderInventoryPreview } from "../inventory-preview.js";
-import { glyphNode } from "../condition-glyphs.js";
-import { itemGlyphName } from "../item-glyph.js";
-import { RARITY, rarityColor } from "../item-rarity.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
+import { loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerFold } from "../importer-offer.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
+import { medallionOf } from "../schema-list.js";
 
 // ==================== state ====================
 
@@ -80,47 +83,20 @@ function mdBlock(labelText, get, set) {
   return h("div", { class: "md-block" }, [t, render]);
 }
 
-// attunementText — «требует настройки (колдуном)» для плашки и подзаголовка.
-function attunementText(it) {
-  if (!it.requiresAttunement) return "";
-  return it.attunementNote ? `требует настройки (${it.attunementNote})` : "требует настройки";
-}
-
-function heroPills() {
-  return [
-    item.rarity ? pill(item.rarity, "rar") : null,
-    item.requiresAttunement ? pill(attunementText(item), "att") : null,
-    item.source ? pill(item.source, "gold") : null,
-    ...item.tags.map((t) => pill(t)),
-  ];
-}
-
-// kvRows — строки таблицы «показатель · значение» (kv-table.js).
-function kvRows() {
-  return [
-    { label: "Стоимость", get: () => item.cost, set: (v) => (item.cost = v), placeholder: "50 зм.", mono: true },
-    { label: "Вес", get: () => item.weight, set: (v) => (item.weight = v), placeholder: "1 фунт.", mono: true },
-    // weightLb — тот же вес числом (см. domain.Item.WeightLb) для суммы
-    // инвентаря на листе; с текстовым «Вес» не синхронизируется.
-    { label: "Вес числом, фнт", get: () => item.weightLb, set: (v) => (item.weightLb = v), placeholder: "0", mono: true, type: "number", min: "0", step: "any", unit: " фнт" },
-    { label: "Активация", get: () => item.activation, set: (v) => (item.activation = v), placeholder: "1 действие" },
-    { label: "Урон", get: () => item.damage, set: (v) => (item.damage = v), placeholder: "1к8 рубящий", mono: true },
-    { label: "Класс доспеха", get: () => item.armorClass, set: (v) => (item.armorClass = v), placeholder: "14 + Лов (макс 2)", mono: true },
-    { label: "Свойства", get: () => item.properties, set: (v) => (item.properties = v), placeholder: "лёгкое, фехтовальное" },
-    { label: "Заряды", get: () => item.charges, set: (v) => (item.charges = v), placeholder: "3 заряда, 1к3 на рассвете" },
-  ];
-}
-
 // ==================== рендер ====================
 
+let compiledItem = null;
 function renderApp() {
   const root = document.getElementById("app");
   root.innerHTML = "";
-  if (editMode) renderEditView(root);
-  else renderReadView(root);
+  const s = schemaFor("item");
+  if (!compiledItem || compiledItem.schema !== s) compiledItem = compileSchema(s);
+  renderSchemaView(root, compiledItem);
 }
 
-function renderEditView(root) {
+// artField — «Арт»: загрузить свою иконку или убрать её; onArt() — после
+// смены (обновить шапку и превью).
+function artField(onArt) {
   const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
@@ -129,9 +105,8 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       item.imageUrl = url;
       scheduleSave();
-      hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl);
       artBtn.textContent = "Убрать арт";
-      preview.update();
+      onArt();
     } catch (err) {
       showAlert("Не удалось загрузить иконку: " + err.message);
     }
@@ -143,57 +118,82 @@ function renderEditView(root) {
       if (item.imageUrl) {
         item.imageUrl = "";
         scheduleSave();
-        hero.setGlyph(glyphNode(itemGlyphName(item), ""), "");
         artBtn.textContent = "Загрузить свой…";
-        preview.update();
+        onArt();
       } else upload.click();
     },
   });
+  return h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload]);
+}
 
-  // Редкость — известные значения списком, любое другое остаётся текстом.
-  const raritySel = h("select", {});
-  raritySel.appendChild(h("option", { value: "", text: "—" }));
-  for (const r of RARITY) raritySel.appendChild(h("option", { value: r.ru, text: r.ru }));
-  if (item.rarity && !RARITY.some((r) => r.ru === item.rarity)) raritySel.appendChild(h("option", { value: item.rarity, text: item.rarity }));
-  raritySel.value = item.rarity || "";
-  raritySel.addEventListener("change", () => {
-    item.rarity = raritySel.value;
-    scheduleSave();
-    refreshHead();
+// compatFold — «Совместимость и источник» (см. bestiary.js: compatFold).
+function compatFold(readOnly, onPills) {
+  const compatSummary = () => [item.source, item.foundryModuleId].filter(Boolean).join(" · ");
+  if (readOnly) {
+    const compat = compatSummary();
+    return compat ? fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }) : null;
+  }
+  const empty = "источник, теги, модуль Foundry";
+  const f = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary() || empty,
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => item.source, (v) => { item.source = v; onPills(); f.setSummary(compatSummary() || empty); }, { placeholder: "DMG'24" })),
+        labeled("Модуль Foundry", textInput(() => item.foundryModuleId, (v) => { item.foundryModuleId = v; f.setSummary(compatSummary() || empty); }, { placeholder: "dnd5e.items" }), "Откуда импортирован — чтобы повторный импорт нашёл карточку."),
+      ]),
+      tagsField(onPills),
+    ],
   });
-  const attCb = h("input", { type: "checkbox" });
-  attCb.checked = !!item.requiresAttunement;
-  attCb.addEventListener("change", () => {
-    item.requiresAttunement = attCb.checked;
-    scheduleSave();
-    attNoteBox.hidden = !item.requiresAttunement;
-    refreshHead();
-  });
-  const attNote = textInput(() => item.attunementNote, (v) => { item.attunementNote = v; refreshHead(); }, { placeholder: "колдуном", style: "width:180px" });
-  const attNoteBox = labeled("Кем", attNote);
-  attNoteBox.hidden = !item.requiresAttunement;
+  return f;
+}
 
-  // Книжный подзаголовок: тип правится прямо в нём.
-  const typeInp = textInput(() => item.type, (v) => { item.type = v; typeInp.size = Math.max(14, v.length + 1); hero.setGlyph(glyphNode(itemGlyphName(item), ""), item.imageUrl); preview.update(); }, { placeholder: "Доспех (кольчуга)", "aria-label": "Тип" });
-  typeInp.size = Math.max(14, (item.type || "").length + 1);
-  const subTail = h("span", {});
-  const subtitle = h("div", { class: "card-sub" }, [typeInp, subTail]);
+// descFold — «Описание»: в правке — markdown с живым рендером, в чтении —
+// текст с кликабельными формулами (пустой не показывается).
+function descFold(readOnly) {
+  if (!readOnly) {
+    const f = fold({ title: "Описание", summary: item.description || "что это и как выглядит", body: [mdBlock("Описание", () => item.description, (v) => { item.description = v; f.setSummary(v || "что это и как выглядит"); })] });
+    return f;
+  }
+  if (!(item.description && item.description.trim())) return null;
+  const body = h("div", { class: "card-prose" });
+  body.innerHTML = renderNoteHtml(item.description);
+  enhanceRolls(body, sendRoll);
+  wireCatalogLinks(body);
+  return fold({ title: "Описание", body: [body], open: true });
+}
+
+// renderSchemaView — карточка по схеме системы (schema-card.js): шапка без
+// редкости и настройки D&D, середина — из схемы; превью «как в инвентаре» и
+// стенд модификаторов — как у карточки D&D, импорт — только у неё.
+function renderSchemaView(root, compiled) {
+  const readOnly = !editMode;
+  const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, item) });
+  const stand = renderStandSelect(standEntries);
+  const fallbackGlyph = () => (medallionOf(compiled, item) || {}).glyph || "box";
+  const preview = renderInventoryPreview(item, { stand, sendRoll, glyphName: fallbackGlyph });
+  const head = cardHead(compiled, item, fallbackGlyph());
   const refreshHead = () => {
-    subTail.textContent = [item.rarity ? ", " + item.rarity : "", item.requiresAttunement ? " (" + attunementText(item) + ")" : ""].join("");
-    hero.setPills(heroPills());
-    hero.setColor(rarityColor(item.rarity) || "");
+    const next = cardHead(compiled, item, fallbackGlyph());
+    subtitle.textContent = cardSubtitle(compiled, item);
+    hero.setGlyph(next.glyph, item.imageUrl);
+    hero.setColor(next.color);
+    hero.setPills(next.pills);
+    preview.update();
   };
-
   const hero = renderHero({
-    glyph: glyphNode(itemGlyphName(item), ""),
+    glyph: head.glyph,
     imageUrl: item.imageUrl,
-    color: rarityColor(item.rarity) || "",
+    color: head.color,
     name: item.name,
     namePlaceholder: "Название предмета",
-    pills: heroPills(),
+    pills: head.pills,
     square: true,
     subtitle,
-    controls: [labeled("Редкость", raritySel), h("div", { class: "field" }, [h("span", { text: "Требует" }), h("label", { class: "card-toggle" }, [attCb, "настройки"])]), attNoteBox, h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    readOnly,
+    controls: readOnly
+      ? undefined
+      : [artField(refreshHead)],
     onName: (v) => {
       item.name = v;
       document.getElementById("itemTitle").textContent = v || "Без имени";
@@ -201,72 +201,26 @@ function renderEditView(root) {
       preview.update();
     },
   });
-  refreshHead();
   root.appendChild(hero.el);
   root.appendChild(ornament());
-
-  const stand = renderStandSelect(standEntries);
-  const preview = renderInventoryPreview(item, { stand, sendRoll });
-  const kv = renderKvTable(kvRows(), { onChange: () => { scheduleSave(); preview.update(); }, hint: "Пустые строки в режиме чтения скрываются. Формулы кубов кликабельны." });
-  const worn = h("div", {}, [
-    h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: "Пока надет" })]),
-    renderStatEditor(item.modifiers, () => { scheduleSave(); preview.update(); }, { stand, periodic: false }),
-  ]);
-
-  const descFold = fold({ title: "Описание", summary: item.description || "что это и как выглядит", body: [mdBlock("Описание", () => item.description, (v) => { item.description = v; descFold.setSummary(v || "что это и как выглядит"); })] });
-  const compatSummary = () => [item.source, item.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
-  const compatFold = fold({
-    title: "Совместимость и источник",
-    summary: compatSummary(),
-    body: [
-      h("div", { class: "card-grid2" }, [
-        labeled("Источник", textInput(() => item.source, (v) => { item.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "DMG'24" })),
-        labeled("Модуль Foundry", textInput(() => item.foundryModuleId, (v) => { item.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.items" }), "Откуда импортирован — чтобы повторный импорт нашёл карточку."),
-      ]),
-      tagsField(() => hero.setPills(heroPills())),
-    ],
+  // «Пока надет» — конструктор модификаторов со стендом, как у карточки D&D.
+  const worn = (sec) => {
+    const title = sec.title || "Пока надет";
+    if (readOnly) return item.modifiers.length ? fold({ title, body: [renderStatEditor(item.modifiers, () => {}, { stand, periodic: false, readOnly: true })], open: true }) : null;
+    return fold({ title, body: [renderStatEditor(item.modifiers, () => { scheduleSave(); preview.update(); }, { stand, periodic: false })], open: true });
+  };
+  const middle = renderSchemaCard({
+    compiled,
+    data: item,
+    readOnly,
+    scheduleSave,
+    onChange: refreshHead,
+    sendRoll,
+    widgets: { modifiers: worn },
   });
-
-  root.appendChild(renderBody([kv, worn, h("div", { class: "card-folds" }, [descFold, compatFold, importSection()])], [preview]));
-}
-
-// ==================== read-режим (по умолчанию) ====================
-
-function renderReadView(root) {
-  const subtitle = h("div", { class: "card-sub", text: [item.type, item.rarity].filter(Boolean).join(", ") + (item.requiresAttunement ? " (" + attunementText(item) + ")" : "") });
-  const hero = renderHero({
-    glyph: glyphNode(itemGlyphName(item), ""),
-    imageUrl: item.imageUrl,
-    color: rarityColor(item.rarity) || "",
-    name: item.name,
-    pills: heroPills(),
-    square: true,
-    subtitle,
-    readOnly: true,
-  });
-  root.appendChild(hero.el);
-  root.appendChild(ornament());
-
-  const stand = renderStandSelect(standEntries);
-  const preview = renderInventoryPreview(item, { stand, sendRoll });
-  const kv = renderKvTable(kvRows(), { readOnly: true, sendRoll });
-  const worn = item.modifiers.length
-    ? h("div", {}, [h("div", { class: "card-worn-h" }, [h("span", { class: "card-lbl", text: "Пока надет" })]), renderStatEditor(item.modifiers, () => {}, { stand, periodic: false, readOnly: true })])
-    : null;
-
-  const folds = [];
-  const desc = item.description && item.description.trim();
-  if (desc) {
-    const body = h("div", { class: "card-prose" });
-    body.innerHTML = renderNoteHtml(item.description);
-    enhanceRolls(body, sendRoll);
-    wireCatalogLinks(body);
-    folds.push(fold({ title: "Описание", body: [body], open: true }));
-  }
-  const compat = [item.source, item.foundryModuleId].filter(Boolean).join(" · ");
-  if (compat) folds.push(fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }));
-
-  root.appendChild(renderBody([kv, worn, folds.length ? h("div", { class: "card-folds" }, folds) : null], [preview]));
+  const folds = [...middle, descFold(readOnly), compatFold(readOnly, refreshHead)];
+  if (!readOnly) folds.push(importerFits("foundry-dnd5e") ? importSection() : offerFold("foundry-dnd5e", "Импорт из Foundry VTT"));
+  root.appendChild(renderBody(cardBody(folds), [preview]));
 }
 
 function tagsField(onChange) {
@@ -512,6 +466,7 @@ function currentId() {
     return;
   }
   await loadTargets(); // подписи целей для статблока
+  await Promise.all([loadSystemProfile(), loadSchemas()]); // единица веса и схемы мира
   standEntries = await loadStand();
   try {
     item = normalizeItem(await fetchItem(itemId));

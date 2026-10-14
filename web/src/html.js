@@ -213,3 +213,14 @@ export function sanitizeHtml(html) {
   }
   return out;
 }
+
+// downloadFile — скачать файл по адресу, не уходя со страницы: ответ с
+// ошибкой вместо файла не уведёт стол на голый JSON.
+export function downloadFile(url) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}

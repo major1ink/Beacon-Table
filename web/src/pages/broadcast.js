@@ -6,6 +6,7 @@
 import "../legacy-dom.js";
 import { initVTT } from "../vtt/index.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
+import { initScreenTimers } from "../screen-timers.js";
 import { createDiceFx } from "../dice-fx.js";
 import { codecSupport } from "../vtt/video-diag.js";
 import { broadcastAccessGranted, requestBroadcastAccess, broadcastRequestState, probeBroadcastCookie } from "../api.js";
@@ -116,6 +117,7 @@ function startTable() {
   // (см. web/src/showcase-overlay.js). На трансляции закрыть нельзя, показом
   // управляет ДМ.
   initShowcaseOverlay({ role: "tv" });
+  initScreenTimers({ role: "tv" });
 
   // Режим задаёт ДМ в настройках стола.
   let dice3d = false;

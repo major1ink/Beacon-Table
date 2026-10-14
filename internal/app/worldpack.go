@@ -53,7 +53,7 @@ const (
 // worldSubdirs — поддиректории мира под dataRoot, которые едут в архив. Всё
 // прочее в dataRoot (beacon.db у legacy-мира, foundry-cache, companies/) —
 // не контент этого мира и в экспорт не попадает.
-var worldSubdirs = []string{"scenes", "journal", "boards", "bestiary", "spells", "items", "references", "conditions"}
+var worldSubdirs = []string{"scenes", "journal", "boards", "bestiary", "spells", "items", "references", "conditions", "screen", "sessions"}
 
 type worldManifest struct {
 	Format           string            `json:"format"`
@@ -67,6 +67,17 @@ type worldManifest struct {
 type worldManifestMeta struct {
 	Name   string `json:"name"`
 	System string `json:"system"`
+	// Modules — модули, подключённые к миру, с версиями на момент экспорта
+	// (см. domain.Company.Modules). Нет поля — мир до модулей: при импорте
+	// подключится модуль его системы, как и раньше.
+	Modules []worldModuleRef `json:"modules,omitempty"`
+}
+
+// worldModuleRef — модуль мира в архиве. Version — справочно: импорт
+// подключает модуль той версии, что стоит на сервере.
+type worldModuleRef struct {
+	ID      string `json:"id"`
+	Version string `json:"version,omitempty"`
 }
 
 type exportPlaylist struct {
@@ -123,6 +134,25 @@ type exportCharacter struct {
 type ImportResult struct {
 	Company       *domain.Company
 	RenamedLogins map[string]string
+	// MissingModules — модули мира из архива, которых нет на этом сервере:
+	// мир импортирован, но их карточек в нём не будет, пока их не поставят.
+	MissingModules []string
+}
+
+// moduleRefs — модули мира для архива; nil у мира до модулей.
+func (m *CompanyManager) moduleRefs(company *domain.Company) []worldModuleRef {
+	if company.Modules == nil {
+		return nil
+	}
+	refs := make([]worldModuleRef, 0, len(company.Modules))
+	for _, id := range company.Modules {
+		ref := worldModuleRef{ID: id}
+		if mod, err := m.modules.Get(id); err == nil {
+			ref.Version = mod.Manifest.Version
+		}
+		refs = append(refs, ref)
+	}
+	return refs
 }
 
 // importOutcome — то, что накопилось по ходу распаковки и нужно либо отдать
@@ -315,7 +345,7 @@ func (m *CompanyManager) ExportWorld(ctx context.Context, companyID, beaconVersi
 		Format:           worldPackFormat,
 		BeaconVersion:    beaconVersion,
 		ExportedAt:       time.Now().UTC().Format(time.RFC3339),
-		World:            worldManifestMeta{Name: company.Name, System: company.System},
+		World:            worldManifestMeta{Name: company.Name, System: company.System, Modules: m.moduleRefs(company)},
 		IncludesAccounts: includeAccounts,
 		Counts:           counts,
 	}
@@ -441,8 +471,8 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 	if strings.TrimSpace(man.World.Name) == "" {
 		return nil, &domain.ValidationError{Msg: "в архиве не указано название мира"}
 	}
-	if !domain.ValidSystem(man.World.System) {
-		return nil, &domain.ValidationError{Msg: "в архиве неизвестная игровая система: " + man.World.System}
+	if !validSystemID.MatchString(man.World.System) {
+		return nil, &domain.ValidationError{Msg: "в архиве неверный id игровой системы: " + man.World.System}
 	}
 
 	// Квоту проверяем ДО создания мира и распаковки: размер загрузок виден
@@ -452,9 +482,36 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 		return nil, err
 	}
 
-	company, err := m.Create(ctx, man.World.Name, man.World.System)
+	// Мир из архива без списка модулей — мир до модулей (Modules nil):
+	// подключён модуль его системы, как и было.
+	name := strings.TrimSpace(man.World.Name)
+	if len(name) > maxCompanyNameLen {
+		name = name[:maxCompanyNameLen]
+	}
+	company, err := m.createWorld(ctx, name, man.World.System, nil)
 	if err != nil {
 		return nil, err
+	}
+	var missingModules []string
+	if man.World.Modules == nil {
+		for _, id := range company.EnabledModules() {
+			if _, err := m.modules.Get(id); err != nil {
+				missingModules = append(missingModules, id)
+			}
+		}
+	} else {
+		ids := make([]string, 0, len(man.World.Modules))
+		for _, ref := range man.World.Modules {
+			ids = append(ids, ref.ID)
+			if _, err := m.modules.Get(ref.ID); err != nil {
+				missingModules = append(missingModules, ref.ID)
+			}
+		}
+		if err := m.companies.SetModules(ctx, company.ID, ids); err != nil {
+			_ = m.companies.Delete(ctx, company.ID)
+			return nil, err
+		}
+		company.Modules = ids
 	}
 	dataRoot, uploadsRoot, uploadsURL := m.rootsFor(company)
 
@@ -469,7 +526,7 @@ func (m *CompanyManager) ImportWorld(ctx context.Context, archivePath string) (*
 		m.quota.Invalidate()
 		return nil, err
 	}
-	return &ImportResult{Company: company, RenamedLogins: out.renamedLogins}, nil
+	return &ImportResult{Company: company, RenamedLogins: out.renamedLogins, MissingModules: missingModules}, nil
 }
 
 func (m *CompanyManager) populateWorld(ctx context.Context, zr *zip.Reader, companyID, system, dataRoot, uploadsRoot, uploadsURL string) (*importOutcome, error) {

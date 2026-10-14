@@ -1,0 +1,206 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"slices"
+
+	"beacon-table/internal/domain"
+	"beacon-table/internal/module"
+)
+
+// Модули контента глазами менеджера миров: установка и удаление — на весь
+// сервер (реестр), включение — в конкретном мире. Всё, что меняет состав
+// карточек ЗАПУЩЕННОГО мира, перезапускает его: каталоги собираются при
+// запуске (см. Launch), и иначе стол увидел бы изменения только после
+// следующего переключения мира.
+
+// InstallModule ставит или обновляет модуль из архива .btmod.
+func (m *CompanyManager) InstallModule(ctx context.Context, archive string) (*module.Module, error) {
+	mod, err := m.modules.Install(archive)
+	if err != nil {
+		return nil, err
+	}
+	return mod, m.relaunchIfUses(ctx, mod.Manifest.ID)
+}
+
+// RemoveModule удаляет установленный модуль с сервера. Миры, где он был
+// включён, продолжают его «помнить» и покажут как ненайденный — вернуть
+// можно, поставив модуль снова.
+func (m *CompanyManager) RemoveModule(ctx context.Context, id string) error {
+	if err := m.modules.Remove(id); err != nil {
+		return err
+	}
+	return m.relaunchIfUses(ctx, id)
+}
+
+// SetWorldModules — какие модули подключены к миру, в порядке подключения;
+// возвращает сохранённый список. Модуль системы мира остаётся всегда, второй
+// системный модуль и контент чужой системы не включаются. Уже включённый, но
+// пропавший с сервера модуль из списка молча не выкидывается — это решает ДМ.
+func (m *CompanyManager) SetWorldModules(ctx context.Context, companyID string, ids []string) ([]string, error) {
+	company, err := m.companies.ByID(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	current := m.EnabledModules(company)
+	clean := make([]string, 0, len(ids)+1)
+	if company.System != domain.SystemCustom && !slices.Contains(ids, company.System) {
+		clean = append(clean, company.System)
+	}
+	for _, id := range ids {
+		if slices.Contains(clean, id) {
+			continue
+		}
+		mod, err := m.modules.Get(id)
+		switch {
+		case err != nil && !slices.Contains(current, id):
+			return nil, &domain.ValidationError{Msg: fmt.Sprintf("модуль %q не установлен на сервере", id)}
+		case err != nil, id == company.System:
+		case mod.Manifest.Type == module.TypeSystem:
+			return nil, &domain.ValidationError{Msg: fmt.Sprintf("«%s» — игровая система: её не включают, а выбирают системой мира", mod.Manifest.Title)}
+		case !compatible(mod.Manifest, company.System):
+			return nil, &domain.ValidationError{Msg: fmt.Sprintf("«%s» сделан для другой системы — в мире на «%s» его не включить", mod.Manifest.Title, m.systemTitle(company.System))}
+		}
+		clean = append(clean, id)
+	}
+	if err := m.companies.SetModules(ctx, companyID, clean); err != nil {
+		return nil, err
+	}
+	return clean, m.relaunch(ctx, companyID)
+}
+
+// SetWorldSystem меняет систему мира и возвращает модули, которые пришлось
+// выключить. Данные мира не трогаются: ключи прежней системы остаются в
+// карточках и листах и снова покажутся при обратной смене. Модули прежней
+// системы (у «Своей» — базовые состояния) уступают место модулям новой,
+// контент чужой системы выключается.
+func (m *CompanyManager) SetWorldSystem(ctx context.Context, companyID, system string) ([]string, error) {
+	company, err := m.companies.ByID(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if !m.systemInstalled(system) {
+		return nil, &domain.ValidationError{Msg: "игровая система не установлена — поставь её модуль"}
+	}
+	if company.System == system {
+		return []string{}, nil
+	}
+	old := defaultModules(company.System)
+	modules := defaultModules(system)
+	disabled := []string{}
+	for _, id := range m.EnabledModules(company) {
+		if slices.Contains(old, id) || slices.Contains(modules, id) {
+			continue
+		}
+		if mod, err := m.modules.Get(id); err == nil && (mod.Manifest.Type == module.TypeSystem || !compatible(mod.Manifest, system)) {
+			disabled = append(disabled, id)
+			continue
+		}
+		modules = append(modules, id)
+	}
+	if err := m.companies.SetSystem(ctx, companyID, system, modules); err != nil {
+		return nil, err
+	}
+	return disabled, m.relaunch(ctx, companyID)
+}
+
+// compatible — контент подходит миру на system: модуль без systems — любому.
+func compatible(man *module.Manifest, system string) bool {
+	return len(man.Systems) == 0 || slices.Contains(man.Systems, system)
+}
+
+func (m *CompanyManager) systemTitle(id string) string {
+	for _, s := range m.Systems() {
+		if s.ID == id {
+			return s.Title
+		}
+	}
+	return id
+}
+
+// WorldModules — включённые в мире модули (EnabledModules), для ответа API.
+func (m *CompanyManager) WorldModules(ctx context.Context, companyID string) ([]string, error) {
+	company, err := m.companies.ByID(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	return m.EnabledModules(company), nil
+}
+
+// SystemThemeCSS — оформление системы запущенного мира готовым CSS. Пусто,
+// если мира нет, система «Своя» или у модуля нет темы; сломанная тема не
+// мешает работе стола.
+func (m *CompanyManager) SystemThemeCSS() string {
+	w := m.Current()
+	if w == nil || w.Company.System == domain.SystemCustom {
+		return ""
+	}
+	mod, err := m.modules.Get(w.Company.System)
+	if err != nil {
+		return ""
+	}
+	css, err := mod.ThemeCSS()
+	if err != nil {
+		slog.Warn("Тема системы не применена", "system", w.Company.System, "err", err)
+		return ""
+	}
+	return css
+}
+
+// EnabledModules — модули, чьи карточки видны в мире. Пока модуля системы
+// нет на сервере, мир играет с базовыми состояниями, как «Своя система». У
+// мира, созданного до модулей (список не хранится), к модулю его системы
+// добавляется контент, заменяющий прежний встроенный каталог: установленные
+// модули с legacyIds для этой системы. Считается на лету, данные мира не
+// меняются.
+func (m *CompanyManager) EnabledModules(company *domain.Company) []string {
+	ids := company.EnabledModules()
+	if company.System == "" || company.System == domain.SystemCustom {
+		return ids
+	}
+	ids = slices.Clone(ids)
+	if _, err := m.modules.Get(company.System); err != nil && !slices.Contains(ids, domain.BaseModuleID) {
+		if _, err := m.modules.Get(domain.BaseModuleID); err == nil {
+			ids = append([]string{domain.BaseModuleID}, ids...)
+		}
+	}
+	if company.Modules != nil {
+		return ids
+	}
+	mods, _ := m.modules.List()
+	for _, mod := range mods {
+		man := mod.Manifest
+		if man.LegacyIDs && man.Type == module.TypeContent && slices.Contains(man.Systems, company.System) && !slices.Contains(ids, man.ID) {
+			ids = append(ids, man.ID)
+		}
+	}
+	return ids
+}
+
+// World — мир по id (для витрины: система и список модулей).
+func (m *CompanyManager) World(ctx context.Context, companyID string) (*domain.Company, error) {
+	return m.companies.ByID(ctx, companyID)
+}
+
+func (m *CompanyManager) relaunchIfUses(ctx context.Context, moduleID string) error {
+	w := m.Current()
+	if w == nil || !slices.Contains(m.EnabledModules(w.Company), moduleID) {
+		return nil
+	}
+	return m.relaunch(ctx, w.Company.ID)
+}
+
+// relaunch перезапускает мир, если он на столе: страницы получают
+// world_reload и перечитывают модули и схемы.
+func (m *CompanyManager) relaunch(ctx context.Context, companyID string) error {
+	w := m.Current()
+	if w == nil || w.Company.ID != companyID {
+		return nil
+	}
+	w.Room.ShutdownForReload()
+	// Клиент мог уйти (страница перезагрузилась по world_reload): остановленный
+	// мир обязан подняться снова.
+	return m.Launch(context.WithoutCancel(ctx), companyID)
+}

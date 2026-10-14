@@ -1,0 +1,533 @@
+{
+ "npc": [
+  {
+   "name": "Старый гоблин",
+   "type": "npc",
+   "img": "systems/dnd5e/tokens/humanoid/goblin.webp",
+   "system": {
+    "abilities": {
+     "str": {
+      "value": 8
+     },
+     "dex": {
+      "value": 14
+     },
+     "con": {
+      "value": 10
+     },
+     "int": {
+      "value": 10
+     },
+     "wis": {
+      "value": 8
+     },
+     "cha": {
+      "value": 8
+     }
+    },
+    "attributes": {
+     "ac": {
+      "flat": 15,
+      "calc": "natural"
+     },
+     "hp": {
+      "value": 7,
+      "max": 7,
+      "formula": "2d6"
+     },
+     "movement": {
+      "walk": 30,
+      "fly": 0,
+      "units": "ft"
+     },
+     "senses": {
+      "darkvision": 60,
+      "units": "ft"
+     }
+    },
+    "details": {
+     "cr": 0.25,
+     "type": {
+      "value": "humanoid",
+      "subtype": "goblinoid"
+     },
+     "alignment": "нейтрально-злой",
+     "biography": {
+      "value": "<p>Короткая заметка.</p>"
+     }
+    },
+    "traits": {
+     "size": "sm",
+     "di": {
+      "value": []
+     },
+     "dr": {
+      "value": [
+       "fire"
+      ]
+     },
+     "dv": {
+      "value": []
+     },
+     "ci": {
+      "value": [
+       "frightened"
+      ]
+     },
+     "languages": {
+      "value": [
+       "common",
+       "goblin"
+      ],
+      "custom": ""
+     }
+    },
+    "skills": {
+     "ste": {
+      "value": 2,
+      "ability": "dex"
+     }
+    },
+    "resources": {
+     "legact": {
+      "value": 1,
+      "max": 1
+     },
+     "lair": {
+      "value": true,
+      "initiative": 20
+     }
+    }
+   },
+   "items": [
+    {
+     "name": "Скимитар",
+     "type": "weapon",
+     "system": {
+      "actionType": "mwak",
+      "activation": {
+       "type": "action",
+       "cost": 1
+      },
+      "attackBonus": "",
+      "properties": {
+       "fin": true,
+       "lgt": true
+      },
+      "damage": {
+       "parts": [
+        [
+         "1d6 + @mod",
+         "slashing"
+        ]
+       ],
+       "versatile": ""
+      },
+      "range": {
+       "value": 5,
+       "units": "ft"
+      },
+      "description": {
+       "value": "<p>Рубящее оружие.</p>"
+      }
+     }
+    },
+    {
+     "name": "Короткий лук",
+     "type": "weapon",
+     "system": {
+      "actionType": "rwak",
+      "activation": {
+       "type": "action",
+       "cost": 1
+      },
+      "damage": {
+       "parts": [
+        [
+         "1d6 + @mod",
+         "piercing"
+        ]
+       ]
+      },
+      "range": {
+       "value": 80,
+       "long": 320,
+       "units": "ft"
+      },
+      "description": {
+       "value": ""
+      }
+     }
+    },
+    {
+     "name": "Ловкий побег",
+     "type": "feat",
+     "system": {
+      "activation": {
+       "type": "bonus",
+       "cost": 1
+      },
+      "description": {
+       "value": "<p>Отход или Засада бонусным действием.</p>"
+      }
+     }
+    },
+    {
+     "name": "Удар хвостом",
+     "type": "feat",
+     "system": {
+      "activation": {
+       "type": "legendary",
+       "cost": 1
+      },
+      "description": {
+       "value": "<p>Легендарное действие.</p>"
+      }
+     }
+    },
+    {
+     "name": "Грохот логова",
+     "type": "feat",
+     "system": {
+      "activation": {
+       "type": "lair",
+       "cost": 1
+      },
+      "description": {
+       "value": "<p>Действие логова.</p>"
+      }
+     }
+    },
+    {
+     "name": "Злобная реакция",
+     "type": "feat",
+     "system": {
+      "activation": {
+       "type": "reaction",
+       "cost": 1
+      },
+      "description": {
+       "value": "<p>Реакция.</p>"
+      }
+     }
+    },
+    {
+     "name": "Чутьё",
+     "type": "feat",
+     "system": {
+      "activation": {
+       "type": ""
+      },
+      "description": {
+       "value": "<p>Пассивная особенность.</p>"
+      }
+     }
+    },
+    {
+     "name": "Огненный снаряд",
+     "type": "spell",
+     "system": {
+      "level": 0,
+      "school": "evo",
+      "preparation": {
+       "mode": "innate"
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "spells": [
+  {
+   "name": "Старый огненный шар",
+   "type": "spell",
+   "system": {
+    "level": 3,
+    "school": "evo",
+    "components": {
+     "vocal": true,
+     "somatic": true,
+     "material": true,
+     "ritual": false,
+     "concentration": false
+    },
+    "materials": {
+     "value": "шарик гуано"
+    },
+    "activation": {
+     "type": "action",
+     "cost": 1
+    },
+    "range": {
+     "value": 150,
+     "units": "ft"
+    },
+    "duration": {
+     "value": "",
+     "units": "inst"
+    },
+    "target": {
+     "value": 20,
+     "units": "ft",
+     "type": "sphere"
+    },
+    "actionType": "save",
+    "save": {
+     "ability": "dex",
+     "dc": null,
+     "scaling": "spell"
+    },
+    "damage": {
+     "parts": [
+      [
+       "8d6",
+       "fire"
+      ]
+     ]
+    },
+    "scaling": {
+     "mode": "level",
+     "formula": "1d6"
+    },
+    "description": {
+     "value": "<p>Взрыв пламени.</p>"
+    }
+   }
+  },
+  {
+   "name": "Старое удержание",
+   "type": "spell",
+   "system": {
+    "level": 2,
+    "school": "enc",
+    "properties": [
+     "vocal",
+     "somatic",
+     "material",
+     "concentration"
+    ],
+    "materials": {
+     "value": "железный прут"
+    },
+    "activation": {
+     "type": "action",
+     "cost": 1
+    },
+    "range": {
+     "value": 60,
+     "units": "ft"
+    },
+    "duration": {
+     "value": 1,
+     "units": "minute"
+    },
+    "actionType": "save",
+    "save": {
+     "ability": "wis"
+    },
+    "description": {
+     "value": "<p>Цель парализована.</p>"
+    }
+   },
+   "effects": [
+    {
+     "name": "Паралич",
+     "statuses": [
+      "paralyzed"
+     ],
+     "duration": {
+      "seconds": 60
+     },
+     "changes": []
+    }
+   ]
+  },
+  {
+   "name": "Старое обнаружение",
+   "type": "spell",
+   "system": {
+    "level": 1,
+    "school": "div",
+    "components": {
+     "vocal": true,
+     "somatic": true,
+     "ritual": true,
+     "concentration": true
+    },
+    "activation": {
+     "type": "action",
+     "cost": 1
+    },
+    "range": {
+     "units": "self"
+    },
+    "duration": {
+     "value": 10,
+     "units": "minute"
+    },
+    "description": {
+     "value": ""
+    }
+   }
+  }
+ ],
+ "items": [
+  {
+   "name": "Старый длинный меч",
+   "type": "weapon",
+   "system": {
+    "weaponType": "martialM",
+    "properties": {
+     "ver": true
+    },
+    "damage": {
+     "parts": [
+      [
+       "1d8 + @mod",
+       "slashing"
+      ]
+     ],
+     "versatile": "1d10 + @mod"
+    },
+    "weight": 3,
+    "price": {
+     "value": 15,
+     "denomination": "gp"
+    },
+    "rarity": "",
+    "attunement": 0,
+    "description": {
+     "value": "<p>Меч.</p>"
+    }
+   }
+  },
+  {
+   "name": "Старая кольчуга",
+   "type": "equipment",
+   "system": {
+    "armor": {
+     "type": "heavy",
+     "value": 16,
+     "dex": 0
+    },
+    "strength": 13,
+    "stealth": true,
+    "weight": 55,
+    "price": {
+     "value": 75,
+     "denomination": "gp"
+    },
+    "rarity": "",
+    "description": {
+     "value": ""
+    }
+   }
+  },
+  {
+   "name": "Старое кольцо защиты",
+   "type": "equipment",
+   "system": {
+    "armor": {
+     "type": "trinket"
+    },
+    "rarity": "rare",
+    "attunement": 1,
+    "weight": 0,
+    "description": {
+     "value": "<p>+1 к КД и спасброскам.</p>"
+    }
+   },
+   "effects": [
+    {
+     "name": "Защита",
+     "transfer": true,
+     "changes": [
+      {
+       "key": "system.attributes.ac.bonus",
+       "mode": 2,
+       "value": "1"
+      },
+      {
+       "key": "system.bonuses.abilities.save",
+       "mode": 2,
+       "value": "1"
+      },
+      {
+       "key": "system.attributes.movement.walk",
+       "mode": 5,
+       "value": "0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Старое зелье",
+   "type": "consumable",
+   "system": {
+    "consumableType": "potion",
+    "uses": {
+     "value": 1,
+     "max": 1,
+     "per": "charges",
+     "autoDestroy": true
+    },
+    "actionType": "heal",
+    "damage": {
+     "parts": [
+      [
+       "2d4 + 2",
+       "healing"
+      ]
+     ]
+    },
+    "rarity": "common",
+    "weight": 0.5,
+    "price": {
+     "value": 50,
+     "denomination": "gp"
+    },
+    "description": {
+     "value": ""
+    }
+   }
+  }
+ ],
+ "effects": [
+  {
+   "name": "Горение",
+   "type": "base",
+   "img": "icons/svg/fire.svg",
+   "statuses": [
+    "burning"
+   ],
+   "flags": {
+    "core": {
+     "overlay": false
+    }
+   },
+   "duration": {
+    "rounds": 3
+   },
+   "changes": [
+    {
+     "key": "system.attributes.hp.value",
+     "mode": 2,
+     "value": "-1d6"
+    }
+   ],
+   "description": "<p>Огонь.</p>"
+  },
+  {
+   "name": "Сбит с ног",
+   "statuses": [
+    "prone"
+   ],
+   "flags": {
+    "core": {
+     "overlay": true
+    }
+   }
+  }
+ ]
+}

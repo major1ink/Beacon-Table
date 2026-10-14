@@ -1,0 +1,54 @@
+{
+  "format": "beacon-schema/v1",
+  "kind": "sheet",
+  "core": {
+    "hp.current": "hp_current",
+    "hp.max": "hp_max",
+    "ac": "ac",
+    "speed": "speed",
+    "initiative": "initiative"
+  },
+  "fields": {
+    "hp_current": { "type": "number", "path": "combat.hpCurrent", "label": "Хиты сейчас" },
+    "hp_max": { "type": "number", "path": "combat.hpMax", "label": "Хиты макс.", "modifierTarget": "hp.max" },
+    "hp_temp": { "type": "number", "path": "combat.hpTemp", "label": "Врем. хиты" },
+    "ac": { "type": "number", "path": "combat.ac", "label": "Защита", "modifierTarget": "ac" },
+    "speed": { "type": "number", "path": "combat.speed", "label": "Скорость", "modifierTarget": "speed" },
+    "initiative": { "type": "dice", "path": "initiative", "label": "Инициатива", "placeholder": "1d20+2, 2d6 или 3" },
+    "stats": {
+      "type": "table",
+      "path": "stats",
+      "label": "Характеристики",
+      "statRows": { "name": "name", "value": "value" },
+      "columns": [
+        { "id": "name", "type": "text", "path": "name", "label": "Название", "placeholder": "Сила, Удача…" },
+        { "id": "value", "type": "number", "path": "value", "label": "Значение" },
+        { "id": "mod", "type": "number", "path": "mod", "label": "Модификатор", "optional": true }
+      ]
+    },
+    "rolls": {
+      "type": "table",
+      "path": "rolls",
+      "label": "Броски",
+      "columns": [
+        { "id": "name", "type": "text", "path": "name", "label": "Название", "placeholder": "Меч, Проверка удачи…" },
+        { "id": "formula", "type": "dice", "path": "formula", "label": "Формула", "placeholder": "1d8+3" }
+      ]
+    },
+    "features": { "type": "longtext", "path": "features", "label": "Способности" },
+    "notes": { "type": "longtext", "path": "notes.0", "label": "Заметки" }
+  },
+  "layout": [
+    { "widget": "hp", "column": 1, "mode": "view" },
+    { "title": "Хиты", "fields": ["hp_current", "hp_max", "hp_temp"], "tab": "sheet", "mode": "edit" },
+    { "title": "Бой", "fields": ["ac", "speed", "initiative"], "column": 1, "tab": "sheet" },
+    { "title": "Состояния", "widget": "statuses", "column": 1, "mode": "view" },
+    { "title": "Ресурсы", "widget": "resources", "column": 1, "tab": "sheet" },
+    { "title": "Характеристики", "fields": ["stats"], "column": 2, "tab": "sheet" },
+    { "title": "Броски", "fields": ["rolls"], "column": 2, "tab": "sheet" },
+    { "title": "Инвентарь", "widget": "inventory", "column": 3, "tab": "inventory" },
+    { "title": "Деньги", "widget": "money", "column": 3, "mode": "view" },
+    { "title": "Способности", "fields": ["features"], "column": 3, "tab": "sheet" },
+    { "title": "Заметки", "fields": ["notes"], "column": 3, "tab": "sheet" }
+  ]
+}

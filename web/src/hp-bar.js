@@ -10,9 +10,13 @@
 // вызывающий — у трекера и бланка она своя (свои классы и размеры), общее
 // тут только поведение.
 
+import { applyInput } from "./schema-formula.js";
+
 // parseQuickValue — что вбили в поле быстрого ввода:
 //   "+5"/"-5" → { delta, value }  — изменение (урон/лечение);
 //   "17"      → { delta: null, value } — поставить ровно столько;
+//   выражение («-12/2», «17-3», «=4») — то же по его знаку (см.
+//   schema-formula.js: applyInput), дробь округляется вниз;
 //   мусор/пусто → null.
 // Отличать дельту от абсолютного значения важно именно из-за временных
 // хитов: урон дельтой съедает их первым (правило считает сервер, см.
@@ -30,7 +34,10 @@ export function parseQuickValue(raw, current) {
     return { delta, value: current + delta };
   }
   if (/^\d+$/.test(t)) return { delta: null, value: parseInt(t, 10) };
-  return null;
+  const r = applyInput(current, t);
+  if (r.error) return null;
+  const value = Math.floor(r.value);
+  return /^[+-]/.test(t) ? { delta: value - current, value } : { delta: null, value };
 }
 
 // attachHpDrag — «потянуть полоску, чтобы выставить хиты». Отдаёт вызывающему

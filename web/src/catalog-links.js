@@ -6,7 +6,7 @@
 // (inline-rolls.js): постобработка готового HTML, а не свой рендерер.
 //
 // Разметку .catalog-ref эмитит только импорт (см. import-скрипты и
-// cmd/beacon-table/systemdata — карточки "из коробки" на этапе сборки, там
+// модули контента (репозиторий beacon-table-modules) — карточки модулей, там
 // же, где @UUID[...] резолвится в читаемый текст, порт clean_html из
 // scratch-конвертера в web/src/*-import.js пока не перенесён — ручные
 // карточки такую ссылку сегодня не заводят); клиенту достаточно уметь её
@@ -18,6 +18,8 @@
 // плавающем окне-iframe, второй уровень вложенности не нужен (см.
 // floating-window.js: все окна — прямые дети топ-документа).
 import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchJournal } from "./api.js";
+// Страница, открытая отдельным окном, открывает карточки у себя — слушатель там.
+import "./floating-window.js";
 
 const KIND_CONFIG = {
   item: { fetchAll: fetchItems, urlFor: (id) => `/itembook.html?id=${id}`, keyPrefix: "item" },
@@ -73,7 +75,7 @@ function matchByName(list, name, folder) {
 // либо ВЫНЕСЕННОЕ кнопкой 🗗 отдельное окно браузера (window.parent — оно
 // само, а топ-документ — это window.opener, см. floating-window.js). Без
 // разбора этого случая ссылки в вынесенном окне журнала молча не работали.
-function hostWindow() {
+export function hostWindow() {
   if (window.opener && window.opener !== window) return window.opener;
   return window.parent;
 }

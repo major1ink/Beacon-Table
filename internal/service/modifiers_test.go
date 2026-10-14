@@ -71,7 +71,8 @@ func TestApplyModifiersSeveralSetTakesLowest(t *testing.T) {
 
 func TestSanitizeModifiersDropsJunk(t *testing.T) {
 	got := sanitizeModifiers([]domain.Modifier{
-		{Target: "system.attributes.ac.bonus", Mode: "add", Value: "2"}, // чужая цель
+		{Target: "КД + 2", Mode: "add", Value: "2"},                     // не цель, а мусор
+		{Target: "", Mode: "add", Value: "2"},                           // цели нет
 		{Target: domain.ModifierTargetAC, Mode: "multiply", Value: "2"}, // неизвестный режим
 		{Target: domain.ModifierTargetAC, Mode: domain.ModifierAdd, Value: "  "},
 		{Target: domain.ModifierTargetAC, Mode: domain.ModifierAdd, Value: " -2 ", Note: " от щита "},
@@ -81,7 +82,7 @@ func TestSanitizeModifiersDropsJunk(t *testing.T) {
 	// Запись с пустым Value (после обрезки пробелов) НЕ выбрасывается — см.
 	// комментарий у sanitizeModifiers: это недописанная строка конструктора,
 	// а не мусор, и она безопасна как есть (ApplyModifiers её просто
-	// пропускает). Выбрасывается только запись с чужой целью.
+	// пропускает). Выбрасывается только запись с негодной целью.
 	if len(got) != 4 {
 		t.Fatalf("осталось %d записей, ожидалось 4: %+v", len(got), got)
 	}
@@ -96,6 +97,26 @@ func TestSanitizeModifiersDropsJunk(t *testing.T) {
 	}
 	if got[3].Period != domain.ModifierPeriodNone {
 		t.Errorf("период у КД должен быть сброшен, получено %q", got[3].Period)
+	}
+}
+
+// Цель, которую этот мир не знает (цель другой системы, ключ Foundry,
+// свободная характеристика), хранится как есть: при расчёте её просто не
+// применяют, а клон карточки в мир на другой системе её не теряет.
+func TestSanitizeModifiersKeepsUnknownTargets(t *testing.T) {
+	in := []domain.Modifier{
+		{Target: "abilities.str", Mode: domain.ModifierAdd, Value: "-2"},
+		{Target: "stat.удача", Mode: domain.ModifierAdd, Value: "1"},
+		{Target: "system.attributes.ac.bonus", Mode: domain.ModifierAdd, Value: "2"},
+	}
+	got := sanitizeModifiers(in)
+	if len(got) != len(in) {
+		t.Fatalf("осталось %d записей из %d: %+v", len(got), len(in), got)
+	}
+	for i := range in {
+		if got[i].Target != in[i].Target {
+			t.Errorf("цель %q превратилась в %q", in[i].Target, got[i].Target)
+		}
 	}
 }
 
@@ -325,5 +346,17 @@ func TestApplyModifiersDiv(t *testing.T) {
 	// Делитель 0/1 — ничего не делает.
 	if got := domain.ApplyModifiers(30, domain.ModifierTargetSpeed, []domain.Modifier{mod(domain.ModifierTargetSpeed, domain.ModifierDiv, "1")}); got != 30 {
 		t.Errorf("делитель 1: %d", got)
+	}
+}
+
+// Деньги листа — словарь валют системы: незнакомая этой системе валюта
+// (лист из мира на другой системе) сохраняется, отрицательная сумма
+// поджимается, негодный ключ выбрасывается.
+func TestSanitizeSheetKeepsForeignCurrencies(t *testing.T) {
+	sheet := domain.DefaultCharacterSheet()
+	sheet.Coins = domain.Coins{"gp": 12, "shells": 4, "money": -3, "Not A Key": 1}
+	got := sanitizeSheet(sheet).Coins
+	if got["gp"] != 12 || got["shells"] != 4 || got["money"] != 0 || len(got) != 3 {
+		t.Fatalf("деньги после проверки: %v", got)
 	}
 }

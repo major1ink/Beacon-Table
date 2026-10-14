@@ -12,12 +12,6 @@ import (
 // maxReferenceLongText/maxReferenceShortText — те же санитарные пределы, что
 // и у Item/Monster (см. bestiary.go/items.go): не игровое правило, а защита
 // от случайно вставленного гигантского текста в поле карточки.
-const (
-	maxReferenceLongText  = 20000 // Description — полный текст класса/архетипа/черты бывает длинным
-	maxReferenceShortText = 300   // Source/Kind/ParentName/ImageURL
-	maxReferenceTags      = 30
-)
-
 // ReferenceService — общая на весь стол библиотека карточек справочника
 // (классы/архетипы/происхождения/виды/черты — см. domain.Reference.Kind,
 // internal/repository/referencefile) — тот же use case, что и ItemService:
@@ -51,21 +45,12 @@ func validateReferenceName(name string) (string, error) {
 	return name, nil
 }
 
-// sanitizeReference — клампит текстовые поля/теги так же, как sanitizeItem
-// клампит карточку предмета: молча, без ошибки — обычный клиент/импорт
-// никогда специально не бьёт по этим лимитам.
+// sanitizeReference — общие пределы карточки (строки, списки, теги, незнакомые ключи — см. cardlimits.go).
+// Молча, без ошибки.
 func sanitizeReference(ref domain.Reference) domain.Reference {
-	ref.ImageURL = clampRunes(ref.ImageURL, maxReferenceShortText)
-	ref.Source = clampRunes(ref.Source, maxReferenceShortText)
-	ref.Kind = clampRunes(ref.Kind, maxReferenceShortText)
-	ref.ParentName = clampRunes(ref.ParentName, maxReferenceShortText)
-	ref.Description = clampRunes(ref.Description, maxReferenceLongText)
-	if len(ref.Tags) > maxReferenceTags {
-		ref.Tags = ref.Tags[:maxReferenceTags]
-	}
-	for i := range ref.Tags {
-		ref.Tags[i] = clampRunes(strings.TrimSpace(ref.Tags[i]), 60)
-	}
+	clampCard(&ref)
+	ref.Tags = sanitizeTags(ref.Tags)
+	ref.Extra = clampExtra(ref.Extra)
 	return ref
 }
 

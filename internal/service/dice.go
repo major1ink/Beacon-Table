@@ -44,6 +44,28 @@ const (
 	maxDiceTerms = 20
 )
 
+// d20Faces — что выпало на d20 в броске: Rolls идут по членам формулы.
+func d20Faces(formula string, rolls []int) []int {
+	normalized := strings.ToLower(strings.ReplaceAll(formula, " ", ""))
+	var out []int
+	i := 0
+	for _, t := range diceTermRe.FindAllStringSubmatch(normalized, -1) {
+		if t[3] == "" {
+			continue
+		}
+		count := 1
+		if t[2] != "" {
+			count, _ = strconv.Atoi(t[2])
+		}
+		end := min(i+count, len(rolls))
+		if t[3] == "20" {
+			out = append(out, rolls[i:end]...)
+		}
+		i = end
+	}
+	return out
+}
+
 type cryptoDiceRoller struct{}
 
 // NewDiceRoller — бросок на crypto/rand, а не math/rand: результат должен

@@ -3,8 +3,9 @@
 // поднят на сервере (см. internal/app.CompanyManager — активен ровно один).
 // Только для admin — index.js уводит сюда ДМ сразу после логина, обычный
 // игрок сюда попасть не может (см. guard ниже, симметрично dm.js).
-import { fetchMe, apiLogout, fetchCompanies, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchVersion, apiChangeOwnPassword, shutdownServer, fetchTutorial, saveTutorial } from "../api.js";
+import { fetchMe, apiLogout, fetchCompanies, fetchSystems, createCompany, launchCompany, deleteCompany, exportCompanyURL, importCompany, stopActiveWorld, fetchWorldRequirements, fetchVersion, apiChangeOwnPassword, shutdownServer, fetchTutorial, saveTutorial } from "../api.js";
 import { openModal, showAlert, showConfirm } from "../modal.js";
+import { runModulesWizard } from "../modules-wizard.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { startTour } from "../tutorial.js";
 import { escapeHtml } from "../html.js";
@@ -23,10 +24,50 @@ const importBtn = document.getElementById("importBtn");
 const importFile = document.getElementById("importFile");
 const importMsg = document.getElementById("importMsg");
 
-const SYSTEM_LABELS = { "dnd5e-2024": "D&D 2024", "dnd5e-2014": "D&D 5e (2014)" };
+// Игровые системы приходят с сервера: «Своя система» и системные модули
+// (см. api.js: fetchSystems). Система мира, модуля которой на сервере нет,
+// показывается своим id с пометкой — мир из чужого архива.
+let systemTitles = {};
 function systemLabel(system) {
-  return SYSTEM_LABELS[system] || system;
+  return systemTitles[system] || `${system} — модуль не установлен`;
 }
+
+async function loadSystems() {
+  const select = document.getElementById("worldSystem");
+  let systems = [];
+  try {
+    systems = await fetchSystems();
+  } catch (err) {
+    createMsg.textContent = "Не удалось получить список систем: " + err.message;
+    createMsg.className = "msg error";
+  }
+  systemTitles = Object.fromEntries(systems.map((s) => [s.id, s.title]));
+  select.replaceChildren(
+    ...systems.map((s) => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.title;
+      return opt;
+    }),
+  );
+  const install = document.createElement("option");
+  install.value = INSTALL_SYSTEM;
+  install.textContent = "+ Установить систему…";
+  select.appendChild(install);
+  previousSystem = select.value;
+}
+
+// Пункт «+ Установить систему…» не система, а вход в витрину.
+const INSTALL_SYSTEM = "__install__";
+let previousSystem = "";
+document.getElementById("worldSystem").addEventListener("change", (e) => {
+  if (e.target.value !== INSTALL_SYSTEM) {
+    previousSystem = e.target.value;
+    return;
+  }
+  e.target.value = previousSystem;
+  location.href = "/modules.html?type=system";
+});
 
 // Мир может быть ещё запущен (ДМ пришёл сюда сразу после логина, а не кнопкой
 // «К мирам» из стола, которая гасит стол) — тогда «Открыть стол →» вместо
@@ -56,6 +97,36 @@ function worldCardHTML(c) {
   `;
 }
 
+// confirmModules — если мир ждёт модулей, которых нет на сервере, показывает
+// мастер установки; false — человек отказался от запуска. Сбой проверки не
+// мешает запуску.
+async function confirmModules(id) {
+  let req;
+  try {
+    req = await fetchWorldRequirements(id);
+  } catch {
+    return true;
+  }
+  if (!req.missing.length) return true;
+  // Отказавшись от модулей, человека не спрашивают снова, пока набор недостающих не изменится.
+  const key = "modulesSkipped:" + id;
+  const signature = req.missing.map((m) => m.id).join(",");
+  try {
+    if (localStorage.getItem(key) === signature) return true;
+  } catch {
+    /* без хранилища — спросим снова */
+  }
+  const go = await runModulesWizard(req);
+  if (go) {
+    try {
+      localStorage.setItem(key, signature);
+    } catch {
+      /* не страшно */
+    }
+  }
+  return go;
+}
+
 async function render() {
   let companies;
   try {
@@ -75,6 +146,11 @@ async function render() {
       btn.disabled = true;
       btn.textContent = "Запускаю…";
       try {
+        if (!(await confirmModules(btn.dataset.id))) {
+          btn.disabled = false;
+          btn.textContent = "Запустить";
+          return;
+        }
         await launchCompany(btn.dataset.id);
         location.href = "/dm.html";
       } catch (err) {
@@ -118,6 +194,10 @@ async function render() {
 }
 
 initFullscreenButton(document.getElementById("fullscreenBtn"));
+
+document.getElementById("modulesBtn").onclick = () => {
+  location.href = "/modules.html";
+};
 
 document.getElementById("logoutBtn").onclick = async () => {
   await apiLogout();
@@ -229,6 +309,11 @@ importFile.addEventListener("change", async (e) => {
     if (renamed.length) {
       msg += ` Логины переименованы из-за совпадений: ${renamed.map(([o, n]) => `${o} → ${n}`).join(", ")}.`;
     }
+    // Мир из чужого архива: его модулей на этом сервере может не быть —
+    // мир работает, но без их карточек, пока модули не поставят.
+    if (world.missingModules && world.missingModules.length) {
+      msg += ` Не хватает модулей: ${world.missingModules.join(", ")} — без них в мире не будет их карточек.`;
+    }
     importMsg.textContent = msg;
     importMsg.className = "msg ok";
     render();
@@ -264,6 +349,7 @@ fetchMe().then(async (me) => {
     return;
   }
   if (me.mustChangePassword) passwordBox.style.display = "";
+  await loadSystems();
   await render();
   initTutorial();
 });

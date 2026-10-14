@@ -47,6 +47,68 @@ export async function apiChangeOwnPassword(oldPassword, newPassword) {
 export async function fetchCompanies() {
   return apiFetch("/api/companies");
 }
+// fetchSystems — на каких игровых системах можно создать мир: «Своя
+// система» и системные модули на сервере (см. app.CompanyManager.Systems).
+export async function fetchSystems() {
+  return apiFetch("/api/systems");
+}
+// ---- модули контента (см. internal/module) — только владелец ----
+// fetchModules — установленные модули и модули запущенного мира:
+// {modules:[...], world:{id, system, enabled, missing}}.
+export async function fetchModules() {
+  return apiFetch("/api/modules");
+}
+// installModuleFile — поставить или обновить модуль из архива .btmod.
+export async function installModuleFile(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/modules", { method: "POST", body: form });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || res.statusText || "ошибка установки");
+  return data;
+}
+// ---- витрина модулей: каталог из интернета (см. internal/modcatalog) ----
+export async function fetchModuleCatalog(refresh) {
+  return apiFetch("/api/module-catalog" + (refresh ? "?refresh=1" : ""));
+}
+export async function fetchModuleSummary(id) {
+  return apiFetch(`/api/module-catalog/${encodeURIComponent(id)}/summary`);
+}
+// installCatalogModule — {installed:[...]} или {requires:[...]}, если нужны
+// другие модули и withRequires не задан.
+export async function installCatalogModule(id, withRequires) {
+  const res = await fetch("/api/module-catalog/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, withRequires: !!withRequires }),
+  });
+  const data = await res.json().catch(() => null);
+  if (res.status === 409 && data && data.requires) return { requires: data.requires };
+  if (!res.ok) throw new Error((data && data.error) || res.statusText || "ошибка установки");
+  return data;
+}
+export async function installModuleURL(url, sha256) {
+  return apiFetch("/api/module-catalog/install-url", { method: "POST", body: JSON.stringify({ url, sha256: sha256 || "" }) });
+}
+export async function fetchModuleSources() {
+  return apiFetch("/api/module-sources");
+}
+export async function setModuleSources(sources) {
+  return apiFetch("/api/module-sources", { method: "PUT", body: JSON.stringify({ sources }) });
+}
+export async function deleteModule(id) {
+  return apiFetch(`/api/modules/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+export async function fetchWorldRequirements(companyId) {
+  return apiFetch(`/api/companies/${companyId}/requirements`);
+}
+export async function setWorldModules(companyId, modules) {
+  return apiFetch(`/api/companies/${companyId}/modules`, { method: "PUT", body: JSON.stringify({ modules }) });
+}
+// setWorldSystem — сменить систему мира; в ответе {system, disabled}.
+export async function setWorldSystem(companyId, system) {
+  return apiFetch(`/api/companies/${companyId}/system`, { method: "PUT", body: JSON.stringify({ system }) });
+}
 export async function createCompany(name, system) {
   return apiFetch("/api/companies", { method: "POST", body: JSON.stringify({ name, system }) });
 }
@@ -76,6 +138,24 @@ export async function importCompany(file) {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch("/api/companies/import", { method: "POST", body: form });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error((data && data.error) || res.statusText || "ошибка импорта");
+  }
+  return res.json();
+}
+
+// sceneExportUrl — сцена одним .zip (см. handleSceneExport); media=false —
+// без картинок и звуков, дамп для отчёта о баге.
+export function sceneExportUrl(id, media = true) {
+  return `/api/scenes/${encodeURIComponent(id)}/export` + (media ? "" : "?media=0");
+}
+
+// importScene — .zip из sceneExportUrl новой сценой запущенного мира.
+export async function importScene(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/scenes/import", { method: "POST", body: form });
   if (!res.ok) {
     const data = await res.json().catch(() => null);
     throw new Error((data && data.error) || res.statusText || "ошибка импорта");
@@ -411,6 +491,22 @@ export async function fetchJournalEntry(id) {
 export async function fetchJournalMembers() {
   return apiFetch("/api/journal/members");
 }
+// fetchJournalGraph — граф связей журнала ({nodes, edges}); as — id игрока,
+// глазами которого смотрит ДМ.
+export async function fetchJournalGraph({ as = "" } = {}) {
+  return apiFetch("/api/journal/graph" + (as ? "?as=" + encodeURIComponent(as) : ""));
+}
+// ---- лента сессии (service.SessionLogService) ----
+export async function fetchSessions() {
+  return apiFetch("/api/sessions");
+}
+// as — id игрока, глазами которого смотрит ДМ.
+export async function fetchSessionEvents(id, { as = "" } = {}) {
+  return apiFetch(`/api/sessions/${encodeURIComponent(id)}` + (as ? "?as=" + encodeURIComponent(as) : ""));
+}
+export async function makeSessionSummary(id, { rebuild = false } = {}) {
+  return apiFetch(`/api/sessions/${encodeURIComponent(id)}/summary${rebuild ? "?rebuild=1" : ""}`, { method: "POST" });
+}
 export async function createJournalEntry({ content, folder = "", def = "none", access = {} } = {}) {
   return apiFetch("/api/journal", {
     method: "POST",
@@ -431,6 +527,14 @@ export async function moveJournalEntry(id, folder) {
 }
 export async function deleteJournalEntry(id) {
   return apiFetch(`/api/journal/${id}`, { method: "DELETE" });
+}
+
+// ---- ширма ведущего: игроку сервер отдаёт только открытые ему вкладки ----
+export async function fetchScreen() {
+  return apiFetch("/api/screen");
+}
+export async function saveScreen(screen) {
+  return apiFetch("/api/screen", { method: "PUT", body: JSON.stringify(screen) });
 }
 
 // ---- доски стола (ДМ и игроки) — web/board.html ----
@@ -594,16 +698,25 @@ export async function deleteReference(id) {
 // у ДМ (см. internal/service/room_statuses.go).
 //
 // Набор зависит от системы запущенного мира (см.
-// internal/app.CompanyManager.Launch: systemdata/conditions/<system>) —
+// internal/app.CompanyManager.Launch: conditions/ подключённых модулей) —
 // клиенту фильтровать ничего не нужно, сервер и так отдаёт только то, что
 // относится к текущему миру.
 export async function fetchConditions() {
   return apiFetch("/api/conditions");
 }
-// fetchModifierTargets — закрытый список того, что модификатор умеет менять
-// (см. internal/domain/modifier.go: ModifierTargetLabels). Не содержимое
-// стола, а описание формата — нужен конструкторам состояний и предметов,
-// чтобы список целей не дублировался константой в JS.
+// fetchModifierTargets — что модификатор умеет менять в запущенном мире:
+// цели ядра (internal/domain/modifier.go: CoreModifierTargets) и цели
+// системы мира (system: true). Свободные характеристики (stat.<ключ>) сюда не
+// входят — конструктор заводит их по названию (см. modifiers.js: statTarget).
+// fetchSystemProfile — система запущенного мира: единица веса и валюты
+// (см. internal/domain/system_profile.go, web/src/system-profile.js).
+export async function fetchSchemas() {
+  return apiFetch("/api/schemas");
+}
+// fetchSchemas (выше) — схемы листа и карточек мира (web/src/schemas.js).
+export async function fetchSystemProfile() {
+  return apiFetch("/api/system");
+}
 export async function fetchModifierTargets() {
   return apiFetch("/api/modifier-targets");
 }

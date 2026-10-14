@@ -1,0 +1,130 @@
+package domain
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"beacon-table/internal/testutil"
+)
+
+func TestExtraKeysSurvive(t *testing.T) {
+	in := `{"id":"m1","name":"Совомедведь","ac":13,"Name":"дубль в другом регистре",` +
+		`"stats":{"сила":14,"мощь":[1,2]},"zzz":true,"aaa":null}`
+	var m Monster
+	if err := json.Unmarshal([]byte(in), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.Name != "дубль в другом регистре" || m.AC != 13 {
+		t.Fatalf("известные поля: %+v", m)
+	}
+	if len(m.Extra) != 3 || string(m.Extra["stats"]) != `{"сила":14,"мощь":[1,2]}` {
+		t.Fatalf("незнакомые ключи: %v", m.Extra)
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	// Известные поля — в своём порядке, незнакомые — следом по алфавиту.
+	if !strings.HasPrefix(s, `{"id":"m1","name":"дубль в другом регистре"`) ||
+		!strings.HasSuffix(s, `,"aaa":null,"stats":{"сила":14,"мощь":[1,2]},"zzz":true}`) ||
+		strings.Count(s, `"name"`) != 1 || strings.Contains(s, `"Name"`) {
+		t.Fatalf("запись: %s", s)
+	}
+	// И через указатель, и после второго круга — то же самое.
+	again, _ := json.Marshal(&m)
+	var m2 Monster
+	_ = json.Unmarshal(again, &m2)
+	if third, _ := json.Marshal(m2); string(third) != s {
+		t.Fatalf("второй круг разошёлся:\n%s\n%s", s, third)
+	}
+}
+
+func TestExtraOnSheetKeepsDefaults(t *testing.T) {
+	// Лист читается ПОВЕРХ листа по умолчанию (см. sqlite.decodeSheet):
+	// незнакомый ключ не должен сбивать это поведение.
+	sheet := DefaultCharacterSheet()
+	if err := json.Unmarshal([]byte(`{"combat":{"ac":3},"sanity":{"value":60,"max":99}}`), &sheet); err != nil {
+		t.Fatal(err)
+	}
+	if sheet.Combat.AC != 3 || sheet.Coins == nil {
+		t.Fatalf("известные поля и умолчания: %+v %v", sheet.Combat, sheet.Coins)
+	}
+	out, _ := json.Marshal(sheet)
+	if !strings.HasSuffix(string(out), `,"sanity":{"value":60,"max":99}}`) {
+		t.Fatalf("незнакомый ключ листа потерян: %s", out)
+	}
+}
+
+func TestExtraEmptyAndBroken(t *testing.T) {
+	var c Condition
+	if err := json.Unmarshal([]byte(`{"name":"Горит"}`), &c); err != nil || c.Extra != nil {
+		t.Fatalf("без лишних ключей Extra пуст: %v %v", c.Extra, err)
+	}
+	c.Extra = Extra{"bad": json.RawMessage("{не json"), "slug": json.RawMessage(`"подмена"`)}
+	c.Slug = "burning"
+	out, err := json.Marshal(c)
+	if err != nil || !strings.Contains(string(out), `"bad":null`) || !strings.Contains(string(out), `"slug":"burning"`) || strings.Contains(string(out), "подмена") {
+		t.Fatalf("битое значение и совпадение с известным полем: %s %v", out, err)
+	}
+	if err := json.Unmarshal([]byte(`{"name":1}`), &c); err == nil {
+		t.Fatal("неверный тип известного поля — ошибка, как и раньше")
+	}
+}
+
+// Незнакомые ключи combat (поля системы — у D&D спасброски от смерти и
+// кость хитов) переживают чтение и запись листа.
+func TestExtraInsideCombatSurvives(t *testing.T) {
+	raw := `{"combat":{"ac":15,"hpMax":30,"hitDiceTotal":"5d10","luck":{"a":[1,2]}},"homebrew":1}`
+	var sheet CharacterSheet
+	if err := json.Unmarshal([]byte(raw), &sheet); err != nil {
+		t.Fatal(err)
+	}
+	if sheet.Combat.AC != 15 || sheet.Combat.HPMax != 30 {
+		t.Fatalf("известные поля combat: %+v", sheet.Combat)
+	}
+	if len(sheet.Combat.Extra) != 2 || string(sheet.Combat.Extra["luck"]) != `{"a":[1,2]}` {
+		t.Fatalf("Extra combat: %v", sheet.Combat.Extra)
+	}
+	out, err := json.Marshal(sheet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back map[string]any
+	if err := json.Unmarshal(out, &back); err != nil {
+		t.Fatal(err)
+	}
+	combat, _ := back["combat"].(map[string]any)
+	if combat["luck"] == nil || combat["ac"] != float64(15) || back["homebrew"] != float64(1) {
+		t.Fatalf("после записи: %s", out)
+	}
+}
+
+// Полный лист D&D (каждое поле системы заполнено, в том числе вложенные
+// ключи combat) читается и пишется назад без потерь: после переезда полей
+// системы в Extra формат данных не меняется.
+func TestFullDnDSheetRoundTrip(t *testing.T) {
+	raw := testutil.DnDSheetJSON(t)
+	var sheet CharacterSheet
+	if err := json.Unmarshal(raw, &sheet); err != nil {
+		t.Fatal(err)
+	}
+	back, err := json.Marshal(sheet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want, got any
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(back, &got); err != nil {
+		t.Fatal(err)
+	}
+	if diff := testutil.JSONDiff(want, got); len(diff) > 0 {
+		t.Fatalf("лист изменился при круге: %v", diff)
+	}
+	if len(sheet.Extra) < 25 || len(sheet.Combat.Extra) < 7 {
+		t.Fatalf("поля системы должны лежать в Extra: лист %d ключей, combat %d", len(sheet.Extra), len(sheet.Combat.Extra))
+	}
+}

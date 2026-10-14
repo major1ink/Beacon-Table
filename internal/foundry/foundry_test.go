@@ -200,7 +200,7 @@ func TestClassify(t *testing.T) {
 		{"готовый персонаж приключения — в пул, не в бестиарий", Doc{"type": "character"}, "Actor", TargetPregens},
 		{"группа актёров не статблок", Doc{"type": "group"}, "Actor", TargetSkipped},
 		{"журнал", Doc{"pages": []any{map[string]any{}}}, "JournalEntry", TargetNotes},
-		{"таблица", Doc{"results": []any{}}, "RollTable", TargetSkipped},
+		{"таблица", Doc{"results": []any{}}, "RollTable", TargetTables},
 		{"эффект", Doc{"changes": []any{}, "duration": map[string]any{}}, "", TargetConditions},
 		{"сцена по форме документа", Doc{"walls": []any{}, "width": 100}, "", TargetScenes},
 	}

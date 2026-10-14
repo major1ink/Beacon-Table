@@ -1,0 +1,1218 @@
+{
+ "_": "Общие случаи расчёта полей по схеме: их гоняют internal/schema (Go) и web/test/schema-formula.test.js (JS). values — значения полей, errors — коды ошибок полей, rolls — броски по листу, static — первая ошибка проверки формул схемы (без проверки путей). rowValues — только JS (колонки таблиц).",
+ "cases": [
+  {
+   "name": "поля, модификаторы, характеристики, пути",
+   "schema": {
+    "fields": {
+     "str": {
+      "type": "number",
+      "path": "abilities.str",
+      "label": "Сила",
+      "modifierTarget": "abilities.str"
+     },
+     "str_mod": {
+      "type": "computed",
+      "formula": "floor((@str - 10) / 2)",
+      "label": "x"
+     },
+     "hp_max": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты",
+      "modifierTarget": "hp.max"
+     },
+     "half": {
+      "type": "computed",
+      "formula": "@hp_max / 2",
+      "label": "x"
+     },
+     "name": {
+      "type": "text",
+      "path": "name",
+      "label": "Имя"
+     },
+     "lvl": {
+      "type": "text",
+      "path": "level",
+      "label": "Уровень"
+     },
+     "inspired": {
+      "type": "bool",
+      "path": "inspired",
+      "label": "Вдохновение"
+     },
+     "bonus": {
+      "type": "computed",
+      "formula": "@lvl + @inspired",
+      "label": "x"
+     },
+     "empty": {
+      "type": "number",
+      "path": "nothing.here",
+      "label": "Пусто"
+     },
+     "raw": {
+      "type": "computed",
+      "formula": "@combat.hpMax + @luck + @missing.path",
+      "label": "x"
+     },
+     "note0": {
+      "type": "text",
+      "path": "notes.0",
+      "label": "Заметка"
+     },
+     "notes_sum": {
+      "type": "computed",
+      "formula": "@note0 + @notes.1",
+      "label": "x"
+     },
+     "luck2": {
+      "type": "computed",
+      "formula": "@stat.удача_ночью * 2 + @stat.нет_такой",
+      "label": "x"
+     },
+     "stats": {
+      "type": "table",
+      "path": "stats",
+      "label": "Характеристики",
+      "statRows": {
+       "name": "name",
+       "value": "value"
+      },
+      "columns": [
+       {
+        "id": "name",
+        "type": "text",
+        "path": "name",
+        "label": "Название"
+       },
+       {
+        "id": "value",
+        "type": "number",
+        "path": "value",
+        "label": "Значение"
+       }
+      ]
+     },
+     "ac_calc": {
+      "type": "computed",
+      "formula": "10 + @str_mod",
+      "label": "x",
+      "modifierTarget": "ac"
+     },
+     "attack": {
+      "type": "roll",
+      "roll": "1d20 + @str_mod",
+      "label": "Атака"
+     },
+     "bad": {
+      "type": "computed",
+      "formula": "@name + 1",
+      "label": "x"
+     },
+     "uses_bad": {
+      "type": "computed",
+      "formula": "@bad * 2",
+      "label": "x"
+     },
+     "uses_roll": {
+      "type": "computed",
+      "formula": "@attack + 1",
+      "label": "x"
+     },
+     "uses_table": {
+      "type": "computed",
+      "formula": "@stats + 1",
+      "label": "x"
+     },
+     "div0": {
+      "type": "computed",
+      "formula": "1 / (@empty)",
+      "label": "x"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "str": 15
+    },
+    "combat": {
+     "hpMax": 21
+    },
+    "name": "Бор",
+    "level": "3",
+    "inspired": true,
+    "luck": 4,
+    "notes": [
+     "7",
+     "2"
+    ],
+    "stats": [
+     {
+      "name": "Удача ночью",
+      "value": 5
+     },
+     {
+      "name": "удача  ночью",
+      "value": 9
+     },
+     {
+      "name": "Сила",
+      "value": "мусор"
+     }
+    ]
+   },
+   "mods": [
+    {
+     "target": "abilities.str",
+     "mode": "add",
+     "value": "-2"
+    },
+    {
+     "target": "stat.удача_ночью",
+     "mode": "add",
+     "value": "-2"
+    },
+    {
+     "target": "hp.max",
+     "mode": "add",
+     "value": "4",
+     "period": "turn-start"
+    },
+    {
+     "target": "ac",
+     "mode": "add",
+     "value": "1"
+    }
+   ],
+   "values": {
+    "str": 13,
+    "str_mod": 1,
+    "hp_max": 21,
+    "half": 10.5,
+    "lvl": 3,
+    "inspired": 1,
+    "bonus": 4,
+    "empty": 0,
+    "raw": 25,
+    "note0": 7,
+    "notes_sum": 9,
+    "luck2": 6,
+    "ac_calc": 12
+   },
+   "errors": {
+    "name": "not_number",
+    "bad": "not_number",
+    "uses_bad": "ref_error",
+    "attack": "not_number",
+    "uses_roll": "not_number",
+    "uses_table": "not_number",
+    "div0": "div_zero"
+   },
+   "rolls": [
+    {
+     "src": "1d20 + @str_mod",
+     "roll": "1d20+1"
+    },
+    {
+     "src": "1к6 + @stat.удача_ночью",
+     "roll": "1d6+3"
+    },
+    {
+     "src": "1d6 + @stat.сила",
+     "roll": "1d6"
+    },
+    {
+     "src": "1d20 + @bad",
+     "error": "ref_error"
+    },
+    {
+     "src": "1d20 + @name",
+     "error": "not_number"
+    },
+    {
+     "src": "1d20 +",
+     "error": "syntax"
+    }
+   ]
+  },
+  {
+   "name": "цикл",
+   "schema": {
+    "fields": {
+     "a": {
+      "type": "computed",
+      "formula": "@b + 1",
+      "label": "x"
+     },
+     "b": {
+      "type": "computed",
+      "formula": "@a + 1",
+      "label": "x"
+     },
+     "c": {
+      "type": "computed",
+      "formula": "@a * 2",
+      "label": "x"
+     },
+     "d": {
+      "type": "computed",
+      "formula": "5",
+      "label": "x"
+     }
+    }
+   },
+   "data": {},
+   "values": {
+    "d": 5
+   },
+   "errors": {
+    "a": "cycle",
+    "b": "cycle",
+    "c": "ref_error"
+   },
+   "rolls": [
+    {
+     "src": "1d20 + @a",
+     "error": "ref_error"
+    },
+    {
+     "src": "1d20 + @d",
+     "roll": "1d20+5"
+    }
+   ],
+   "static": "cycle"
+  },
+  {
+   "name": "поле ссылается само на себя",
+   "schema": {
+    "fields": {
+     "a": {
+      "type": "computed",
+      "formula": "@a + 1",
+      "label": "x"
+     }
+    }
+   },
+   "data": {},
+   "errors": {
+    "a": "cycle"
+   },
+   "static": "cycle"
+  },
+  {
+   "name": "битая формула",
+   "schema": {
+    "fields": {
+     "a": {
+      "type": "computed",
+      "formula": "floor(",
+      "label": "x"
+     },
+     "b": {
+      "type": "computed",
+      "formula": "@a + 1",
+      "label": "x"
+     },
+     "r": {
+      "type": "roll",
+      "roll": "2 * 1d6",
+      "label": "Бросок"
+     }
+    }
+   },
+   "data": {},
+   "errors": {
+    "a": "syntax",
+    "b": "ref_error"
+   },
+   "static": "syntax"
+  },
+  {
+   "name": "без схемы — только пути",
+   "schema": null,
+   "data": {
+    "abilities": {
+     "dex": 14
+    },
+    "initiative": "1к20"
+   },
+   "rolls": [
+    {
+     "src": "1d20 + floor((@abilities.dex - 10) / 2)",
+     "roll": "1d20+2"
+    },
+    {
+     "src": "1d20 + @stat.ловкость",
+     "roll": "1d20"
+    }
+   ]
+  },
+  {
+   "name": "колонки таблиц",
+   "schema": {
+    "fields": {
+     "prof": {
+      "type": "number",
+      "path": "prof",
+      "label": "Бонус мастерства"
+     },
+     "skills": {
+      "type": "table",
+      "path": "skills",
+      "label": "Навыки",
+      "columns": [
+       {
+        "id": "name",
+        "type": "text",
+        "path": "name",
+        "label": "Навык"
+       },
+       {
+        "id": "base",
+        "type": "number",
+        "path": "base",
+        "label": "Основа"
+       },
+       {
+        "id": "trained",
+        "type": "bool",
+        "path": "trained",
+        "label": "Владение"
+       },
+       {
+        "id": "bonus",
+        "type": "computed",
+        "formula": "@base + if(@trained, @prof, 0)",
+        "label": "Бонус"
+       },
+       {
+        "id": "check",
+        "type": "roll",
+        "roll": "1d20 + @bonus",
+        "label": "Проверка"
+       },
+       {
+        "id": "loop",
+        "type": "computed",
+        "formula": "@loop + 1",
+        "label": "Цикл"
+       }
+      ]
+     }
+    }
+   },
+   "data": {
+    "prof": 2,
+    "skills": [
+     {
+      "name": "Скрытность",
+      "base": 3,
+      "trained": true
+     },
+     {
+      "name": "Атлетика",
+      "base": "1"
+     }
+    ]
+   },
+   "rowValues": [
+    {
+     "table": "skills",
+     "row": 0,
+     "values": {
+      "bonus": 5,
+      "base": 3,
+      "trained": 1
+     },
+     "errors": {
+      "loop": "cycle",
+      "name": "not_number"
+     },
+     "rolls": [
+      {
+       "col": "check",
+       "roll": "1d20+5"
+      }
+     ]
+    },
+    {
+     "table": "skills",
+     "row": 1,
+     "values": {
+      "bonus": 1
+     },
+     "rolls": [
+      {
+       "col": "check",
+       "roll": "1d20+1"
+      }
+     ]
+    }
+   ],
+   "static": "cycle"
+  },
+  {
+   "name": "select с формулами вариантов: выбранный вариант",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    },
+    "spellcasting": {
+     "ability": "int"
+    }
+   },
+   "values": {
+    "ability": 3,
+    "dc": 11
+   }
+  },
+  {
+   "name": "select с формулами вариантов: другой вариант",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    },
+    "spellcasting": {
+     "ability": "wis"
+    }
+   },
+   "values": {
+    "ability": 1,
+    "dc": 9
+   }
+  },
+  {
+   "name": "select с формулами вариантов: пусто — ноль",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    }
+   },
+   "values": {
+    "ability": 0,
+    "dc": 8
+   }
+  },
+  {
+   "name": "select с формулами вариантов: вариант без формулы",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@wis_mod"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    },
+    "spellcasting": {
+     "ability": "none"
+    }
+   },
+   "errors": {
+    "ability": "not_number",
+    "dc": "ref_error"
+   }
+  },
+  {
+   "name": "select с формулами вариантов: цикл через вариант",
+   "schema": {
+    "fields": {
+     "int": {
+      "type": "number",
+      "path": "abilities.int",
+      "label": "Инт"
+     },
+     "wis": {
+      "type": "number",
+      "path": "abilities.wis",
+      "label": "Мдр"
+     },
+     "int_mod": {
+      "type": "computed",
+      "formula": "floor((@int - 10) / 2)",
+      "label": "x"
+     },
+     "wis_mod": {
+      "type": "computed",
+      "formula": "floor((@wis - 10) / 2)",
+      "label": "x"
+     },
+     "ability": {
+      "type": "select",
+      "path": "spellcasting.ability",
+      "label": "Характеристика",
+      "options": [
+       {
+        "value": "int",
+        "label": "Инт",
+        "formula": "@int_mod"
+       },
+       {
+        "value": "wis",
+        "label": "Мдр",
+        "formula": "@dc"
+       },
+       {
+        "value": "none",
+        "label": "Без формулы"
+       }
+      ]
+     },
+     "dc": {
+      "type": "computed",
+      "formula": "8 + @ability",
+      "label": "СЛ"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "int": 16,
+     "wis": 12
+    }
+   },
+   "static": "cycle"
+  },
+  {
+   "name": "default: значения нет — запасное из схемы",
+   "schema": {
+    "fields": {
+     "dex": {
+      "type": "number",
+      "path": "abilities.dex",
+      "label": "Ловкость",
+      "default": 10,
+      "modifierTarget": "abilities.dex"
+     },
+     "dex_mod": {
+      "type": "computed",
+      "formula": "floor((@dex - 10) / 2)",
+      "label": "x"
+     },
+     "hp": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты"
+     },
+     "init": {
+      "type": "computed",
+      "formula": "@hp + @dex_mod",
+      "label": "x"
+     }
+    }
+   },
+   "data": {},
+   "mods": [],
+   "values": {
+    "dex": 10,
+    "dex_mod": 0,
+    "hp": 0,
+    "init": 0
+   }
+  },
+  {
+   "name": "default: явный ноль — не отсутствие",
+   "schema": {
+    "fields": {
+     "dex": {
+      "type": "number",
+      "path": "abilities.dex",
+      "label": "Ловкость",
+      "default": 10,
+      "modifierTarget": "abilities.dex"
+     },
+     "dex_mod": {
+      "type": "computed",
+      "formula": "floor((@dex - 10) / 2)",
+      "label": "x"
+     },
+     "hp": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты"
+     },
+     "init": {
+      "type": "computed",
+      "formula": "@hp + @dex_mod",
+      "label": "x"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "dex": 0
+    }
+   },
+   "mods": [],
+   "values": {
+    "dex": 0,
+    "dex_mod": -5,
+    "hp": 0,
+    "init": -5
+   }
+  },
+  {
+   "name": "default: заполнено — как есть, модификаторы поверх",
+   "schema": {
+    "fields": {
+     "dex": {
+      "type": "number",
+      "path": "abilities.dex",
+      "label": "Ловкость",
+      "default": 10,
+      "modifierTarget": "abilities.dex"
+     },
+     "dex_mod": {
+      "type": "computed",
+      "formula": "floor((@dex - 10) / 2)",
+      "label": "x"
+     },
+     "hp": {
+      "type": "number",
+      "path": "combat.hpMax",
+      "label": "Хиты"
+     },
+     "init": {
+      "type": "computed",
+      "formula": "@hp + @dex_mod",
+      "label": "x"
+     }
+    }
+   },
+   "data": {
+    "abilities": {
+     "dex": 14
+    },
+    "combat": {
+     "hpMax": 7
+    }
+   },
+   "mods": [
+    {
+     "target": "abilities.dex",
+     "mode": "add",
+     "value": "2"
+    }
+   ],
+   "values": {
+    "dex": 16,
+    "dex_mod": 3,
+    "hp": 7,
+    "init": 10
+   }
+  }
+ ],
+ "_subtitles": "subtitles — подпись по шаблону list.subtitle (internal/schema: Subtitle, web/src/schema-list.js: cardSubtitle).",
+ "subtitles": [
+  {
+   "name": "поля по типам",
+   "schema": {
+    "fields": {
+     "level": {
+      "type": "number",
+      "path": "level",
+      "label": "Уровень"
+     },
+     "hp": {
+      "type": "computed",
+      "formula": "@level * 6",
+      "label": "Хиты"
+     },
+     "half": {
+      "type": "computed",
+      "formula": "@level / 3",
+      "label": "Треть"
+     },
+     "kind": {
+      "type": "select",
+      "path": "kind",
+      "label": "Вид",
+      "options": [
+       {
+        "value": "beast",
+        "label": "Зверь"
+       },
+       {
+        "value": "1",
+        "label": "Первый"
+       }
+      ]
+     },
+     "flying": {
+      "type": "bool",
+      "path": "flying",
+      "label": "Летает"
+     },
+     "bite": {
+      "type": "roll",
+      "roll": "1d20 + @level",
+      "label": "Укус"
+     },
+     "note": {
+      "type": "text",
+      "path": "note",
+      "label": "Заметка"
+     },
+     "broken": {
+      "type": "computed",
+      "formula": "1 / 0",
+      "label": "Сломано"
+     },
+     "empty": {
+      "type": "number",
+      "path": "nothing",
+      "label": "Пусто"
+     }
+    }
+   },
+   "data": {
+    "level": 3,
+    "kind": "beast",
+    "flying": true,
+    "note": "  тень  ",
+    "name": "Гуль",
+    "tags": [
+     "нежить",
+     "ночь"
+    ],
+    "source": "Хоумбрю"
+   },
+   "cases": [
+    [
+     "Хиты {hp} · Уровень {level}",
+     "Хиты 18 · Уровень 3"
+    ],
+    [
+     "{kind} · {flying} · {bite}",
+     "Зверь · Летает · 1d20+3"
+    ],
+    [
+     "{note}",
+     "тень"
+    ],
+    [
+     "{half}",
+     "1"
+    ],
+    [
+     "{name} ({source}) · {tags}",
+     "Гуль (Хоумбрю) · нежить, ночь"
+    ],
+    [
+     "Хиты {broken} · {empty} · Уровень {level}",
+     "Уровень 3"
+    ],
+    [
+     "Без подстановок",
+     "Без подстановок"
+    ],
+    [
+     "{unknown} · x",
+     "x"
+    ]
+   ]
+  },
+  {
+   "name": "пусто и дроби",
+   "schema": {
+    "fields": {
+     "level": {
+      "type": "number",
+      "path": "level",
+      "label": "Уровень"
+     },
+     "hp": {
+      "type": "computed",
+      "formula": "@level * 6",
+      "label": "Хиты"
+     },
+     "half": {
+      "type": "computed",
+      "formula": "@level / 3",
+      "label": "Треть"
+     },
+     "kind": {
+      "type": "select",
+      "path": "kind",
+      "label": "Вид",
+      "options": [
+       {
+        "value": "beast",
+        "label": "Зверь"
+       },
+       {
+        "value": "1",
+        "label": "Первый"
+       }
+      ]
+     },
+     "flying": {
+      "type": "bool",
+      "path": "flying",
+      "label": "Летает"
+     },
+     "bite": {
+      "type": "roll",
+      "roll": "1d20 + @level",
+      "label": "Укус"
+     },
+     "note": {
+      "type": "text",
+      "path": "note",
+      "label": "Заметка"
+     },
+     "broken": {
+      "type": "computed",
+      "formula": "1 / 0",
+      "label": "Сломано"
+     },
+     "empty": {
+      "type": "number",
+      "path": "nothing",
+      "label": "Пусто"
+     }
+    }
+   },
+   "data": {
+    "level": 2,
+    "kind": 1,
+    "flying": false
+   },
+   "cases": [
+    [
+     "{half}",
+     "0.67"
+    ],
+    [
+     "{kind} · {flying}",
+     "Первый"
+    ],
+    [
+     "Уровень {level} · {note}",
+     "Уровень 2"
+    ],
+    [
+     "",
+     ""
+    ]
+   ]
+  },
+  {
+   "name": "необязательные части и поле-шаблон: пометка есть",
+   "schema": {
+    "fields": {
+     "ac": {
+      "type": "number",
+      "path": "ac",
+      "label": "КД"
+     },
+     "note": {
+      "type": "text",
+      "path": "acNote",
+      "label": "Пометка"
+     },
+     "hp": {
+      "type": "number",
+      "path": "hp",
+      "label": "Хиты"
+     },
+     "dice": {
+      "type": "text",
+      "path": "hitDice",
+      "label": "Кость"
+     },
+     "ac_line": {
+      "type": "template",
+      "label": "Класс доспеха",
+      "template": "{ac}[ ({note})]"
+     },
+     "hp_line": {
+      "type": "template",
+      "label": "Хиты",
+      "template": "{hp}[ ({dice})]"
+     }
+    }
+   },
+   "data": {
+    "ac": 17,
+    "acNote": "природный доспех",
+    "hp": 45,
+    "hitDice": "6к10+12"
+   },
+   "cases": [
+    [
+     "{ac_line}",
+     "17 (природный доспех)"
+    ],
+    [
+     "{hp_line} · КД {ac_line}",
+     "45 (6к10+12) · КД 17 (природный доспех)"
+    ],
+    [
+     "{ac}[ / {note}]",
+     "17 / природный доспех"
+    ]
+   ]
+  },
+  {
+   "name": "необязательные части и поле-шаблон: пометки нет",
+   "schema": {
+    "fields": {
+     "ac": {
+      "type": "number",
+      "path": "ac",
+      "label": "КД"
+     },
+     "note": {
+      "type": "text",
+      "path": "acNote",
+      "label": "Пометка"
+     },
+     "hp": {
+      "type": "number",
+      "path": "hp",
+      "label": "Хиты"
+     },
+     "dice": {
+      "type": "text",
+      "path": "hitDice",
+      "label": "Кость"
+     },
+     "ac_line": {
+      "type": "template",
+      "label": "Класс доспеха",
+      "template": "{ac}[ ({note})]"
+     },
+     "hp_line": {
+      "type": "template",
+      "label": "Хиты",
+      "template": "{hp}[ ({dice})]"
+     }
+    }
+   },
+   "data": {
+    "ac": 17,
+    "hp": 45
+   },
+   "cases": [
+    [
+     "{ac_line}",
+     "17"
+    ],
+    [
+     "{hp_line} · КД {ac_line}",
+     "45 · КД 17"
+    ],
+    [
+     "{ac}[ / {note}]",
+     "17"
+    ],
+    [
+     "[{note}] · {ac}",
+     "17"
+    ]
+   ]
+  }
+ ]
+}

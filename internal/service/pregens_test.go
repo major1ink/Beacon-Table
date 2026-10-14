@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 	ctx := context.Background()
 	pregens := memory.NewPregenStore()
 	chars := memory.NewCharacterStore()
-	svc := service.NewPregenService(pregens, chars)
+	svc := service.NewPregenService(pregens, chars, nil)
 
 	// Импорт: пустой пре-ген по имени, затем полная перезапись листом.
 	p, err := svc.Import(ctx, "  Шила  ")
@@ -25,8 +26,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 		t.Fatalf("ожидали обрезанное имя, получили %q", p.Name)
 	}
 	sheet := domain.DefaultCharacterSheet()
-	sheet.Info.Class = "Плут"
-	sheet.Info.Level = 3
+	sheet.Extra = domain.Extra{"info": json.RawMessage(`{"class":"Плут","level":3}`)}
 	sheet.Combat.HPMax = 21
 	if _, err := svc.Update(ctx, p.ID, "Шила", "http://x/a.png", "ag-goblin-trouble", sheet); err != nil {
 		t.Fatalf("Update: %v", err)
@@ -41,7 +41,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if c.AccountID != "acc-1" || c.Name != "Шила" || c.Sheet.Info.Class != "Плут" || c.Sheet.Combat.HPMax != 21 {
+	if c.AccountID != "acc-1" || c.Name != "Шила" || string(c.Sheet.Extra["info"]) != `{"class":"Плут","level":3}` || c.Sheet.Combat.HPMax != 21 {
 		t.Fatalf("лист не перенёсся в персонажа: %+v", c)
 	}
 	if avail, _ := svc.Available(ctx); len(avail) != 0 {
@@ -85,7 +85,7 @@ func TestPregenService_ClaimReleaseFlow(t *testing.T) {
 }
 
 func TestPregenService_ImportRejectsEmptyName(t *testing.T) {
-	svc := service.NewPregenService(memory.NewPregenStore(), memory.NewCharacterStore())
+	svc := service.NewPregenService(memory.NewPregenStore(), memory.NewCharacterStore(), nil)
 	if _, err := svc.Import(context.Background(), "   "); err == nil {
 		t.Fatal("пустое имя пре-гена должно отклоняться")
 	}

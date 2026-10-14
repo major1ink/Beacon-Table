@@ -92,6 +92,7 @@ export async function initVTT({ canvasId, role, playerId }) {
     // vtt:combatState / vtt:lightEditMode ниже, читает layers/tokens.js.
     hideLightMarkers: true,
     lightEditActive: false,
+    viewAsPlayer: false, // «как видит игрок» у ведущего, см. vtt:viewAsPlayer
   };
 
   // Единственная точка применения камеры — здесь же и клэмп по зоне показа
@@ -262,6 +263,17 @@ export async function initVTT({ canvasId, role, playerId }) {
     if (next === ctx.lightEditActive) return;
     ctx.lightEditActive = next;
     ctx.dirty.tokens = true;
+    ctx.render();
+  });
+  // «Как видит игрок» (кнопка в окне ведущего, dm.js): тьма, свет и туман
+  // считаются как у игроков. Меняется только отрисовка, сцена та же;
+  // инструменты по-прежнему смотрят на роль.
+  document.addEventListener("vtt:viewAsPlayer", (e) => {
+    const next = isDM && !!(e.detail && e.detail.active);
+    if (next === ctx.viewAsPlayer) return;
+    ctx.viewAsPlayer = next;
+    ctx.dirty.vision = true;
+    ctx.dirty.manualFog = true;
     ctx.render();
   });
   document.addEventListener("vtt:combatState", (e) => {

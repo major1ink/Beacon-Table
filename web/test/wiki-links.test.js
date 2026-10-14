@@ -83,10 +83,18 @@ test("в тексте видно только заголовок, путь ух�
 // пакетный импорт целого модуля эту разметку уже разбирает на сервере, здесь
 // проверяем только клиентский рендер как страховку).
 test("макрос Foundry [[/...]] не матчится как вики-ссылка", () => {
-  const html = renderNoteHtml("[[/r d100]]{20d100}");
+  const html = renderNoteHtml("[[/check dex 15]]");
   assert.doesNotMatch(html, /wikilink:/);
+  assert.match(html, /\[\[\/check dex 15\]\]/);
   // Обычная вики-ссылка на заметку с "/" внутри пути по-прежнему работает —
   // условие бьёт только по ПЕРВОМУ символу цели, не по слэшам вообще.
   const withPath = renderNoteHtml("[[Кампания/Глава 1/NPC/Марго]]");
   assert.match(withPath, /wikilink:/);
+});
+
+test("бросок Foundry в тексте записи — формула без скобок и /r", () => {
+  assert.match(renderNoteHtml("Гнилая ступень: [[/r 2d6]] дробящего"), /Гнилая ступень: 2d6 дробящего/);
+  assert.match(renderNoteHtml("[[/r 1d20+5]]{Атака}"), /Атака \(1d20\+5\)/);
+  assert.match(renderNoteHtml("[[/roll 1d20+5 # Скрытность]]"), /Скрытность \(1d20\+5\)/);
+  assert.match(renderNoteHtml("[[/r 1d20]] и [[Марго]]"), /1d20 и <a[^>]*wikilink:/);
 });

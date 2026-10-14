@@ -49,14 +49,8 @@ func TestSummonListRespectsFlags(t *testing.T) {
 	yes := true
 	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_summon_all", SummonAll: &yes}})
 	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "summon_list"}})
-	if got := pl.last("summon_list")["monsters"].([]summonable); len(got) != 2 {
-		t.Errorf("с тумблером, но без встроенных карточек ожидались сова и дракон: %+v", got)
-	}
-	// Встроенный каталог — только когда он включён и у ДМ.
-	r.handleInbound(inboundMsg{from: dm, msg: domain.ClientMsg{Type: "set_show_builtin_cards", ShowBuiltinCards: &yes}})
-	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "summon_list"}})
 	if got := pl.last("summon_list")["monsters"].([]summonable); len(got) != 3 {
-		t.Errorf("со встроенными карточками ожидалась вся библиотека: %+v", got)
+		t.Errorf("с тумблером ожидалась вся библиотека вместе с карточками модулей: %+v", got)
 	}
 }
 
@@ -165,5 +159,16 @@ func TestPlayerEditsOnlyOwnToken(t *testing.T) {
 	}
 	if _, ok := sc.Tokens["me"]; ok {
 		t.Error("свой призванный токен не убран")
+	}
+}
+
+// Подпись существа в призыве — по схеме системы мира (встроенная схема
+// «Своей системы»: «Хиты N · Защита M»).
+func TestSummonListSubtitle(t *testing.T) {
+	r, _, pl := summonRoom()
+	r.monsters = &fakeMonsters{list: []*domain.Monster{testMonster(t, `{"id":"owl","name":"Сова","summonable":true,"hp":3,"ac":11,"cr":"1/8"}`)}}
+	r.handleInbound(inboundMsg{from: pl, msg: domain.ClientMsg{Type: "summon_list"}})
+	if got := pl.last("summon_list")["monsters"].([]summonable); len(got) != 1 || got[0].Subtitle != "Хиты 3 · Защита 11" {
+		t.Fatalf("своя система: %+v", got)
 	}
 }

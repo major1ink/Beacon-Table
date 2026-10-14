@@ -3,7 +3,7 @@
 // dm.html/player.html, с параметрами через query string: type
 // (creatures|spells|items|reference), system (0|1 — какой корень дерева:
 // Beacon Table/Пользовательские), role (dm|player — только для виджета
-// "добавить заклинание"), kind (для reference) / category (для items),
+// "добавить заклинание"), category (подраздел из list.categories схемы),
 // title (заголовок окна).
 //
 // Функционально — перенос renderBestiaryRows/renderSpellRows/renderItemRows/
@@ -18,6 +18,8 @@
 // floating-window.js: postToOpenWindows("catalog-", ...) — топ-документ
 // форвардит "beacon:*Saved" сюда же.
 import { fetchMe } from "../api.js";
+// Вынесенный список открывает карточки у себя — слушатель там.
+import "../floating-window.js";
 import { icon } from "../icons.js";
 import {
   fetchBestiary, createMonster, updateMonster, deleteMonster, fetchMonster,
@@ -35,73 +37,44 @@ import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
 import { CONDITION_RU, conditionName } from "../foundry-conditions.js";
 import { glyphNode } from "../condition-glyphs.js";
-import { rarityKey, rarityRank, rarityColor } from "../item-rarity.js";
-import { kindRank } from "../reference-kind.js";
-import { classifyItemType, classifyReferenceKind } from "../compendium-taxonomy.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { openSocket } from "../ws-reconnect.js";
 import { initFullscreenButton } from "../fullscreen.js";
-import { escapeHtml, cssUrl } from "../html.js";
+import { escapeHtml } from "../html.js";
+import { setArtBackground } from "../art.js";
 import { asButton } from "../a11y.js";
 import { announceOwnHeader } from "../embed.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { schemaHasWidget } from "../schema-layout.js";
+import { catalogConfig, categoriesOf } from "../schema-list.js";
+import { loadSystemProfile, moduleAttribution, moduleHas, moduleTitle, worldModules } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerImport } from "../importer-offer.js";
 
 const qs = new URLSearchParams(location.search);
 const type = qs.get("type");
-const systemScope = qs.get("system") === "1";
+// source — id модуля, USER_SOURCE (библиотека мира, как в
+// compendium-menu.js) или ALL_SOURCES.
+const USER_SOURCE = "user";
+const ALL_SOURCES = "all";
+let source = qs.get("source") || USER_SOURCE;
+const isModuleSource = () => source !== USER_SOURCE && source !== ALL_SOURCES;
+
+function inSource(x) {
+  if (source === ALL_SOURCES) return true;
+  if (source === USER_SOURCE) return !x.system;
+  return x.system && x.module === source;
+}
 const role = qs.get("role") === "dm" ? "dm" : "player";
-const kind = qs.get("kind") || "";
 const category = qs.get("category") || "";
 const title = qs.get("title") || "Компендиум";
-
-function spellLevelLabel(lvl) {
-  return lvl ? lvl + "-й круг" : "Заговор";
-}
-
-function spellGroupLabel(lvl) {
-  return lvl ? lvl + "-й круг" : "Заговоры";
-}
 
 // «Адское возмездие [Hellish Rebuke]» → { ru, en }.
 function splitName(name) {
   const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name || "");
   return m ? { ru: m[1], en: m[2] } : { ru: name || "", en: "" };
 }
-
-function spellClasses(s) {
-  return String(s.classes || "").split(/[,;/]/).map((c) => c.trim()).filter(Boolean);
-}
-
-const CR_ORDER = ["", "0", "1/8", "1/4", "1/2", ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
-
-function crKey(cr) {
-  return String(cr || "").trim();
-}
-
-function crLabel(cr) {
-  return cr ? "ПО " + cr : "ПО —";
-}
-
-function crGroupLabel(cr) {
-  return cr ? "ПО " + cr : "ПО — (без уровня опасности)";
-}
-
-function crRank(cr) {
-  const i = CR_ORDER.indexOf(cr);
-  return i === -1 ? CR_ORDER.length : i;
-}
-
-function capitalize(t) {
-  t = String(t || "").trim();
-  return t ? t[0].toUpperCase() + t.slice(1) : "";
-}
-
-// «зверь (динозавр)» → «Зверь».
-function monsterBaseType(m) {
-  const t = capitalize(String(m.type || "").replace(/\s*\(.*$/, ""));
-  return t ? [t] : [];
-}
-
-
 
 function bySource(x) {
   const src = String(x.source || "").trim();
@@ -230,15 +203,6 @@ const CONFIGS = {
     mapOne: mapFoundryMonsterJson,
     avatar: true,
     avatarIcon: "creature",
-    searchHay: (m) => [m.name, m.type, ...(m.tags || [])],
-    badge: (m) => [crLabel(crKey(m.cr)), (m.source || "").trim()],
-    sidebar: [
-      { id: "cr", title: "ПО", kind: "chips", values: CR_ORDER, label: (v) => v || "—", of: (m) => [crKey(m.cr)] },
-      { id: "type", title: "Тип", kind: "list", of: monsterBaseType },
-    ],
-    groupKey: (m) => crKey(m.cr),
-    groupLabel: crGroupLabel,
-    groupSort: (a, b) => crRank(a) - crRank(b),
     draggable: true,
     dragMime: "application/x-beacon-monster",
     createPlaceholder: "Имя нового монстра",
@@ -255,21 +219,6 @@ const CONFIGS = {
     detailUrl: (id, o) => `/spellbook.html?id=${id}` + (o && o.edit ? "&edit=1" : ""),
     mapOne: mapFoundrySpellJson,
     avatar: false,
-    searchHay: (s) => [s.name, s.school, s.classes, ...(s.tags || [])],
-    badge: (s) => (s.source || "").trim(),
-    badgeTitle: (s) => spellLevelLabel(s.level),
-    flags: (s) => [s.concentration && ["К", "Концентрация"], s.ritual && ["Р", "Ритуал"]].filter(Boolean),
-    sidebar: [
-      { id: "level", title: "Круг", kind: "chips", values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], label: String, of: (s) => [s.level || 0] },
-      { id: "props", title: "Свойства", kind: "toggles", items: [
-        { key: "concentration", label: "Концентрация", icon: "eye" },
-        { key: "ritual", label: "Ритуал", icon: "scroll" },
-      ] },
-      { id: "cls", title: "Класс", kind: "list", of: spellClasses },
-    ],
-    groupKey: (s) => s.level || 0,
-    groupLabel: spellGroupLabel,
-    groupSort: (a, b) => a - b,
     createPlaceholder: "Имя нового заклинания",
     emptyUser: "Своих заклинаний пока нет — создай или импортируй первое выше.",
     deleteConfirm: (s) => `Удалить «${s.name}» из библиотеки?`,
@@ -286,23 +235,10 @@ const CONFIGS = {
     mapOne: mapFoundryItemJson,
     avatar: true,
     avatarIcon: "backpack",
-    searchHay: (it) => [it.name, it.type, it.rarity, ...(it.tags || [])],
-    badge: (it) => [it.rarity || "", (it.source || "").trim()],
-    badgeColor: (it, text) => (text === it.rarity ? rarityColor(it.rarity) : ""),
-    flags: (it) => (it.requiresAttunement ? [["Н", "Требует настройки"]] : []),
-    sidebar: [
-      { id: "rarity", title: "Редкость", kind: "list", of: (it) => (rarityKey(it.rarity) ? [capitalize(rarityKey(it.rarity))] : []) },
-      { id: "props", title: "Свойства", kind: "toggles", items: [{ key: "requiresAttunement", label: "Настройка", icon: "zap" }] },
-      { id: "source", title: "Источник", kind: "list", of: bySource },
-    ],
-    groupKey: (it) => rarityKey(it.rarity),
-    groupLabel: (r) => capitalize(r) || "Без редкости",
-    groupSort: (a, b) => rarityRank(a) - rarityRank(b),
     createPlaceholder: "Имя нового предмета",
     emptyUser: "Своих предметов пока нет — создай или импортируй первый выше.",
     deleteConfirm: (it) => `Удалить «${it.name}» из библиотеки?`,
     savedMessageType: "beacon:itemSaved",
-    extraFilter: category ? (it) => classifyItemType(it.type) === category : null,
   },
   reference: {
     fetchAll: fetchReferences,
@@ -315,22 +251,10 @@ const CONFIGS = {
     batchEmptyMsg: "Не удалось распознать ни одной записи справочника (нужен класс/архетип/черта Foundry VTT).",
     avatar: true,
     avatarIcon: "scroll",
-    searchHay: (ref) => [ref.name, ref.kind, ref.parentName, ref.source, ...(ref.tags || [])],
-    badge: (ref) => (ref.source || "").trim(),
-    subText: (ref) => [splitName(ref.name).en, ref.parentName].filter(Boolean).join(" · "),
-    sidebar: [
-      { id: "kind", title: "Тип записи", kind: "list", of: (ref) => (ref.kind ? [capitalize(ref.kind)] : []) },
-      { id: "parent", title: "Класс", kind: "list", of: (ref) => (ref.parentName ? [ref.parentName] : []) },
-      { id: "tags", title: "Метки", kind: "list", of: byTags },
-    ],
-    groupKey: (ref) => String(ref.kind || "").trim().toLowerCase(),
-    groupLabel: (k) => capitalize(k) || "Без типа",
-    groupSort: (a, b) => kindRank(a) - kindRank(b) || a.localeCompare(b, "ru"),
     createPlaceholder: "Имя новой записи",
     emptyUser: "Своих записей пока нет — создай или импортируй первую выше.",
     deleteConfirm: (ref) => `Удалить «${ref.name}» из библиотеки?`,
     savedMessageType: "beacon:referenceSaved",
-    extraFilter: kind ? (ref) => classifyReferenceKind(ref.kind) === kind : null,
   },
   conditions: {
     fetchAll: fetchConditions,
@@ -357,7 +281,30 @@ const CONFIGS = {
     savedMessageType: "beacon:conditionSaved",
   },
 };
-const cfg = CONFIGS[type];
+let cfg = CONFIGS[type];
+
+// SCHEMA_KINDS — вид схемы (schemas.js) у каталогов карточек. Если у системы
+// мира есть схема вида, подпись, поиск, фильтры, группы и сортировка
+// берутся из её раздела list (schema-list.js: catalogConfig), а не из полей
+// D&D.
+const SCHEMA_KINDS = { creatures: "monster", spells: "spell", items: "item", reference: "reference" };
+function applySchemaConfig() {
+  const schema = cfg && SCHEMA_KINDS[type] && schemaFor(SCHEMA_KINDS[type]);
+  if (!schema) return;
+  const compiled = compileSchema(schema);
+  const own = catalogConfig(compiled);
+  if (category) own.extraFilter = (categoriesOf(compiled).find((c) => c.label === category) || {}).test || null;
+  cfg = Object.assign({}, cfg, own);
+}
+
+// applyImporters — импорт Foundry (карточки, состояния) работает в системах,
+// которые понимает foundry-dnd5e; в остальных кнопка предлагает подключить
+// нужную систему.
+function applyImporters() {
+  // Заклинание можно добавить на лист, только если у листа есть виджет заклинаний.
+  if (!schemaHasWidget(schemaFor("sheet"), "spellbook")) cfg = Object.assign({}, cfg, { extraWidget: null });
+  if (!cfg.mapOne && !cfg.batchMap) importLabel.style.display = "none";
+}
 
 // ==================== DOM ====================
 
@@ -397,6 +344,38 @@ function toggleSide(sec, value, btn) {
   renderRows();
 }
 
+// initSourceFilter — «Модуль»: модули мира, «Пользовательские», «Все».
+function initSourceFilter() {
+  const modules = worldModules().filter((m) => m.id === source || moduleHas(m.id, type));
+  const options = [...modules.map((m) => [m.id, m.title]), [USER_SOURCE, "Пользовательские"], [ALL_SOURCES, "Все"]];
+  const wrap = document.createElement("div");
+  const head = document.createElement("p");
+  head.className = "side-title";
+  head.textContent = "Модуль";
+  const body = document.createElement("div");
+  body.className = "side-list";
+  for (const [id, label] of options) {
+    body.appendChild(
+      sideButton(label, id === source, (e) => {
+        source = id;
+        for (const b of body.children) b.classList.toggle("on", b === e.currentTarget);
+        applySource();
+        renderRows();
+      }, "side-item")
+    );
+  }
+  wrap.append(head, body);
+  sideEl.appendChild(wrap);
+}
+
+// applySource — создавать и импортировать можно только в свою библиотеку.
+function applySource() {
+  const readOnly = isModuleSource();
+  createForm.style.display = readOnly ? "none" : "";
+  importLabel.style.display = readOnly || (!cfg.mapOne && !cfg.batchMap) ? "none" : "";
+  systemHintEl.style.display = readOnly ? "block" : "none";
+}
+
 function initSidebar() {
   if (!cfg) return;
   for (const sec of cfg.sidebar || []) {
@@ -430,7 +409,7 @@ function renderSideLists(onScope) {
     for (const x of onScope) for (const v of sec.of(x)) names.add(v);
     const set = sideFilter.get(sec.id);
     for (const v of set) if (!names.has(v)) set.delete(v);
-    const sorted = [...names].sort((a, b) => a.localeCompare(b, "ru"));
+    const sorted = [...names].sort(sec.sort || ((a, b) => a.localeCompare(b, "ru")));
     wrap.style.display = sorted.length ? "" : "none";
     body.innerHTML = "";
     for (const v of sorted) body.appendChild(sideButton(v, set.has(v), (e) => toggleSide(sec, v, e.currentTarget), "side-item"));
@@ -442,7 +421,10 @@ function passesSidebar(x) {
     const set = sideFilter.get(sec.id);
     if (!set.size) continue;
     if (sec.kind === "toggles") {
-      for (const key of set) if (!x[key]) return false;
+      for (const key of set) {
+        const item = sec.items.find((it) => it.key === key);
+        if (!(item && item.test ? item.test(x) : x[key])) return false;
+      }
     } else if (!sec.of(x).some((v) => set.has(v))) return false;
   }
   return true;
@@ -481,7 +463,7 @@ function buildRow(x) {
   if (cfg.avatar) {
     const avatar = document.createElement("div");
     avatar.className = "catalog-avatar";
-    if (x.imageUrl) avatar.style.backgroundImage = cssUrl(x.imageUrl);
+    if (x.imageUrl) setArtBackground(avatar, x.imageUrl);
     else if (cfg.avatarNode) avatar.appendChild(cfg.avatarNode(x));
     else avatar.innerHTML = icon(cfg.avatarIcon || "image", { size: 14 });
     row.appendChild(avatar);
@@ -526,14 +508,14 @@ function buildRow(x) {
     row.appendChild(badge);
   }
 
-  // Каталог "из коробки" (System, см. соответствующий system.go у каждого
-  // репозитория) — только для чтения, та же логика для всех 4 типов.
+  // Карточка модуля — только для чтения, бейдж с названием модуля.
   if (x.system) {
     const badge = document.createElement("span");
     badge.className = "catalog-sys-badge";
-    badge.title = "Карточка каталога «из коробки» — только для чтения";
+    const attribution = moduleAttribution(x.module);
+    badge.title = `Карточка модуля «${moduleTitle(x.module)}» — только для чтения` + (attribution ? `\nИсточник текста: ${attribution}` : "");
     badge.innerHTML = icon("lock", { size: 11 });
-    badge.append(" каталог");
+    badge.append(" " + moduleTitle(x.module));
     row.appendChild(badge);
   } else {
     const delBtn = document.createElement("button");
@@ -559,7 +541,7 @@ function buildRow(x) {
 function renderRows() {
   const filter = searchEl.value.trim().toLowerCase();
   rowsEl.innerHTML = "";
-  let onScope = list.filter((x) => !!x.system === systemScope);
+  let onScope = list.filter(inSource);
   if (cfg.extraFilter) onScope = onScope.filter(cfg.extraFilter);
   renderSideLists(onScope);
   const filtered = onScope.filter((x) => {
@@ -570,12 +552,13 @@ function renderRows() {
   if (filtered.length === 0) {
     const empty = document.createElement("p");
     empty.className = "hint";
-    empty.textContent = onScope.length === 0 ? (systemScope ? "Каталог «из коробки» пуст." : cfg.emptyUser) : "Ничего не найдено.";
+    empty.textContent = onScope.length === 0 ? (isModuleSource() ? "В модуле нет карточек этого вида." : cfg.emptyUser) : "Ничего не найдено.";
     rowsEl.appendChild(empty);
     return;
   }
+  const rowSort = cfg.rowSort || ((a, b) => a.name.localeCompare(b.name, "ru"));
   if (!cfg.groupKey) {
-    for (const x of filtered) rowsEl.appendChild(buildRow(x));
+    for (const x of filtered.sort(rowSort)) rowsEl.appendChild(buildRow(x));
     return;
   }
   const groups = new Map();
@@ -592,12 +575,11 @@ function renderRows() {
     head.className = "catalog-group-title";
     head.textContent = cfg.groupLabel(k);
     group.appendChild(head);
-    for (const x of groups.get(k).sort((a, b) => a.name.localeCompare(b.name, "ru"))) group.appendChild(buildRow(x));
+    for (const x of groups.get(k).sort(rowSort)) group.appendChild(buildRow(x));
     rowsEl.appendChild(group);
   }
 }
 searchEl.oninput = renderRows;
-initSidebar();
 
 // ==================== создание ====================
 
@@ -623,6 +605,12 @@ createForm.addEventListener("submit", async (e) => {
 // резолвить родителя по всем документам сразу, см. reference-import.js), для
 // остальных — по документу за раз, внутри своего try (ошибка одного файла не
 // прерывает остальные при массовом импорте).
+importLabel.addEventListener("click", (e) => {
+  if (importerFits("foundry-dnd5e")) return;
+  e.preventDefault();
+  offerImport("foundry-dnd5e");
+});
+
 importFile.addEventListener("change", async (e) => {
   const input = e.target;
   const files = [...input.files];
@@ -721,12 +709,13 @@ window.addEventListener("message", (e) => {
     importLabel.style.display = "none";
     return;
   }
-  if (systemScope) {
-    createForm.style.display = "none";
-    importLabel.style.display = "none";
-    systemHintEl.style.display = "";
-  }
-  if (type === "spells") {
+  await Promise.all([loadSchemas(), loadSystemProfile()]);
+  applySchemaConfig();
+  applyImporters();
+  initSourceFilter();
+  initSidebar();
+  applySource();
+  if (type === "spells" && cfg.extraWidget) {
     try {
       if (role === "dm") {
         const [chars, monsters] = await Promise.all([fetchAdminCharacters(), fetchBestiary()]);

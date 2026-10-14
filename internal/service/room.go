@@ -10,10 +10,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository"
+	"beacon-table/internal/schema"
 )
 
 // RoomClient — то, что Room-актору нужно от подключённого клиента, чтобы не
@@ -37,6 +39,10 @@ type RoomService interface {
 	Leave(c RoomClient)
 	Dispatch(c RoomClient, msg domain.ClientMsg)
 	Shutdown()
+	// ShutdownForReload — как Shutdown, но клиенты перед отключением
+	// получают world_reload: у мира сменились модули или система, и
+	// страницам нужно перечитать схемы.
+	ShutdownForReload()
 	ImportScenes(ctx context.Context, scenes []*domain.SceneState) (int, error)
 	// LinkTokensToMonsters дописывает Token.MonsterID токенам, приехавшим со
 	// сценами из Foundry, по карте "id актёра Foundry -> id карточки
@@ -64,6 +70,9 @@ type RoomService interface {
 	// раньше это делала только перезагрузка страницы. kind нужен, чтобы
 	// клиент не дёргал сервер за всем разом из-за правки одной карточки.
 	NotifyLibraryChanged(kind string)
+	// SetScreen — ширма сохранена: открытые игрокам таймеры и счётчики,
+	// какие события считать.
+	SetScreen(sc *domain.Screen)
 	// SpawnPlayerToken ставит на активную сцену токен персонажа игрока —
 	// нужен входу в публичное демо игроком, где ДМ-а, который перетащил бы
 	// фишку на карту, может не быть вовсе (см. room_guest.go).
@@ -80,6 +89,9 @@ type RoomService interface {
 	// ListScenes — все сцены комнаты в порядке переключателя ДМ: карточки
 	// сцен на доске (см. web/src/pages/board.js).
 	ListScenes(ctx context.Context) ([]domain.SceneCard, error)
+	// SceneCopy — полная копия сцены id для экспорта в файл; нет такой —
+	// domain.ErrNotFound.
+	SceneCopy(ctx context.Context, id string) (*domain.SceneState, error)
 	// PlayerOwnsMonster — у игрока есть свой токен этого существа (призванный
 	// фамильяр): тогда ему можно прочитать карточку бестиария, которая в
 	// остальном только для ДМ (см. api/http: handleMonsterGet).
@@ -127,6 +139,14 @@ type Room struct {
 	// справочника (см. room_statuses.go: lookupCondition, snapshotStatus) —
 	// тем же принципом недоверия клиенту, что и items выше.
 	conditions repository.ConditionRepository
+	// rules — правила боя системы мира (инициатива, 0 хитов, опыт), см.
+	// combatRules.
+	rules *domain.CombatRules
+	// tokenSize — сторона токена существа по его карточке; nil — 1×1.
+	tokenSize *domain.TokenSizeRule
+	// schemas — схемы листа и карточек системы мира по видам (см.
+	// schemaFor): по ним сервер считает ссылки @поле в формуле инициативы.
+	schemas map[string]*schema.Schema
 
 	scenes         map[string]*domain.SceneState // все сцены комнаты, ключ — SceneState.ID
 	sceneOrder     []string                      // порядок сцен в переключателе DM
@@ -144,7 +164,10 @@ type Room struct {
 	join     chan RoomClient
 	leave    chan RoomClient
 	inbound  chan inboundMsg
-	shutdown chan chan struct{}
+	shutdown chan shutdownReq
+	// stopped закрывается, когда run() завершился: Join/Leave/Dispatch после
+	// этого не ждут комнату, которой больше нет.
+	stopped chan struct{}
 	// importScenes — сцены, приехавшие импортом пакета Foundry (см.
 	// ImportScenes): отдельный канал, а не inbound, потому что это не
 	// команда клиента и авторизации по роли у неё нет — вызывающего
@@ -165,6 +188,8 @@ type Room struct {
 	// listScenes — «дай список сцен» из HTTP-хендлера (см. ListScenes):
 	// свой канал по той же причине, что и spawnToken выше.
 	listScenes chan chan []domain.SceneCard
+	// sceneCopy — «дай копию сцены» из HTTP-хендлера (см. SceneCopy).
+	sceneCopy chan sceneCopyReq
 	// ownsMonster — «есть ли у игрока токен этого существа» из HTTP-хендлера
 	// (см. PlayerOwnsMonster) — тот же приём.
 	ownsMonster chan ownsMonsterReq
@@ -245,6 +270,18 @@ type Room struct {
 	// в state сцены не пишется, шлётся всем и досылается свежеподключившимся
 	// (см. showcasePayload/broadcastShowcase). nil = ничего не показывается.
 	showcase *domain.ShowcaseState
+
+	// Ширма ведущего (см. room_screen.go); пишется и из HTTP.
+	screenMu      sync.Mutex
+	screenSvc     ScreenService
+	screenPub     domain.ScreenPublic
+	screenAuto    map[string]bool
+	screenChanged chan struct{}
+
+	// Лента сессии (см. room_session.go).
+	sessionsMu sync.Mutex
+	sessions   SessionLogService
+	timers     map[string]screenTimerRun // идущие таймеры ширмы с прошлого раза, см. logTimers
 }
 
 // NewRoom поднимает комнату из sceneRepo (все сцены с прошлого запуска,
@@ -253,7 +290,7 @@ type Room struct {
 // conditionRepo — см. Room.characters/Room.monsters/Room.items/
 // Room.conditions, только для чтения (кроме точечных мутаций инвентаря
 // персонажа при луте, см. handleHubTakeItem/handleLootTakeItem).
-func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit) (*Room, error) {
+func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRepo repository.CharacterRepository, monsterRepo repository.MonsterRepository, itemRepo repository.ItemRepository, conditionRepo repository.ConditionRepository, chatRepo repository.ChatRepository, chatLimit *ChatHistoryLimit, rules *domain.CombatRules, tokenSize *domain.TokenSizeRule, schemas map[string]*schema.Schema) (*Room, error) {
 	rs, err := sceneRepo.Load(context.Background())
 	if err != nil {
 		return nil, err
@@ -277,6 +314,9 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		monsters:       monsterRepo,
 		items:          itemRepo,
 		conditions:     conditionRepo,
+		rules:          rules,
+		tokenSize:      tokenSize,
+		schemas:        schemas,
 		scenes:         rs.Scenes,
 		sceneOrder:     rs.SceneOrder,
 		currentSceneID: rs.CurrentSceneID,
@@ -285,12 +325,14 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		join:           make(chan RoomClient),
 		leave:          make(chan RoomClient),
 		inbound:        make(chan inboundMsg, 32),
-		shutdown:       make(chan chan struct{}),
+		shutdown:       make(chan shutdownReq),
+		stopped:        make(chan struct{}),
 		importScenes:   make(chan importScenesReq),
 		linkTokens:     make(chan linkTokensReq),
 		spawnToken:     make(chan spawnTokenReq),
 		dropTokens:     make(chan dropTokensReq),
 		listScenes:     make(chan chan []domain.SceneCard),
+		sceneCopy:      make(chan sceneCopyReq),
 		ownsMonster:    make(chan ownsMonsterReq),
 		journalChanged: make(chan string, 32),
 
@@ -298,6 +340,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		playlistsChanged:      make(chan struct{}, 4),
 		charactersChanged:     make(chan struct{}, 4),
 		libraryChanged:        make(chan string, 16),
+		screenChanged:         make(chan struct{}, 1),
 		announce:              make(chan string, 4),
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
@@ -318,10 +361,62 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 	return r, nil
 }
 
-func (r *Room) Join(c RoomClient)  { r.join <- c }
-func (r *Room) Leave(c RoomClient) { r.leave <- c }
+// combatRules — правила боя мира; без правил (комнаты из тестов) — правила
+// «Своей системы».
+func (r *Room) combatRules() *domain.CombatRules {
+	if r.rules == nil {
+		return domain.CustomCombatRules()
+	}
+	return r.rules
+}
+
+// monsterTokenSize — радиус токена существа monsterID по правилу системы;
+// карточки нет — 1×1.
+func (r *Room) monsterTokenSize(monsterID string, cell float64) float64 {
+	cells := 1.0
+	if monsterID != "" && r.monsters != nil && r.tokenSize != nil {
+		if m, err := r.monsters.Get(context.Background(), monsterID); err == nil {
+			cells = r.tokenSize.CellsFor(m)
+		}
+	}
+	return cells * cell / 2
+}
+
+// schemaFor — схема вида kind (schema.KindSheet, KindMonster…) системы мира.
+// Комната без схем (тесты) — встроенные схемы «Своей системы».
+func (r *Room) schemaFor(kind string) *schema.Schema {
+	if kind == "" {
+		return nil
+	}
+	if r.schemas == nil {
+		s, _ := schema.Builtin(kind)
+		return s
+	}
+	return r.schemas[kind]
+}
+
+// Join — после остановки комнаты клиент сразу отключается и переподключится
+// уже к новому миру.
+func (r *Room) Join(c RoomClient) {
+	select {
+	case r.join <- c:
+	case <-r.stopped:
+		c.Close()
+	}
+}
+
+func (r *Room) Leave(c RoomClient) {
+	select {
+	case r.leave <- c:
+	case <-r.stopped:
+	}
+}
+
 func (r *Room) Dispatch(c RoomClient, msg domain.ClientMsg) {
-	r.inbound <- inboundMsg{from: c, msg: msg}
+	select {
+	case r.inbound <- inboundMsg{from: c, msg: msg}:
+	case <-r.stopped:
+	}
 }
 
 // ImportScenes — см. RoomService.ImportScenes. ctx нужен не для отмены самой
@@ -458,6 +553,8 @@ func (r *Room) run() {
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
 			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
 			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
+			c.Send(r.screenPayload())   // открытые таймеры и счётчики ширмы
+			c.Send(r.sessionPayload())  // идёт ли сессия (лента)
 			r.sendChatHistory(c)        // чат стола, только видимое этому клиенту
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
@@ -487,6 +584,9 @@ func (r *Room) run() {
 		case reply := <-r.listScenes:
 			reply <- r.sceneCards()
 
+		case req := <-r.sceneCopy:
+			req.reply <- copyScene(r.scenes[req.id])
+
 		case req := <-r.ownsMonster:
 			owns := false
 			for _, s := range r.scenes {
@@ -497,6 +597,10 @@ func (r *Room) run() {
 				}
 			}
 			req.reply <- owns
+
+		case <-r.screenChanged:
+			r.broadcastScreen()
+			r.logTimers()
 
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
@@ -519,12 +623,15 @@ func (r *Room) run() {
 
 		case <-ticker.C:
 			r.flushIfDirty()
+			r.logTimerEnds(time.Now().UnixMilli())
 
-		case done := <-r.shutdown:
+		case req := <-r.shutdown:
 			// финальное сохранение перед выходом процесса — не ждём таймер,
 			// чтобы Ctrl+C или закрытие сервиса не роняло последние секунды правок.
 			r.flushIfDirty()
-			close(done)
+			r.dropClients(req.reload)
+			close(r.stopped)
+			close(req.done)
 			return
 		}
 	}
@@ -567,6 +674,12 @@ func (r *Room) handleInbound(im inboundMsg) {
 		return
 	case "chat_clear":
 		r.handleChatClear()
+		return
+	case "screen_counter":
+		r.handleScreenCounter(im.msg) // см. room_screen.go
+		return
+	case "session_start", "session_end", "session_note":
+		r.handleSession(im.msg) // см. room_session.go
 		return
 	case "show_image":
 		// «Показать игрокам» из раздела «Показ» — картинка поверх
@@ -793,11 +906,6 @@ func (r *Room) handleInbound(im inboundMsg) {
 			r.handleSetHighlightActiveToken(*im.msg.HighlightActiveToken)
 		}
 		return
-	case "set_show_builtin_cards":
-		if im.msg.ShowBuiltinCards != nil {
-			r.handleSetShowBuiltinCards(*im.msg.ShowBuiltinCards)
-		}
-		return
 	case "set_hide_light_markers":
 		if im.msg.HideLightMarkers != nil {
 			r.handleSetHideLightMarkers(*im.msg.HideLightMarkers)
@@ -955,13 +1063,38 @@ func (r *Room) flushIfDirty() {
 	}
 }
 
-// Shutdown синхронно сохраняет текущую сцену и завершает горутину run().
-// Вызывается композиционным корнем при получении SIGINT/SIGTERM, чтобы
-// гарантированно не потерять правки за последние autosaveInterval секунд.
-func (r *Room) Shutdown() {
-	done := make(chan struct{})
-	r.shutdown <- done
-	<-done
+type shutdownReq struct {
+	done   chan struct{}
+	reload bool
+}
+
+// Shutdown синхронно сохраняет текущую сцену, отключает клиентов и
+// завершает горутину run(). Повторный вызов ничего не делает.
+func (r *Room) Shutdown() { r.stop(false) }
+
+// ShutdownForReload — см. RoomService.ShutdownForReload.
+func (r *Room) ShutdownForReload() { r.stop(true) }
+
+func (r *Room) stop(reload bool) {
+	req := shutdownReq{done: make(chan struct{}), reload: reload}
+	select {
+	case r.shutdown <- req:
+		<-req.done
+	case <-r.stopped:
+	}
+}
+
+// dropClients отключает всех: иначе они остались бы на сокетах комнаты,
+// которая больше ничего не читает.
+func (r *Room) dropClients(reload bool) {
+	for c := range r.clients {
+		if reload {
+			c.Send(map[string]any{"type": "world_reload"})
+		}
+		c.Close()
+	}
+	clear(r.clients)
+	clear(r.viewing)
 }
 
 // sceneOf — сцена, которую видит клиент: открытая им у себя (viewing), если
@@ -1436,6 +1569,7 @@ func (r *Room) handleRollDice(c RoomClient, msg domain.ClientMsg) {
 	}
 	hidden := msg.Hidden != nil && *msg.Hidden
 	r.relayRoll(c, r.rollerName(c, msg.CharacterID), msg.Formula, clampRunes(msg.Label, maxRollLabel), result, hidden)
+	r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoRoll, Player: c.Role() == domain.RolePlayer, D20: d20Faces(msg.Formula, result.Rolls), Total: result.Total})
 }
 
 // rollerName — кто указан бросающим в общем логе. Если бросок пришёл с
@@ -1494,6 +1628,7 @@ func (r *Room) relayRoll(from RoomClient, name, formula, label string, result do
 	if hidden {
 		payload["hidden"] = true
 	}
+	r.logRoll(from, name, formula, label, result.Total, hidden)
 	for c := range r.clients {
 		switch {
 		case hidden && c.Role() != domain.RoleDM && !sameRoller(from, c):
@@ -1648,6 +1783,10 @@ func (r *Room) switchScene(id string) {
 		return
 	}
 	prevURL, _ := r.ambientOf(r.scenes[r.currentSceneID])
+	if id != r.currentSceneID {
+		defer r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoScene})
+		defer r.logSession(domain.SessionEvent{Kind: domain.SessionScene, Scene: s.Name, Text: "Сцена: " + s.Name})
+	}
 	r.currentSceneID = id
 	r.scene = s
 	clear(r.viewing) // «показать игрокам» — все на неё, и ДМ, что открывал другую, тоже
@@ -1695,6 +1834,47 @@ func (r *Room) ListScenes(ctx context.Context) ([]domain.SceneCard, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+type sceneCopyReq struct {
+	id    string
+	reply chan *domain.SceneState
+}
+
+// SceneCopy — см. RoomService; ctx — как у ListScenes.
+func (r *Room) SceneCopy(ctx context.Context, id string) (*domain.SceneState, error) {
+	req := sceneCopyReq{id: id, reply: make(chan *domain.SceneState, 1)}
+	select {
+	case r.sceneCopy <- req:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	select {
+	case s := <-req.reply:
+		if s == nil {
+			return nil, domain.ErrNotFound
+		}
+		return s, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// copyScene — глубокая копия через JSON: сцену дальше читают вне горутины
+// комнаты, пока та продолжает её менять.
+func copyScene(s *domain.SceneState) *domain.SceneState {
+	if s == nil {
+		return nil
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	var out domain.SceneState
+	if json.Unmarshal(b, &out) != nil {
+		return nil
+	}
+	return &out
 }
 
 type ownsMonsterReq struct {
@@ -1786,14 +1966,6 @@ func (r *Room) uniqueCombatantName(base string) string {
 	return fmt.Sprintf("%s %d", base, maxN+1)
 }
 
-// abilityMod — тот же floor((score-10)/2), что и на клиенте (см.
-// web/src/pages/character-sheet.js: abilityMod) — сервер должен посчитать
-// ровно то же самое число для модификатора инициативы, иначе бросок "1d20 +
-// мод" разъедется с тем, что игрок видит у себя на листе.
-func abilityMod(score int) int {
-	return int(math.Floor(float64(score-10) / 2))
-}
-
 // handleAddCombatant — "add_combatant": источник ОДИН из двух (см.
 // domain.ClientMsg) — TokenID (существующий токен активной сцены, обычный
 // путь через ПКМ-меню токена) либо MonsterID (карточка бестиария напрямую,
@@ -1803,7 +1975,11 @@ func abilityMod(score int) int {
 // недоверия клиенту, что и у handleRollDice).
 func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	var name, image, color, ownerID, characterID, monsterID, tokenID string
-	dexScore := 10
+	// src — лист персонажа или карточка существа: из неё правила системы
+	// берут формулу и прибавку инициативы (см. domain.CombatRules), kind —
+	// вид её схемы.
+	var src any
+	var kind string
 	ac, hpCur, hpMax, hpTemp := 0, 0, 0, 0
 
 	switch {
@@ -1862,8 +2038,8 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			if ownerID == "" {
 				ownerID = ch.AccountID
 			}
-			dexScore = ch.Sheet.Abilities.Dex
-			ac = ch.Sheet.Combat.AC
+			src, kind = ch.Sheet, schema.KindSheet
+			ac = coreInt(r.schemaFor(kind), src, domain.ModifierTargetAC, ch.Sheet.Combat.AC)
 			hpCur = ch.Sheet.Combat.HPCurrent
 			hpMax = ch.Sheet.Combat.HPMax
 			hpTemp = ch.Sheet.Combat.HPTemp
@@ -1876,10 +2052,10 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 			if image == "" {
 				image = m.ImageURL
 			}
-			dexScore = m.Abilities.Dex
-			ac = m.AC
-			hpCur = m.HP
-			hpMax = m.HP
+			src, kind = m, schema.KindMonster
+			ac = coreInt(r.schemaFor(kind), src, domain.ModifierTargetAC, m.AC)
+			hpMax = coreInt(r.schemaFor(kind), src, domain.ModifierTargetHPMax, m.HP)
+			hpCur = hpMax
 		}
 	}
 	if name == "" {
@@ -1887,25 +2063,18 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	}
 	name = r.uniqueCombatantName(name)
 
-	mod := abilityMod(dexScore)
-	// Модификаторы инициативы от состояний, УЖЕ висящих на токене (ДМ мог
-	// пометить монстра до того, как бросил инициативу) — см.
-	// domain.ModifierTargetInitiative. Задним числом уже брошенную
-	// инициативу ничто не пересчитывает: это разовый бросок, а не
-	// производное число.
+	// Модификаторы от состояний, УЖЕ висящих на токене (ДМ мог пометить
+	// монстра до того, как бросил инициативу), и от надетых предметов
+	// персонажа — как на листе (web/src/pages/character-sheet.js:
+	// activeModifiers). Задним числом уже брошенную инициативу ничто не
+	// пересчитывает: это разовый бросок, а не производное число.
+	mods := r.equippedModifiers(ctx, characterID)
 	if t, _ := r.findToken(tokenID); t != nil {
-		mods := make([]domain.Modifier, 0, len(t.Statuses))
 		for _, st := range t.Statuses {
-			mods = append(mods, st.Modifiers...)
+			mods = append(mods, domain.ScaleModifiers(st.Modifiers, st.Level)...)
 		}
-		mod = domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
 	}
-	formula := fmt.Sprintf("1d20%+d", mod)
-	initiative := 0.0
-	if result, err := r.dice.Roll(formula); err == nil {
-		initiative = float64(result.Total)
-		r.relayRoll(nil, "ДМ", formula, "Инициатива: "+name, result, false)
-	}
+	initiative := r.rollInitiative(name, kind, src, mods)
 
 	id := "combatant-" + newID()
 	r.combatSeq++
@@ -1916,6 +2085,70 @@ func (r *Room) handleAddCombatant(msg domain.ClientMsg) {
 	}
 	r.markCombatDirty()
 	r.broadcastCombat()
+}
+
+// rollInitiative — инициатива бойца по правилам системы: формула из правил
+// и поля листа или карточки src; ссылки @поле в ней сервер считает по схеме
+// вида kind с модификаторами mods, как их посчитал бы лист. Пустая формула
+// или ошибка в ней (кривое поле листа) — ручной ввод: боец встаёт с 0, ДМ
+// вписывает число в трекере. Формула без кубов («3») — просто число.
+func (r *Room) rollInitiative(name, kind string, src any, mods []domain.Modifier) float64 {
+	text := r.combatRules().InitiativeFormula(src, func(mod int) int {
+		return domain.ApplyModifiers(mod, domain.ModifierTargetInitiative, mods)
+	})
+	if text == "" {
+		return 0
+	}
+	roll, err := schema.NewEvaluator(r.schemaFor(kind), src, mods).Dice(text)
+	if err != nil {
+		slog.Debug("Формула инициативы не считается, ручной ввод", "combatant", name, "formula", text, "err", err)
+		return 0
+	}
+	if roll.Dice == 0 {
+		return float64(roll.Const)
+	}
+	result, err := r.dice.Roll(roll.Formula)
+	if err != nil {
+		return 0
+	}
+	r.relayRoll(nil, "ДМ", roll.Formula, "Инициатива: "+name, result, false)
+	return float64(result.Total)
+}
+
+// coreInt — общее поле ядра target листа или карточки src по схеме s (КД
+// может быть формулой — «10 + @dex_mod»); без схемы или без привязки —
+// fallback. Основа, без модификаторов: состояния трекер накладывает сам
+// (см. effectiveStat).
+func coreInt(s *schema.Schema, src any, target string, fallback int) int {
+	if s == nil {
+		return fallback
+	}
+	if v, ok := schema.NewEvaluator(s, src, nil).Core(target); ok {
+		return int(math.Floor(v))
+	}
+	return fallback
+}
+
+// equippedModifiers — модификаторы надетых предметов персонажа: карточки
+// из библиотеки по ItemID (снимок в инвентаре модификаторов не хранит).
+func (r *Room) equippedModifiers(ctx context.Context, characterID string) []domain.Modifier {
+	if characterID == "" || r.characters == nil || r.items == nil {
+		return nil
+	}
+	inv, err := r.characters.ListInventory(ctx, characterID)
+	if err != nil {
+		return nil
+	}
+	var mods []domain.Modifier
+	for _, e := range inv {
+		if !e.Equipped || e.ItemID == "" {
+			continue
+		}
+		if it, err := r.items.Get(ctx, e.ItemID); err == nil && it != nil {
+			mods = append(mods, it.Modifiers...)
+		}
+	}
+	return mods
 }
 
 func (r *Room) handleRemoveCombatant(id string) {
@@ -1964,19 +2197,19 @@ func (r *Room) handleSetCombatantAC(id string, ac int) {
 // ДМ по столу, не наше дело валидировать боевую механику (та же философия
 // "умного бланка", что и у CharacterSheet/Monster).
 //
-// Побочные эффекты по правилам (см. план):
+// Побочные эффекты:
 //   - HP поднялось выше нуля — боец стабилизировался/подлечен, отметки
 //     спасбросков от смерти больше не актуальны, сбрасываем их в ноль; если
 //     за ним стоит токен, ранее помеченный Dead (например, ДМ заново
 //     добавил в инициативу уже "умершего" монстра/NPC по его токену и
 //     проставил HP), снимаем метку — кости на карте меняются обратно на
-//     аватарку (см. reviveTokenIfDead).
-//   - HP опустилось до нуля или ниже у бойца БЕЗ CharacterID (монстр или
-//     голый NPC-токен, см. domain.Combatant) — спасбросков от смерти у них
-//     не бывает, умирает сразу (killMonsterCombatant). У бойца С
-//     CharacterID (игровой персонаж) вместо этого просто ждём отметок
-//     "set_combatant_death_save" — из инициативы его уберёт только 3-й
-//     провал (см. handleSetCombatantDeathSave).
+//     аватарку (см. reviveTokenIfDead). Выбывший по правилу ZeroHPOut
+//     приходит в себя — состояние «без сознания» снимается.
+//   - HP опустилось до нуля или ниже — что дальше, решают правила системы
+//     (domain.CombatRules.ZeroHP), отдельно для персонажа (CharacterID) и
+//     остальных: умирает сразу (killCombatant), выбывает (на токен
+//     вешается «без сознания»), ждёт отметок "set_combatant_death_save"
+//     (handleSetCombatantDeathSave) или ничего.
 func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 	cmb, ok := r.combat.Combatants[id]
 	if !ok {
@@ -2021,14 +2254,26 @@ func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 		cur = &next
 	}
 	if cur != nil {
+		wasDown := cmb.HPCurrent <= 0
+		before := cmb.HPCurrent
 		cmb.HPCurrent = *cur
+		r.logHP(cmb, before)
+		zeroHP := r.combatRules().ZeroHPFor(cmb.CharacterID != "")
 		if cmb.HPCurrent > 0 {
 			cmb.DeathSaveSuccess = 0
 			cmb.DeathSaveFail = 0
 			r.reviveTokenIfDead(cmb.TokenID)
-		} else if cmb.CharacterID == "" {
-			r.killMonsterCombatant(cmb)
-			return // combatant уже удалён и разослан внутри killMonsterCombatant
+			if wasDown && zeroHP == domain.ZeroHPOut {
+				r.handleRemoveStatus(domain.ClientMsg{CombatantID: cmb.ID, StatusSlug: domain.ZeroHPOutStatus})
+			}
+		} else {
+			switch zeroHP {
+			case domain.ZeroHPDead:
+				r.killCombatant(cmb)
+				return // combatant уже удалён и разослан внутри killCombatant
+			case domain.ZeroHPOut:
+				r.handleApplyStatus(domain.ClientMsg{CombatantID: cmb.ID, StatusSlug: domain.ZeroHPOutStatus, Source: "0 хитов"})
+			}
 		}
 	}
 	// Хиты игрового персонажа живут ещё и в его листе — держим их одним
@@ -2040,7 +2285,7 @@ func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 
 // markTokenDead — если у бойца есть токен на активной сцене, помечает его
 // Dead и рассылает сцену. Общая часть между "монстр/NPC умер сразу" (см.
-// killMonsterCombatant) и "персонаж провалил 3-й спасбросок от смерти" (см.
+// killCombatant) и "персонаж провалил 3-й спасбросок от смерти" (см.
 // handleSetCombatantDeathSave) — в обоих случаях итог на карте один и тот
 // же: кости вместо арта (web/src/vtt/layers/tokens.js). Токен с карты не
 // убираем, только помечаем — сам токен остаётся двигаемым.
@@ -2077,7 +2322,7 @@ func (r *Room) reviveTokenIfDead(tokenID string) {
 // handleReviveKilledToken — "revive_token" (только ДМ): кнопка
 // "Восстановить" на вкладке "Убитые" трекера инициативы (см. combatPayload:
 // "killed") — в отличие от reviveTokenIfDead выше, это не побочный эффект
-// подлеченного бойца в инициативе (там бойца уже нет, killMonsterCombatant
+// подлеченного бойца в инициативе (там бойца уже нет, killCombatant
 // его убрал), а прямая команда ДМ на уже мёртвом токене без комбатанта.
 // Возвращает токену обычный арт вместо костей и очищает снимки смерти
 // (Loot/XP, см. snapshotTokenSpoils) — они больше не описывают труп,
@@ -2130,18 +2375,18 @@ func (r *Room) handleClearKilledTokens() {
 	r.broadcastCombat()
 }
 
-// snapshotTokenSpoils — вызывается ровно один раз, из killMonsterCombatant, в
+// snapshotTokenSpoils — вызывается ровно один раз, из killCombatant, в
 // момент смерти монстра: КОПИРУЕТ (не ссылается на) текущий
 // Monster.Inventory этого монстра в Token.Loot убитого токена, с новыми ID
-// на каждую запись, и снимает опыт за его CR в Token.XP (см. CRToXP). Копия
+// на каждую запись, и снимает опыт за него в Token.XP по правилам системы
+// (см. domain.CombatRules.XPFor). Копия
 // лута, а не общая ссылка на шаблон — так лутание одного трупа не трогает
 // "склад" шаблона бестиария и других уже стоящих на карте токенов того же
 // монстра (см. план фичи); опыт снят числом по той же причине — карточка
 // монстра может измениться или быть удалена уже после его смерти, а вкладка
 // "Убитые" трекера инициативы должна продолжать показывать то, за что его
 // реально убили. monsterID == "" (голый NPC-токен без карточки бестиария за
-// спиной) — тихо ничего не делает: лутить нечего, опыт по таблице CR не
-// посчитать.
+// спиной) — тихо ничего не делает: лутить нечего, опыт взять неоткуда.
 func (r *Room) snapshotTokenSpoils(tokenID, monsterID string) {
 	if tokenID == "" || monsterID == "" || r.monsters == nil {
 		return
@@ -2162,16 +2407,17 @@ func (r *Room) snapshotTokenSpoils(tokenID, monsterID string) {
 		}
 		t.Loot = loot
 	}
-	t.XP = domain.CRToXP(m.CR)
+	t.XP = r.combatRules().XPFor(m)
 	r.markDirty(r.scene.ID)
 }
 
-// killMonsterCombatant — HP монстра/безликого NPC (нет CharacterID, см.
-// domain.Combatant) опустилось до нуля: по правилам спасбросков от смерти у
-// них не бывает, умирает сразу. Убирает бойца из трекера, как
+// killCombatant — боец умер: HP ушло в ноль по правилу ZeroHPDead или
+// набрались провалы спасбросков. Убирает бойца из трекера, как
 // handleRemoveCombatant, и помечает его токен Dead (markTokenDead) —
-// требование "заменить токен на отображение костей".
-func (r *Room) killMonsterCombatant(cmb *domain.Combatant) {
+// требование "заменить токен на отображение костей". У существа с карточкой
+// снимаются лут и опыт (у персонажа MonsterID пуст — снимок ничего не
+// делает).
+func (r *Room) killCombatant(cmb *domain.Combatant) {
 	id := cmb.ID
 	// Снимок лута и опыта ДО markTokenDead: тот сам шлёт broadcastAll (см.
 	// его комментарий) — если поставить его раньше, Loot/XP уйдут клиентам
@@ -2180,6 +2426,9 @@ func (r *Room) killMonsterCombatant(cmb *domain.Combatant) {
 	r.snapshotTokenSpoils(cmb.TokenID, cmb.MonsterID)
 	r.markTokenDead(cmb.TokenID)
 	delete(r.combat.Combatants, id)
+	if r.combat.Active {
+		defer r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoKilled, Player: cmb.CharacterID != ""})
+	}
 	if r.combat.CurrentID == id {
 		if order := sortedCombatantIDs(r.combat); len(order) > 0 {
 			r.combat.CurrentID = order[0]
@@ -2196,55 +2445,48 @@ func (r *Room) killMonsterCombatant(cmb *domain.Combatant) {
 // handleSetCombatantDeathSave — "set_combatant_death_save": ДМ вручную
 // отмечает чекбоксы спасбросков от смерти прямо в трекере (как в Foundry) —
 // сервер сам кубик не кидает, только хранит отметки и разруливает
-// последствия. value — абсолютное значение 0-3 (см. domain.ClientMsg).
+// последствия. value — абсолютное значение (см. domain.ClientMsg). Сколько
+// нужно успехов и провалов, задают правила системы
+// (domain.DeathSavesRule); если у этого бойца на 0 хитов не спасброски —
+// команда игнорируется.
 //
-//   - 3 успеха — персонаж стабилизируется и приходит в себя с 1 HP (см.
-//     требование), отметки сбрасываются, боец остаётся в инициативе.
-//   - 3 провала — персонаж умирает: убираем его из инициативы (требование
-//     "если у персонажа провалены спасброски на смерть — убрать из
-//     инициативы") и помечаем его токен Dead, как и у монстра (требование
-//     "должны появиться такие же кости, как у монстра" — см. markTokenDead).
+//   - Набраны успехи — боец стабилизируется и приходит в себя с
+//     StabilizeHP хитами, отметки сбрасываются, боец остаётся в инициативе.
+//   - Набраны провалы — боец умирает: уходит из инициативы, токен
+//     становится костями, как у монстра (см. killCombatant).
 func (r *Room) handleSetCombatantDeathSave(id, kind string, value int) {
 	cmb, ok := r.combat.Combatants[id]
 	if !ok {
 		return
 	}
-	if value < 0 {
-		value = 0
-	} else if value > 3 {
-		value = 3
+	rules := r.combatRules()
+	ds := rules.ZeroHP.DeathSaves
+	if ds == nil || rules.ZeroHPFor(cmb.CharacterID != "") != domain.ZeroHPDeathSaves {
+		return
 	}
+	value = max(value, 0)
 	switch kind {
 	case "success":
-		cmb.DeathSaveSuccess = value
+		cmb.DeathSaveSuccess = min(value, ds.Success)
 	case "fail":
-		cmb.DeathSaveFail = value
+		cmb.DeathSaveFail = min(value, ds.Fail)
 	default:
 		return
 	}
-	if cmb.DeathSaveSuccess >= 3 {
-		cmb.HPCurrent = 1
+	if cmb.DeathSaveSuccess >= ds.Success {
+		cmb.HPCurrent = ds.StabilizeHP
 		cmb.DeathSaveSuccess = 0
 		cmb.DeathSaveFail = 0
 		// Стабилизация — тоже правка хитов, лист персонажа должен увидеть
-		// эту единицу (см. room_character_hp.go).
+		// это число (см. room_character_hp.go).
 		r.syncCharacterHP(cmb)
 		r.markCombatDirty()
 		r.broadcastCombat()
 		return
 	}
-	if cmb.DeathSaveFail >= 3 {
-		r.markTokenDead(cmb.TokenID)
-		delete(r.combat.Combatants, id)
-		if r.combat.CurrentID == id {
-			if order := sortedCombatantIDs(r.combat); len(order) > 0 {
-				r.combat.CurrentID = order[0]
-			} else {
-				r.combat.CurrentID = ""
-				r.combat.Active = false
-				r.combat.Round = 0
-			}
-		}
+	if cmb.DeathSaveFail >= ds.Fail {
+		r.killCombatant(cmb)
+		return
 	}
 	r.markCombatDirty()
 	r.broadcastCombat()
@@ -2277,16 +2519,6 @@ func (r *Room) handleSetLootingEnabled(v bool) {
 // combatPayload).
 func (r *Room) handleSetHighlightActiveToken(v bool) {
 	r.combat.HighlightActiveToken = &v
-	r.markCombatDirty()
-	r.broadcastCombat()
-}
-
-// handleSetShowBuiltinCards — "set_show_builtin_cards": общий тумблер стола,
-// показывать ли вшитый каталог "из коробки" в справочнике и пикерах (см.
-// domain.CombatState.ShowBuiltinCards, combatPayload). Только UI клиента —
-// сами карточки System сервер по-прежнему отдаёт всем эндпоинтам.
-func (r *Room) handleSetShowBuiltinCards(v bool) {
-	r.combat.ShowBuiltinCards = v
 	r.markCombatDirty()
 	r.broadcastCombat()
 }
@@ -2330,7 +2562,7 @@ func (r *Room) handlePlaceCombatantToken(id string, x, y float64) {
 		r.dropDuplicateCharacterTokens(cmb.CharacterID, tokenID)
 	}
 	r.scene.Tokens[tokenID] = &domain.Token{
-		ID: tokenID, X: x, Y: y, Size: gridSize / 2,
+		ID: tokenID, X: x, Y: y, Size: r.monsterTokenSize(cmb.MonsterID, gridSize),
 		Label: cmb.Name, Image: cmb.Image, Color: cmb.Color,
 		OwnerID: cmb.OwnerID, CharacterID: cmb.CharacterID, MonsterID: cmb.MonsterID,
 		// Метки состояний, повешенные на бойца ДО того, как он попал на
@@ -2357,9 +2589,17 @@ func (r *Room) handleStartCombat() {
 	r.combat.CurrentID = order[0]
 	r.markCombatDirty()
 	r.broadcastCombat()
+	r.logSession(domain.SessionEvent{Kind: domain.SessionCombat, Text: "Бой начался"})
+	r.logTurn()
+	r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoCombat})
+	r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoRound})
+	r.countTurn()
 }
 
 func (r *Room) handleEndCombat() {
+	if r.combat.Active {
+		r.logSession(domain.SessionEvent{Kind: domain.SessionCombat, Text: fmt.Sprintf("Бой окончен на %d-м раунде", r.combat.Round)})
+	}
 	r.combat.Active = false
 	r.combat.Round = 0
 	r.combat.CurrentID = ""
@@ -2381,9 +2621,14 @@ func (r *Room) handleTurnStep(dir int) {
 	} else {
 		idx += dir
 	}
+	newRound := false
 	if idx >= len(order) {
 		idx = 0
 		r.combat.Round++
+		newRound = true
+		if r.combat.Active {
+			defer r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoRound})
+		}
 	} else if idx < 0 {
 		idx = len(order) - 1
 		if r.combat.Round > 1 {
@@ -2401,6 +2646,11 @@ func (r *Room) handleTurnStep(dir int) {
 	r.combat.CurrentID = order[idx]
 
 	if r.combat.Active && dir > 0 {
+		defer r.countTurn()
+		defer r.logTurn()
+		if newRound {
+			r.logSession(domain.SessionEvent{Kind: domain.SessionRound, Text: fmt.Sprintf("Раунд %d", r.combat.Round)})
+		}
 		// Ход перешёл к бойцу: сначала разовый урон/лечение «в начале хода»
 		// (горение, регенерация, яд), потом отсчёт длительностей — иначе
 		// метка с последним оставшимся раундом успела бы истечь до того, как
@@ -2408,7 +2658,7 @@ func (r *Room) handleTurnStep(dir int) {
 		//
 		// applyPeriodicModifiers может УБИТЬ бойца (тот же путь, что и
 		// ручная правка HP в трекере) — тогда он исчезает из r.combat и
-		// killMonsterCombatant сам переставляет CurrentID; поэтому дальше
+		// killCombatant сам переставляет CurrentID; поэтому дальше
 		// работаем по свежему чтению из map, а не по сохранённому указателю.
 		r.applyPeriodicModifiers(r.combat.Combatants[r.combat.CurrentID], domain.ModifierPeriodTurnStart)
 		if changed, sceneID := r.tickStatuses(r.combat.Combatants[r.combat.CurrentID]); changed {
@@ -2520,7 +2770,6 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		// combat.json/новый стол) трактуем как включено, см.
 		// domain.CombatState.HighlightActiveToken.
 		"highlightActiveToken": r.combat.HighlightActiveToken == nil || *r.combat.HighlightActiveToken,
-		"showBuiltinCards":     r.combat.ShowBuiltinCards,
 		"summonAll":            r.combat.SummonAll,
 		// hideLightMarkers — nil (старый combat.json/новый стол) трактуем как
 		// включено (прятать), см. domain.CombatState.HideLightMarkers.
@@ -2531,6 +2780,9 @@ func (r *Room) combatPayload(c RoomClient) map[string]any {
 		"hidePlayerDrawings":   r.combat.HidePlayerDrawings,
 		"hideBroadcastDice":    r.combat.HideBroadcastDice,
 		"broadcastDice3d":      r.combat.BroadcastDice3D,
+		// zeroHp — правила системы на 0 хитов: трекер по ним решает,
+		// рисовать ли спасброски и сколько в них лампочек.
+		"zeroHp": r.combatRules().ZeroHP,
 	}
 	if isDM {
 		payload["killed"] = r.killedMonsters()
@@ -2579,7 +2831,7 @@ func (r *Room) broadcastCombat() {
 // содержимое хаба не секрет ни от кого (в отличие от AC/HP в combatPayload).
 
 // maxHubNote/maxHubEntries — те же санитарные пределы, что и у остальных
-// сервисов (см. maxMonsterLongText в bestiary.go) — защита от гигантского
+// сервисов (см. cardlimits.go) — защита от гигантского
 // текста/бесконечного разрастания хаба, не игровое правило.
 const (
 	maxHubNote    = 300
@@ -2646,7 +2898,7 @@ func (r *Room) handleHubAddItem(msg domain.ClientMsg) {
 	id := "hub-" + newID()
 	r.hub.Entries[id] = &domain.InventoryEntry{
 		ID: id, ItemID: item.ID, Name: item.Name, ImageURL: item.ImageURL,
-		WeightLb: item.WeightLb, Quantity: qty, Notes: note,
+		WeightValue: item.WeightValue, Quantity: qty, Notes: note,
 	}
 	r.markHubDirty()
 	r.broadcastHub()
@@ -2818,6 +3070,14 @@ func (r *Room) dropDuplicateCharacterTokens(characterID, keepTokenID string) {
 	}
 }
 
+// clampTokenSize — чтобы клиент не прислал токен на всю карту.
+func clampTokenSize(size, cell float64) float64 {
+	if cell <= 0 {
+		cell = 48
+	}
+	return min(size, domain.MaxTokenCells*cell/2)
+}
+
 func (r *Room) applyMutation(msg domain.ClientMsg) {
 	switch msg.Type {
 	case "move_token", "add_token":
@@ -2842,6 +3102,7 @@ func (r *Room) applyMutation(msg domain.ClientMsg) {
 			if msg.Token.CharacterID != "" {
 				r.dropDuplicateCharacterTokens(msg.Token.CharacterID, msg.Token.ID)
 			}
+			msg.Token.Size = clampTokenSize(msg.Token.Size, r.scene.Grid.Size)
 			r.scene.Tokens[msg.Token.ID] = msg.Token
 			r.markDirty(r.scene.ID)
 		}

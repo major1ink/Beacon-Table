@@ -1,3 +1,4 @@
+import { artNode } from "./art.js";
 import { icon } from "./icons.js";
 
 // Панель «Призыв» игрока: существа, которые ДМ разрешил призывать
@@ -68,21 +69,19 @@ export function mountSummonPanel(panelEl, { send }) {
       row.className = "scene-row row-card scene-pick summon-row" + (m.id === selectedId ? " active" : "");
       row.setAttribute("aria-pressed", String(m.id === selectedId));
       if (m.imageUrl) {
-        const img = document.createElement("img");
-        img.src = m.imageUrl;
-        img.alt = "";
-        img.className = "summon-art";
-        row.appendChild(img);
+        row.appendChild(artNode(m.imageUrl, "summon-art"));
       }
       const name = document.createElement("span");
       name.className = "scene-name";
       name.textContent = m.name;
       row.appendChild(name);
-      if (m.cr) {
-        const cr = document.createElement("span");
-        cr.className = "pill-badge";
-        cr.textContent = "ПО " + m.cr;
-        row.appendChild(cr);
+      // Подпись собирает сервер: по схеме существа системы мира, у
+      // статблока D&D — «ПО 1/2» (см. service.Room: summonableMonsters).
+      if (m.subtitle) {
+        const sub = document.createElement("span");
+        sub.className = "pill-badge";
+        sub.textContent = m.subtitle;
+        row.appendChild(sub);
       }
       row.onclick = () => {
         selectedId = m.id;
@@ -125,11 +124,10 @@ export function mountSummonPanel(panelEl, { send }) {
   document.addEventListener("vtt:libraryChanged", (e) => {
     if (!e.detail || e.detail.kind === "compendium") refresh();
   });
-  // Оба тумблера стола влияют на список: «любых существ» и «показывать
-  // встроенные карточки» (см. canSummon в room_summon.go).
+  // Тумблер «любых существ» меняет список (см. canSummon в room_summon.go).
   let key = null;
   document.addEventListener("vtt:combatState", (e) => {
-    const next = `${!!(e.detail && e.detail.summonAll)}:${!!(e.detail && e.detail.showBuiltinCards)}`;
+    const next = !!(e.detail && e.detail.summonAll);
     if (next === key) return;
     key = next;
     refresh();

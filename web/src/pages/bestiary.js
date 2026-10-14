@@ -21,13 +21,20 @@ import { createRollLog } from "../roll-log.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { inApp } from "../native-app.js";
-import { el as hh, labeled, pill, ornament, renderHero, fold, renderBody } from "../card-shell.js";
-import { renderKvTable } from "../kv-table.js";
+import { el as hh, labeled, ornament, renderHero, fold, renderBody } from "../card-shell.js";
 import { glyphNode } from "../condition-glyphs.js";
-import { ABILITIES, fmtMod, crColor, monsterGlyphName, renderAbilityTiles, renderMonsterPreview } from "../monster-block.js";
+import { renderMonsterPreview } from "../monster-preview.js";
 import { cssUrl } from "../html.js";
 import { withRollMode } from "../roll-mode.js";
 import { announceOwnHeader } from "../embed.js";
+import { formatWeight, initiativeRule, loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerFold } from "../importer-offer.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardBody, cardHead, cardSubtitle, renderSchemaCard } from "../schema-card.js";
+import { coreSummary, initiativeText } from "../schema-summary.js";
+import { medallionOf } from "../schema-list.js";
 
 // ==================== state ====================
 
@@ -44,8 +51,6 @@ let editMode = false;
 
 function normalizeMonster(raw) {
   const m = raw && typeof raw === "object" ? raw : {};
-  m.abilities = m.abilities || {};
-  for (const a of ABILITIES) if (!m.abilities[a.key]) m.abilities[a.key] = 10;
   m.tags = Array.isArray(m.tags) ? m.tags : [];
   m.spells = Array.isArray(m.spells) ? m.spells : [];
   // inventory — шаблон добычи монстра (см. domain.InventoryEntry) — список
@@ -78,40 +83,21 @@ function textInput(get, set, opts) {
   return inp;
 }
 
-function numberInput(get, set, opts) {
-  const inp = h("input", Object.assign({ type: "number" }, opts || {}));
-  inp.value = get() ?? 0;
-  inp.addEventListener("input", () => {
-    const v = parseInt(inp.value, 10);
-    set(Number.isNaN(v) ? 0 : v);
-    scheduleSave();
-  });
-  return inp;
-}
-
-const monsterGlyph = () => glyphNode(monsterGlyphName(monster), "");
-
-function heroPills() {
-  return [monster.cr ? pill("ПО " + monster.cr, "rar") : null, monster.source ? pill(monster.source, "gold") : null, ...monster.tags.map((t) => pill(t))];
-}
-
-// textBlock — свёрнутый блок текста статблока (особенности, действия…):
+// textBlock — свёрнутый блок текста статблока («Описание»):
 // в редакторе textarea markdown/HTML, в чтении — рендер с кликабельными
 // формулами (см. inline-rolls.js). Пустой в чтении не показывается.
 function textBlock(title, key, { open, readOnly } = {}) {
-  const get = () => (key === "legendaryActions" ? [monster.legendaryActionsIntro, monster.legendaryActions].filter(Boolean).join("\n\n") : monster[key] || "");
+  const get = () => monster[key] || "";
   if (readOnly) {
     const text = get();
     if (!text.trim()) return null;
     const body = h("div", { class: "mb-prose" });
-    // Вступление и легендарные действия склеены пустой строкой, а не <p>:
-    // после HTML-блока marked не разбирает markdown в следующих строках.
     body.innerHTML = renderNoteHtml(text);
     enhanceRolls(body, sendRoll);
     wireCatalogLinks(body);
     return fold({ title, body: [body], open: open !== false });
   }
-  const t = h("textarea", { "aria-label": title, style: key === "legendaryActionsIntro" ? "min-height:56px" : "min-height:110px" });
+  const t = h("textarea", { "aria-label": title, style: "min-height:110px" });
   t.value = monster[key] ?? "";
   t.addEventListener("input", () => {
     monster[key] = t.value;
@@ -123,49 +109,6 @@ function textBlock(title, key, { open, readOnly } = {}) {
   return f;
 }
 
-// kvRows — строки статблока «показатель · значение» (kv-table.js).
-function kvTopRows(onChange) {
-  const set = (k) => (v) => {
-    monster[k] = v;
-    onChange && onChange();
-  };
-  return [
-    {
-      label: "Класс доспеха",
-      get: () => (monster.acNote ? `${monster.ac || 0} (${monster.acNote})` : String(monster.ac || 0)),
-      custom: () => h("div", { class: "kvt-pair" }, [numberInput(() => monster.ac, (v) => { monster.ac = v; onChange && onChange(); }, { min: 0, class: "mono", "aria-label": "КД", style: "width:72px" }), textInput(() => monster.acNote, set("acNote"), { placeholder: "природный доспех", "aria-label": "КД — примечание" })]),
-    },
-    {
-      label: "Хиты",
-      get: () => (monster.hitDice ? `${monster.hp || 0} (${monster.hitDice})` : String(monster.hp || 0)),
-      mono: true,
-      custom: () => h("div", { class: "kvt-pair" }, [numberInput(() => monster.hp, (v) => { monster.hp = v; onChange && onChange(); }, { min: 0, class: "mono", "aria-label": "Хиты", style: "width:72px" }), textInput(() => monster.hitDice, set("hitDice"), { placeholder: "2к6", class: "mono", "aria-label": "Кость хитов" })]),
-    },
-    { label: "Скорость", get: () => monster.speed, set: set("speed"), placeholder: "30 фт., полёт 60 фт." },
-  ];
-}
-function kvBottomRows(onChange) {
-  const set = (k) => (v) => {
-    monster[k] = v;
-    onChange && onChange();
-  };
-  return [
-    { label: "Спасброски", get: () => monster.savingThrows, set: set("savingThrows"), placeholder: "Тел +7, Мдр +4", mono: true },
-    { label: "Навыки", get: () => monster.skills, set: set("skills"), placeholder: "Восприятие +5, Скрытность +6", mono: true },
-    { label: "Уязвимости к урону", get: () => monster.damageVulnerabilities, set: set("damageVulnerabilities") },
-    { label: "Сопротивления к урону", get: () => monster.damageResistances, set: set("damageResistances") },
-    { label: "Иммунитет к урону", get: () => monster.damageImmunities, set: set("damageImmunities") },
-    { label: "Иммунитет к состояниям", get: () => monster.conditionImmunities, set: set("conditionImmunities") },
-    { label: "Чувства", get: () => monster.senses, set: set("senses"), placeholder: "тёмное зрение 60 фт., пасс. Внимательность 12" },
-    { label: "Языки", get: () => monster.languages, set: set("languages") },
-    {
-      label: "Опасность",
-      get: () => [monster.cr ? monster.cr : "", monster.proficiencyBonus ? "бонус мастерства " + fmtMod(monster.proficiencyBonus) : ""].filter(Boolean).join(", "),
-      custom: () => h("div", { class: "kvt-pair" }, [textInput(() => monster.cr, (v) => { monster.cr = v; onChange && onChange(); }, { placeholder: "1/2", class: "mono", "aria-label": "Опасность", style: "width:72px" }), labeled("Бонус мастерства", numberInput(() => monster.proficiencyBonus, set("proficiencyBonus"), { min: 0, class: "mono", style: "width:72px" }))]),
-    },
-  ];
-}
-
 // ==================== рендер ====================
 
 // renderApp — диспетчер: read-режим (по умолчанию, см. editMode) или полная
@@ -173,11 +116,20 @@ function kvBottomRows(onChange) {
 function renderApp() {
   const root = document.getElementById("app");
   root.innerHTML = "";
-  if (editMode) renderEditView(root);
-  else renderReadView(root);
+  renderSchemaView(root, monsterSchema());
 }
 
-function renderEditView(root) {
+// compiledMonster — схема существа системы мира, разобранная один раз.
+let compiledMonster = null;
+function monsterSchema() {
+  const s = schemaFor("monster");
+  if (!compiledMonster || compiledMonster.schema !== s) compiledMonster = compileSchema(s);
+  return compiledMonster;
+}
+
+// artField — «Арт»: загрузить токен-арт или убрать его; onArt() — после
+// смены (обновить шапку и превью).
+function artField(onArt) {
   const upload = h("input", { type: "file", accept: "image/*", style: "display:none" });
   upload.addEventListener("change", async () => {
     const file = upload.files[0];
@@ -186,9 +138,8 @@ function renderEditView(root) {
       const { url } = await uploadFile(file, "tokens");
       monster.imageUrl = url;
       scheduleSave();
-      hero.setGlyph(monsterGlyph(), monster.imageUrl);
       artBtn.textContent = "Убрать арт";
-      preview.update();
+      onArt();
     } catch (err) {
       showAlert("Не удалось загрузить арт: " + err.message);
     }
@@ -200,30 +151,65 @@ function renderEditView(root) {
       if (monster.imageUrl) {
         monster.imageUrl = "";
         scheduleSave();
-        hero.setGlyph(monsterGlyph(), "");
         artBtn.textContent = "Загрузить токен-арт…";
-        preview.update();
+        onArt();
       } else upload.click();
     },
   });
+  return h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload]);
+}
 
-  // Книжный подзаголовок: размер, тип и мировоззрение правятся в нём.
-  const subInput = (key, ph, size) => {
-    const inp = textInput(() => monster[key], (v) => { monster[key] = v; inp.size = Math.max(size, v.length + 1); if (key === "type") { hero.setGlyph(monsterGlyph(), monster.imageUrl); preview.update(); } }, { placeholder: ph, "aria-label": ph });
-    inp.size = Math.max(size, (monster[key] || "").length + 1);
-    return inp;
+// compatFold — «Совместимость и источник»: в правке — источник, модуль
+// Foundry, теги и «можно призывать»; в чтении — строка, если есть что
+// показать. onPills() — теги или источник поменялись.
+function compatFold(readOnly, onPills) {
+  const compatSummary = () => [monster.source, monster.foundryModuleId].filter(Boolean).join(" · ");
+  if (readOnly) {
+    const compat = compatSummary();
+    return compat ? fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }) : null;
+  }
+  const f = fold({
+    title: "Совместимость и источник",
+    summary: compatSummary() || "источник, теги, модуль Foundry",
+    body: [
+      h("div", { class: "card-grid2" }, [
+        labeled("Источник", textInput(() => monster.source, (v) => { monster.source = v; onPills(); f.setSummary(compatSummary() || "источник, теги, модуль Foundry"); }, { placeholder: "MM'24" })),
+        labeled("Модуль Foundry", textInput(() => monster.foundryModuleId, (v) => { monster.foundryModuleId = v; f.setSummary(compatSummary() || "источник, теги, модуль Foundry"); }, { placeholder: "dnd5e.monsters" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
+      ]),
+      tagsField(onPills),
+      summonableField(),
+    ],
+  });
+  return f;
+}
+
+// renderSchemaView — карточка по схеме системы (schema-card.js): шапка,
+// середина — из схемы, «Описание» и «Совместимость» — как обычно. Превью
+// «На карте и в трекере» — по общим полям ядра схемы; импорт Foundry — у
+// D&D-миров.
+function renderSchemaView(root, compiled) {
+  const readOnly = !editMode;
+  const subtitle = h("div", { class: "card-sub", text: cardSubtitle(compiled, monster) });
+  const fallbackGlyph = () => (medallionOf(compiled, monster) || {}).glyph || "hood";
+  const head = cardHead(compiled, monster, fallbackGlyph());
+  const refreshHead = () => {
+    const next = cardHead(compiled, monster, fallbackGlyph());
+    subtitle.textContent = cardSubtitle(compiled, monster);
+    hero.setGlyph(next.glyph, monster.imageUrl);
+    hero.setColor(next.color);
+    hero.setPills(next.pills);
+    preview.update();
   };
-  const subtitle = h("div", { class: "card-sub" }, [subInput("size", "Средний", 8), h("span", { text: " " }), subInput("type", "гуманоид", 12), h("span", { text: ", " }), subInput("alignment", "нейтральное", 12)]);
-
   const hero = renderHero({
-    glyph: monsterGlyph(),
+    glyph: head.glyph,
     imageUrl: monster.imageUrl,
-    color: crColor(monster.cr),
+    color: head.color,
     name: monster.name,
     namePlaceholder: "Имя существа",
-    pills: heroPills(),
+    pills: head.pills,
     subtitle,
-    controls: [h("div", { class: "field" }, [h("span", { text: "Арт" }), artBtn, upload])],
+    readOnly,
+    controls: readOnly ? undefined : [artField(refreshHead)],
     onName: (v) => {
       monster.name = v;
       document.getElementById("monsterTitle").textContent = v || "Без имени";
@@ -233,84 +219,26 @@ function renderEditView(root) {
   });
   root.appendChild(hero.el);
   root.appendChild(ornament());
-
-  const preview = renderMonsterPreview(monster, { glyphNode });
-  const refreshHead = () => {
-    hero.setPills(heroPills());
-    hero.setColor(crColor(monster.cr));
-    preview.update();
-  };
-  const kvTop = renderKvTable(kvTopRows(() => preview.update()), { onChange: scheduleSave });
-  const tiles = renderAbilityTiles(monster, { onChange: () => { scheduleSave(); preview.update(); }, sendRoll });
-  const kvBottom = renderKvTable(kvBottomRows(refreshHead), { onChange: scheduleSave, hint: "Пустые строки в чтении скрываются. +к попаданию и формулы урона в действиях кликабельны." });
-
-  const compatSummary = () => [monster.source, monster.foundryModuleId].filter(Boolean).join(" · ") || "источник, теги, модуль Foundry";
-  const compatFold = fold({
-    title: "Совместимость и источник",
-    summary: compatSummary(),
-    body: [
-      h("div", { class: "card-grid2" }, [
-        labeled("Источник", textInput(() => monster.source, (v) => { monster.source = v; hero.setPills(heroPills()); compatFold.setSummary(compatSummary()); }, { placeholder: "MM'24" })),
-        labeled("Модуль Foundry", textInput(() => monster.foundryModuleId, (v) => { monster.foundryModuleId = v; compatFold.setSummary(compatSummary()); }, { placeholder: "dnd5e.monsters" }), "Откуда импортировано — чтобы повторный импорт нашёл карточку."),
-      ]),
-      tagsField(() => hero.setPills(heroPills())),
-      summonableField(),
-    ],
+  const preview = renderMonsterPreview(monster, {
+    glyphNode,
+    glyphName: fallbackGlyph,
+    numbers: () => {
+      const c = coreSummary(compiled, monster, []);
+      return { ini: initiativeText(compiled, monster, initiativeRule()) || c.initiative, ac: c.ac || "—", hp: c.hpMax || "—" };
+    },
   });
-
-  root.appendChild(
-    renderBody(
-      [
-        kvTop,
-        tiles,
-        kvBottom,
-        h("div", { class: "card-folds" }, [
-          textBlock("Особенности", "traits", { open: true }),
-          textBlock("Действия", "actions", { open: true }),
-          textBlock("Бонусные действия", "bonusActions"),
-          textBlock("Реакции", "reactions"),
-          textBlock("Вступление к легендарным действиям", "legendaryActionsIntro"),
-          textBlock("Легендарные действия", "legendaryActions"),
-          textBlock("Действия и эффекты логова", "lairActions"),
-          spellsSection(false),
-          invSection(false),
-          textBlock("Описание", "description"),
-          compatFold,
-          importSection(),
-        ]),
-      ],
-      [preview]
-    )
-  );
-}
-
-// ==================== read-режим (по умолчанию) ====================
-
-function renderReadView(root) {
-  const subtitle = h("div", { class: "card-sub", text: [[monster.size, monster.type].filter(Boolean).join(" "), monster.alignment].filter(Boolean).join(", ") });
-  const hero = renderHero({ glyph: monsterGlyph(), imageUrl: monster.imageUrl, color: crColor(monster.cr), name: monster.name, pills: heroPills(), subtitle, readOnly: true });
-  root.appendChild(hero.el);
-  root.appendChild(ornament());
-
-  const preview = renderMonsterPreview(monster, { glyphNode });
-  const kvTop = renderKvTable(kvTopRows(), { readOnly: true, sendRoll });
-  const tiles = renderAbilityTiles(monster, { readOnly: true, sendRoll });
-  const kvBottom = renderKvTable(kvBottomRows(), { readOnly: true, sendRoll });
-  const blocks = [
-    textBlock("Особенности", "traits", { readOnly: true }),
-    textBlock("Действия", "actions", { readOnly: true }),
-    textBlock("Бонусные действия", "bonusActions", { readOnly: true }),
-    textBlock("Реакции", "reactions", { readOnly: true }),
-    textBlock("Легендарные действия", "legendaryActions", { readOnly: true }),
-    textBlock("Действия и эффекты логова", "lairActions", { readOnly: true }),
-    spellsSection(true),
-    invSection(true),
-    textBlock("Описание", "description", { readOnly: true, open: false }),
-  ].filter(Boolean);
-  const compat = [monster.source, monster.foundryModuleId].filter(Boolean).join(" · ");
-  if (compat) blocks.push(fold({ title: "Совместимость и источник", summary: compat, body: [h("p", { class: "card-text", text: compat })] }));
-
-  root.appendChild(renderBody([kvTop, tiles, kvBottom, blocks.length ? h("div", { class: "card-folds" }, blocks) : null], [preview]));
+  const middle = renderSchemaCard({
+    compiled,
+    data: monster,
+    readOnly,
+    scheduleSave,
+    onChange: refreshHead,
+    sendRoll,
+    widgets: { inventory: () => invSection(readOnly), spells: () => spellsSection(readOnly) },
+  });
+  const folds = [...middle, textBlock("Описание", "description", readOnly ? { readOnly: true, open: false } : {}), compatFold(readOnly, refreshHead)];
+  if (!readOnly) folds.push(importerFits("foundry-dnd5e") ? importSection() : offerFold("foundry-dnd5e", "Импорт из TTG Club / Foundry VTT"));
+  root.appendChild(renderBody(cardBody(folds), [preview]));
 }
 
 // applyImport — общая точка для файла и вставленного текста: парсит JSON,
@@ -485,7 +413,7 @@ function invSection(readOnly) {
       const avatar = h("div", { class: "av" });
       if (e.imageUrl) avatar.style.backgroundImage = cssUrl(e.imageUrl);
       const name = h("span", { class: "nm", text: e.name });
-      const weight = h("span", { class: "tag", text: (e.weightLb || 0) + " фнт" });
+      const weight = h("span", { class: "tag", text: formatWeight(e.weightLb) });
       const row = [avatar, name, weight];
       if (readOnly) {
         row.push(h("span", { class: "tag", text: "×" + e.quantity }));
@@ -745,6 +673,7 @@ function currentId() {
 
 (async function boot() {
   const me = await fetchMe();
+  await Promise.all([loadSystemProfile(), loadSchemas()]);
   if (!me) {
     location.href = "/";
     return;

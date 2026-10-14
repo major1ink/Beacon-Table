@@ -22,6 +22,7 @@ import { sceneLinksOf } from "../board/links.js";
 import { attachTooltip, hideTooltip, renderWithKeys } from "../tooltip.js";
 import { TOOL_HELP, PANEL_HELP, RAIL_HELP } from "../tool-help.js";
 import { zoneStyle } from "../vtt/layers/manual-fog.js";
+import { snapToGrid, tokenCells } from "../geometry.js";
 import {
   fetchMe,
   apiLogout,
@@ -65,9 +66,14 @@ import {
   fetchFoundryModules,
   checkFoundryModuleUpdates,
   deleteFoundryModule,
+  fetchModules,
+  fetchSystems,
+  setWorldModules,
   shutdownServer,
   fetchTutorial,
   saveTutorial,
+  sceneExportUrl,
+  importScene,
 } from "../api.js";
 import { showAlert, showConfirm, showPrompt, openModal } from "../modal.js";
 import { icon } from "../icons.js";
@@ -79,7 +85,12 @@ import { isGM, isPlayer, isDemoGuest as isDemoRole, roleLabel as accountRoleLabe
 import { installErrorCapture, openBugReport } from "../bug-report.js";
 import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutorial.js";
 import { dmTourSteps } from "../tutorial-dm.js";
-import { escapeHtml, cssUrl } from "../html.js";
+import { changeWorldSystem, fitsSystem } from "../world-system.js";
+import { showMissingModulesNotice } from "../modules-notice.js";
+import { openModulesShowcase } from "../modules-link.js";
+import { cardTokenCells, loadSystemProfile } from "../system-profile.js";
+import { escapeHtml, cssUrl, downloadFile } from "../html.js";
+import { setArtBackground } from "../art.js";
 import { copyToClipboard, flashCopied } from "../clipboard.js";
 import { asButton } from "../a11y.js";
 import { initVisualViewport } from "../visual-viewport.js";
@@ -107,6 +118,7 @@ let isDemoGuest = false;
   }
   isDemoGuest = isDemoRole(me.role);
   if (isDemoGuest) hideOwnerOnlyUI();
+  if (!isDemoGuest) showMissingModulesNotice();
   document.getElementById("dmUsername").textContent = me.username;
   // Всё остальное в этом файле — обычные top-level обработчики
   // (onclick/addEventListener), выполняются один раз при загрузке страницы
@@ -260,6 +272,24 @@ function openJournalWindow(entryId, section) {
 
 document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
+// Сессии и граф — тот же журнал, но своим окном, чтобы не уводить открытую запись.
+function openJournalView(view, title) {
+  openFloatingWindow({ key: "journal-" + view, title, url: "/journal.html?view=" + view, width: 1000, height: 700, popoutFeatures: "width=1000,height=700" });
+}
+document.getElementById("sessionsBtn").onclick = () => openJournalView("sessions", "Сессии");
+document.getElementById("graphBtn").onclick = () => openJournalView("graph", "Граф связей");
+
+document.getElementById("screenBtn").onclick = () =>
+  openFloatingWindow({
+    key: "gm-screen",
+    title: "Ширма",
+    url: "/gm-screen.html",
+    width: 1100,
+    height: 720,
+    popoutFeatures: "width=1100,height=720",
+    desktopFill: true,
+  });
+
 // hideOwnerOnlyUI — убрать со стола то, что доступно только хозяину сервера:
 // список миров, вкладки «Трансляция» и «Сервер» в настройках. Права на
 // сервере проверяет он сам (см. requireOwner), здесь — только внешний вид.
@@ -286,6 +316,24 @@ function hideOwnerOnlyUI() {
 // сам заход на worlds.html его не трогает.
 // Полный экран (см. src/fullscreen.js) — в HUD зума.
 initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
+
+// «Как видит игрок»: тьма, свет и туман в окне ведущего — как у игроков и на
+// трансляции (vtt/index.js: vtt:viewAsPlayer). Только вид: сцену можно
+// править, игроки ничего не замечают; после перезагрузки режим выключен.
+const viewAsPlayerBtn = document.getElementById("viewAsPlayerBtn");
+const viewAsPlayerBadge = document.getElementById("viewAsPlayerBadge");
+viewAsPlayerBadge.insertAdjacentHTML("afterbegin", icon("eye", { size: 13 }));
+function setViewAsPlayer(on) {
+  viewAsPlayerBtn.innerHTML = icon(on ? "eye-off" : "eye", { size: 15 });
+  viewAsPlayerBtn.title = on ? "Вернуть вид ведущего" : "Как видит игрок: тьма, свет и туман глазами партии";
+  viewAsPlayerBtn.classList.toggle("open", on);
+  viewAsPlayerBtn.setAttribute("aria-pressed", String(on));
+  viewAsPlayerBadge.hidden = !on;
+  document.dispatchEvent(new CustomEvent("vtt:viewAsPlayer", { detail: { active: on } }));
+}
+setViewAsPlayer(false);
+viewAsPlayerBtn.onclick = () => setViewAsPlayer(viewAsPlayerBadge.hidden);
+viewAsPlayerBadge.onclick = () => setViewAsPlayer(false);
 initVisualViewport();
 initWakeLock();
 
@@ -798,6 +846,8 @@ const tokenMenuAddInitiativeBtn = document.getElementById("tokenMenuAddInitiativ
 const tokenMenuLootBtn = document.getElementById("tokenMenuLootBtn");
 const tokenMenuHiddenRow = document.getElementById("tokenMenuHiddenRow");
 const tokenMenuShapeRow = document.getElementById("tokenMenuShapeRow");
+const tokenMenuSizeRow = document.getElementById("tokenMenuSizeRow");
+const tokenMenuSize = document.getElementById("tokenMenuSize");
 const tokenMenuOwnerRow = document.getElementById("tokenMenuOwnerRow");
 const tokenMenuOwner = document.getElementById("tokenMenuOwner");
 const tokenMenuLightRow = document.getElementById("tokenMenuLightRow");
@@ -1653,6 +1703,9 @@ document.addEventListener("vtt:tokenContextMenu", (e) => {
   tokenMenuLootBtn.style.display = !menuIsMulti && token.dead && menuTokenLoot.length ? "flex" : "none";
   tokenMenuHiddenRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
   tokenMenuShapeRow.style.display = !menuIsMulti && !menuIsLightOnly ? "flex" : "none";
+  // В пачке размер берётся с токена под курсором и уходит всем выделенным.
+  tokenMenuSizeRow.style.display = menuIsLightOnly ? "none" : "flex";
+  tokenMenuSize.value = nearestTokenSizeOption(tokenCells(token, vtt.getScene().grid));
   // "Владелец" — привязать существующий токен к персонажу игрока задним
   // числом (единственный путь после импорта мира, где персонажа надо было бы
   // заново перетащить из панели). Не для токенов-лампочек и декораций.
@@ -1792,6 +1845,7 @@ function applyTokenMenuLockState() {
     tokenMenuLootBtn,
     tokenMenuHiddenRow,
     tokenMenuShapeRow,
+    tokenMenuSizeRow,
     tokenMenuVisionRow,
     tokenMenuVisionRangeField,
     tokenMenuLightRow,
@@ -2111,6 +2165,23 @@ tokenMenuShape.onchange = () => {
   );
 };
 
+function nearestTokenSizeOption(cells) {
+  let best = tokenMenuSize.options[0].value;
+  for (const opt of tokenMenuSize.options) {
+    if (Math.abs(+opt.value - cells) < Math.abs(+best - cells)) best = opt.value;
+  }
+  return best;
+}
+
+tokenMenuSize.onchange = () => {
+  const tokens = vtt.getScene().tokens || {};
+  const cells = +tokenMenuSize.value;
+  for (const id of menuTokenIds) {
+    if (!tokens[id] || tokens[id].lightOnly) continue;
+    document.dispatchEvent(new CustomEvent("vtt:setTokenSize", { detail: { id, cells } }));
+  }
+};
+
 // sendTokenMenuLight — шлёт одни и те же настройки света на каждый токен в
 // menuTokenIds (для одиночного меню это всегда [menuTokenId], для пачечного
 // — весь состав выделения: "Добавить источник света с одними и теми же
@@ -2424,7 +2495,7 @@ async function loadSettingsTab(tab) {
       await renderAppVersion();
       break;
     case "modules":
-      await renderFoundryModules();
+      await Promise.all([renderWorldModules(), renderFoundryModules()]);
       break;
     default:
       // «Стол» — тумблеры приходят со снапшотом сцены; свой запрос только у
@@ -2434,7 +2505,10 @@ async function loadSettingsTab(tab) {
   }
 }
 
-document.getElementById("bugReportBtn").onclick = () => openBugReport();
+document.getElementById("bugReportBtn").onclick = () => {
+  const s = sceneList.find((x) => x.id === viewSceneId);
+  openBugReport({ scene: s ? { name: s.name, url: sceneExportUrl(s.id, false) } : null });
+};
 
 async function renderAppVersion() {
   const el = document.getElementById("appVersion");
@@ -2486,7 +2560,8 @@ function showTutorialHint(key, text, title) {
   showAlert(text, { title });
 }
 
-function runDmTour() {
+async function runDmTour() {
+  await loadSystemProfile();
   startTour(dmTourSteps(), {
     key: TUTORIAL_KEY,
     onFinish: () => setTutorialState("done"),
@@ -2924,6 +2999,102 @@ broadcastRotateBtn.onclick = async () => {
 };
 
 // ---- модули Foundry VTT (раздел "Настройки") ----
+// ---- модули мира (Настройки → Модули) ----
+// Смена системы и включение модулей перезапускают мир: страницы у всех
+// перезагрузятся сами по world_reload (см. ws-reconnect.js).
+const worldSystemSelect = document.getElementById("worldSystemSelect");
+const worldSystemBtn = document.getElementById("worldSystemBtn");
+const worldModulesList = document.getElementById("worldModulesList");
+let worldModulesData = null; // ответ fetchModules
+let worldSystems = []; // ответ fetchSystems
+
+const systemName = (id) => (worldSystems.find((x) => x.id === id) || {}).title || id;
+
+async function renderWorldModules() {
+  try {
+    [worldModulesData, worldSystems] = await Promise.all([fetchModules(), fetchSystems()]);
+  } catch (err) {
+    worldModulesList.innerHTML = `<p class="hint">Ошибка: ${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  drawWorldSystem();
+  drawWorldModules();
+}
+
+function drawWorldSystem() {
+  const world = worldModulesData.world;
+  worldSystemSelect.innerHTML = "";
+  for (const sys of worldSystems) worldSystemSelect.add(new Option(sys.title, sys.id, false, sys.id === world.system));
+  if (!worldSystems.some((x) => x.id === world.system)) {
+    const opt = new Option(`${world.system} — модуль не установлен`, world.system, false, true);
+    opt.disabled = true;
+    worldSystemSelect.add(opt);
+  }
+  worldSystemBtn.disabled = true;
+}
+
+worldSystemSelect.onchange = () => {
+  worldSystemBtn.disabled = !worldModulesData || worldSystemSelect.value === worldModulesData.world.system;
+};
+
+worldSystemBtn.onclick = () => changeWorldSystem(worldSystemSelect.value);
+
+function drawWorldModules() {
+  const { world, modules } = worldModulesData;
+  worldModulesList.innerHTML = "";
+  const content = modules.filter((m) => m.type === "content");
+  const missing = (world.missing || []).filter((id) => id !== world.system);
+  if (!content.length && !missing.length) {
+    worldModulesList.innerHTML = '<p class="hint">Модулей контента на сервере нет.</p>';
+    return;
+  }
+  for (const m of content) {
+    const fits = fitsSystem(m, world.system);
+    const note = fits ? `v${m.version}` : `для системы ${m.systems.map(systemName).join(", ")}`;
+    worldModulesList.appendChild(moduleToggleRow(m.id, m.title, note, world.enabled.includes(m.id), !fits));
+  }
+  for (const id of missing) worldModulesList.appendChild(moduleToggleRow(id, id, "не найден на сервере", true, false));
+}
+
+function moduleToggleRow(id, title, note, on, locked) {
+  const row = document.createElement("div");
+  row.className = "checkbox-row";
+  const label = document.createElement("label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.className = "switch";
+  box.checked = on;
+  box.disabled = locked;
+  box.onchange = () => toggleWorldModule(id, box);
+  const hint = document.createElement("span");
+  hint.className = "hint";
+  hint.textContent = ` — ${note}`;
+  label.append(box, ` ${title}`, hint);
+  row.appendChild(label);
+  return row;
+}
+
+async function toggleWorldModule(id, box) {
+  const world = worldModulesData.world;
+  const ok = await showConfirm(`${box.checked ? "Включить" : "Выключить"} модуль? Мир перезапустится, у всех за столом обновится страница.`, {
+    title: "Модули мира",
+    okLabel: box.checked ? "Включить" : "Выключить",
+  });
+  if (!ok) {
+    box.checked = !box.checked;
+    return;
+  }
+  const next = box.checked ? [...world.enabled, id] : world.enabled.filter((x) => x !== id);
+  try {
+    await setWorldModules(world.id, next);
+  } catch (err) {
+    box.checked = !box.checked;
+    showAlert("Не удалось изменить модули: " + err.message);
+  }
+}
+
+document.getElementById("moduleShowcaseBtn").onclick = () => openModulesShowcase();
+
 // Список того, что ДМ хотя бы раз импортировал в этот мир (см.
 // service.FoundryService.Installed), плюс необязательная проверка новых
 // версий по кнопке (см. checkFoundryModuleUpdates) — сама по себе она не
@@ -3130,12 +3301,12 @@ function pregenPoolRow(p) {
 
   const avatar = document.createElement("div");
   avatar.className = "dmchar-avatar";
-  if (p.avatarUrl) avatar.style.backgroundImage = cssUrl(p.avatarUrl);
+  if (p.avatarUrl) setArtBackground(avatar, p.avatarUrl);
   else avatar.textContent = "—";
 
   const name = document.createElement("div");
   name.className = "dmchar-name";
-  const sub = [p.species, p.class && `${p.class}${p.level ? ` ${p.level} ур.` : ""}`].filter(Boolean).join(", ");
+  const sub = p.subtitle || ""; // по схеме листа или «вид, класс N ур.» (см. api/http: pregenSubtitle)
   // «заготовка» в каждой строке — чтобы её не путали с настоящим персонажем
   // игрока, у которого может быть такое же имя (заготовка — это шаблон листа,
   // персонажа из неё ещё не создали).
@@ -3261,7 +3432,7 @@ function assignedCharRow(c, pregen) {
   handle.innerHTML = icon("grip-vertical", { size: 14 });
   const avatar = document.createElement("div");
   avatar.className = "dmchar-avatar";
-  if (c.avatarUrl) avatar.style.backgroundImage = cssUrl(c.avatarUrl);
+  if (c.avatarUrl) setArtBackground(avatar, c.avatarUrl);
   else avatar.textContent = "—";
   const name = document.createElement("div");
   name.className = "dmchar-name";
@@ -3457,23 +3628,26 @@ sceneCanvasEl.addEventListener("drop", (e) => {
 async function addMonsterToken(monsterId, { x, y }) {
   let m;
   try {
-    m = await fetchMonster(monsterId);
+    [m] = await Promise.all([fetchMonster(monsterId), loadSystemProfile()]);
   } catch (err) {
     showAlert("Не удалось загрузить монстра: " + err.message);
     return;
   }
   counter++;
   const id = "tok-" + Date.now() + "-" + counter;
-  const gridSize = (vtt.getScene().grid && vtt.getScene().grid.size) || 48;
+  const grid = vtt.getScene().grid;
+  const gridSize = (grid && grid.size) || 48;
+  const cells = cardTokenCells(m);
+  const p = snapToGrid(x, y, grid, cells);
   vtt.send({
     type: "add_token",
     token: {
       id,
-      x,
-      y,
+      x: p.x,
+      y: p.y,
       label: m.name,
       image: m.imageUrl || "",
-      size: gridSize / 2,
+      size: (cells * gridSize) / 2,
       shape: "",
       hidden: false,
       monsterId: m.id,
@@ -4365,9 +4539,8 @@ document.addEventListener("vtt:openNoteMarker", async (e) => {
 //   ручного закрытия/открытия.
 window.addEventListener("message", async (e) => {
   if (e.origin !== location.origin || !e.data) return;
-  if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
-  } else if (e.data.type === "beacon:openCombatantCard") {
+  // "beacon:openFloatingWindow" открывает сам floating-window.js.
+  if (e.data.type === "beacon:openCombatantCard") {
     // Клик по бойцу в трекере, вынесенном в плавающее окно (iframe
     // combat-tracker.html): своей колонки у него нет — показываем в нашей
     // (см. combatant-card.js: openCombatantCard).
@@ -4518,7 +4691,7 @@ function openSpellStatusPicker(payload) {
     cb.value = t.id;
     const av = document.createElement("span");
     av.className = "picker-avatar";
-    if (t.image) av.style.backgroundImage = cssUrl(t.image);
+    if (t.image) setArtBackground(av, t.image);
     else av.style.background = t.color || "#555";
     const name = document.createElement("span");
     name.textContent = t.label || "Без имени";
@@ -4614,9 +4787,6 @@ document.addEventListener("vtt:hubState", (e) => {
 
 initItemPicker(document.getElementById("lootHubPicker"), {
   onPick: (item, qty) => vtt.send({ type: "hub_add_item", itemId: item.id, quantity: qty }),
-  // Вшитый каталог прячем, пока в "Настройках" не включён показ встроенных
-  // карточек (см. showBuiltinCardsToggle) — геттер, чекбокс синкается сервером.
-  excludeBuiltin: () => !document.getElementById("showBuiltinCardsToggle").checked,
 });
 
 onPanelOpen("loot", renderLootHub);
@@ -4718,20 +4888,6 @@ combatHighlightActiveToggle.onchange = () => {
   vtt.send({ type: "set_highlight_active_token", highlightActiveToken: combatHighlightActiveToggle.checked });
 };
 
-// showBuiltinCardsToggle / hideLightMarkersToggle — тот же приём: общие тумблеры
-// стола, значение приходит внутри "combat_state" (см. domain.CombatState.
-// ShowBuiltinCards / HideLightMarkers, service.combatPayload). showBuiltinCards
-// правит дерево справочника и пикеры (compendium-menu.js, combat-panel.js,
-// status-palette.js, item-picker хаба лута ниже); hideLightMarkers долетает до
-// слоя токенов через vtt/index.js (см. vtt:combatState там).
-const showBuiltinCardsToggle = document.getElementById("showBuiltinCardsToggle");
-document.addEventListener("vtt:combatState", (e) => {
-  showBuiltinCardsToggle.checked = !!e.detail.showBuiltinCards;
-});
-showBuiltinCardsToggle.onchange = () => {
-  vtt.send({ type: "set_show_builtin_cards", showBuiltinCards: showBuiltinCardsToggle.checked });
-};
-
 // summonAllToggle — тот же приём (см. domain.CombatState.SummonAll):
 // игрокам открывается вся библиотека для призыва; точечно — флагом «Можно
 // призывать» на карточке (pages/bestiary.js).
@@ -4819,6 +4975,8 @@ hidePlayerDrawingsToggle.onchange = () => {
   vtt.send({ type: "set_hide_player_drawings", hidePlayerDrawings: hidePlayerDrawingsToggle.checked });
 };
 
+// hideLightMarkersToggle — общий тумблер стола (см. domain.CombatState.
+// HideLightMarkers); до слоя токенов долетает через vtt/index.js.
 const hideLightMarkersToggle = document.getElementById("hideLightMarkersToggle");
 document.addEventListener("vtt:combatState", (e) => {
   hideLightMarkersToggle.checked = e.detail.hideLightMarkers !== false;
@@ -5113,6 +5271,9 @@ for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-
 }
 attachTooltip(railToolsBtn, () => (toolsFlyoutOpen ? null : RAIL_HELP.tools));
 attachTooltip(document.getElementById("journalBtn"), RAIL_HELP.journal);
+attachTooltip(document.getElementById("screenBtn"), RAIL_HELP.screen);
+attachTooltip(document.getElementById("sessionsBtn"), RAIL_HELP.sessions);
+attachTooltip(document.getElementById("graphBtn"), RAIL_HELP.graph);
 attachTooltip(railMoreBtn, () => (railMenu.hidden ? RAIL_HELP.more : null));
 
 // ---- ширина панели: тянется мышью за #panelResizer ----
@@ -6247,6 +6408,23 @@ fGridOpacity.oninput = () => {
 gridEditorBtn.onclick = () => {
   closeSidePanel();
   document.dispatchEvent(new CustomEvent("vtt:setTool", { detail: "grid-edit" }));
+};
+
+// ---- экспорт / импорт сцены файлом (см. handleSceneExport) ----
+document.getElementById("sceneExportBtn").onclick = () => downloadFile(sceneExportUrl(settingsSceneId));
+
+const sceneImportInput = document.getElementById("sceneImportInput");
+document.getElementById("sceneImportBtn").onclick = () => sceneImportInput.click();
+sceneImportInput.onchange = async () => {
+  const file = sceneImportInput.files[0];
+  sceneImportInput.value = "";
+  if (!file) return;
+  try {
+    const s = await importScene(file);
+    showAlert(`Сцена «${s.name}» добавлена в конец списка.`, { title: "Импорт сцены" });
+  } catch (err) {
+    showAlert(err.message, { title: "Импорт сцены" });
+  }
 };
 
 // ---- удаление / сохранение (сцена, чьё подменю открыто) ----

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/schema"
 )
 
 // ---- призыв существ игроком ----
@@ -37,7 +38,9 @@ type summonable struct {
 	Name     string `json:"name"`
 	ImageURL string `json:"imageUrl,omitempty"`
 	Size     string `json:"size,omitempty"`
-	CR       string `json:"cr,omitempty"`
+	// Subtitle — короткая подпись: по схеме существа системы мира
+	// (list.subtitle), у старого статблока D&D — «ПО 1/2».
+	Subtitle string `json:"subtitle,omitempty"`
 }
 
 // summonableMonsters — что игроку можно призвать сейчас.
@@ -50,24 +53,19 @@ func (r *Room) summonableMonsters() []summonable {
 		return nil
 	}
 	out := make([]summonable, 0)
+	sch := r.schemaFor(schema.KindMonster)
 	for _, m := range list {
 		if !r.canSummon(m) {
 			continue
 		}
-		out = append(out, summonable{ID: m.ID, Name: m.Name, ImageURL: m.ImageURL, Size: m.Size, CR: m.CR})
+		out = append(out, summonable{ID: m.ID, Name: m.Name, ImageURL: m.ImageURL, Size: m.Extra.String("size"), Subtitle: sch.Subtitle(m)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
 // canSummon — доступно игроку: по тумблеру стола либо по флагу карточки.
-// Встроенный каталог при этом подчиняется своему тумблеру
-// (CombatState.ShowBuiltinCards): скрыт у ДМ — скрыт и в призыве, иначе у
-// игрока было бы больше карточек, чем у ведущего.
 func (r *Room) canSummon(m *domain.Monster) bool {
-	if m.System && !r.combat.ShowBuiltinCards {
-		return false
-	}
 	return r.combat.SummonAll || m.Summonable
 }
 

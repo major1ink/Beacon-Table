@@ -41,6 +41,10 @@ import { openFloatingWindow } from "../floating-window.js";
 import { icon } from "../icons.js";
 import { isGM } from "../roles.js";
 import { initFullscreenButton } from "../fullscreen.js";
+import { compileSchema } from "../schema-formula.js";
+import { cardSubtitle } from "../schema-list.js";
+import { compactStats, coreSummary } from "../schema-summary.js";
+import { loadSchemas, schemaFor } from "../schemas.js";
 
 const editorRoot = document.getElementById("editorRoot");
 const statusEl = document.getElementById("status");
@@ -105,7 +109,8 @@ function renderNote(element) {
     createElement("div", { className: "board-note-title", key: "t" }, title),
     html
       ? createElement("div", {
-          className: "board-note-body",
+          // note-render — оформление блока связей и врезок из theme.css.
+          className: "board-note-body note-render",
           key: "b",
           dangerouslySetInnerHTML: { __html: html },
         })
@@ -153,31 +158,34 @@ async function loadCard(card, force = false) {
   editor?.repaint();
 }
 
-function abilityMod(score) {
-  const n = Math.floor(((score || 0) - 10) / 2);
-  return n >= 0 ? "+" + n : String(n);
+// compiledSchema — схема вида kind системы мира, разобранная один раз.
+const compiledSchemas = new Map();
+function compiledSchema(kind) {
+  const s = schemaFor(kind);
+  const got = compiledSchemas.get(kind);
+  if (got && got.schema === s) return got;
+  const c = compileSchema(s);
+  compiledSchemas.set(kind, c);
+  return c;
 }
 
-const ABILITIES = [
-  ["str", "Сил"],
-  ["dex", "Лов"],
-  ["con", "Тел"],
-  ["int", "Инт"],
-  ["wis", "Муд"],
-  ["cha", "Хар"],
-];
+// MAX_TILES — сколько плиток характеристик помещается на карточку доски.
+const MAX_TILES = 12;
 
-function abilitiesRow(abilities) {
+// schemaTiles — плитки характеристик по схеме (schema-summary.js:
+// compactStats): свободные характеристики и поля с коротким названием.
+function schemaTiles(compiled, data) {
+  const tiles = compactStats(compiled, data, []).slice(0, MAX_TILES);
+  if (!tiles.length) return null;
   return createElement(
     "div",
-    { className: "board-card-abilities", key: "ab" },
-    ABILITIES.map(([k, label]) => {
-      const v = (abilities && abilities[k]) || 10;
-      return createElement("div", { className: "board-card-ability", key: k }, [
-        createElement("span", { className: "board-card-ability-label", key: "l" }, label),
-        createElement("span", { key: "v" }, v + " (" + abilityMod(v) + ")"),
-      ]);
-    })
+    { className: "board-card-abilities board-card-abilities-free", key: "ab" },
+    tiles.map((t, i) =>
+      createElement("div", { className: "board-card-ability", key: i }, [
+        createElement("span", { className: "board-card-ability-label", key: "l", title: t.label }, t.label),
+        createElement("span", { key: "v" }, t.note ? t.value + " (" + t.note + ")" : t.value),
+      ])
+    )
   );
 }
 
@@ -256,27 +264,28 @@ function renderMonsterCard(card) {
   }
   if (got.error) return cardMessage("monster", "Монстр недоступен: " + got.error);
   const m = got.data;
-  const subtitle = [m.size, m.type].filter(Boolean).join(" ") + (m.alignment ? ", " + m.alignment : "");
-  const hp = m.hp ? String(m.hp) + (m.hitDice ? " (" + m.hitDice + ")" : "") : "—";
-  const ac = m.ac ? String(m.ac) + (m.acNote ? " (" + m.acNote + ")" : "") : "—";
+  return renderSchemaMonsterCard(card, m, compiledSchema("monster"));
+}
+
+// renderSchemaMonsterCard — существо по схеме системы: подпись из
+// list.subtitle, защита/хиты/скорость — общие поля ядра, плитки —
+// характеристики схемы.
+function renderSchemaMonsterCard(card, m, compiled) {
+  const core = coreSummary(compiled, m, []);
   return cardShell("monster", [
     cardHead({
       image: m.imageUrl,
       name: m.name,
-      subtitle,
+      subtitle: cardSubtitle(compiled, m),
       onOpen: () => openMonster(card.id, m.name),
-      openTitle: "Открыть статблок",
+      openTitle: "Открыть карточку",
     }),
     createElement("div", { className: "board-card-stats", key: "stats" }, [
-      statCell("КД", ac, "ac"),
-      statCell("Хиты", hp, "hp"),
-      statCell("Скорость", m.speed || "—", "spd"),
+      statCell("Защита", core.ac || "—", "ac"),
+      statCell("Хиты", core.hpMax || "—", "hp"),
+      statCell("Скорость", core.speed || "—", "spd"),
     ]),
-    abilitiesRow(m.abilities),
-    createElement("div", { className: "board-card-foot", key: "foot" }, [
-      createElement("span", { key: "cr" }, "Опасность " + (m.cr || "—")),
-      m.proficiencyBonus ? createElement("span", { key: "pb" }, "Мастерство +" + m.proficiencyBonus) : null,
-    ]),
+    schemaTiles(compiled, m),
     monsterControls(card, m),
   ]);
 }
@@ -286,7 +295,7 @@ function renderMonsterCard(card) {
 function monsterControls(card, m) {
   if (!gm) return null;
   const out = [];
-  if (hasHost) {
+  if (hasHost()) {
     out.push(
       cardButton({ key: "map", icon: "map", label: "На карту", title: "Токен в центр текущего вида", onClick: () => askHost({ type: "beacon:placeMonster", id: card.id }) }),
       cardButton({ key: "fight", icon: "sword", label: "В бой", title: "Добавить в трекер инициативы", onClick: () => askHost({ type: "beacon:addCombatant", monsterId: card.id }) })
@@ -305,14 +314,19 @@ function renderCharacterCard(card) {
   if (got.error) return cardMessage("character", "Лист недоступен: " + got.error);
   const c = got.data;
   const sheet = c.sheet || {};
-  const info = sheet.info || {};
-  const combat = sheet.combat || {};
-  const who = [info.class, info.level ? info.level + " ур." : ""].filter(Boolean).join(" ");
-  const kin = info.species || info.race || "";
-  const player = info.playerName || c.accountUsername || "";
-  const subtitle = [who, kin].filter(Boolean).join(" · ") + (player ? " — " + player : "");
-  let hp = combat.hpMax ? (combat.hpCurrent || 0) + " / " + combat.hpMax : "—";
-  if (combat.hpTemp) hp += " +" + combat.hpTemp;
+  return renderSchemaCharacterCard(card, c, sheet, compiledSchema("sheet"));
+}
+
+// renderSchemaCharacterCard — персонаж по схеме листа: подпись из
+// list.subtitle листа и имя игрока, хиты «сейчас / макс.», защита и
+// скорость — общие поля ядра (без модификаторов предметов и состояний —
+// их доска не знает), плитки — характеристики схемы.
+function renderSchemaCharacterCard(card, c, sheet, compiled) {
+  const core = coreSummary(compiled, sheet, []);
+  const player = (sheet.info && sheet.info.playerName) || c.accountUsername || "";
+  const sub = cardSubtitle(compiled, sheet);
+  const subtitle = sub + (player ? (sub ? " — " : "") + player : "");
+  const hp = core.hpMax ? (core.hp || "0") + " / " + core.hpMax : core.hp || "—";
   return cardShell("character", [
     cardHead({
       image: c.avatarUrl,
@@ -322,11 +336,11 @@ function renderCharacterCard(card) {
       openTitle: "Открыть лист персонажа",
     }),
     createElement("div", { className: "board-card-stats", key: "stats" }, [
-      statCell("КД", combat.ac ? String(combat.ac) : "—", "ac"),
+      statCell("Защита", core.ac || "—", "ac"),
       statCell("Хиты", hp, "hp"),
-      statCell("Скорость", combat.speed ? combat.speed + " фт." : "—", "spd"),
+      statCell("Скорость", core.speed || "—", "spd"),
     ]),
-    abilitiesRow(sheet.abilities),
+    schemaTiles(compiled, sheet),
   ]);
 }
 
@@ -346,7 +360,7 @@ function stopOnTable() {
 
 // askHost — просьба столу (dm.html); без стола и не у ДМ молча ничего.
 function askHost(msg) {
-  if (!gm || !hasHost) return;
+  if (!gm || !hasHost()) return;
   hostWindow().postMessage(msg, location.origin);
 }
 
@@ -358,7 +372,7 @@ function renderAudioCard(card) {
   const dead = deadAudio.has(card.url);
   if (dead) tags.push("файла нет в загрузках");
   const controls = [];
-  if (gm && hasHost && !dead) {
+  if (gm && hasHost() && !dead) {
     controls.push(
       cardButton({ key: "play", icon: "play", label: card.sfx ? "Запустить" : "На стол", title: card.sfx ? "Проиграть всем за столом" : "Включить всем за столом", onClick: () => playOnTable(card) })
     );
@@ -437,11 +451,11 @@ function sceneName(id) {
 // beacon:switchSceneId → view_scene): игроки остаются на своей, поэтому
 // метка «на столе сейчас» (current — активная для стола) не трогается.
 function goToScene(id) {
-  if (!gm || !hasHost) return;
+  if (!gm || !hasHost()) return;
   askHost({ type: "beacon:switchSceneId", id });
 }
 
-const canTeleport = () => gm && hasHost;
+const canTeleport = () => gm && hasHost();
 
 // sceneChip — сосед в телепорте: кнопка у ДМ за столом, иначе просто имя.
 function sceneChip(id) {
@@ -582,13 +596,14 @@ function pickRowText(row, main, meta) {
 
 async function pickMonster() {
   const list = await fetchBestiary().catch(() => []);
+  const compiled = compiledSchema("monster");
+  const sub = (m) => cardSubtitle(compiled, m);
   const picked = await pickFromList({
     title: "Монстр на доску",
     okLabel: "Вставить",
     items: list,
     empty: "Бестиарий пуст — заведи монстра или импортируй модуль.",
-    render: (row, m) =>
-      pickRowText(row, m.name, [m.type, m.cr ? "опасность " + m.cr : ""].filter(Boolean).join(" · ")),
+    render: (row, m) => pickRowText(row, m.name, sub(m)),
   });
   return picked ? { link: monsterLink(picked.id), ...CARD_SIZE.monster } : null;
 }
@@ -658,11 +673,13 @@ function hostWindow() {
   return window.parent;
 }
 
-const hasHost = hostWindow() !== window;
+// hasHost — есть ли стол, которому слать просьбы. У вынесенного окна
+// десктопа opener нет, просьбы столу передаёт десктоп (см. floating-window.js).
+const hasHost = () => hostWindow() !== window || !!(window.beaconDesktop && window.beaconDesktop.toTable);
 
 // openWindow — окном стола, иначе карточка встала бы внутрь рамки доски.
 function openWindow(spec) {
-  if (hasHost) {
+  if (hostWindow() !== window) {
     hostWindow().postMessage({ type: "beacon:openFloatingWindow", ...spec }, location.origin);
   } else {
     openFloatingWindow(spec);
@@ -897,6 +914,9 @@ async function pickImage() {
   // Журнал нужен и на чтение ссылок, и на их раздачу. Не приехал — ссылки
   // просто не разрешатся по названию, доска от этого не ломается.
   entries = await fetchJournal().catch(() => []);
+  // Схемы системы мира: по ним рисуются карточки существ и персонажей (без
+  // схем — старый вид D&D). Ошибка загрузки — тоже старый вид.
+  await loadSchemas();
 
   statusEl.style.display = "none";
   editor = mountBoardEditor(editorRoot, {

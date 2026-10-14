@@ -14,17 +14,13 @@ package domain
 // (голый NPC-токен) они начинаются нулями — ДМ либо выставляет их вручную,
 // либо просто не пользуется этим полем для данного бойца.
 //
-// DeathSaveSuccess/DeathSaveFail — спасброски от смерти (0-3 каждое), тоже
-// правятся вручную ДМ прямо в трекере ("set_combatant_death_save"), как
-// чекбоксы в Foundry — сервер сам кубик не кидает, только хранит отметки и
-// разруливает исход по 3-й отметке. Имеют смысл только для бойца с
-// CharacterID (игровой персонаж): у монстра/безликого NPC спасбросков от
-// смерти не бывает — при HPCurrent<=0 он умирает сразу (см.
-// service.Room.killMonsterCombatant), а у персонажа при HPCurrent<=0 ждём
-// эти отметки. 3-й успех — персонаж стабилизируется и приходит в себя с 1
-// HP, отметки сбрасываются, боец остаётся в инициативе; 3-й провал —
-// персонаж умирает, убирается из инициативы и его токен помечается Dead,
-// как у монстра (см. service.Room.handleSetCombatantDeathSave).
+// DeathSaveSuccess/DeathSaveFail — спасброски от смерти, тоже правятся
+// вручную ДМ прямо в трекере ("set_combatant_death_save"), как чекбоксы в
+// Foundry — сервер сам кубик не кидает, только хранит отметки и разруливает
+// исход. Имеют смысл, только если правила системы велят этому бойцу на 0
+// хитов бросать спасброски (CombatRules.ZeroHP, ZeroHPDeathSaves); сколько
+// нужно успехов и провалов и со скольких хитов боец приходит в себя, задаёт
+// DeathSavesRule (см. service.Room.handleSetCombatantDeathSave).
 type Combatant struct {
 	ID          string  `json:"id"`
 	TokenID     string  `json:"tokenId,omitempty"`
@@ -52,8 +48,8 @@ type Combatant struct {
 	// service.sortedCombatantIDs) — иначе порядок "кто вперёд" плавал бы от
 	// перезапуска к перезапуску (итерация map недетерминирована).
 	Seq              int64 `json:"seq,omitempty"`
-	DeathSaveSuccess int   `json:"deathSaveSuccess,omitempty"` // 0-3
-	DeathSaveFail    int   `json:"deathSaveFail,omitempty"`    // 0-3
+	DeathSaveSuccess int   `json:"deathSaveSuccess,omitempty"`
+	DeathSaveFail    int   `json:"deathSaveFail,omitempty"`
 	// Statuses — наложенные состояния бойца (см. domain.AppliedStatus),
 	// НО только для бойца БЕЗ токена на сцене: добавленного из бестиария/
 	// списка персонажей через «+ Добавить», которого ДМ ещё не вытащил на
@@ -99,13 +95,6 @@ type Combatant struct {
 // всем ролям — подсказывает не только ДМ, но и игрокам/TV, чей ход прямо
 // сейчас на самой карте, а не только в верхнем оверлее.
 //
-// ShowBuiltinCards — общий тумблер стола ("Настройки"): показывать ли в
-// справочнике и пикерах вшитый каталог "из коробки" (записи System:true, см.
-// internal/repository/*/system.go). bool, дефолт false — на новых и на всех
-// ранее заведённых столах встроенный каталог по умолчанию скрыт, ДМ включает
-// его вручную. Значение не секрет — уходит всем ролям (дерево справочника
-// одно на всех, см. web/src/compendium-menu.js).
-//
 // HideLightMarkers — общий тумблер стола ("Настройки"): прятать ли у ДМ
 // иконки-лампочки токенов света (Token.LightOnly) вне открытого раздела
 // "Освещение". *bool по тому же принципу, что HighlightActiveToken: nil (в
@@ -120,7 +109,6 @@ type CombatState struct {
 	ShowHP               bool                  `json:"showHp,omitempty"`
 	LootingEnabled       bool                  `json:"lootingEnabled,omitempty"`
 	HighlightActiveToken *bool                 `json:"highlightActiveToken,omitempty"`
-	ShowBuiltinCards     bool                  `json:"showBuiltinCards,omitempty"`
 	HideLightMarkers     *bool                 `json:"hideLightMarkers,omitempty"`
 	// PlayerDrawingEnabled — могут ли игроки рисовать на слое пометок (см.
 	// domain.Drawing, service.Room.handleAddDrawing). Выключено по умолчанию.

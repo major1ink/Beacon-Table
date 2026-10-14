@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"beacon-table/internal/app"
+	"beacon-table/internal/modcatalog"
 	"beacon-table/internal/service"
 )
 
@@ -23,6 +24,9 @@ type API struct {
 	// nil — ручки отвечают 503 (тесты).
 	Tutorial  service.TutorialService
 	Companies *app.CompanyManager
+	// Catalog — витрина модулей (см. module_catalog_handlers.go). nil — ручки
+	// отвечают 503 (тесты).
+	Catalog *modcatalog.Catalog
 	// SecureCookies — сервер стоит за HTTPS-прокси (--behind-proxy), значит
 	// cookie можно и нужно помечать Secure: браузер перестанет отправлять их
 	// по незашифрованному соединению. На голом HTTP флаг оставляют
@@ -140,6 +144,23 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	// см. company_handlers.go / app.CompanyManager.ExportWorld/ImportWorld.
 	mux.HandleFunc("GET /api/companies/{id}/export", a.handleCompanyExport)
 	mux.HandleFunc("POST /api/companies/import", a.handleCompanyImport)
+	// Модули контента — ставит, удаляет и включает в мирах владелец, см.
+	// module_handlers.go.
+	mux.HandleFunc("GET /api/systems", a.handleSystemsList)
+	mux.HandleFunc("GET /api/modules", a.handleModulesList)
+	mux.HandleFunc("GET /system-theme.css", a.handleSystemTheme)
+	mux.HandleFunc("GET /api/module-catalog", a.handleCatalogList)
+	mux.HandleFunc("GET /api/module-catalog/{id}/summary", a.handleCatalogSummary)
+	mux.HandleFunc("POST /api/module-catalog/install", a.handleCatalogInstall)
+	mux.HandleFunc("POST /api/module-catalog/install-url", a.handleCatalogInstallURL)
+	mux.HandleFunc("GET /api/module-sources", a.handleSourcesGet)
+	mux.HandleFunc("GET /api/companies/{id}/requirements", a.handleWorldRequirements)
+	mux.HandleFunc("PUT /api/module-sources", a.handleSourcesSet)
+	mux.HandleFunc("POST /api/modules", a.handleModuleInstall)
+	mux.HandleFunc("DELETE /api/modules/{id}", a.handleModuleDelete)
+	mux.HandleFunc("GET /api/companies/{id}/modules", a.handleWorldModulesGet)
+	mux.HandleFunc("PUT /api/companies/{id}/modules", a.handleWorldModulesSet)
+	mux.HandleFunc("PUT /api/companies/{id}/system", a.handleWorldSystemSet)
 
 	mux.HandleFunc("GET /api/characters", a.handleCharactersList)
 	mux.HandleFunc("POST /api/characters", a.handleCharacterCreate)
@@ -197,6 +218,10 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/journal", a.handleJournalList)
 	mux.HandleFunc("POST /api/journal", a.handleJournalCreate)
 	mux.HandleFunc("GET /api/journal/members", a.handleJournalMembers)
+	mux.HandleFunc("GET /api/journal/graph", a.handleJournalGraph)
+	mux.HandleFunc("GET /api/sessions", a.handleSessionList)
+	mux.HandleFunc("GET /api/sessions/{id}", a.handleSessionEvents)
+	mux.HandleFunc("POST /api/sessions/{id}/summary", a.handleSessionSummary)
 	mux.HandleFunc("GET /api/journal/{id}", a.handleJournalGet)
 	mux.HandleFunc("PUT /api/journal/{id}", a.handleJournalUpdate)
 	mux.HandleFunc("PUT /api/journal/{id}/access", a.handleJournalAccess)
@@ -215,9 +240,14 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/board-images", a.handleBoardImages)
 	// Сцены стола для карточек на доске (см. handleSceneList).
 	mux.HandleFunc("GET /api/scenes", a.handleSceneList)
+	mux.HandleFunc("GET /api/scenes/{id}/export", a.handleSceneExport)
+	mux.HandleFunc("POST /api/scenes/import", a.handleSceneImport)
 	mux.HandleFunc("PUT /api/boards/{id}/name", a.handleBoardRename)
 	mux.HandleFunc("PUT /api/boards/{id}/access", a.handleBoardAccess)
 	mux.HandleFunc("DELETE /api/boards/{id}", a.handleBoardDelete)
+
+	mux.HandleFunc("GET /api/screen", a.handleScreenGet)
+	mux.HandleFunc("PUT /api/screen", a.handleScreenSave)
 
 	mux.HandleFunc("GET /api/journal-folders", a.handleJournalFoldersList)
 	mux.HandleFunc("POST /api/journal-folders", a.handleJournalFolderCreate)
@@ -249,6 +279,8 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/references/{id}", a.handleReferenceDelete)
 
 	mux.HandleFunc("GET /api/modifier-targets", a.handleModifierTargets)
+	mux.HandleFunc("GET /api/system", a.handleSystemProfile)
+	mux.HandleFunc("GET /api/schemas", a.handleSchemas)
 
 	// Импорт компендиумов Foundry VTT по ссылке на манифест — только ДМ,
 	// см. foundry_handlers.go.

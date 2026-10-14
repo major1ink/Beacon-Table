@@ -275,7 +275,7 @@ export function createTokensLayer(ctx) {
     lightIcon.visible = false;
     // deadIcon — "кости" вместо арта/кружка, когда HP бойца в трекере
     // инициативы дошло до нуля (только у монстров/безликих NPC —
-    // domain.Token.Dead, см. room.go: killMonsterCombatant). Тот же приём,
+    // domain.Token.Dead, см. room.go: killCombatant). Тот же приём,
     // что и lightIcon: готовый эмодзи вместо картинки, никаких новых
     // ассетов заводить не нужно.
     const deadIcon = new Text({ text: "💀", style: { fontSize: 20, fontFamily: "sans-serif", align: "center" } });

@@ -141,8 +141,9 @@
     .board-card-abilities {
       display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; text-align: center;
     }
-    .board-card-ability { display: flex; flex-direction: column; white-space: nowrap; }
-    .board-card-foot { display: flex; gap: 12px; color: var(--text-dim); font-size: 11px; }
+    .board-card-abilities-free { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
+    .board-card-ability { display: flex; flex-direction: column; white-space: nowrap; min-width: 0; }
+    .board-card-abilities-free .board-card-ability-label { overflow: hidden; text-overflow: ellipsis; }
     .board-card-icon { display: inline-flex; align-items: center; flex: 0 0 auto; }
     .board-card-audio .board-card-head > .board-card-icon { width: 28px; height: 28px; justify-content: center; }
     .board-card-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -187,6 +188,7 @@
       .image-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); max-height: 46dvh; }
     }
   </style>
+  <link rel="stylesheet" href="/system-theme.css" />
 </head>
 <body>
   <div id="topbar">

@@ -8,10 +8,10 @@ import { el } from "./card-shell.js";
 import { enhanceRolls } from "./inline-rolls.js";
 import { applyModifiers, TARGET_AC, TARGET_SPEED } from "./modifiers.js";
 import { glyphNode } from "./condition-glyphs.js";
-import { itemGlyphName } from "./item-glyph.js";
+import { formatWeight } from "./system-profile.js";
 
 // renderInventoryPreview — узел с update(); stand — select из stand.js.
-export function renderInventoryPreview(item, { stand, sendRoll }) {
+export function renderInventoryPreview(item, { stand, sendRoll, glyphName }) {
   const root = el("div", { class: "ip" });
   let equipped = true;
   root.update = () => {
@@ -23,7 +23,7 @@ export function renderInventoryPreview(item, { stand, sendRoll }) {
       equipped = toggle.checked;
       root.update();
     });
-    const icon = item.imageUrl ? el("img", { src: item.imageUrl, alt: "" }) : glyphNode(itemGlyphName(item), "");
+    const icon = item.imageUrl ? el("img", { src: item.imageUrl, alt: "" }) : glyphNode(glyphName(), "");
     const kv = [];
     if (who) {
       for (const [target, label] of [
@@ -46,10 +46,10 @@ export function renderInventoryPreview(item, { stand, sendRoll }) {
     root.append(
       el("span", { class: "card-lbl", text: who ? "В инвентаре у " + who.name.split(",")[0] : "В инвентаре" }),
       el("div", { class: "ip-inv" }, [
-        el("div", { class: "ip-row" }, [el("span", { class: "ip-ic" }, [icon]), el("span", { class: "ip-nm", text: item.name || "Без имени" }), el("span", { class: "ip-w", text: "×1 · " + (item.weightLb || 0) + " фнт" })]),
+        el("div", { class: "ip-row" }, [el("span", { class: "ip-ic" }, [icon]), el("span", { class: "ip-nm", text: item.name || "Без имени" }), el("span", { class: "ip-w", text: "×1 · " + formatWeight(item.weightLb) })]),
         el("label", { class: "ip-eq" }, [toggle, "надето"]),
       ]),
-      kv.length ? el("div", { class: "ip-kv" }, kv) : null,
+      ...(kv.length ? [el("div", { class: "ip-kv" }, kv)] : []),
       el("span", { class: "card-aside-note", text: equipped ? "Так игрок увидит предмет на листе; изменения действуют, пока стоит «надето»." : "Снято — изменения из «Пока надет» не действуют." })
     );
   };

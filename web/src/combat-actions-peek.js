@@ -17,6 +17,10 @@
 // бестиарии. Ссылки .catalog-ref (@UUID из модулей Foundry) тоже живые —
 // wireCatalogLinks, как и везде.
 //
+// Попап собирается по схеме существа (internal/schema): плитки
+// характеристик и поля боевой части (schema-summary.js: compactStats,
+// peekSections), кубы — кнопками.
+//
 // Своей истины модуль не держит: статблок тянется с сервера по monsterId и
 // кэшируется на время жизни страницы — правка статблока в соседнем окне
 // посреди боя это редкость, а лишний запрос на каждое открытие попапа — нет.
@@ -30,6 +34,11 @@ import { icon } from "./icons.js";
 import { enhanceRolls } from "./inline-rolls.js";
 import { renderNoteHtml } from "./notes/markdown.js";
 import { withRollMode } from "./roll-mode.js";
+import { compileSchema, createEvaluator } from "./schema-formula.js";
+import { getPath } from "./schema-layout.js";
+import { cardSubtitle, displayValue } from "./schema-list.js";
+import { compactStats, peekSections } from "./schema-summary.js";
+import { loadSchemas, schemaFor } from "./schemas.js";
 
 const CSS = `
 .actions-peek {
@@ -48,13 +57,21 @@ const CSS = `
 .actions-peek-head button:hover { color: var(--text); }
 .actions-peek-meta { font-size: 11.5px; opacity: 0.75; }
 .actions-peek-meta strong { opacity: 0.7; font-weight: 600; }
-.actions-peek-abilities { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
 .actions-peek-ability {
   display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 0;
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
 }
 .actions-peek-ability span:first-child { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.55; }
 .actions-peek-ability span:last-child { font-size: 11.5px; font-weight: 700; }
+.actions-peek-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; }
+.actions-peek-stats .actions-peek-ability span:first-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.actions-peek-rolls { display: flex; flex-wrap: wrap; gap: 4px; }
+.actions-peek-roll {
+  padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface);
+  color: var(--text); font-size: 11.5px; cursor: pointer;
+}
+.actions-peek-roll b { color: var(--accent); margin-left: 4px; }
+.actions-peek-roll:hover:not(:disabled) { border-color: var(--accent); }
 .actions-peek-title {
   font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.55;
   border-bottom: 1px solid var(--border); padding-bottom: 2px; margin-top: 2px;
@@ -124,36 +141,6 @@ export function isActionsPeekOpen(combatantId) {
   return !!openPeek && (!combatantId || openPeek.combatantId === combatantId);
 }
 
-const ABILITY_LABELS = [
-  ["str", "СИЛ"],
-  ["dex", "ЛОВ"],
-  ["con", "ТЕЛ"],
-  ["int", "ИНТ"],
-  ["wis", "МДР"],
-  ["cha", "ХАР"],
-];
-
-function fmtMod(n) {
-  return n >= 0 ? "+" + n : String(n);
-}
-
-// BLOCKS — что и в каком порядке показываем. Ровно боевая часть статблока:
-// описание/лор сюда не идёт (за ним — полная карточка), заклинания и
-// инвентарь тоже: их рендер живёт в bestiary.js и тянет свои запросы.
-const BLOCKS = [
-  ["Особенности", (m) => m.traits],
-  ["Действия", (m) => m.actions],
-  ["Бонусные действия", (m) => m.bonusActions],
-  ["Реакции", (m) => m.reactions],
-  // Вступление к легендарным ("может совершить 3 легендарных действия…")
-  // склеиваем с самими действиями ПУСТОЙ СТРОКОЙ, а не оборачиваем в <p>:
-  // после HTML-блока marked считает следующие строки его продолжением и
-  // markdown в них уже не разбирает — жирные названия действий остались бы
-  // текстом "**Рывок.**".
-  ["Легендарные действия", (m) => [m.legendaryActionsIntro, m.legendaryActions].filter(Boolean).join("\n\n")],
-  ["Логово", (m) => m.lairActions],
-];
-
 // openActionsPeek — показать попап.
 //
 //   combatant — боец из combat_state (нужны monsterId и name);
@@ -185,7 +172,7 @@ export async function openActionsPeek({ x, y, combatant, send, pinned = false })
 
   let monster;
   try {
-    monster = await loadMonster(combatant.monsterId);
+    [monster] = await Promise.all([loadMonster(combatant.monsterId), loadSchemas()]);
   } catch (err) {
     if (!openPeek || openPeek.el !== el) return;
     el.textContent = "Не удалось загрузить статблок: " + err.message;
@@ -205,6 +192,18 @@ function position(el, x, y) {
   el.style.top = Math.max(8, Math.min(y, window.innerHeight - h - 8)) + "px";
 }
 
+// compiledMonster — схема существа системы мира, разобранная один раз.
+let compiledFor = null;
+let compiledCache = null;
+function compiledMonster() {
+  const schema = schemaFor("monster");
+  if (schema !== compiledFor) {
+    compiledFor = schema;
+    compiledCache = schema ? compileSchema(schema) : null;
+  }
+  return compiledCache;
+}
+
 function render(el, monster, combatant, send, pinned) {
   el.textContent = "";
 
@@ -215,12 +214,18 @@ function render(el, monster, combatant, send, pinned) {
     send(withRollMode({ type: "roll_dice", formula, label: full }));
   };
 
+  const compiled = compiledMonster();
+  el.appendChild(renderHead(combatant, cardSubtitle(compiled, monster), pinned));
+  renderSchemaBody(el, compiled, monster, sendRoll);
+}
+
+function renderHead(combatant, subtitle, pinned) {
   const head = document.createElement("div");
   head.className = "actions-peek-head";
   const name = document.createElement("div");
   name.className = "actions-peek-name";
   name.textContent = combatant.name;
-  name.title = [monster.size, monster.type, monster.cr ? "ПО " + monster.cr : ""].filter(Boolean).join(", ");
+  name.title = subtitle;
 
   head.appendChild(name);
   if (pinned) {
@@ -251,68 +256,139 @@ function render(el, monster, combatant, send, pinned) {
 
   head.appendChild(fullBtn);
   head.appendChild(closeBtn);
-  el.appendChild(head);
+  return head;
+}
 
-  // Строки, которых нет в карточке бойца трекера (КД/HP/инициатива там уже
-  // есть, и дублировать их незачем): скорость, чувства, спасброски, навыки.
-  for (const [label, value] of [
-    ["Скорость", monster.speed],
-    ["Чувства", monster.senses],
-    ["Спасброски", monster.savingThrows],
-    ["Навыки", monster.skills],
-    ["Иммунитет к состояниям", monster.conditionImmunities],
-    ["Сопротивление урону", monster.damageResistances],
-    ["Иммунитет к урону", monster.damageImmunities],
-    ["Уязвимость к урону", monster.damageVulnerabilities],
-  ]) {
-    if (!value || !String(value).trim()) continue;
-    const line = document.createElement("div");
-    line.className = "actions-peek-meta";
-    const strong = document.createElement("strong");
-    strong.textContent = label + ": ";
-    line.append(strong, String(value));
-    el.appendChild(line);
-    enhanceRolls(line, sendRoll); // "+5" в спасбросках/навыках — тоже бросок
+const EMPTY_HINT = "В статблоке не заполнены действия — открой карточку целиком и допиши.";
+
+function hintLine(text) {
+  const node = document.createElement("div");
+  node.className = "actions-peek-hint";
+  node.textContent = text;
+  return node;
+}
+
+// metaLine — «Метка: значение» мелкой строкой; модификаторы и формулы в
+// значении кликабельны ("+5" в спасбросках/навыках — тоже бросок).
+function metaLine(label, value, sendRoll) {
+  const line = document.createElement("div");
+  line.className = "actions-peek-meta";
+  const strong = document.createElement("strong");
+  strong.textContent = label + ": ";
+  line.append(strong, String(value));
+  enhanceRolls(line, sendRoll);
+  return line;
+}
+
+function titleLine(text) {
+  const h = document.createElement("div");
+  h.className = "actions-peek-title";
+  h.textContent = text;
+  return h;
+}
+
+function textBlock(raw, sendRoll) {
+  const body = document.createElement("div");
+  body.className = "actions-peek-block";
+  body.innerHTML = renderNoteHtml(raw);
+  enhanceRolls(body, sendRoll);
+  wireCatalogLinks(body);
+  return body;
+}
+
+function abilityCell(label, value) {
+  const cell = document.createElement("div");
+  cell.className = "actions-peek-ability";
+  const l = document.createElement("span");
+  l.textContent = label;
+  l.title = label;
+  const v = document.createElement("span");
+  v.textContent = value;
+  cell.append(l, v);
+  return cell;
+}
+
+// rollButton — бросок схемы кнопкой: r — уже посчитанная формула
+// (schema-formula.js: createEvaluator → rollField / row().dice()).
+function rollButton(name, r, sendRoll) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "actions-peek-roll";
+  b.title = r.error ? r.error.message : "Бросить " + r.formula;
+  const bold = document.createElement("b");
+  bold.textContent = r.error ? "!" : r.formula;
+  b.append(name, bold);
+  b.disabled = !!r.error || !r.dice;
+  b.onclick = () => sendRoll(r.formula, name);
+  return b;
+}
+
+// schemaRolls — кнопки бросков поля: кубы и броски — одна кнопка, таблица
+// с колонкой кубов — кнопка на строку (подпись — первая текстовая колонка).
+function schemaRolls(compiled, monster, ev, id, sendRoll) {
+  const f = compiled.schema.fields[id];
+  if (f.type === "dice" || f.type === "roll") {
+    if (f.type === "dice" && !String(getPath(monster, f.path) ?? "").trim()) return [];
+    return [rollButton(f.label, ev.rollField(id), sendRoll)];
+  }
+  const dice = (f.columns || []).find((c) => c.type === "dice" || c.type === "roll");
+  if (!dice) return [];
+  const title = (f.columns || []).find((c) => c.type === "text");
+  const rows = getPath(monster, f.path);
+  const out = [];
+  (Array.isArray(rows) ? rows : []).forEach((row, i) => {
+    if (dice.type === "dice" && !String(getPath(row, dice.path) ?? "").trim()) return;
+    const name = (title && String(getPath(row, title.path) || "").trim()) || f.label;
+    out.push(rollButton(name, ev.row(id, i).dice(dice.id), sendRoll));
+  });
+  return out;
+}
+
+// renderSchemaBody — попап по схеме существа: плитки характеристик
+// (schema-summary.js: compactStats), затем секции боевой части
+// (peekSections) — простые поля строками, длинные тексты блоками, кубы и
+// броски кнопками. Формулы — по карточке, без модификаторов, как в самой
+// карточке.
+function renderSchemaBody(el, compiled, monster, sendRoll) {
+  const tiles = compactStats(compiled, monster, []);
+  if (tiles.length) {
+    const grid = document.createElement("div");
+    grid.className = "actions-peek-stats";
+    for (const t of tiles) grid.appendChild(abilityCell(t.label, t.note ? `${t.value} (${t.note})` : t.value));
+    el.appendChild(grid);
+    enhanceRolls(grid, sendRoll);
   }
 
-  const abilities = monster.abilities || {};
-  const grid = document.createElement("div");
-  grid.className = "actions-peek-abilities";
-  for (const [key, label] of ABILITY_LABELS) {
-    const score = abilities[key] ?? 10;
-    const cell = document.createElement("div");
-    cell.className = "actions-peek-ability";
-    const l = document.createElement("span");
-    l.textContent = label;
-    const v = document.createElement("span");
-    v.textContent = `${score} (${fmtMod(Math.floor((score - 10) / 2))})`;
-    cell.append(l, v);
-    grid.appendChild(cell);
-  }
-  el.appendChild(grid);
-  enhanceRolls(grid, sendRoll); // клик по модификатору = проверка характеристики
-
+  const { fields } = compiled.schema;
+  const ev = createEvaluator(compiled, monster, []);
   let any = false;
-  for (const [title, get] of BLOCKS) {
-    const raw = get(monster);
-    if (!raw || !String(raw).trim()) continue;
+  for (const sec of peekSections(compiled)) {
+    const nodes = [];
+    const rolls = [];
+    for (const id of sec.fields) {
+      const f = fields[id];
+      if (f.type === "longtext") {
+        const raw = displayValue(compiled, monster, id, ev);
+        if (raw.trim()) nodes.push(textBlock(raw, sendRoll));
+      } else if (f.type === "dice" || f.type === "roll" || f.type === "table") {
+        rolls.push(...schemaRolls(compiled, monster, ev, id, sendRoll));
+      } else {
+        const value = displayValue(compiled, monster, id, ev);
+        if (value !== "") nodes.push(metaLine(f.label, value, sendRoll));
+      }
+    }
+    if (rolls.length) {
+      const wrap = document.createElement("div");
+      wrap.className = "actions-peek-rolls";
+      wrap.append(...rolls);
+      nodes.push(wrap);
+    }
+    if (!nodes.length) continue;
     any = true;
-    const h = document.createElement("div");
-    h.className = "actions-peek-title";
-    h.textContent = title;
-    const body = document.createElement("div");
-    body.className = "actions-peek-block";
-    body.innerHTML = renderNoteHtml(raw);
-    enhanceRolls(body, sendRoll);
-    wireCatalogLinks(body);
-    el.append(h, body);
+    if (sec.title) el.appendChild(titleLine(sec.title));
+    el.append(...nodes);
   }
-  if (!any) {
-    const hint = document.createElement("div");
-    hint.className = "actions-peek-hint";
-    hint.textContent = "В статблоке не заполнены действия — открой карточку целиком и допиши.";
-    el.appendChild(hint);
-  }
+  if (!any && !tiles.length) el.appendChild(hintLine(EMPTY_HINT));
 }
 
 // Клик мимо и Esc закрывают попап — тот же контракт, что у палитры

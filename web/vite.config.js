@@ -60,6 +60,7 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, "index.html"),
         worlds: resolve(__dirname, "worlds.html"),
+        modules: resolve(__dirname, "modules.html"),
         dm: resolve(__dirname, "dm.html"),
         player: resolve(__dirname, "player.html"),
         // broadcast.html собирается отдельно, см. vite.broadcast.config.js
@@ -72,6 +73,7 @@ export default defineConfig({
         referencebook: resolve(__dirname, "referencebook.html"),
         conditions: resolve(__dirname, "conditions.html"),
         combatTracker: resolve(__dirname, "combat-tracker.html"),
+        gmScreen: resolve(__dirname, "gm-screen.html"),
         catalog: resolve(__dirname, "catalog.html"),
         foundryImport: resolve(__dirname, "foundry-import.html"),
       },
@@ -83,6 +85,7 @@ export default defineConfig({
     // запросы проксируются на бэкенд, включая апгрейд WebSocket.
     proxy: {
       "/api": "http://localhost:8080",
+      "/system-theme.css": "http://localhost:8080",
       "/upload": "http://localhost:8080",
       "/assets": "http://localhost:8080",
       "/uploads": "http://localhost:8080",

@@ -96,6 +96,25 @@ func (r *Room) handleChatSend(from RoomClient, msg domain.ClientMsg) {
 		}
 		m.To, m.ToName = msg.To, toName
 	}
+	r.addChat(m)
+}
+
+// postNotice — сообщение ширмы от сервера: всем за столом или только ведущему.
+func (r *Room) postNotice(n ScreenNotice) {
+	m := &domain.ChatMessage{
+		ID:       newID(),
+		At:       time.Now().UnixMilli(),
+		FromName: clampRunes(n.From, maxScreenTabTitle),
+		Text:     clampRunes(n.Text, maxChatTextLen),
+		System:   true,
+	}
+	if n.ToDM {
+		m.To, m.ToName = domain.ChatToDM, "ДМ"
+	}
+	r.addChat(m)
+}
+
+func (r *Room) addChat(m *domain.ChatMessage) {
 	r.chatLog = append(r.chatLog, m)
 	if cap := r.chatCap(); len(r.chatLog) > cap {
 		r.chatLog = r.chatLog[len(r.chatLog)-cap:]

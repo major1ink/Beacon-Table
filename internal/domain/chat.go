@@ -16,6 +16,8 @@ type ChatMessage struct {
 	To       string     `json:"to,omitempty"`
 	ToName   string     `json:"toName,omitempty"`
 	Text     string     `json:"text"`
+	// System — сообщение сервера (порог счётчика ширмы), отвечать некому.
+	System bool `json:"system,omitempty"`
 }
 
 // Private — личное сообщение (есть адресат).

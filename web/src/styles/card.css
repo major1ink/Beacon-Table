@@ -15,7 +15,7 @@
 .card-hero-text { flex: 1 1 auto; min-width: 0; display: grid; gap: 6px; }
 .card-name { margin: 0; min-width: 0; }
 .card-name input, .card-name-text {
-  font: 600 32px/1.05 var(--font-display); color: #fff; letter-spacing: 0.005em;
+  font: 600 32px/1.05 var(--font-display); color: var(--heading); letter-spacing: 0.005em;
   background: transparent; border: none; border-bottom: 1px dashed transparent; border-radius: 0;
   padding: 0; min-height: 0; width: 100%; display: block; overflow-wrap: anywhere;
 }
@@ -29,7 +29,7 @@
   background: #0f0f16; border: 2px solid var(--cc); color: var(--cc);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--cc) 22%, transparent), 0 0 28px color-mix(in srgb, var(--cc) 45%, transparent);
 }
-.card-medal img { width: 76%; height: 76%; object-fit: contain; border-radius: 50%; }
+.card-medal img, .card-medal video { width: 76%; height: 76%; object-fit: contain; border-radius: 50%; }
 .card-medal .cond-glyph { display: contents; }
 .card-medal svg { width: 56%; height: 56%; }
 /* .cond-glyph — обёртка глифа (condition-glyphs.js: glyphNode): SVG в размер шрифта */
@@ -128,7 +128,7 @@
 .stat-table thead th { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); text-align: left; padding: 6px; }
 .stat-table thead th:nth-child(n + 2) { text-align: center; }
 .stat-table td, .stat-table th.stat-n { padding: 5px 6px; border-top: 1px solid var(--border); vertical-align: middle; text-align: left; }
-.stat-table th.stat-n { font: 600 19px/1.1 var(--font-display); color: #fff; width: 28%; }
+.stat-table th.stat-n { font: 600 19px/1.1 var(--font-display); color: var(--heading); width: 28%; }
 .stat-table td.stat-base { text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 16px; color: var(--text-dim); width: 12%; }
 .stat-table td.stat-ch { width: 42%; }
 .stat-res { text-align: center; font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 18px; }
@@ -168,6 +168,11 @@
 .stat-ab .stat-err { text-align: left; }
 .stat-editor.readonly .stat-ab { display: flex; flex-wrap: wrap; }
 .stat-editor.readonly .stat-ab > div { min-width: 90px; }
+/* Свободные характеристики (stat.<ключ>) и цели другой системы — подпись над сеткой. */
+.stat-free { display: grid; gap: 6px; }
+.stat-free > .card-lbl { font-size: 11px; }
+.stat-free-add { display: flex; gap: 6px; }
+.stat-free-add input { flex: 1; min-width: 0; }
 .stat-legend code { font-family: ui-monospace, Menlo, monospace; color: var(--gold); background: rgba(181, 137, 31, 0.1); padding: 1px 5px; border-radius: 4px; font-variant-ligatures: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -224,7 +229,7 @@
 /* ---- таблица «показатель · значение» (kv-table.js) ---- */
 .kvt { margin: 6px 18px 0; border-top: 2px solid rgba(181, 137, 31, 0.55); border-bottom: 2px solid rgba(181, 137, 31, 0.55); padding: 4px 0; }
 .kvt table { width: 100%; border-collapse: collapse; }
-.kvt th { font: 600 17px/1.15 var(--font-display); color: #fff; text-align: left; padding: 6px; width: 32%; border-top: 1px solid var(--border); vertical-align: middle; }
+.kvt th { font: 600 17px/1.15 var(--font-display); color: var(--heading); text-align: left; padding: 6px; width: 32%; border-top: 1px solid var(--border); vertical-align: middle; }
 .kvt td { padding: 4px 6px; border-top: 1px solid var(--border); }
 .kvt tr:first-child th, .kvt tr:first-child td { border-top: none; }
 .kvt td input { min-height: 34px; padding: 4px 8px; background: transparent; border-color: transparent; font-size: 14px; }
@@ -315,7 +320,7 @@
 .sc-chip button { background: none; padding: 0; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--text-dim); }
 .sc-chip button:hover { color: #fff; background: var(--danger); }
 
-/* ---- статблок существа (monster-block.js) ---- */
+/* ---- плитки характеристик существа ---- */
 .mb-ab { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 10px 18px 0; }
 .mb-tile { text-align: center; background: var(--bg); border-radius: 10px; padding: 6px 4px; display: grid; gap: 2px; justify-items: center; }
 .mb-tile .card-lbl { font-size: 10.5px; }
@@ -345,11 +350,11 @@
 .mp > * { min-width: 0; max-width: 100%; }
 .mp .card-lbl { justify-self: start; }
 .mp-token { width: 100px; height: 100px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4b4a5e, #1d1c28 70%); border: 3px solid var(--cc, #5a5a6e); display: grid; place-items: center; overflow: hidden; color: var(--cc); }
-.mp-token img { width: 100%; height: 100%; object-fit: cover; }
+.mp-token img, .mp-token video { width: 100%; height: 100%; object-fit: cover; }
 .mp-token svg { width: 48px; height: 48px; }
 .mp-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 12px 6px 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; }
 .mp-av { width: 28px; height: 28px; border-radius: 50%; background: #1d1c28; border: 1px solid var(--cc, var(--border)); display: grid; place-items: center; overflow: hidden; color: var(--cc); flex: 0 0 auto; }
-.mp-av img { width: 100%; height: 100%; object-fit: cover; }
+.mp-av img, .mp-av video { width: 100%; height: 100%; object-fit: cover; }
 .mp-av svg { width: 15px; height: 15px; }
 .mp-nums { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: nowrap; }
 .mp-nums b { color: var(--text); font-weight: 600; }
@@ -359,3 +364,16 @@
   .mb-tile input { min-height: 40px; }
   .mb-block { padding-inline: 14px; }
 }
+
+/* Карточка по схеме (schema-card.js): строка-бросок и ошибка формулы. */
+.kvt-roll { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
+.kvt-roll:hover { text-decoration: underline; }
+.kvt .formula-error, .card-fold .formula-error { color: var(--danger); outline: 1px solid var(--danger); outline-offset: 1px; }
+/* Плитки таблиц схемы на карточке (schema-fields.js: характеристики,
+   кнопки бросков) — те же классы, что на листе, своё оформление. */
+.card-fold .v-tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+.card-fold .v-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+.card-fold .v-tile b { font-size: 17px; font-weight: 600; }
+.card-fold .v-tile span { font-size: 11px; color: var(--text-dim); }
+.card-fold button.v-tile { cursor: pointer; }
+.card-fold button.v-tile:hover { background: var(--surface-hover); }

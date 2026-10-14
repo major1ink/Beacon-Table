@@ -13,9 +13,9 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"beacon-table/internal/domain"
+	"beacon-table/internal/module"
 	"beacon-table/internal/quota"
 	"beacon-table/internal/repository"
 	"beacon-table/internal/repository/boardfile"
@@ -33,8 +34,11 @@ import (
 	"beacon-table/internal/repository/monsterfile"
 	"beacon-table/internal/repository/referencefile"
 	"beacon-table/internal/repository/scenefile"
+	"beacon-table/internal/repository/screenfile"
+	"beacon-table/internal/repository/sessionfile"
 	"beacon-table/internal/repository/spellfile"
 	"beacon-table/internal/repository/sqlite"
+	"beacon-table/internal/schema"
 	"beacon-table/internal/service"
 )
 
@@ -58,6 +62,9 @@ type ActiveWorld struct {
 
 	Journal service.JournalService
 	Boards  service.BoardService
+	Screen  service.ScreenService
+	// Sessions — ленты сессий (world/sessions).
+	Sessions service.SessionLogService
 	// BoardSync — живые доски мира (см. service.BoardHub): по горутине на
 	// доску, открытую сейчас хотя бы одним окном.
 	BoardSync *service.BoardHub
@@ -65,6 +72,13 @@ type ActiveWorld struct {
 	Assets    service.AssetService
 
 	Foundry service.FoundryService
+
+	// Modules — модули, подключённые к миру при запуске, в порядке
+	// подключения. MissingModules — включённые в мире, но не найденные на
+	// сервере (удалены или ещё не установлены): мир работает без их
+	// карточек, интерфейс предлагает их поставить.
+	Modules        []*module.Module
+	MissingModules []string
 }
 
 // CompanyManager — держит список миров и то, какой из них сейчас запущен на
@@ -79,7 +93,7 @@ type CompanyManager struct {
 	accounts  repository.AccountRepository
 	sessions  repository.SessionRepository
 	dice      service.DiceRoller
-	systemFS  fs.FS
+	modules   *module.Registry
 
 	dataRoot    string // корень пользовательских данных легаси-компании, обычно "data"
 	uploadsRoot string // корень загрузок легаси-компании, обычно "uploads"
@@ -106,9 +120,9 @@ type CompanyManager struct {
 // данные инсталляции, существовавшей до появления миров (см. Bootstrap);
 // любая другая компания получает свои собственные подпапки внутри тех же
 // корней.
-func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, systemFS fs.FS, dataRoot, uploadsRoot, uploadsURL string, allowPrivateFoundryNet bool, uploadQuota *quota.Tracker) *CompanyManager {
+func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accounts repository.AccountRepository, sessions repository.SessionRepository, dice service.DiceRoller, modules *module.Registry, dataRoot, uploadsRoot, uploadsURL string, allowPrivateFoundryNet bool, uploadQuota *quota.Tracker) *CompanyManager {
 	return &CompanyManager{
-		db: db, companies: companies, accounts: accounts, sessions: sessions, dice: dice, systemFS: systemFS,
+		db: db, companies: companies, accounts: accounts, sessions: sessions, dice: dice, modules: modules,
 		dataRoot: dataRoot, uploadsRoot: uploadsRoot, uploadsURL: uploadsURL,
 		allowPrivateFoundryNet: allowPrivateFoundryNet,
 		quota:                  uploadQuota,
@@ -118,6 +132,173 @@ func NewCompanyManager(db *sql.DB, companies repository.CompanyRepository, accou
 
 // ChatHistory — ручка лимита истории чата для настроек (cmd/beacon-table/settings.go).
 func (m *CompanyManager) ChatHistory() *service.ChatHistoryLimit { return m.chatHistory }
+
+// Modules — реестр модулей контента сервера (см. internal/module).
+func (m *CompanyManager) Modules() *module.Registry { return m.modules }
+
+// resolveModules — модули мира company в порядке подключения; ненайденные
+// id — во втором списке.
+func (m *CompanyManager) resolveModules(company *domain.Company) (found []*module.Module, missing []string) {
+	for _, id := range m.EnabledModules(company) {
+		mod, err := m.modules.Get(id)
+		if err != nil {
+			missing = append(missing, id)
+			continue
+		}
+		found = append(found, mod)
+	}
+	return found, missing
+}
+
+// baseTables — встроенный базовый модуль, если его нет среди модулей мира: его
+// случайные таблицы нужны ширме в любом мире, а состояния — только «Своей системе».
+func (m *CompanyManager) baseTables(mods []*module.Module) *module.Module {
+	for _, mod := range mods {
+		if mod.Manifest.ID == domain.BaseModuleID {
+			return nil
+		}
+	}
+	bm, err := m.modules.Get(domain.BaseModuleID)
+	if err != nil {
+		return nil
+	}
+	return bm
+}
+
+// combatRules — правила боя мира: из системного модуля его системы, а если
+// система — «Своя», модуля нет на сервере или он правил не задаёт —
+// правила «Своей системы».
+func (m *CompanyManager) combatRules(company *domain.Company) *domain.CombatRules {
+	if company.System != domain.SystemCustom {
+		if mod, err := m.modules.Get(company.System); err == nil && mod.Manifest.Combat != nil {
+			return mod.Manifest.Combat
+		}
+	}
+	return domain.CustomCombatRules()
+}
+
+// tokenSizeRule — размер токенов существ мира из модуля его системы; nil — 1×1.
+func (m *CompanyManager) tokenSizeRule(company *domain.Company) *domain.TokenSizeRule {
+	if company.System == domain.SystemCustom {
+		return nil
+	}
+	if mod, err := m.modules.Get(company.System); err == nil {
+		return mod.Manifest.TokenSize
+	}
+	return nil
+}
+
+// ModifierTargets — цели модификаторов мира company: цели ядра и цели,
+// которые объявляет модуль его системы (если он есть на сервере).
+func (m *CompanyManager) ModifierTargets(company *domain.Company) []domain.ModifierTargetInfo {
+	out := append([]domain.ModifierTargetInfo(nil), domain.CoreModifierTargets...)
+	if company == nil || company.System == domain.SystemCustom {
+		return out
+	}
+	if mod, err := m.modules.Get(company.System); err == nil {
+		out = append(out, mod.Manifest.ModifierTargets...)
+	}
+	return out
+}
+
+// SystemProfile — система мира company для клиента: название, вид листа,
+// единица веса, валюты, куб проверки, правило инициативы и размер токенов. Всё это — из модуля системы; «Своя система»,
+// модуль не установлен или раздела нет — умолчания «Своей системы»
+// (универсальный лист, «кг», «Деньги»).
+func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemProfile {
+	p := domain.SystemProfile{
+		ID: domain.SystemCustom, Title: "Своя система (без правил)",
+		Units: domain.CustomUnits(), Currencies: domain.CustomCurrencies(), Rolls: domain.CustomRolls(),
+		Initiative: domain.CustomCombatRules().Initiative, Modules: []domain.WorldModule{},
+	}
+	if company == nil {
+		return p
+	}
+	mods, _ := m.resolveModules(company)
+	for _, mod := range mods {
+		p.Modules = append(p.Modules, domain.WorldModule{ID: mod.Manifest.ID, Title: mod.Manifest.Title, Type: mod.Manifest.Type, Attribution: mod.Manifest.Attribution, Counts: mod.Counts()})
+	}
+	if bm := m.baseTables(mods); bm != nil {
+		counts := map[string]int{module.KindReferences: bm.Counts()[module.KindReferences]}
+		p.Modules = append(p.Modules, domain.WorldModule{ID: bm.Manifest.ID, Title: bm.Manifest.Title, Type: bm.Manifest.Type, Counts: counts})
+	}
+	if company.System == domain.SystemCustom {
+		return p
+	}
+	p.ID, p.Title = company.System, company.System
+	mod, err := m.modules.Get(company.System)
+	if err != nil {
+		return p
+	}
+	p.Title = mod.Manifest.Title
+	if mod.Manifest.Units != nil {
+		p.Units = *mod.Manifest.Units
+	}
+	if len(mod.Manifest.Currencies) > 0 {
+		p.Currencies = mod.Manifest.Currencies
+	}
+	if mod.Manifest.Rolls != nil {
+		p.Rolls = *mod.Manifest.Rolls
+	}
+	if mod.Manifest.Combat != nil {
+		p.Initiative = mod.Manifest.Combat.Initiative
+	}
+	p.TokenSize = m.tokenSizeRule(company)
+	return p
+}
+
+// Schemas — схемы листа и карточек мира company по видам (см.
+// internal/schema), JSON как есть — его рисует клиент. Для каждого вида —
+// схема из модуля системы мира, если она там есть, иначе встроенная схема
+// «Своей системы».
+func (m *CompanyManager) Schemas(company *domain.Company) (map[string]json.RawMessage, error) {
+	set, err := m.schemaSet(company)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]json.RawMessage, len(set))
+	for kind, s := range set {
+		if s == nil {
+			out[kind] = nil
+			continue
+		}
+		out[kind] = s.Raw
+	}
+	return out, nil
+}
+
+// SchemaOf — схема вида kind мира company (см. schemaSet).
+func (m *CompanyManager) SchemaOf(company *domain.Company, kind string) *schema.Schema {
+	set, err := m.schemaSet(company)
+	if err != nil {
+		return nil
+	}
+	return set[kind]
+}
+
+// schemaSet — схемы мира company по видам: схема модуля системы, иначе
+// встроенная. Их же получает комната мира (формулы инициативы).
+func (m *CompanyManager) schemaSet(company *domain.Company) (map[string]*schema.Schema, error) {
+	var mod *module.Module
+	if company != nil && company.System != domain.SystemCustom {
+		mod, _ = m.modules.Get(company.System)
+	}
+	out := make(map[string]*schema.Schema, len(schema.Kinds))
+	for _, kind := range schema.Kinds {
+		if mod != nil {
+			if s, ok := mod.Schemas[kind]; ok {
+				out[kind] = s
+				continue
+			}
+		}
+		s, err := schema.Builtin(kind)
+		if err != nil {
+			return nil, err
+		}
+		out[kind] = s
+	}
+	return out, nil
+}
 
 // UploadQuota — квота мира company (см. internal/quota). Нужна и хранилищу
 // ассетов этого мира, и импорту мира из архива.
@@ -187,10 +368,16 @@ func (m *CompanyManager) Create(ctx context.Context, name, system string) (*doma
 	if name == "" || len(name) > maxCompanyNameLen {
 		return nil, &domain.ValidationError{Msg: "название мира — обязательно, до 80 символов"}
 	}
-	if !domain.ValidSystem(system) {
-		return nil, &domain.ValidationError{Msg: "неизвестная система"}
+	if !m.systemInstalled(system) {
+		return nil, &domain.ValidationError{Msg: "игровая система не установлена — поставь её модуль"}
 	}
-	c := &domain.Company{ID: newID(), Name: name, System: system}
+	return m.createWorld(ctx, name, system, defaultModules(system))
+}
+
+// createWorld — без проверки системы: импорт мира создаёт его и на
+// системе, которой на этом сервере (пока) нет.
+func (m *CompanyManager) createWorld(ctx context.Context, name, system string, modules []string) (*domain.Company, error) {
+	c := &domain.Company{ID: newID(), Name: name, System: system, Modules: modules}
 	if err := m.companies.Create(ctx, c); err != nil {
 		return nil, err
 	}
@@ -330,35 +517,48 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
 	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
 	boardRepo := boardfile.NewStore(filepath.Join(dataRoot, "boards"))
-	monsterRepo := monsterfile.NewCatalog(
-		monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")),
-		monsterfile.NewSystemStore(m.systemFS, "systemdata/bestiary/"+company.System),
+	screenRepo := screenfile.NewStore(filepath.Join(dataRoot, "screen"))
+	// Карточки модулей: у каждого вида — источник на каждый подключённый
+	// модуль, в порядке подключения (см. cardcatalog.Catalog).
+	mods, missingMods := m.resolveModules(company)
+	if len(missingMods) > 0 {
+		slog.Warn("Мир запущен без части модулей — их нет на сервере", "world", company.Name, "modules", missingMods)
+	}
+	var (
+		monsterSrc   []*monsterfile.SystemStore
+		spellSrc     []*spellfile.SystemStore
+		itemSrc      []*itemfile.SystemStore
+		referenceSrc []*referencefile.SystemStore
+		conditionSrc []*conditionfile.SystemStore
 	)
-	spellRepo := spellfile.NewCatalog(
-		spellfile.NewStore(filepath.Join(dataRoot, "spells")),
-		spellfile.NewSystemStore(m.systemFS, "systemdata/spells/"+company.System),
-	)
-	itemRepo := itemfile.NewCatalog(
-		itemfile.NewStore(filepath.Join(dataRoot, "items")),
-		itemfile.NewSystemStore(m.systemFS, "systemdata/items/"+company.System),
-	)
-	referenceRepo := referencefile.NewCatalog(
-		referencefile.NewStore(filepath.Join(dataRoot, "references")),
-		referencefile.NewSystemStore(m.systemFS, "systemdata/references/"+company.System),
-	)
-	// conditionRepo — библиотека состояний, тот же каталог «из коробки» +
-	// пользовательская библиотека, что и у остальных четырёх. Подпапка
-	// systemdata/conditions/<system> — единственное место, где реализовано
-	// требование «статусы делятся по игровым системам»: у мира на D&D 2014
-	// своё истощение, у мира на 2024 — своё.
-	conditionRepo := conditionfile.NewCatalog(
-		conditionfile.NewStore(filepath.Join(dataRoot, "conditions")),
-		conditionfile.NewSystemStore(m.systemFS, "systemdata/conditions/"+company.System),
-	)
+	for _, mod := range mods {
+		prefix, id := mod.Manifest.IDPrefix(), mod.Manifest.ID
+		monsterSrc = append(monsterSrc, monsterfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindBestiary), prefix, id))
+		spellSrc = append(spellSrc, spellfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindSpells), prefix, id))
+		itemSrc = append(itemSrc, itemfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindItems), prefix, id))
+		referenceSrc = append(referenceSrc, referencefile.NewModuleStore(mod.FS, mod.ContentDir(module.KindReferences), prefix, id))
+		conditionSrc = append(conditionSrc, conditionfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindConditions), prefix, id))
+	}
+	if bm := m.baseTables(mods); bm != nil {
+		referenceSrc = append(referenceSrc, referencefile.NewModuleStore(bm.FS, bm.ContentDir(module.KindReferences), bm.Manifest.IDPrefix(), bm.Manifest.ID))
+	}
+	monsterRepo := monsterfile.NewCatalog(monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")), monsterSrc...)
+	spellRepo := spellfile.NewCatalog(spellfile.NewStore(filepath.Join(dataRoot, "spells")), spellSrc...)
+	itemRepo := itemfile.NewCatalog(itemfile.NewStore(filepath.Join(dataRoot, "items")), itemSrc...)
+	referenceRepo := referencefile.NewCatalog(referencefile.NewStore(filepath.Join(dataRoot, "references")), referenceSrc...)
+	conditionRepo := conditionfile.NewCatalog(conditionfile.NewStore(filepath.Join(dataRoot, "conditions")), conditionSrc...)
 	assetRepo := localfs.NewStore(uploadsRoot, uploadsURL, m.quota.World(uploadsRoot))
 	if err := assetRepo.EnsureDirs(); err != nil {
 		return err
 	}
+	// Карточки библиотеки мира не ссылаются на картинки модулей: при записи
+	// они копируются в загрузки мира (клон переживает удаление модуля).
+	localizer := &moduleAssetLocalizer{modules: m.modules, assets: assetRepo}
+	monsterRepo.WithLocalizer(localizer)
+	spellRepo.WithLocalizer(localizer)
+	itemRepo.WithLocalizer(localizer)
+	referenceRepo.WithLocalizer(localizer)
+	conditionRepo.WithLocalizer(localizer)
 
 	characterRepo := sqlite.NewCharacterStore(m.db, company.ID, company.System)
 	pregenRepo := sqlite.NewPregenStore(m.db, company.ID)
@@ -366,7 +566,11 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	foundryModuleRepo := sqlite.NewFoundryModuleStore(m.db, company.ID)
 	chatRepo := sqlite.NewChatStore(m.db, company.ID)
 
-	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory)
+	schemas, err := m.schemaSet(company)
+	if err != nil {
+		return err
+	}
+	room, err := service.NewRoom(sceneRepo, m.dice, characterRepo, monsterRepo, itemRepo, conditionRepo, chatRepo, m.chatHistory, m.combatRules(company), m.tokenSizeRule(company), schemas)
 	if err != nil {
 		return err
 	}
@@ -377,12 +581,17 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	}
 
 	journal := service.NewJournalService(journalRepo)
+	screen := service.NewScreenService(screenRepo, journal)
+	room.UseScreen(ctx, screen)
+	sessions := service.NewSessionLogService(ctx, sessionfile.NewStore(filepath.Join(dataRoot, "sessions")), journal)
+	room.UseSessions(sessions)
 	boards := service.NewBoardService(boardRepo)
 	boardSync := service.NewBoardHub(boardRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
 	assets := service.NewAssetService(assetRepo)
-	bestiary := service.NewBestiaryService(monsterRepo)
-	spells := service.NewSpellService(spellRepo)
+	schemaOf := func(kind string) *schema.Schema { return m.SchemaOf(company, kind) }
+	bestiary := service.NewBestiaryService(monsterRepo, schemaOf)
+	spells := service.NewSpellService(spellRepo, schemaOf)
 	items := service.NewItemService(itemRepo)
 	references := service.NewReferenceService(referenceRepo)
 	conditions := service.NewConditionService(conditionRepo)
@@ -390,8 +599,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	world := &ActiveWorld{
 		Company:    company,
 		Room:       room,
-		Characters: service.NewCharacterService(characterRepo),
-		Pregens:    service.NewPregenService(pregenRepo, characterRepo),
+		Characters: service.NewCharacterService(characterRepo, schemaOf),
+		Pregens:    service.NewPregenService(pregenRepo, characterRepo, schemaOf),
 		Admin:      service.NewAdminService(m.accounts, m.sessions, characterRepo, company.ID),
 		Bestiary:   bestiary,
 		Spells:     spells,
@@ -400,6 +609,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Conditions: conditions,
 		Journal:    journal,
 		Boards:     boards,
+		Screen:     screen,
+		Sessions:   sessions,
 		BoardSync:  boardSync,
 		Playlists:  playlists,
 		Assets:     assets,
@@ -408,6 +619,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 			bestiary, spells, items, references, conditions, pregenRepo,
 			m.allowPrivateFoundryNet,
 		),
+		Modules:        mods,
+		MissingModules: missingMods,
 	}
 
 	m.mu.Lock()

@@ -1,0 +1,1804 @@
+[
+ {
+  "_id": "phbsplFireBolt00",
+  "_key": "!items!phbsplFireBolt00",
+  "effects": [],
+  "flags": {
+   "dnd5e": {},
+   "midi-qol": {
+    "AoETargetType": "any",
+    "autoTarget": "default",
+    "effectCondition": "",
+    "fumbleThreshold": null,
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ida": false,
+    "idi": false,
+    "idr": false,
+    "idv": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "vmdawIhC3HKVLQgF",
+  "img": "modules/ag-icons/magic/fire/fire-burning-dark.webp",
+  "name": "Огненный снаряд [Fire Bolt]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "ability": "",
+   "activation": {
+    "condition": "",
+    "type": "action",
+    "value": null
+   },
+   "activities": {
+    "63FEeE6mADjIMxyZ": {
+     "_id": "63FEeE6mADjIMxyZ",
+     "activation": {
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "ammunition": "",
+     "attack": {
+      "ability": "",
+      "bonus": "",
+      "critical": {
+       "threshold": null
+      },
+      "flat": false,
+      "type": {
+       "classification": "",
+       "value": "ranged"
+      }
+     },
+     "attackMode": "oneHanded",
+     "attackRollPerTarget": "default",
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "damage": {
+      "critical": {
+       "bonus": ""
+      },
+      "includeBase": true,
+      "parts": [
+       {
+        "bonus": "",
+        "custom": {
+         "enabled": true,
+         "formula": "1d10"
+        },
+        "denomination": 0,
+        "number": null,
+        "scaling": {
+         "mode": "whole",
+         "number": 1
+        },
+        "types": [
+         "fire"
+        ]
+       }
+      ]
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [],
+     "flags": {},
+     "fumbleThreshold": 1,
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": "",
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "",
+     "otherActivityAsParentType": true,
+     "otherActivityId": "none",
+     "otherActivityUuid": "",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "units": "ft"
+      }
+     },
+     "type": "attack",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    },
+    "dnd5eactivity000": {
+     "appliedEffects": [],
+     "damage": {
+      "parts": [
+       {
+        "bonus": "",
+        "custom": {
+         "enabled": true,
+         "formula": "(floor((@details.level+1)/6)+1)d10"
+        },
+        "denomination": 10,
+        "number": 1,
+        "scaling": {
+         "formula": "",
+         "mode": "",
+         "number": 1
+        },
+        "types": [
+         "fire"
+        ]
+       }
+      ]
+     },
+     "img": "",
+     "name": ""
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. [[/damage 1d10 fire]] Текст описания. </p><p><strong>Улучшение фокуса.</strong> Урон увеличивается на [[/r 1d10]], когда вы достигаете 5-го ([[/r 2d10]]), 11-го ([[/r 3d10]]) и 17-го уровня ([[/r 4d10]]).</p>"
+   },
+   "duration": {
+    "units": "inst",
+    "value": ""
+   },
+   "identifier": "fire-bolt",
+   "level": 0,
+   "materials": {
+    "consumed": false,
+    "cost": 0,
+    "supply": 0,
+    "value": ""
+   },
+   "method": "spell",
+   "prepared": 2,
+   "properties": [
+    "vocal",
+    "somatic"
+   ],
+   "range": {
+    "special": "",
+    "units": "ft",
+    "value": "120"
+   },
+   "school": "evo",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "target": {
+    "affects": {
+     "choice": false,
+     "count": "1",
+     "special": "",
+     "type": "creatureOrObject"
+    },
+    "template": {
+     "contiguous": false,
+     "stationary": false,
+     "type": "",
+     "units": "ft"
+    }
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "spell"
+ },
+ {
+  "_id": "phbsplFireball00",
+  "_key": "!items!phbsplFireball00",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": []
+    }
+   },
+   "midi-qol": {
+    "AoETargetType": "any",
+    "autoTarget": "default",
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ida": false,
+    "idi": false,
+    "idr": false,
+    "idv": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "8DrF48nKYr6s422r",
+  "img": "modules/ag-icons/magic/fire/fireball-dark.webp",
+  "name": "Огненный шар [Fireball]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "ability": "",
+   "activation": {
+    "condition": "",
+    "type": "action",
+    "value": null
+   },
+   "activities": {
+    "dNWpG5SEHROQG5AS": {
+     "_id": "dNWpG5SEHROQG5AS",
+     "activation": {
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "damage": {
+      "critical": {
+       "allow": false
+      },
+      "onSave": "half",
+      "parts": [
+       {
+        "bonus": "",
+        "custom": {
+         "enabled": false,
+         "formula": ""
+        },
+        "denomination": 6,
+        "number": 8,
+        "scaling": {
+         "formula": "d6",
+         "mode": "whole",
+         "number": 1
+        },
+        "types": [
+         "fire"
+        ]
+       }
+      ]
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [],
+     "flags": {},
+     "friendlySave": "default",
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": null,
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "",
+     "otherActivityAsParentType": true,
+     "otherActivityId": "none",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "save": {
+      "ability": [
+       "dex"
+      ],
+      "dc": {
+       "calculation": "spellcasting",
+       "formula": ""
+      }
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "units": "ft"
+      }
+     },
+     "type": "save",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. [[/damage 8d6 fire]] Текст описания. </p><p> Текст описания. </p><p><strong> Текст описания. </strong> Урон увеличивается на [[/r 1d6]] за каждый круг ячейки выше 3-го.</p>"
+   },
+   "duration": {
+    "units": "inst",
+    "value": ""
+   },
+   "identifier": "fireball",
+   "level": 3,
+   "materials": {
+    "consumed": false,
+    "cost": 0,
+    "supply": 0,
+    "value": "комок из гуано летучей мыши и серы"
+   },
+   "method": "spell",
+   "prepared": 0,
+   "properties": [
+    "vocal",
+    "somatic",
+    "material"
+   ],
+   "range": {
+    "special": "",
+    "units": "ft",
+    "value": "150"
+   },
+   "school": "evo",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "license": "",
+    "page": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "target": {
+    "affects": {
+     "choice": false,
+     "count": "",
+     "special": "",
+     "type": "creature"
+    },
+    "template": {
+     "contiguous": false,
+     "count": "",
+     "size": "20",
+     "stationary": false,
+     "type": "sphere",
+     "units": "ft"
+    }
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "spell"
+ },
+ {
+  "_id": "phbsplHoldMonste",
+  "_key": "!items!phbsplHoldMonste",
+  "effects": [
+   "YzDvrgwOJOjvfu98",
+   {
+    "_id": "YzDvrgwOJOjvfu98",
+    "description": "",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": 60
+    },
+    "flags": {
+     "ActiveAuras": {
+      "alignment": "",
+      "aura": "None",
+      "customCheck": "",
+      "displayTemp": false,
+      "height": false,
+      "hidden": false,
+      "hostile": false,
+      "ignoreSelf": false,
+      "isAura": false,
+      "nameOverride": "",
+      "onlyOnce": false,
+      "radius": "",
+      "type": "",
+      "wallsBlock": "system"
+     },
+     "core": {
+      "overlay": true
+     },
+     "dae": {
+      "disableCondition": "",
+      "durationExpression": "",
+      "enableCondition": "",
+      "macroRepeat": "none",
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "noneNameOnly"
+     }
+    },
+    "folder": null,
+    "img": "systems/dnd5e/icons/svg/statuses/paralyzed.svg",
+    "name": "Парализованный",
+    "origin": "Compendium.ag-fifthpendium.spells.Item.phbsplHoldMonste",
+    "showIcon": 2,
+    "sort": 0,
+    "start": null,
+    "statuses": [
+     "paralyzed"
+    ],
+    "system": {
+     "changes": []
+    },
+    "tint": "#ffffff",
+    "transfer": false,
+    "type": "base"
+   }
+  ],
+  "flags": {
+   "dnd5e": {
+    "persistSourceMigration": true
+   },
+   "midi-qol": {
+    "AoETargetType": "any",
+    "autoTarget": "default",
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ida": false,
+    "idi": false,
+    "idr": false,
+    "idv": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "EAQh5TRlLefDrTYG",
+  "img": "modules/ag-icons/old/2/skill%2018.webp",
+  "name": "Паралич чудовища [Hold Monster]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "ability": "",
+   "activation": {
+    "condition": "",
+    "type": "action",
+    "value": null
+   },
+   "activities": {
+    "dnd5eactivity000": {
+     "_id": "dnd5eactivity000",
+     "activation": {
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false,
+       "max": ""
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "damage": {
+      "critical": {
+       "allow": false
+      },
+      "onSave": "half",
+      "parts": []
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [
+      {
+       "_id": "YzDvrgwOJOjvfu98",
+       "level": {},
+       "onSave": false
+      }
+     ],
+     "flags": {},
+     "friendlySave": "default",
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": "",
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "",
+     "otherActivityAsParentType": true,
+     "otherActivityId": "none",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "save": {
+      "ability": [
+       "wis"
+      ],
+      "dc": {
+       "calculation": "spellcasting",
+       "formula": ""
+      }
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "units": "ft"
+      }
+     },
+     "type": "save",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p><p><strong> Текст описания. </strong> Текст описания. </p>"
+   },
+   "duration": {
+    "units": "minute",
+    "value": "1"
+   },
+   "identifier": "hold-monster",
+   "level": 5,
+   "materials": {
+    "consumed": false,
+    "cost": 0,
+    "supply": 0,
+    "value": "ровный кусочек железа"
+   },
+   "method": "spell",
+   "prepared": 0,
+   "properties": [
+    "vocal",
+    "somatic",
+    "material",
+    "concentration"
+   ],
+   "range": {
+    "special": "",
+    "units": "ft",
+    "value": "90"
+   },
+   "school": "enc",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "target": {
+    "affects": {
+     "choice": false,
+     "count": "@item.level - 4",
+     "special": "",
+     "type": "creature"
+    },
+    "template": {
+     "contiguous": false,
+     "stationary": false,
+     "type": "",
+     "units": "ft"
+    }
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "spell"
+ },
+ {
+  "_id": "phbsplCureWounds",
+  "_key": "!items!phbsplCureWounds",
+  "effects": [],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": [],
+     "effect": []
+    }
+   },
+   "midi-qol": {
+    "AoETargetType": "any",
+    "autoTarget": "default",
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ida": false,
+    "idi": false,
+    "idr": false,
+    "idv": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "XH3Ons3OMXwqIPSs",
+  "img": "modules/ag-icons/abilities/paladin/lesser-healing.webp",
+  "name": "Исцеление ран [Cure Wounds]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "ability": "",
+   "activation": {
+    "condition": "",
+    "type": "action",
+    "value": null
+   },
+   "activities": {
+    "DPxPYkbjGGIvZjVi": {
+     "_id": "DPxPYkbjGGIvZjVi",
+     "activation": {
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [],
+     "flags": {},
+     "healing": {
+      "bonus": "@mod",
+      "custom": {
+       "enabled": false
+      },
+      "denomination": 8,
+      "number": 2,
+      "scaling": {
+       "formula": "",
+       "mode": "whole",
+       "number": 2
+      },
+      "types": [
+       "healing"
+      ]
+     },
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": "",
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "units": "ft"
+      }
+     },
+     "type": "heal",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. [[/r 2d8]] Текст описания. </p><p><strong> Текст описания. </strong> Текст описания. [[/r 2d8]] за каждый круг ячейки выше 1-го.</p>"
+   },
+   "duration": {
+    "units": "inst",
+    "value": ""
+   },
+   "identifier": "cure-wounds",
+   "level": 1,
+   "materials": {
+    "consumed": false,
+    "cost": 0,
+    "supply": 0,
+    "value": ""
+   },
+   "method": "spell",
+   "prepared": 0,
+   "properties": [
+    "vocal",
+    "somatic"
+   ],
+   "range": {
+    "special": "",
+    "units": "touch"
+   },
+   "school": "abj",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "target": {
+    "affects": {
+     "choice": false,
+     "count": "1",
+     "special": "",
+     "type": "creature"
+    },
+    "template": {
+     "contiguous": false,
+     "stationary": false,
+     "type": "",
+     "units": "ft"
+    }
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "spell"
+ },
+ {
+  "_id": "phbsplDetectMagi",
+  "_key": "!items!phbsplDetectMagi",
+  "effects": [
+   "ame6n2rxY5Ydgn3l",
+   {
+    "_id": "ame6n2rxY5Ydgn3l",
+    "description": "",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": 600
+    },
+    "flags": {
+     "ActiveAuras": {
+      "alignment": "",
+      "aura": "None",
+      "customCheck": "",
+      "displayTemp": false,
+      "height": false,
+      "hidden": false,
+      "hostile": false,
+      "ignoreSelf": false,
+      "isAura": false,
+      "nameOverride": "",
+      "onlyOnce": false,
+      "radius": "",
+      "type": "",
+      "wallsBlock": "system"
+     },
+     "core": {
+      "overlay": false
+     },
+     "dae": {
+      "disableCondition": "",
+      "durationExpression": "",
+      "enableCondition": "",
+      "macroRepeat": "none",
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "noneName"
+     }
+    },
+    "folder": null,
+    "img": "modules/ag-icons/magic/psychic/star-purple-spiral.webp",
+    "name": "Обнаружение магии [Detect Magic]",
+    "origin": "Compendium.ag-fifthpendium.spells.Item.phbsplDetectMagi",
+    "showIcon": 1,
+    "sort": 0,
+    "start": null,
+    "statuses": [],
+    "system": {
+     "changes": [
+      {
+       "key": "token.detectionModes.detectMagic.range",
+       "phase": "initial",
+       "priority": 20,
+       "type": "upgrade",
+       "value": 30
+      }
+     ]
+    },
+    "tint": "#ffffff",
+    "transfer": false,
+    "type": "base"
+   }
+  ],
+  "flags": {
+   "dnd5e": {
+    "riders": {
+     "activity": [],
+     "effect": []
+    }
+   },
+   "midi-qol": {
+    "AoETargetType": "any",
+    "autoTarget": "default",
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ida": false,
+    "idi": false,
+    "idr": false,
+    "idv": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "XH3Ons3OMXwqIPSs",
+  "img": "modules/ag-icons/magic/psychic/star-purple-spiral.webp",
+  "name": "Обнаружение магии [Detect Magic]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "ability": "int",
+   "activation": {
+    "condition": "",
+    "type": "action",
+    "value": null
+   },
+   "activities": {
+    "1YlIbYB6C3C0qt3G": {
+     "_id": "1YlIbYB6C3C0qt3G",
+     "activation": {
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [
+      {
+       "_id": "KgRyggoVMIFNkuMR",
+       "level": {}
+      },
+      {
+       "_id": "ame6n2rxY5Ydgn3l",
+       "level": {}
+      }
+     ],
+     "flags": {},
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": null,
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "",
+     "otherActivityAsParentType": true,
+     "otherActivityId": "none",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "roll": {
+      "formula": "",
+      "name": "",
+      "prompt": false,
+      "visible": false
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false,
+       "count": "",
+       "type": "self"
+      },
+      "override": true,
+      "prompt": false,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "type": "",
+       "units": "ft"
+      }
+     },
+     "type": "utility",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p><p> Текст описания. </p>"
+   },
+   "duration": {
+    "units": "minute",
+    "value": "10"
+   },
+   "identifier": "detect-magic",
+   "level": 1,
+   "materials": {
+    "consumed": false,
+    "cost": 0,
+    "supply": 0,
+    "value": ""
+   },
+   "method": "spell",
+   "prepared": 0,
+   "properties": [
+    "vocal",
+    "somatic",
+    "concentration",
+    "ritual"
+   ],
+   "range": {
+    "special": "",
+    "units": "self"
+   },
+   "school": "div",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "target": {
+    "affects": {
+     "choice": false,
+     "count": "",
+     "special": "",
+     "type": "self"
+    },
+    "template": {
+     "contiguous": false,
+     "count": "",
+     "size": "30",
+     "stationary": false,
+     "type": "",
+     "units": "ft"
+    }
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "spell"
+ },
+ {
+  "_id": "phbsplHypnoticPa",
+  "_key": "!items!phbsplHypnoticPa",
+  "effects": [
+   "JcVV8L5QWXFN4pF5",
+   {
+    "_id": "JcVV8L5QWXFN4pF5",
+    "description": "",
+    "disabled": false,
+    "duration": {
+     "expired": false,
+     "expiry": null,
+     "units": "seconds",
+     "value": 60
+    },
+    "flags": {
+     "ActiveAuras": {
+      "alignment": "",
+      "aura": "None",
+      "customCheck": "",
+      "displayTemp": false,
+      "height": false,
+      "hidden": false,
+      "hostile": false,
+      "ignoreSelf": false,
+      "isAura": false,
+      "nameOverride": "",
+      "onlyOnce": false,
+      "radius": "",
+      "type": "",
+      "wallsBlock": "system"
+     },
+     "core": {
+      "overlay": true
+     },
+     "dae": {
+      "disableCondition": "",
+      "durationExpression": "",
+      "enableCondition": "",
+      "macroRepeat": "none",
+      "showIcon": false,
+      "specialDuration": [],
+      "stackable": "noneNameOnly"
+     }
+    },
+    "folder": null,
+    "img": "systems/dnd5e/icons/svg/statuses/charmed.svg",
+    "name": "Очарованный",
+    "origin": "Compendium.ag-fifthpendium.spells.Item.PkYBTK38iyEnapjY",
+    "showIcon": 2,
+    "sort": 0,
+    "start": null,
+    "statuses": [
+     "incapacitated",
+     "charmed"
+    ],
+    "system": {
+     "changes": [
+      {
+       "key": "system.attributes.movement.walk",
+       "phase": "initial",
+       "priority": 1,
+       "type": "downgrade",
+       "value": 0
+      }
+     ]
+    },
+    "tint": "#ffffff",
+    "transfer": false,
+    "type": "base"
+   }
+  ],
+  "flags": {
+   "dnd5e": {
+    "persistSourceMigration": true
+   },
+   "midi-qol": {
+    "AoETargetType": "any",
+    "autoTarget": "default",
+    "effectCondition": "",
+    "itemCondition": "",
+    "otherCondition": "",
+    "reactionCondition": "",
+    "removeAttackDamageButtons": "default",
+    "rollAttackPerTarget": "default"
+   },
+   "midiProperties": {
+    "autoFailFriendly": false,
+    "autoSaveFriendly": false,
+    "ida": false,
+    "idi": false,
+    "idr": false,
+    "idv": false,
+    "ignoreTotalCover": false,
+    "magicdam": false,
+    "magiceffect": false,
+    "noConcentrationCheck": false,
+    "toggleEffect": false
+   }
+  },
+  "folder": "8DrF48nKYr6s422r",
+  "img": "modules/ag-icons/magic/illusion/character-headphone-cart.webp",
+  "name": "Завораживающий узор [Hypnotic Pattern]",
+  "ownership": {
+   "33LJj0jVtc1Jxniz": 3,
+   "default": 0
+  },
+  "sort": 0,
+  "system": {
+   "ability": "",
+   "activation": {
+    "condition": "",
+    "type": "action",
+    "value": null
+   },
+   "activities": {
+    "dnd5eactivity000": {
+     "_id": "dnd5eactivity000",
+     "activation": {
+      "override": false,
+      "type": "action",
+      "value": null
+     },
+     "consumption": {
+      "scaling": {
+       "allowed": false,
+       "max": ""
+      },
+      "spellSlot": true,
+      "targets": []
+     },
+     "damage": {
+      "critical": {
+       "allow": false
+      },
+      "onSave": "half",
+      "parts": []
+     },
+     "description": {
+      "chatFlavor": ""
+     },
+     "duration": {
+      "concentration": false,
+      "override": false,
+      "units": "inst"
+     },
+     "effectConditionText": "",
+     "effects": [
+      {
+       "_id": "JcVV8L5QWXFN4pF5",
+       "level": {},
+       "onSave": false
+      }
+     ],
+     "flags": {},
+     "friendlySave": "default",
+     "ignoreTraits": {
+      "ida": false,
+      "idi": false,
+      "idm": false,
+      "idr": false,
+      "idv": false
+     },
+     "img": "",
+     "isOverTimeFlag": false,
+     "macroData": {
+      "command": "",
+      "name": ""
+     },
+     "midiProperties": {
+      "autoCEEffects": "default",
+      "autoConsume": false,
+      "autoTargetAction": "default",
+      "autoTargetType": "any",
+      "automationOnly": false,
+      "chooseEffects": false,
+      "confirmTargets": "default",
+      "displayActivityName": false,
+      "forceConsumeDialog": "default",
+      "forceDamageDialog": "default",
+      "forceRollDialog": "default",
+      "identifier": "",
+      "ignoreFullCover": false,
+      "ignoreTraits": [],
+      "magicDamage": false,
+      "magicEffect": false,
+      "noConcentrationCheck": false,
+      "otherActivityAsParentType": true,
+      "otherActivityCompatible": true,
+      "removeChatButtons": "default",
+      "rollMode": "default",
+      "skipConcentrationCheck": false,
+      "toggleEffect": false,
+      "triggeredActivityConditionText": "",
+      "triggeredActivityConfigure": true,
+      "triggeredActivityConsume": true,
+      "triggeredActivityId": "none",
+      "triggeredActivityRollAs": "self",
+      "triggeredActivityTargets": "targets"
+     },
+     "name": "",
+     "otherActivityAsParentType": true,
+     "otherActivityId": "none",
+     "overTimeProperties": {
+      "postRemoveConditionText": "",
+      "preRemoveConditionText": "",
+      "rollAs": "target",
+      "saveRemoves": true
+     },
+     "range": {
+      "override": false,
+      "units": "self"
+     },
+     "regionBehavior": {
+      "dispositionFilter": -1,
+      "enabled": false,
+      "excludeSource": true,
+      "oncePerTurn": true,
+      "regionVisibility": 2,
+      "rules": [],
+      "wallRestriction": "none"
+     },
+     "regionLight": {
+      "alpha": 0.5,
+      "animationIntensity": 5,
+      "animationSpeed": 5,
+      "animationType": "",
+      "bright": 0,
+      "color": null,
+      "dim": 0,
+      "enabled": false,
+      "luminosity": 0.5
+     },
+     "save": {
+      "ability": [
+       "wis"
+      ],
+      "dc": {
+       "calculation": "spellcasting",
+       "formula": "0"
+      }
+     },
+     "sort": 0,
+     "target": {
+      "affects": {
+       "choice": false
+      },
+      "override": false,
+      "prompt": true,
+      "template": {
+       "contiguous": false,
+       "stationary": false,
+       "units": "ft"
+      }
+     },
+     "type": "save",
+     "useConditionReason": "",
+     "useConditionText": "",
+     "uses": {
+      "max": "",
+      "recovery": [],
+      "spent": 0
+     },
+     "visibility": {
+      "level": {},
+      "requireAttunement": false,
+      "requireIdentification": false,
+      "requireMagic": false
+     }
+    }
+   },
+   "description": {
+    "chat": "",
+    "value": "<p> Текст описания. </p><p> Текст описания. </p>"
+   },
+   "duration": {
+    "units": "minute",
+    "value": "1"
+   },
+   "identifier": "hypnotic-pattern",
+   "level": 3,
+   "materials": {
+    "consumed": false,
+    "cost": 0,
+    "supply": 0,
+    "value": "щепоть конфетти"
+   },
+   "method": "spell",
+   "prepared": 0,
+   "properties": [
+    "somatic",
+    "material",
+    "concentration"
+   ],
+   "range": {
+    "special": "",
+    "units": "ft",
+    "value": "120"
+   },
+   "school": "ill",
+   "source": {
+    "book": "PHB 2024",
+    "custom": "",
+    "revision": 1,
+    "rules": "2024"
+   },
+   "target": {
+    "affects": {
+     "choice": false,
+     "count": "",
+     "type": ""
+    },
+    "template": {
+     "contiguous": false,
+     "count": "",
+     "size": "30",
+     "stationary": false,
+     "type": "cube",
+     "units": "ft"
+    }
+   },
+   "uses": {
+    "max": "",
+    "recovery": [],
+    "spent": 0
+   }
+  },
+  "type": "spell"
+ }
+]

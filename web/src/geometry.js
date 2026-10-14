@@ -721,12 +721,21 @@ export function teleportAt(x, y, teleports, grid, filter) {
   return null;
 }
 
-// snapToGrid — ближайший центр клетки сетки к точке (x,y). grid: {size,offsetX,offsetY}.
-export function snapToGrid(x, y, grid) {
+// snapToGrid — точка привязки токена со стороной cells клеток к (x,y). grid: {size,offsetX,offsetY}.
+// Нечётный токен встаёт в центр клетки, чётный — на пересечение линий: иначе
+// токен 2×2 занимал бы по половинке соседних клеток.
+export function snapToGrid(x, y, grid, cells = 1) {
   if (!grid || !grid.size || grid.size <= 0) return { x, y };
-  const col = Math.round((x - grid.offsetX - grid.size / 2) / grid.size);
-  const row = Math.round((y - grid.offsetY - grid.size / 2) / grid.size);
-  return { x: grid.offsetX + col * grid.size + grid.size / 2, y: grid.offsetY + row * grid.size + grid.size / 2 };
+  const half = Math.round(cells) % 2 === 0 ? 0 : grid.size / 2;
+  const col = Math.round((x - grid.offsetX - half) / grid.size);
+  const row = Math.round((y - grid.offsetY - half) / grid.size);
+  return { x: grid.offsetX + col * grid.size + half, y: grid.offsetY + row * grid.size + half };
+}
+
+// tokenCells — сторона токена в клетках; size у токена — радиус в пикселях.
+export function tokenCells(token, grid) {
+  const cell = grid && grid.size > 0 ? grid.size : 48;
+  return ((token && token.size) || cell / 2) * 2 / cell;
 }
 
 // gridHandleCell — клетка сетки под точкой (cx,cy) (обычно центр вьюпорта,

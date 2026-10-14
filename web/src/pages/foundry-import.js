@@ -22,33 +22,24 @@ import {
   fetchJournal, fetchJournalEntry, createJournalEntry, updateJournalEntry,
   fetchAdminPregens, createAdminPregen, updateAdminPregen,
 } from "../api.js";
+import { loadSystemProfile } from "../system-profile.js";
+import { importerFits } from "../importers.js";
+import { offerBody } from "../importer-offer.js";
 import { mapFoundryItemJson } from "../item-import.js";
 import { mapFoundrySpellJson } from "../spell-import.js";
 import { mapFoundryMonsterJson } from "../monster-import.js";
 import { mapFoundryCharacterJson } from "../character-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
+import { mapFoundryRollTable } from "../rolltable-import.js";
 import { initFullscreenButton } from "../fullscreen.js";
-
-// tokenArt/itemArt — картинка документа Foundry. Мапперы карточек её не
-// трогают (существу/предмету арт задаёт ДМ, а не экспорт), но при импорте
-// целого пака сервер уже перенёс файл в /uploads и переписал ссылку — грех
-// не подставить. У существа арт токена приоритетнее портрета: на карте
-// стоять будет именно он.
-function tokenArt(doc) {
-  const token = doc.prototypeToken || doc.token || {};
-  const texture = token.texture || {};
-  return texture.src || token.img || doc.img || "";
-}
-function itemArt(doc) {
-  return doc.img || "";
-}
+import { tokenArt, itemArt, pregenArt, mapPackDocs, cardKey, sameCard } from "../foundry-import-cards.js";
 
 // TARGETS — разделы стола, по которым разъезжается пакет. Порядок задаёт и
 // порядок галочек, и порядок импорта внутри пака.
 // fetchAll у карточек — не только для галочки в отчёте: по этому списку
 // импорт проверяет, нет ли такой карточки в библиотеке уже (см. importCards).
-const TARGETS = [
+const ALL_TARGETS = [
   // linkField — куда положить id исходного документа Foundry. Только у
   // существ: по нему потом сойдутся карточка бестиария и токены, уже
   // стоящие на импортированных сценах (см. domain.Token.FoundryActorID и
@@ -60,12 +51,14 @@ const TARGETS = [
   // «карточка изменилась» — sheet после round-trip через сервер обрастает
   // дефолтными полями и JSON-сравнение в sameCard уже не совпадает точь-в-точь;
   // это не ошибка, ДМ выбирает «пропустить».
-  { id: "pregens", label: "Готовые персонажи", fetchAll: fetchAdminPregens, createOne: createAdminPregen, updateOne: updateAdminPregen, mapOne: mapFoundryCharacterJson, art: (doc) => (doc && doc.img) || tokenArt(doc) },
+  { id: "pregens", label: "Готовые персонажи", fetchAll: fetchAdminPregens, createOne: createAdminPregen, updateOne: updateAdminPregen, mapOne: mapFoundryCharacterJson, art: pregenArt },
   { id: "monsters", label: "Существа", fetchAll: fetchBestiary, createOne: createMonster, updateOne: updateMonster, mapOne: mapFoundryMonsterJson, art: tokenArt, linkField: "foundryActorId" },
   { id: "spells", label: "Заклинания", fetchAll: fetchSpells, createOne: createSpell, updateOne: updateSpell, mapOne: mapFoundrySpellJson },
   { id: "items", label: "Снаряжение", fetchAll: fetchItems, createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },
   { id: "references", label: "Справочник", fetchAll: fetchReferences, createOne: createReference, updateOne: updateReference, mapBatch: mapFoundryReferenceBatch },
   { id: "conditions", label: "Состояния", fetchAll: fetchConditions, createOne: createCondition, updateOne: updateCondition, mapBatch: mapFoundryConditionBatch },
+  // Случайные таблицы — карточки справочника с бросаемой таблицей (см. ширму), в любом мире.
+  { id: "tables", label: "Случайные таблицы", fetchAll: fetchReferences, createOne: createReference, updateOne: updateReference, mapOne: mapFoundryRollTable },
   // Журналы модуля: текст и папку готовит сервер (см.
   // service.FoundryImport.Notes), но заводит записи эта страница — потому что
   // запись с тем же названием в той же папке может уже существовать, и что с
@@ -77,7 +70,12 @@ const TARGETS = [
   { id: "scenes", label: "Сцены", server: true },
   { id: "playlists", label: "Плейлисты", server: true },
 ];
-const TARGET_BY_ID = Object.fromEntries(TARGETS.map((t) => [t.id, t]));
+// Карточные разделы (мапперы dnd5e) — только в мире системы, которую
+// понимает импортёр foundry-dnd5e; сцены, плейлисты и журнал — в любом.
+const CARD_TARGETS = new Set(["pregens", "monsters", "spells", "items", "references", "conditions"]);
+let cardsFit = true;
+const TARGETS = ALL_TARGETS;
+const TARGET_BY_ID = Object.fromEntries(ALL_TARGETS.map((t) => [t.id, t]));
 
 // JOURNAL_DEST — куда класть журналы модуля. В Foundry весь сюжет приключения
 // лежит в JournalEntry; на столе ему место в журнале (см. web/journal.html).
@@ -233,6 +231,7 @@ function renderTargets() {
   for (const t of TARGETS) {
     const box = h("input", { type: "checkbox" });
     box.checked = selectedTargets.has(t.id);
+    box.disabled = !cardsFit && CARD_TARGETS.has(t.id);
     box.addEventListener("change", () => {
       if (box.checked) selectedTargets.add(t.id);
       else selectedTargets.delete(t.id);
@@ -240,6 +239,7 @@ function renderTargets() {
     });
     targetsEl.appendChild(h("label", {}, [box, t.label]));
   }
+  if (!cardsFit) targetsEl.appendChild(h("div", { style: "flex-basis:100%" }, offerBody("foundry-dnd5e")));
 }
 
 function renderPacks() {
@@ -395,61 +395,15 @@ importBtn.addEventListener("click", async () => {
   notifySaved();
 });
 
-// cardKey — по чему считаем, что «такая карточка уже есть». Имя (без учёта
-// регистра и лишних пробелов) — то, что видит ДМ в списке и по чему на
-// карточку ссылаются описания (см. web/src/catalog-links.js). У состояний
-// ключ машинный — slug: именно им состояние вешается на токен, и два
-// «Ослепления» с одним slug'ом — точно одна и та же карточка.
-function cardKey(target, card) {
-  if (target.id === "conditions" && card.slug) return "slug:" + String(card.slug).trim().toLowerCase();
-  return (card.name || "").trim().toLowerCase();
-}
-
-// sameCard — импорт НИЧЕГО не изменит в существующей карточке: каждое поле,
-// которое он собирается записать, уже там такое же. Сравниваем только
-// importируемые поля — то, что ДМ дописал сам (свои теги, заметки в
-// описании соседних полей), карточку «изменившейся» не делает.
-function sameCard(existing, mapped) {
-  for (const [key, value] of Object.entries(mapped)) {
-    const before = existing[key];
-    const isComposite = (v) => v !== null && typeof v === "object";
-    if (isComposite(value) || isComposite(before)) {
-      if (JSON.stringify(before ?? null) !== JSON.stringify(value ?? null)) return false;
-      continue;
-    }
-    if (String(before ?? "") !== String(value ?? "")) return false;
-  }
-  return true;
-}
-
-// importCards — маппинг и заведение карточек одного раздела. Батчевые
-// мапперы (справочник, состояния) получают весь пак разом: архетипу нужно
-// найти класс-родителя среди соседей, а состояния схлопываются по slug (см.
-// reference-import.js/condition-import.js).
-//
-// Совпадения разбираются так же, как у заметок (см. importNotes): точно
-// такая же карточка пропускается молча, отличающаяся — как решит ДМ.
+// importCards — маппинг (см. mapPackDocs) и заведение карточек одного
+// раздела. Совпадения разбираются так же, как у заметок (см. importNotes):
+// точно такая же карточка пропускается молча (cardKey/sameCard), отличающаяся
+// — как решит ДМ.
 async function importCards(target, docs, pack) {
   const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
-  // sourceIds — карточка -> _id документа Foundry, из которого она собрана.
-  // Отдельная карта, а не поле карточки: якорь проставляется ПОСЛЕ сравнения
-  // "не изменилась ли карточка" (см. ниже, там же и про foundryModuleId),
-  // а до тех пор он не должен попасть ни в sameCard, ни в глаза ДМ в
-  // диалоге конфликта.
-  const sourceIds = new Map();
-  const mapped = target.mapBatch
-    ? target.mapBatch(docs)
-    : docs.map((doc) => {
-        try {
-          const card = target.mapOne(doc);
-          if (target.art && !card.imageUrl) card.imageUrl = target.art(doc);
-          if (target.linkField && doc && doc._id) sourceIds.set(card, String(doc._id));
-          return card;
-        } catch (err) {
-          console.warn(`[${pack.name}] ${doc && doc.name}: ${err.message}`);
-          return null;
-        }
-      });
+  const { mapped, sourceIds } = mapPackDocs(target, docs, (doc, err) => {
+    console.warn(`[${pack.name}] ${doc && doc.name}: ${err.message}`);
+  });
 
   const list = mapped.filter(Boolean);
   stats.failed += mapped.length - list.length;
@@ -782,6 +736,9 @@ document.getElementById("closeBtn").onclick = () => {
     setStatus("Импорт пакетов Foundry доступен только ДМ.", true);
     return;
   }
+  await loadSystemProfile();
+  cardsFit = importerFits("foundry-dnd5e");
+  if (!cardsFit) for (const id of CARD_TARGETS) selectedTargets.delete(id);
   // ?url= — окно открыто из настроек кнопкой "Обновить" у уже
   // установленного пакета (см. pages/dm.js: openFoundryUpdateWindow):
   // подставляем ссылку на манифест и сразу запускаем разведку, как будто ДМ

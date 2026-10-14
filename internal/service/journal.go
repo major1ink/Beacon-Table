@@ -70,6 +70,10 @@ type JournalService interface {
 	// кликом сносил бы чужие); ДМ — всегда.
 	DeleteFolder(ctx context.Context, v domain.JournalViewer, folder string) error
 	RenameFolder(ctx context.Context, v domain.JournalViewer, from, to string) error
+
+	// Graph — граф связей глазами v (см. domain.BuildJournalGraph). audience
+	// нужен только ДМ — чтобы пометить связи, которых не видит ни один игрок.
+	Graph(ctx context.Context, v domain.JournalViewer, audience []domain.JournalViewer) (*domain.JournalGraph, error)
 }
 
 // JournalDraft — что клиент присылает на создание записи. Отдельный тип, а
@@ -384,6 +388,14 @@ func (s *journalService) RenameFolder(ctx context.Context, v domain.JournalViewe
 		return &domain.ValidationError{Msg: err.Error()}
 	}
 	return nil
+}
+
+func (s *journalService) Graph(ctx context.Context, v domain.JournalViewer, audience []domain.JournalViewer) (*domain.JournalGraph, error) {
+	all, err := s.entries.ListWithContent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return domain.BuildJournalGraph(all, v, audience), nil
 }
 
 // inFolder — лежит ли запись в папке folder или в любой вложенной в неё.

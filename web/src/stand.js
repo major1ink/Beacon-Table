@@ -3,6 +3,11 @@
 // stat-editor.js). База — реальные числа из бестиария и листов персонажей,
 // расчёт — applyModifiers (modifiers.js); ничего не пишет, только читает.
 import { fetchCharacters, fetchCharacter, fetchBestiary } from "./api.js";
+import { schemaBases, standStats } from "./universal-stats.js";
+import { loadSchemas, schemaFor } from "./schemas.js";
+import { compileSchema } from "./schema-formula.js";
+import { initiativeBase } from "./schema-summary.js";
+import { initiativeRule, loadSystemProfile } from "./system-profile.js";
 
 const STORAGE_KEY = "beacon.stand";
 // Без мира с существами стенд всё равно должен что-то показывать.
@@ -10,22 +15,37 @@ const DUMMY = {
   id: "dummy",
   name: "Манекен",
   kind: "dummy",
-  stats: { ac: 10, speed: 30, "hp.max": 10, "hp.current": 10, initiative: 0, "abilities.str": 10, "abilities.dex": 10, "abilities.con": 10, "abilities.int": 10, "abilities.wis": 10, "abilities.cha": 10 },
+  stats: { ac: 10, speed: 30, "hp.max": 10, "hp.current": 10, initiative: 0 },
 };
 // Персонажей грузим по одному (список отдаёт только имена) — ограничение,
 // чтобы стол с сотней персонажей не открывал карточку минуту.
 const MAX_CHARACTERS = 20;
 
-const abilityMod = (score) => Math.floor(((score || 10) - 10) / 2);
+
+// standInitiative — число инициативы по правилу системы; 0 — схемы нет.
+const compiled = new Map();
+function standInitiative(kind, data) {
+  const s = schemaFor(kind);
+  if (!s) return 0;
+  let c = compiled.get(kind);
+  if (!c || c.schema !== s) {
+    c = compileSchema(s);
+    compiled.set(kind, c);
+  }
+  return initiativeBase(c, data, initiativeRule());
+}
+
 // Скорость монстра — свободный текст («30 фт., полёт 60 фт.»): берём первое число.
 const speedOf = (s) => {
   const m = String(s || "").match(/\d+/);
   return m ? parseInt(m[0], 10) : 30;
 };
 
+// fromSheet — основы персонажа: инициатива по правилу системы, свободные
+// характеристики — основы целей stat.<ключ>, остальные цели — из полей схемы
+// листа с modifierTarget.
 function fromSheet(c) {
   const sheet = c.sheet || {};
-  const ab = sheet.abilities || {};
   const combat = sheet.combat || {};
   return {
     id: c.id,
@@ -36,19 +56,14 @@ function fromSheet(c) {
       speed: combat.speed || 30,
       "hp.max": combat.hpMax || 0,
       "hp.current": combat.hpCurrent || 0,
-      initiative: abilityMod(ab.dex),
-      "abilities.str": ab.str || 10,
-      "abilities.dex": ab.dex || 10,
-      "abilities.con": ab.con || 10,
-      "abilities.int": ab.int || 10,
-      "abilities.wis": ab.wis || 10,
-      "abilities.cha": ab.cha || 10,
+      initiative: standInitiative("sheet", sheet),
+      ...standStats(sheet),
+      ...schemaBases(schemaFor("sheet"), sheet),
     },
   };
 }
 
 function fromMonster(m) {
-  const ab = m.abilities || {};
   return {
     id: m.id,
     name: m.name,
@@ -58,13 +73,8 @@ function fromMonster(m) {
       speed: speedOf(m.speed),
       "hp.max": m.hp || 0,
       "hp.current": m.hp || 0,
-      initiative: abilityMod(ab.dex),
-      "abilities.str": ab.str || 10,
-      "abilities.dex": ab.dex || 10,
-      "abilities.con": ab.con || 10,
-      "abilities.int": ab.int || 10,
-      "abilities.wis": ab.wis || 10,
-      "abilities.cha": ab.cha || 10,
+      initiative: standInitiative("monster", m),
+      ...schemaBases(schemaFor("monster"), m),
     },
   };
 }
@@ -72,6 +82,7 @@ function fromMonster(m) {
 // loadStand — все доступные записи. Ошибки глотаем: игроку бестиарий
 // недоступен (403), а карточка должна открыться всё равно.
 export async function loadStand() {
+  await Promise.all([loadSchemas(), loadSystemProfile()]);
   const entries = [];
   try {
     const list = await fetchCharacters();

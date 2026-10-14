@@ -1,0 +1,50 @@
+{
+  "format": "beacon-schema/v1",
+  "kind": "monster",
+  "core": {
+    "hp.max": "hp",
+    "ac": "ac",
+    "speed": "speed",
+    "initiative": "initiative"
+  },
+  "fields": {
+    "hp": { "type": "number", "path": "hp", "label": "Хиты" },
+    "ac": { "type": "number", "path": "ac", "label": "Защита" },
+    "speed": { "type": "text", "path": "speed", "label": "Скорость" },
+    "initiative": { "type": "dice", "path": "initiative", "label": "Инициатива", "placeholder": "1d20+2, 2d6 или 3" },
+    "xp": { "type": "number", "path": "xp", "label": "Опыт" },
+    "stats": {
+      "type": "table",
+      "path": "stats",
+      "label": "Характеристики",
+      "statRows": { "name": "name", "value": "value" },
+      "columns": [
+        { "id": "name", "type": "text", "path": "name", "label": "Название" },
+        { "id": "value", "type": "number", "path": "value", "label": "Значение" },
+        { "id": "mod", "type": "number", "path": "mod", "label": "Модификатор", "optional": true }
+      ]
+    },
+    "rolls": {
+      "type": "table",
+      "path": "rolls",
+      "label": "Броски",
+      "columns": [
+        { "id": "name", "type": "text", "path": "name", "label": "Название", "placeholder": "Укус, Когти…" },
+        { "id": "formula", "type": "dice", "path": "formula", "label": "Формула", "placeholder": "1d6+2" }
+      ]
+    },
+    "traits": { "type": "longtext", "path": "traits", "label": "Способности" }
+  },
+  "layout": [
+    { "title": "Бой", "fields": ["hp", "ac", "speed", "initiative", "xp"] },
+    { "title": "Характеристики", "fields": ["stats"] },
+    { "title": "Броски", "fields": ["rolls"] },
+    { "title": "Способности", "fields": ["traits"] },
+    { "title": "Добыча", "widget": "inventory" }
+  ],
+  "list": {
+    "subtitle": "Хиты {hp} · Защита {ac}",
+    "sort": ["name"],
+    "search": ["name", "tags"]
+  }
+}
