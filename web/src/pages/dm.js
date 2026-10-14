@@ -87,6 +87,7 @@ import { startTour, stopTour, clearTourProgress, tourHintOnce } from "../tutoria
 import { dmTourSteps } from "../tutorial-dm.js";
 import { changeWorldSystem, fitsSystem } from "../world-system.js";
 import { showMissingModulesNotice } from "../modules-notice.js";
+import { openModulesShowcase } from "../modules-link.js";
 import { cardTokenCells, loadSystemProfile } from "../system-profile.js";
 import { escapeHtml, cssUrl, downloadFile } from "../html.js";
 import { setArtBackground } from "../art.js";
@@ -271,6 +272,24 @@ function openJournalWindow(entryId, section) {
 
 document.getElementById("journalBtn").onclick = () => openJournalWindow();
 
+// Сессии и граф — тот же журнал, но своим окном, чтобы не уводить открытую запись.
+function openJournalView(view, title) {
+  openFloatingWindow({ key: "journal-" + view, title, url: "/journal.html?view=" + view, width: 1000, height: 700, popoutFeatures: "width=1000,height=700" });
+}
+document.getElementById("sessionsBtn").onclick = () => openJournalView("sessions", "Сессии");
+document.getElementById("graphBtn").onclick = () => openJournalView("graph", "Граф связей");
+
+document.getElementById("screenBtn").onclick = () =>
+  openFloatingWindow({
+    key: "gm-screen",
+    title: "Ширма",
+    url: "/gm-screen.html",
+    width: 1100,
+    height: 720,
+    popoutFeatures: "width=1100,height=720",
+    desktopFill: true,
+  });
+
 // hideOwnerOnlyUI — убрать со стола то, что доступно только хозяину сервера:
 // список миров, вкладки «Трансляция» и «Сервер» в настройках. Права на
 // сервере проверяет он сам (см. requireOwner), здесь — только внешний вид.
@@ -297,6 +316,24 @@ function hideOwnerOnlyUI() {
 // сам заход на worlds.html его не трогает.
 // Полный экран (см. src/fullscreen.js) — в HUD зума.
 initFullscreenButton(document.getElementById("fullscreenBtn"), (active) => icon(active ? "fullscreen-exit" : "fullscreen", { size: 15 }));
+
+// «Как видит игрок»: тьма, свет и туман в окне ведущего — как у игроков и на
+// трансляции (vtt/index.js: vtt:viewAsPlayer). Только вид: сцену можно
+// править, игроки ничего не замечают; после перезагрузки режим выключен.
+const viewAsPlayerBtn = document.getElementById("viewAsPlayerBtn");
+const viewAsPlayerBadge = document.getElementById("viewAsPlayerBadge");
+viewAsPlayerBadge.insertAdjacentHTML("afterbegin", icon("eye", { size: 13 }));
+function setViewAsPlayer(on) {
+  viewAsPlayerBtn.innerHTML = icon(on ? "eye-off" : "eye", { size: 15 });
+  viewAsPlayerBtn.title = on ? "Вернуть вид ведущего" : "Как видит игрок: тьма, свет и туман глазами партии";
+  viewAsPlayerBtn.classList.toggle("open", on);
+  viewAsPlayerBtn.setAttribute("aria-pressed", String(on));
+  viewAsPlayerBadge.hidden = !on;
+  document.dispatchEvent(new CustomEvent("vtt:viewAsPlayer", { detail: { active: on } }));
+}
+setViewAsPlayer(false);
+viewAsPlayerBtn.onclick = () => setViewAsPlayer(viewAsPlayerBadge.hidden);
+viewAsPlayerBadge.onclick = () => setViewAsPlayer(false);
 initVisualViewport();
 initWakeLock();
 
@@ -3056,7 +3093,7 @@ async function toggleWorldModule(id, box) {
   }
 }
 
-document.getElementById("moduleShowcaseBtn").onclick = () => window.open("/modules.html", "_blank", "noopener");
+document.getElementById("moduleShowcaseBtn").onclick = () => openModulesShowcase();
 
 // Список того, что ДМ хотя бы раз импортировал в этот мир (см.
 // service.FoundryService.Installed), плюс необязательная проверка новых
@@ -4502,9 +4539,8 @@ document.addEventListener("vtt:openNoteMarker", async (e) => {
 //   ручного закрытия/открытия.
 window.addEventListener("message", async (e) => {
   if (e.origin !== location.origin || !e.data) return;
-  if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
-  } else if (e.data.type === "beacon:openCombatantCard") {
+  // "beacon:openFloatingWindow" открывает сам floating-window.js.
+  if (e.data.type === "beacon:openCombatantCard") {
     // Клик по бойцу в трекере, вынесенном в плавающее окно (iframe
     // combat-tracker.html): своей колонки у него нет — показываем в нашей
     // (см. combatant-card.js: openCombatantCard).
@@ -5235,6 +5271,9 @@ for (const btn of document.querySelectorAll("#rail > .rail-top > .rail-btn[data-
 }
 attachTooltip(railToolsBtn, () => (toolsFlyoutOpen ? null : RAIL_HELP.tools));
 attachTooltip(document.getElementById("journalBtn"), RAIL_HELP.journal);
+attachTooltip(document.getElementById("screenBtn"), RAIL_HELP.screen);
+attachTooltip(document.getElementById("sessionsBtn"), RAIL_HELP.sessions);
+attachTooltip(document.getElementById("graphBtn"), RAIL_HELP.graph);
 attachTooltip(railMoreBtn, () => (railMenu.hidden ? RAIL_HELP.more : null));
 
 // ---- ширина панели: тянется мышью за #panelResizer ----

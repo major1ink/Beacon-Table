@@ -22,14 +22,17 @@ import {
   createJournalFolder,
   renameJournalFolder,
   deleteJournalFolder,
+  importBoard,
 } from "../api.js";
+import { mountJournalGraph, boardScene } from "../journal-graph.js";
+import { mountSessionFeed } from "../session-feed.js";
 import { openSocket } from "../ws-reconnect.js";
 import { renderNoteHtml, wireWikiLinks, markMissingWikiLinks, decorateTags, tagsIn, wikiTargetsIn, resolveWikiTarget, scrollToHeading, scrollHeadingIntoView } from "../notes/markdown.js";
 import { createNoteEditor } from "../notes/editor.js";
 import { mountNoteToolbar } from "../notes/toolbar.js";
 import { attachWikiAutocomplete } from "../notes/wiki-autocomplete.js";
 import { icon } from "../icons.js";
-import { wireCatalogLinks } from "../catalog-links.js";
+import { wireCatalogLinks, hostWindow } from "../catalog-links.js";
 import { enhanceRolls } from "../inline-rolls.js";
 import { showConfirm, showPrompt } from "../modal.js";
 import { isGM } from "../roles.js";
@@ -1144,6 +1147,10 @@ function connectRollSocket() {
   // обрыва кнопка честно говорила бы «нет связи» до перезагрузки страницы.
   rollWS = openSocket(isDM ? "/ws/dm" : "/ws/player", {
     onMessage: (data) => {
+    if (data.type === "session_state" || data.type === "session_event") {
+      if (feed) feed.onMessage(data);
+      return;
+    }
     if (data.type === "journal_changed") {
       onJournalChanged(data.id);
       return;
@@ -1191,6 +1198,7 @@ function onJournalChanged(id) {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(async () => {
     await refreshList({ keepMessage: true });
+    if (graph && document.body.classList.contains("graph-open")) graph.refresh();
     if (!current || !id || id !== current.id) return;
     // Свою же правку перечитывать незачем — она и так только что приехала
     // ответом на сохранение; а в режиме правки перечитывание затёрло бы
@@ -1444,6 +1452,94 @@ wireWikiLinks(renderEl, () => entries, {
   },
 });
 
+// ---- граф связей (src/journal-graph.js) ----
+
+const graphBtn = document.getElementById("graphBtn");
+graphBtn.innerHTML = icon("graph", { size: 15 });
+let graph = null;
+
+function openGraph() {
+  closeSessions();
+  document.body.classList.add("graph-open");
+  graphBtn.classList.add("active");
+  if (!graph) {
+    graph = mountJournalGraph(document.getElementById("graphRoot"), {
+      isDM,
+      members,
+      onOpen: (id) => {
+        closeGraph();
+        openEntry(id);
+      },
+      onBoard: graphToBoard,
+    });
+  }
+  graph.refresh().then(() => current && graph.select(current.id));
+}
+
+function closeGraph() {
+  document.body.classList.remove("graph-open");
+  graphBtn.classList.remove("active");
+}
+
+graphBtn.onclick = () => (document.body.classList.contains("graph-open") ? closeGraph() : openGraph());
+document.getElementById("graphCloseBtn").onclick = closeGraph;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.body.classList.contains("graph-open") && !quickOverlay.classList.contains("open")) closeGraph();
+});
+
+// ---- сессии (src/session-feed.js) ----
+
+const sessionsBtn = document.getElementById("sessionsBtn");
+sessionsBtn.innerHTML = icon("clock", { size: 15 });
+let feed = null;
+
+function openSessions() {
+  closeGraph();
+  document.body.classList.add("sessions-open");
+  sessionsBtn.classList.add("active");
+  if (!feed) {
+    feed = mountSessionFeed(document.getElementById("sessionsRoot"), {
+      isDM,
+      members,
+      send: (msg) => rollWS && rollWS.send(msg),
+      onOpenEntry: (id) => {
+        closeSessions();
+        refreshList().then(() => openEntry(id));
+      },
+    });
+  }
+  feed.refresh();
+}
+
+function closeSessions() {
+  document.body.classList.remove("sessions-open");
+  sessionsBtn.classList.remove("active");
+}
+
+sessionsBtn.onclick = () => (document.body.classList.contains("sessions-open") ? closeSessions() : openSessions());
+document.getElementById("sessionsCloseBtn").onclick = closeSessions;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.body.classList.contains("sessions-open") && !quickOverlay.classList.contains("open")) closeSessions();
+});
+
+// graphToBoard — снимок видимого графа новой доской: связь карточки с
+// записью — по [[названию]], как у досок из Obsidian.
+async function graphToBoard(shown, positions) {
+  const name = "Граф связей " + new Date().toLocaleDateString("ru");
+  const file = new File([JSON.stringify(boardScene(shown, positions))], name + ".excalidraw", { type: "application/json" });
+  try {
+    const res = await importBoard(file, name);
+    const board = res.board || res;
+    hostWindow().postMessage(
+      { type: "beacon:openFloatingWindow", key: "board-" + board.id, title: board.name, url: "/board.html?id=" + encodeURIComponent(board.id) },
+      location.origin
+    );
+  } catch (err) {
+    msgEl.className = "";
+    msgEl.textContent = "Не удалось сделать доску: " + err.message;
+  }
+}
+
 // guard — общий обработчик «сделал и показал ошибку человеку»: почти каждое
 // действие тут может упереться в права (сервер — единственный источник
 // правды о них), и молча проглатывать это нельзя.
@@ -1472,7 +1568,10 @@ async function guard(fn) {
     members = []; // без списка стола диалог прав покажет только «Все за столом»
   }
   await refreshList();
-  const wanted = new URLSearchParams(location.search).get("id");
+  const params = new URLSearchParams(location.search);
+  if (params.get("view") === "graph") openGraph();
+  if (params.get("view") === "sessions") openSessions();
+  const wanted = params.get("id");
   if (wanted) await openEntry(wanted, { section: decodeURIComponent(location.hash.slice(1)) });
 })();
 

@@ -46,7 +46,8 @@
       border-right: 1px solid var(--border); background: var(--panel-bg);
     }
     .dir-head { flex: 0 0 auto; padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 8px; }
-    .search-row { position: relative; display: flex; align-items: center; }
+    .search-row { position: relative; display: flex; align-items: center; gap: 4px; }
+    .search-row input { flex: 1 1 auto; min-width: 0; }
     .search-row svg { position: absolute; left: 9px; opacity: .45; pointer-events: none; }
     #search { padding-left: 30px; }
     .filters { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -208,6 +209,9 @@
     .note-editor-content a.wikilink { color: var(--accent); cursor: text; }
     .note-editor-content a.wikilink-macro { color: var(--text-dim); font-family: "Cascadia Code", Consolas, monospace; font-size: .9em; }
     .note-editor-content a.catalog-ref { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 3px; cursor: text; }
+    /* блок ```связи в редакторе — подписан, чтобы не путать с кодом */
+    .note-editor-content pre:has(> code.language-связи) { border-left: 3px solid var(--accent); }
+    .note-editor-content pre:has(> code.language-связи)::before { content: "Связи · тип: [[Запись]]"; display: block; margin-bottom: 4px; font-size: 11px; color: var(--text-dim); font-family: inherit; }
     .note-editor-content .ProseMirror-selectednode { outline: 2px solid var(--accent); border-radius: 4px; }
     .note-editor-content img.ProseMirror-selectednode { outline-offset: 2px; }
     /* ProseMirror оборачивает пункт в <p>, отступы не нужны */
@@ -429,6 +433,15 @@
       #editWrap { padding: 10px 12px 12px; }
       #titleRow { padding: 10px 12px 0; }
     }
+    /* ---- граф связей поверх окна (src/journal-graph.js) ---- */
+    #graphView { display: none; position: fixed; inset: 0; z-index: 20; flex-direction: column; background: var(--bg); }
+    body.graph-open #graphView { display: flex; }
+    #sessionsView { display: none; position: fixed; inset: 0; z-index: 20; flex-direction: column; background: var(--bg); }
+    body.sessions-open #sessionsView { display: flex; }
+    #sessionsRoot { flex: 1 1 auto; min-height: 0; }
+    .graph-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 16px; border-bottom: 1px solid var(--border); }
+    .graph-title { flex: 1; font-family: var(--font-serif); font-size: 22px; font-weight: 700; color: var(--heading); }
+    #graphRoot { flex: 1 1 auto; min-height: 0; }
   </style>
   <link rel="stylesheet" href="/system-theme.css" />
 </head>
@@ -439,6 +452,8 @@
         <div class="search-row">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
           <input type="text" id="search" placeholder="Поиск по журналу…" />
+          <button id="sessionsBtn" class="icon-btn" type="button" title="Сессии — лента событий стола"></button>
+          <button id="graphBtn" class="icon-btn" type="button" title="Граф связей между записями"></button>
         </div>
         <div class="filters" id="filters">
           <button type="button" class="filter-chip active" data-filter="all">Все</button>
@@ -499,6 +514,22 @@
       </div>
     </main>
   </div>
+
+  <section id="graphView" aria-label="Граф связей">
+    <header class="graph-head">
+      <span class="graph-title">Граф связей</span>
+      <button id="graphCloseBtn" class="icon-btn" type="button" title="Закрыть граф"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+    </header>
+    <div id="graphRoot"></div>
+  </section>
+
+  <section id="sessionsView" aria-label="Сессии">
+    <header class="graph-head">
+      <span class="graph-title">Сессии</span>
+      <button id="sessionsCloseBtn" class="icon-btn" type="button" title="Закрыть"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+    </header>
+    <div id="sessionsRoot"></div>
+  </section>
 
   <div id="quickOverlay">
     <div id="quickBox">

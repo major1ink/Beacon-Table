@@ -123,12 +123,9 @@ export function attachWikiAutocomplete(editor, getNotes) {
   function insert(note) {
     const target = targetFor(note, getNotes() || []);
     const to = editor.state.selection.from;
-    editor
-      .chain()
-      .focus()
-      .deleteRange({ from: at.from, to })
-      .insertContent({ type: "wikiLink", attrs: { target } })
-      .run();
+    // В блоке кода (```связи) узлы не живут — там ссылка остаётся текстом.
+    const content = editor.isActive("codeBlock") ? `[[${target}]]` : { type: "wikiLink", attrs: { target } };
+    editor.chain().focus().deleteRange({ from: at.from, to }).insertContent(content).run();
     close();
   }
 

@@ -270,6 +270,7 @@ func (r *Room) handleApplyStatus(msg domain.ClientMsg) {
 		}
 	}
 	r.commitStatuses(tgt)
+	r.logStatus(msg, true)
 }
 
 // putStatus — вставка/обновление одной метки без рассылки (общее тело для
@@ -349,6 +350,7 @@ func (r *Room) handleRemoveStatus(msg domain.ClientMsg) {
 	}
 	*tgt.list = append((*tgt.list)[:i], (*tgt.list)[i+1:]...)
 	r.commitStatuses(tgt)
+	r.logStatus(msg, false)
 }
 
 // handleSetStatusLevel — "set_status_level": уровень многоуровневого

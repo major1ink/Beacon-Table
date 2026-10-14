@@ -18,6 +18,8 @@
 // floating-window.js: postToOpenWindows("catalog-", ...) — топ-документ
 // форвардит "beacon:*Saved" сюда же.
 import { fetchMe } from "../api.js";
+// Вынесенный список открывает карточки у себя — слушатель там.
+import "../floating-window.js";
 import { icon } from "../icons.js";
 import {
   fetchBestiary, createMonster, updateMonster, deleteMonster, fetchMonster,
@@ -46,7 +48,7 @@ import { loadSchemas, schemaFor } from "../schemas.js";
 import { compileSchema } from "../schema-formula.js";
 import { schemaHasWidget } from "../schema-layout.js";
 import { catalogConfig, categoriesOf } from "../schema-list.js";
-import { loadSystemProfile, moduleHas, moduleTitle, worldModules } from "../system-profile.js";
+import { loadSystemProfile, moduleAttribution, moduleHas, moduleTitle, worldModules } from "../system-profile.js";
 import { importerFits } from "../importers.js";
 import { offerImport } from "../importer-offer.js";
 
@@ -510,7 +512,8 @@ function buildRow(x) {
   if (x.system) {
     const badge = document.createElement("span");
     badge.className = "catalog-sys-badge";
-    badge.title = `Карточка модуля «${moduleTitle(x.module)}» — только для чтения`;
+    const attribution = moduleAttribution(x.module);
+    badge.title = `Карточка модуля «${moduleTitle(x.module)}» — только для чтения` + (attribution ? `\nИсточник текста: ${attribution}` : "");
     badge.innerHTML = icon("lock", { size: 11 });
     badge.append(" " + moduleTitle(x.module));
     row.appendChild(badge);

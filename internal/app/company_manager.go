@@ -34,6 +34,8 @@ import (
 	"beacon-table/internal/repository/monsterfile"
 	"beacon-table/internal/repository/referencefile"
 	"beacon-table/internal/repository/scenefile"
+	"beacon-table/internal/repository/screenfile"
+	"beacon-table/internal/repository/sessionfile"
 	"beacon-table/internal/repository/spellfile"
 	"beacon-table/internal/repository/sqlite"
 	"beacon-table/internal/schema"
@@ -60,6 +62,9 @@ type ActiveWorld struct {
 
 	Journal service.JournalService
 	Boards  service.BoardService
+	Screen  service.ScreenService
+	// Sessions — ленты сессий (world/sessions).
+	Sessions service.SessionLogService
 	// BoardSync — живые доски мира (см. service.BoardHub): по горутине на
 	// доску, открытую сейчас хотя бы одним окном.
 	BoardSync *service.BoardHub
@@ -145,6 +150,21 @@ func (m *CompanyManager) resolveModules(company *domain.Company) (found []*modul
 	return found, missing
 }
 
+// baseTables — встроенный базовый модуль, если его нет среди модулей мира: его
+// случайные таблицы нужны ширме в любом мире, а состояния — только «Своей системе».
+func (m *CompanyManager) baseTables(mods []*module.Module) *module.Module {
+	for _, mod := range mods {
+		if mod.Manifest.ID == domain.BaseModuleID {
+			return nil
+		}
+	}
+	bm, err := m.modules.Get(domain.BaseModuleID)
+	if err != nil {
+		return nil
+	}
+	return bm
+}
+
 // combatRules — правила боя мира: из системного модуля его системы, а если
 // система — «Своя», модуля нет на сервере или он правил не задаёт —
 // правила «Своей системы».
@@ -196,7 +216,11 @@ func (m *CompanyManager) SystemProfile(company *domain.Company) domain.SystemPro
 	}
 	mods, _ := m.resolveModules(company)
 	for _, mod := range mods {
-		p.Modules = append(p.Modules, domain.WorldModule{ID: mod.Manifest.ID, Title: mod.Manifest.Title, Type: mod.Manifest.Type, Counts: mod.Counts()})
+		p.Modules = append(p.Modules, domain.WorldModule{ID: mod.Manifest.ID, Title: mod.Manifest.Title, Type: mod.Manifest.Type, Attribution: mod.Manifest.Attribution, Counts: mod.Counts()})
+	}
+	if bm := m.baseTables(mods); bm != nil {
+		counts := map[string]int{module.KindReferences: bm.Counts()[module.KindReferences]}
+		p.Modules = append(p.Modules, domain.WorldModule{ID: bm.Manifest.ID, Title: bm.Manifest.Title, Type: bm.Manifest.Type, Counts: counts})
 	}
 	if company.System == domain.SystemCustom {
 		return p
@@ -493,6 +517,7 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	sceneRepo := scenefile.NewStore(filepath.Join(dataRoot, "scenes"))
 	journalRepo := journalfile.NewStore(filepath.Join(dataRoot, "journal"))
 	boardRepo := boardfile.NewStore(filepath.Join(dataRoot, "boards"))
+	screenRepo := screenfile.NewStore(filepath.Join(dataRoot, "screen"))
 	// Карточки модулей: у каждого вида — источник на каждый подключённый
 	// модуль, в порядке подключения (см. cardcatalog.Catalog).
 	mods, missingMods := m.resolveModules(company)
@@ -513,6 +538,9 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		itemSrc = append(itemSrc, itemfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindItems), prefix, id))
 		referenceSrc = append(referenceSrc, referencefile.NewModuleStore(mod.FS, mod.ContentDir(module.KindReferences), prefix, id))
 		conditionSrc = append(conditionSrc, conditionfile.NewModuleStore(mod.FS, mod.ContentDir(module.KindConditions), prefix, id))
+	}
+	if bm := m.baseTables(mods); bm != nil {
+		referenceSrc = append(referenceSrc, referencefile.NewModuleStore(bm.FS, bm.ContentDir(module.KindReferences), bm.Manifest.IDPrefix(), bm.Manifest.ID))
 	}
 	monsterRepo := monsterfile.NewCatalog(monsterfile.NewStore(filepath.Join(dataRoot, "bestiary")), monsterSrc...)
 	spellRepo := spellfile.NewCatalog(spellfile.NewStore(filepath.Join(dataRoot, "spells")), spellSrc...)
@@ -553,6 +581,10 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 	}
 
 	journal := service.NewJournalService(journalRepo)
+	screen := service.NewScreenService(screenRepo, journal)
+	room.UseScreen(ctx, screen)
+	sessions := service.NewSessionLogService(ctx, sessionfile.NewStore(filepath.Join(dataRoot, "sessions")), journal)
+	room.UseSessions(sessions)
 	boards := service.NewBoardService(boardRepo)
 	boardSync := service.NewBoardHub(boardRepo)
 	playlists := service.NewPlaylistService(playlistRepo)
@@ -577,6 +609,8 @@ func (m *CompanyManager) Launch(ctx context.Context, companyID string) error {
 		Conditions: conditions,
 		Journal:    journal,
 		Boards:     boards,
+		Screen:     screen,
+		Sessions:   sessions,
 		BoardSync:  boardSync,
 		Playlists:  playlists,
 		Assets:     assets,

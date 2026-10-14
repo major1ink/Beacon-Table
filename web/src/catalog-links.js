@@ -18,6 +18,8 @@
 // плавающем окне-iframe, второй уровень вложенности не нужен (см.
 // floating-window.js: все окна — прямые дети топ-документа).
 import { fetchItems, fetchSpells, fetchReferences, fetchBestiary, fetchJournal } from "./api.js";
+// Страница, открытая отдельным окном, открывает карточки у себя — слушатель там.
+import "./floating-window.js";
 
 const KIND_CONFIG = {
   item: { fetchAll: fetchItems, urlFor: (id) => `/itembook.html?id=${id}`, keyPrefix: "item" },
@@ -73,7 +75,7 @@ function matchByName(list, name, folder) {
 // либо ВЫНЕСЕННОЕ кнопкой 🗗 отдельное окно браузера (window.parent — оно
 // само, а топ-документ — это window.opener, см. floating-window.js). Без
 // разбора этого случая ссылки в вынесенном окне журнала молча не работали.
-function hostWindow() {
+export function hostWindow() {
   if (window.opener && window.opener !== window) return window.opener;
   return window.parent;
 }

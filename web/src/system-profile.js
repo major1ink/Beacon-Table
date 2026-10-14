@@ -73,6 +73,10 @@ export const systemId = () => profile.id;
 // worldModules — модули мира [{id, title, type}]; moduleTitle — название по
 // id (неизвестный модуль — сам id).
 export const worldModules = () => profile.modules;
+export function moduleAttribution(id) {
+  const m = profile.modules.find((x) => x.id === id);
+  return (m && m.attribution) || "";
+}
 export function moduleTitle(id) {
   const m = profile.modules.find((x) => x.id === id);
   return m ? m.title : id;

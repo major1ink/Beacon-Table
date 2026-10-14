@@ -218,6 +218,10 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/journal", a.handleJournalList)
 	mux.HandleFunc("POST /api/journal", a.handleJournalCreate)
 	mux.HandleFunc("GET /api/journal/members", a.handleJournalMembers)
+	mux.HandleFunc("GET /api/journal/graph", a.handleJournalGraph)
+	mux.HandleFunc("GET /api/sessions", a.handleSessionList)
+	mux.HandleFunc("GET /api/sessions/{id}", a.handleSessionEvents)
+	mux.HandleFunc("POST /api/sessions/{id}/summary", a.handleSessionSummary)
 	mux.HandleFunc("GET /api/journal/{id}", a.handleJournalGet)
 	mux.HandleFunc("PUT /api/journal/{id}", a.handleJournalUpdate)
 	mux.HandleFunc("PUT /api/journal/{id}/access", a.handleJournalAccess)
@@ -241,6 +245,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/boards/{id}/name", a.handleBoardRename)
 	mux.HandleFunc("PUT /api/boards/{id}/access", a.handleBoardAccess)
 	mux.HandleFunc("DELETE /api/boards/{id}", a.handleBoardDelete)
+
+	mux.HandleFunc("GET /api/screen", a.handleScreenGet)
+	mux.HandleFunc("PUT /api/screen", a.handleScreenSave)
 
 	mux.HandleFunc("GET /api/journal-folders", a.handleJournalFoldersList)
 	mux.HandleFunc("POST /api/journal-folders", a.handleJournalFolderCreate)

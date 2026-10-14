@@ -73,6 +73,7 @@ export default defineConfig({
         referencebook: resolve(__dirname, "referencebook.html"),
         conditions: resolve(__dirname, "conditions.html"),
         combatTracker: resolve(__dirname, "combat-tracker.html"),
+        gmScreen: resolve(__dirname, "gm-screen.html"),
         catalog: resolve(__dirname, "catalog.html"),
         foundryImport: resolve(__dirname, "foundry-import.html"),
       },

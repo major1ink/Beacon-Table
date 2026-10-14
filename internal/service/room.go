@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"beacon-table/internal/domain"
@@ -69,6 +70,9 @@ type RoomService interface {
 	// раньше это делала только перезагрузка страницы. kind нужен, чтобы
 	// клиент не дёргал сервер за всем разом из-за правки одной карточки.
 	NotifyLibraryChanged(kind string)
+	// SetScreen — ширма сохранена: открытые игрокам таймеры и счётчики,
+	// какие события считать.
+	SetScreen(sc *domain.Screen)
 	// SpawnPlayerToken ставит на активную сцену токен персонажа игрока —
 	// нужен входу в публичное демо игроком, где ДМ-а, который перетащил бы
 	// фишку на карту, может не быть вовсе (см. room_guest.go).
@@ -266,6 +270,18 @@ type Room struct {
 	// в state сцены не пишется, шлётся всем и досылается свежеподключившимся
 	// (см. showcasePayload/broadcastShowcase). nil = ничего не показывается.
 	showcase *domain.ShowcaseState
+
+	// Ширма ведущего (см. room_screen.go); пишется и из HTTP.
+	screenMu      sync.Mutex
+	screenSvc     ScreenService
+	screenPub     domain.ScreenPublic
+	screenAuto    map[string]bool
+	screenChanged chan struct{}
+
+	// Лента сессии (см. room_session.go).
+	sessionsMu sync.Mutex
+	sessions   SessionLogService
+	timers     map[string]screenTimerRun // идущие таймеры ширмы с прошлого раза, см. logTimers
 }
 
 // NewRoom поднимает комнату из sceneRepo (все сцены с прошлого запуска,
@@ -324,6 +340,7 @@ func NewRoom(sceneRepo repository.SceneRepository, dice DiceRoller, characterRep
 		playlistsChanged:      make(chan struct{}, 4),
 		charactersChanged:     make(chan struct{}, 4),
 		libraryChanged:        make(chan string, 16),
+		screenChanged:         make(chan struct{}, 1),
 		announce:              make(chan string, 4),
 		dirtyScenes:           make(map[string]bool),
 		combat:                combat,
@@ -536,6 +553,8 @@ func (r *Room) run() {
 			c.Send(r.combatPayload(c))  // трекер инициативы — свежеподключившийся сразу видит бой (если идёт)
 			c.Send(r.hubPayload())      // хаб лута — свежеподключившийся сразу видит, что уже накидал ДМ
 			c.Send(r.showcasePayload()) // картинка «Показать игрокам», если ДМ сейчас что-то показывает
+			c.Send(r.screenPayload())   // открытые таймеры и счётчики ширмы
+			c.Send(r.sessionPayload())  // идёт ли сессия (лента)
 			r.sendChatHistory(c)        // чат стола, только видимое этому клиенту
 			r.broadcastSceneList()
 			r.broadcastPlayerList()
@@ -579,6 +598,10 @@ func (r *Room) run() {
 			}
 			req.reply <- owns
 
+		case <-r.screenChanged:
+			r.broadcastScreen()
+			r.logTimers()
+
 		case id := <-r.journalChanged:
 			r.broadcastJournalChanged(id)
 
@@ -600,6 +623,7 @@ func (r *Room) run() {
 
 		case <-ticker.C:
 			r.flushIfDirty()
+			r.logTimerEnds(time.Now().UnixMilli())
 
 		case req := <-r.shutdown:
 			// финальное сохранение перед выходом процесса — не ждём таймер,
@@ -650,6 +674,12 @@ func (r *Room) handleInbound(im inboundMsg) {
 		return
 	case "chat_clear":
 		r.handleChatClear()
+		return
+	case "screen_counter":
+		r.handleScreenCounter(im.msg) // см. room_screen.go
+		return
+	case "session_start", "session_end", "session_note":
+		r.handleSession(im.msg) // см. room_session.go
 		return
 	case "show_image":
 		// «Показать игрокам» из раздела «Показ» — картинка поверх
@@ -1539,6 +1569,7 @@ func (r *Room) handleRollDice(c RoomClient, msg domain.ClientMsg) {
 	}
 	hidden := msg.Hidden != nil && *msg.Hidden
 	r.relayRoll(c, r.rollerName(c, msg.CharacterID), msg.Formula, clampRunes(msg.Label, maxRollLabel), result, hidden)
+	r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoRoll, Player: c.Role() == domain.RolePlayer, D20: d20Faces(msg.Formula, result.Rolls), Total: result.Total})
 }
 
 // rollerName — кто указан бросающим в общем логе. Если бросок пришёл с
@@ -1597,6 +1628,7 @@ func (r *Room) relayRoll(from RoomClient, name, formula, label string, result do
 	if hidden {
 		payload["hidden"] = true
 	}
+	r.logRoll(from, name, formula, label, result.Total, hidden)
 	for c := range r.clients {
 		switch {
 		case hidden && c.Role() != domain.RoleDM && !sameRoller(from, c):
@@ -1751,6 +1783,10 @@ func (r *Room) switchScene(id string) {
 		return
 	}
 	prevURL, _ := r.ambientOf(r.scenes[r.currentSceneID])
+	if id != r.currentSceneID {
+		defer r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoScene})
+		defer r.logSession(domain.SessionEvent{Kind: domain.SessionScene, Scene: s.Name, Text: "Сцена: " + s.Name})
+	}
 	r.currentSceneID = id
 	r.scene = s
 	clear(r.viewing) // «показать игрокам» — все на неё, и ДМ, что открывал другую, тоже
@@ -2219,7 +2255,9 @@ func (r *Room) handleSetCombatantHP(id string, cur, max, temp, delta *int) {
 	}
 	if cur != nil {
 		wasDown := cmb.HPCurrent <= 0
+		before := cmb.HPCurrent
 		cmb.HPCurrent = *cur
+		r.logHP(cmb, before)
 		zeroHP := r.combatRules().ZeroHPFor(cmb.CharacterID != "")
 		if cmb.HPCurrent > 0 {
 			cmb.DeathSaveSuccess = 0
@@ -2388,6 +2426,9 @@ func (r *Room) killCombatant(cmb *domain.Combatant) {
 	r.snapshotTokenSpoils(cmb.TokenID, cmb.MonsterID)
 	r.markTokenDead(cmb.TokenID)
 	delete(r.combat.Combatants, id)
+	if r.combat.Active {
+		defer r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoKilled, Player: cmb.CharacterID != ""})
+	}
 	if r.combat.CurrentID == id {
 		if order := sortedCombatantIDs(r.combat); len(order) > 0 {
 			r.combat.CurrentID = order[0]
@@ -2548,9 +2589,17 @@ func (r *Room) handleStartCombat() {
 	r.combat.CurrentID = order[0]
 	r.markCombatDirty()
 	r.broadcastCombat()
+	r.logSession(domain.SessionEvent{Kind: domain.SessionCombat, Text: "Бой начался"})
+	r.logTurn()
+	r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoCombat})
+	r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoRound})
+	r.countTurn()
 }
 
 func (r *Room) handleEndCombat() {
+	if r.combat.Active {
+		r.logSession(domain.SessionEvent{Kind: domain.SessionCombat, Text: fmt.Sprintf("Бой окончен на %d-м раунде", r.combat.Round)})
+	}
 	r.combat.Active = false
 	r.combat.Round = 0
 	r.combat.CurrentID = ""
@@ -2572,9 +2621,14 @@ func (r *Room) handleTurnStep(dir int) {
 	} else {
 		idx += dir
 	}
+	newRound := false
 	if idx >= len(order) {
 		idx = 0
 		r.combat.Round++
+		newRound = true
+		if r.combat.Active {
+			defer r.countScreen(domain.ScreenEvent{Kind: domain.ScreenAutoRound})
+		}
 	} else if idx < 0 {
 		idx = len(order) - 1
 		if r.combat.Round > 1 {
@@ -2592,6 +2646,11 @@ func (r *Room) handleTurnStep(dir int) {
 	r.combat.CurrentID = order[idx]
 
 	if r.combat.Active && dir > 0 {
+		defer r.countTurn()
+		defer r.logTurn()
+		if newRound {
+			r.logSession(domain.SessionEvent{Kind: domain.SessionRound, Text: fmt.Sprintf("Раунд %d", r.combat.Round)})
+		}
 		// Ход перешёл к бойцу: сначала разовый урон/лечение «в начале хода»
 		// (горение, регенерация, яд), потом отсчёт длительностей — иначе
 		// метка с последним оставшимся раундом успела бы истечь до того, как

@@ -31,6 +31,16 @@ function insertWikiLink(editor) {
   }
 }
 
+// insertRelations — блок ```связи (см. notes/relations.js) с первой строкой.
+function insertRelations(editor) {
+  if (editor.isActive("codeBlock", { language: "связи" })) return;
+  editor
+    .chain()
+    .focus()
+    .insertContent({ type: "codeBlock", attrs: { language: "связи" }, content: [{ type: "text", text: "союзник: [[" }] })
+    .run();
+}
+
 function insertTable(editor) {
   editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
 }
@@ -81,6 +91,12 @@ export function mountNoteToolbar(toolbarEl, note) {
     [
       { icon: "link", title: "Вставить ссылку", action: () => insertLink(editor), active: () => editor.isActive("link") },
       { icon: "brackets", title: "Вики-ссылка на другую запись — можно с папкой: [[Глава 1/Таверна]]", action: () => insertWikiLink(editor) },
+      {
+        icon: "graph",
+        title: "Связи записи для графа: союзник, враг, семья, подчинённый — по строке «тип: [[Запись]]»",
+        action: () => insertRelations(editor),
+        active: () => editor.isActive("codeBlock", { language: "связи" }),
+      },
       { icon: "image", title: "Вставить файл или картинку", action: () => fileInput.click() },
       { icon: "minus", title: "Разделитель", action: () => c().setHorizontalRule().run() },
       { icon: "table", title: "Вставить таблицу", action: () => insertTable(editor), active: () => editor.isActive("table") },

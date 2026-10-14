@@ -18,6 +18,7 @@ import {
   deleteCharacterApi,
   fetchPregens,
   claimPregen,
+  fetchScreen,
 } from "../api.js";
 import { icon } from "../icons.js";
 import { initFullscreenButton } from "../fullscreen.js";
@@ -27,6 +28,7 @@ import { mountScenePicker } from "../scene-picker.js";
 import { mountSummonPanel } from "../summon-panel.js";
 import { mountPlayerTokenMenu } from "../player-token-menu.js";
 import { initShowcaseOverlay } from "../showcase-overlay.js";
+import { initScreenTimers } from "../screen-timers.js";
 import { showAlert, showConfirm } from "../modal.js";
 import { createDrawOptions } from "../draw-options.js";
 import { createBoardList } from "../board-list.js";
@@ -307,7 +309,10 @@ const PLAYER_DRAW_HELP = {
   // править. Кнопка, а не панель: журнал — полноценное окно, ему тесно в
   // выезжающей плашке бокового меню.
   vtt.sideMenu.addButton(icon("scroll", { size: 16 }), "Журнал стола", openJournalWindow, { tip: PANEL_HELP.journal });
+  vtt.sideMenu.addButton(icon("list", { size: 16 }), "Сессии", () => openJournalView("sessions", "Сессии"), { tip: PANEL_HELP.sessions, more: true });
+  vtt.sideMenu.addButton(icon("graph", { size: 16 }), "Граф связей", () => openJournalView("graph", "Граф связей"), { tip: PANEL_HELP.graph, more: true });
   vtt.sideMenu.addButton(icon("backpack", { size: 16 }), "Хаб", openLootHub, { tip: PANEL_HELP.hub });
+  initScreenButton(vtt.sideMenu.addButton(icon("book-text", { size: 16 }), "Шпаргалка ведущего", () => openScreenWindow(), { tip: PANEL_HELP.screen }));
 
   vtt.sideMenu.addSeparator();
 
@@ -337,6 +342,7 @@ const PLAYER_DRAW_HELP = {
   // (см. web/src/showcase-overlay.js). Закрыть игрок не может, показом
   // управляет ДМ.
   initShowcaseOverlay({ role: "player" });
+  initScreenTimers({ role: "player" });
 
   document.addEventListener("vtt:authFailed", () => {
     document.getElementById("authFailedOverlay").classList.add("open");
@@ -359,6 +365,45 @@ function openJournalWindow(entryId) {
     width: 900,
     height: 640,
     popoutFeatures: "width=900,height=640",
+  });
+}
+
+// Сессии и граф — тот же журнал, но своим окном.
+function openJournalView(view, title) {
+  openFloatingWindow({ key: "journal-" + view, title, url: "/journal.html?view=" + view, width: 1000, height: 700, popoutFeatures: "width=1000,height=700" });
+}
+
+function openScreenWindow(tabId) {
+  openFloatingWindow({
+    key: "gm-screen",
+    title: "Шпаргалка ведущего",
+    url: "/gm-screen.html" + (tabId ? "?tab=" + encodeURIComponent(tabId) : ""),
+    navigate: !!tabId,
+    width: 1000,
+    height: 680,
+    popoutFeatures: "width=1000,height=680",
+  });
+}
+
+// Кнопка видна, пока ведущий что-то открыл; новая открытая вкладка сразу всплывает окном.
+function initScreenButton(btn) {
+  let shared = null;
+  const refresh = async () => {
+    let tabs = [];
+    try {
+      tabs = (await fetchScreen()).tabs || [];
+    } catch {
+      return;
+    }
+    btn.style.display = tabs.length ? "" : "none";
+    const fresh = shared ? tabs.find((t) => !shared.has(t.id)) : null;
+    shared = new Set(tabs.map((t) => t.id));
+    if (fresh) openScreenWindow(fresh.id);
+  };
+  btn.style.display = "none";
+  refresh();
+  document.addEventListener("vtt:libraryChanged", (e) => {
+    if (e.detail.kind === "screen") refresh();
   });
 }
 
@@ -639,9 +684,8 @@ trackOpenClass(charsOverlay, "open", () => charsOverlay.classList.remove("open")
 // pages/dm.js — идентичный блок, те же два моста, см. комментарий там).
 window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data) return;
-  if (e.data.type === "beacon:openFloatingWindow") {
-    openFloatingWindow({ key: e.data.key, title: e.data.title, url: e.data.url, navigate: !!e.data.navigate });
-  } else if (e.data.type === "beacon:characterSaved") {
+  // "beacon:openFloatingWindow" открывает сам floating-window.js.
+  if (e.data.type === "beacon:characterSaved") {
     // Имя/аватар поменяли в листе — список и чипы дока держат свою копию.
     renderChars();
   } else if (

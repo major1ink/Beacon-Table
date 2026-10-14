@@ -43,6 +43,7 @@ var schemaMigrations = []migration{
 	{version: 2, name: "тип плейлиста (панель эффектов)", apply: migrateV2},
 	{version: 3, name: "чат за столом", apply: migrateV3},
 	{version: 4, name: "модули мира", apply: migrateV4},
+	{version: 5, name: "сообщения ширмы в чате", apply: migrateV5},
 }
 
 // sqlExec — общее у *sql.DB и *sql.Tx: чтобы вспомогательные функции
@@ -120,6 +121,12 @@ func migrateV2(tx *sql.Tx) error {
 // модулей, — «модуль их системы» (см. Company.EnabledModules).
 func migrateV4(tx *sql.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE companies ADD COLUMN modules TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+// migrateV5 — chat_messages.system: сообщение сервера (порог счётчика ширмы).
+func migrateV5(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE chat_messages ADD COLUMN system INTEGER NOT NULL DEFAULT 0`)
 	return err
 }
 

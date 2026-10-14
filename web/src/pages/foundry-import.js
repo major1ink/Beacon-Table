@@ -31,6 +31,7 @@ import { mapFoundryMonsterJson } from "../monster-import.js";
 import { mapFoundryCharacterJson } from "../character-import.js";
 import { mapFoundryReferenceBatch } from "../reference-import.js";
 import { mapFoundryConditionBatch } from "../condition-import.js";
+import { mapFoundryRollTable } from "../rolltable-import.js";
 import { initFullscreenButton } from "../fullscreen.js";
 import { tokenArt, itemArt, pregenArt, mapPackDocs, cardKey, sameCard } from "../foundry-import-cards.js";
 
@@ -56,6 +57,8 @@ const ALL_TARGETS = [
   { id: "items", label: "Снаряжение", fetchAll: fetchItems, createOne: createItem, updateOne: updateItem, mapOne: mapFoundryItemJson, art: itemArt },
   { id: "references", label: "Справочник", fetchAll: fetchReferences, createOne: createReference, updateOne: updateReference, mapBatch: mapFoundryReferenceBatch },
   { id: "conditions", label: "Состояния", fetchAll: fetchConditions, createOne: createCondition, updateOne: updateCondition, mapBatch: mapFoundryConditionBatch },
+  // Случайные таблицы — карточки справочника с бросаемой таблицей (см. ширму), в любом мире.
+  { id: "tables", label: "Случайные таблицы", fetchAll: fetchReferences, createOne: createReference, updateOne: updateReference, mapOne: mapFoundryRollTable },
   // Журналы модуля: текст и папку готовит сервер (см.
   // service.FoundryImport.Notes), но заводит записи эта страница — потому что
   // запись с тем же названием в той же папке может уже существовать, и что с

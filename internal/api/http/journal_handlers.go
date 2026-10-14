@@ -149,7 +149,7 @@ func (a *API) handleJournalMembers(w http.ResponseWriter, r *http.Request) {
 		if !acc.IsActive() {
 			continue // ещё не одобренному ДМ аккаунту нечего выдавать
 		}
-		out = append(out, map[string]any{"id": acc.ID, "username": acc.Username})
+		out = append(out, map[string]any{"id": acc.ID, "username": acc.Username, "gm": acc.IsGM()})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -186,6 +186,49 @@ func (a *API) handleJournalCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	notifyJournal(world, e.ID)
 	writeJSON(w, http.StatusCreated, journalJSON(e, v))
+}
+
+// handleJournalGraph — граф связей журнала. ДМ может посмотреть его глазами
+// игрока (?as=<аккаунт>) — проверить, не выдают ли связи тайну.
+func (a *API) handleJournalGraph(w http.ResponseWriter, r *http.Request) {
+	acc, ok := a.requireAccount(w, r)
+	if !ok {
+		return
+	}
+	world, ok := a.requireWorld(w)
+	if !ok {
+		return
+	}
+	v := journalViewer(acc)
+	var audience []domain.JournalViewer
+	if v.IsDM {
+		accounts, err := world.Admin.ListAccounts(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "ошибка сервера")
+			return
+		}
+		as := r.URL.Query().Get("as")
+		for _, p := range accounts {
+			if !p.IsActive() || p.IsGM() {
+				continue
+			}
+			pv := journalViewer(p)
+			audience = append(audience, pv)
+			if p.ID == as {
+				v = pv
+			}
+		}
+		if as != "" && v.IsDM {
+			writeErr(w, http.StatusNotFound, "игрок не найден")
+			return
+		}
+	}
+	g, err := world.Journal.Graph(r.Context(), v, audience)
+	if err != nil {
+		writeJournalErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
 }
 
 func (a *API) handleJournalGet(w http.ResponseWriter, r *http.Request) {

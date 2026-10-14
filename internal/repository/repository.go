@@ -12,6 +12,7 @@
 //   - spellfile — Spell поверх файлов .json, по одному на заклинание
 //   - itemfile — Item поверх файлов .json, по одному на предмет
 //   - conditionfile — Condition поверх файлов .json, по одному на состояние
+//   - screenfile — ширма ведущего, один .json на мир
 //   - localfs   — Asset поверх файловой системы (загруженные карты/токены/аудио)
 //   - memory    — in-memory реализации для unit-тестов service-слоя
 package repository
@@ -275,6 +276,22 @@ type BoardRepository interface {
 	// Rename по той же причине, что и у журнала (см. JournalRepository).
 	SetAccess(ctx context.Context, id string, def domain.JournalAccess, access map[string]domain.JournalAccess) (bool, error)
 	Delete(ctx context.Context, id string) error
+}
+
+// ScreenRepository — ширма ведущего, один файл на мир (screenfile).
+type ScreenRepository interface {
+	// Get — сохранённая ширма; domain.ErrNotFound, если её ещё не сохраняли.
+	Get(ctx context.Context) (*domain.Screen, error)
+	Save(ctx context.Context, s *domain.Screen) error
+}
+
+// SessionLogRepository — ленты сессий, файл .jsonl на сессию (sessionfile).
+// Строки только дописываются.
+type SessionLogRepository interface {
+	// IDs — сессии по возрастанию (id начинается с даты).
+	IDs(ctx context.Context) ([]string, error)
+	Events(ctx context.Context, id string) ([]domain.SessionEvent, error)
+	Append(ctx context.Context, id string, ev domain.SessionEvent) error
 }
 
 // MonsterRepository — библиотека карточек бестиария ДМ, файл-на-монстра (см.

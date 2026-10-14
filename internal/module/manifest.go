@@ -88,6 +88,8 @@ type Manifest struct {
 	Description string       `json:"description,omitempty"`
 	Author      string       `json:"author,omitempty"`
 	License     string       `json:"license,omitempty"`
+	// Attribution — откуда взят текст (перевод, переводчик, ссылка).
+	Attribution string `json:"attribution,omitempty"`
 	// LegacyIDs — id карточек в старом формате sys-<slug> (см.
 	// LegacyIDPrefix). Только для модулей, заменяющих встроенный каталог.
 	LegacyIDs bool `json:"legacyIds,omitempty"`

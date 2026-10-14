@@ -1,5 +1,5 @@
 // floating-window.js — минимальная Foundry-style "Application": перетаскиваемое
-// (за шапку) и растягиваемое (нативный CSS resize) окно с iframe внутри,
+// (за шапку) и растягиваемое (за уголок) окно с iframe внутри,
 // плавает поверх канваса. НЕМОДАЛЬНОЕ — канвас под окном по-прежнему кликается
 // (drag токенов, зум и т.п.), окно просто лежит выше по z-index. Единственный
 // сегодняшний потребитель — лист персонажа (character-sheet.html, см.
@@ -30,7 +30,14 @@ function injectStyle() {
       position: fixed; display: flex; flex-direction: column;
       background: #1c1c24; border: 1px solid rgba(255,255,255,0.14); border-radius: 10px;
       box-shadow: 0 12px 40px rgba(0,0,0,0.55); overflow: hidden;
-      resize: both; min-width: 420px; min-height: 320px;
+      min-width: 420px; min-height: 320px;
+    }
+    /* Свой уголок вместо CSS resize: в WebKit (десктоп) ручку resize перекрывает
+       iframe — WebKit ищет её только у слоя элемента под курсором. */
+    .fw-resize {
+      position: absolute; right: 0; bottom: 0; z-index: 1; width: 16px; height: 16px;
+      cursor: nwse-resize; touch-action: none;
+      background: linear-gradient(135deg, transparent 55%, rgba(255,255,255,0.3) 55% 62%, transparent 62% 72%, rgba(255,255,255,0.3) 72% 79%, transparent 79%);
     }
     .fw-titlebar {
       flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 10px;
@@ -58,13 +65,12 @@ function injectStyle() {
         left: 0 !important; top: var(--vv-top, 0px) !important;
         width: 100% !important; height: var(--vv-h, 100dvh) !important;
         min-width: 0; min-height: 0; border: none; border-radius: 0;
-        resize: none;
         box-sizing: border-box; padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
       }
       .fw-titlebar { cursor: default; padding: 8px 8px 8px 12px; }
       .fw-btn { width: 34px; height: 34px; font-size: 15px; }
       /* 🗗 на телефоне — вторая вкладка, из которой не вернуться. */
-      .fw-popout { display: none; }
+      .fw-popout, .fw-resize { display: none; }
       .fw-own-header .fw-titlebar { display: none; }
     }
   `;
@@ -97,6 +103,8 @@ function bringToFront(el) {
 // ("вынести" в настоящее отдельное окно браузера, полностью закрывая
 // плавающее — это ставит обратно ровно то поведение, что было ДО этого UI:
 // см. git history web/src/pages/dm.js:handleAdminCharacterUpdate и соседей).
+// В десктопе window.open не работает — окно приложения открывает он сам
+// (window.beaconDesktop.popout, см. cmd/beacon-table/desktop.go).
 export function openFloatingWindow({
   key,
   title,
@@ -105,6 +113,8 @@ export function openFloatingWindow({
   popoutFeatures = "width=1040,height=880",
   width = 1040,
   height = 880,
+  // desktopFill — в десктопе на втором экране развернуть окно целиком.
+  desktopFill = false,
 }) {
   injectStyle();
   const existing = openWindows.get(key);
@@ -145,7 +155,7 @@ export function openFloatingWindow({
   popoutBtn.type = "button";
   popoutBtn.className = "fw-btn fw-popout";
   popoutBtn.textContent = "🗗";
-  popoutBtn.title = "Открыть в отдельном окне браузера";
+  popoutBtn.title = window.beaconDesktop ? "Открыть в отдельном окне" : "Открыть в отдельном окне браузера";
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
   closeBtn.className = "fw-btn";
@@ -160,8 +170,10 @@ export function openFloatingWindow({
   iframe.allowFullscreen = true; // кнопка «во весь экран» внутри страницы, см. fullscreen.js
   iframe.src = url;
   body.appendChild(iframe);
+  const grip = document.createElement("div");
+  grip.className = "fw-resize";
 
-  el.append(titlebar, body);
+  el.append(titlebar, body, grip);
   document.body.appendChild(el);
   openWindows.set(key, el);
   bringToFront(el);
@@ -229,7 +241,9 @@ export function openFloatingWindow({
     // внутри это то же самое, что закрытие, поэтому спрашиваем так же.
     if (!(await confirmClose())) return;
     await flushIframe(); // новое окно грузится с сервера — сначала дописать несохранённое
-    window.open(url, key, popoutFeatures);
+    const desktop = window.beaconDesktop;
+    if (desktop && desktop.popout) desktop.popout({ key, title, url: currentUrl(), width, height, fill: desktopFill });
+    else window.open(url, key, popoutFeatures);
     close();
   };
 
@@ -271,6 +285,32 @@ export function openFloatingWindow({
       /* тот же origin всегда, сюда не попадём — оставлено на всякий случай */
     }
   });
+
+  let startW = 0;
+  let startH = 0;
+  attachDrag(grip, {
+    onStart: () => {
+      bringToFront(el);
+      startW = el.offsetWidth;
+      startH = el.offsetHeight;
+    },
+    onMove: (dx, dy) => {
+      el.style.width = Math.min(startW + dx, window.innerWidth - el.offsetLeft) + "px";
+      el.style.height = Math.min(startH + dy, window.innerHeight - el.offsetTop) + "px";
+    },
+  });
+
+  // Десктоп откроет вынесенное окно с сервера заново — на той записи, где
+  // окно сейчас, а не где его открыли (журнал меняет адрес через replaceState).
+  function currentUrl() {
+    try {
+      const loc = iframe.contentWindow.location;
+      if (loc.origin === location.origin) return loc.pathname + loc.search + loc.hash;
+    } catch {
+      /* тот же origin всегда */
+    }
+    return url;
+  }
 
   return el;
 }
@@ -314,4 +354,27 @@ export function openCardWindow({ key, title, url, navigate = false }) {
     return;
   }
   openFloatingWindow({ key, title, url, navigate });
+}
+
+// Страница открыта сама по себе — вкладкой или окном десктопа, вынесенным 🗗.
+// Ссылки в ней просят «открой окно» у хозяина (window.parent — она же сама):
+// открываем здесь, поверх неё. У стола (dm.html/player.html) это тот же путь
+// для ссылок из его боковых панелей и окон-iframe.
+//
+// В окне десктопа window.opener нет — остальные просьбы к столу (сцена по
+// ссылке, «лист сохранён» и т. п.) передаёт столу сам десктоп (toTable).
+const FRAME_ONLY = new Set(["beacon:closeFloatingWindow", "beacon:ownHeader"]);
+if (typeof window !== "undefined" && window.parent === window) {
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || !e.data || typeof e.data.type !== "string") return;
+    const { type, key, title, url, navigate } = e.data;
+    if (type === "beacon:openFloatingWindow") {
+      openFloatingWindow({ key, title, url, navigate: !!navigate });
+      return;
+    }
+    const desktop = window.beaconDesktop;
+    if (!desktop || !desktop.toTable || !type.startsWith("beacon:") || FRAME_ONLY.has(type)) return;
+    desktop.toTable(e.data);
+    if (type.endsWith("Saved")) postToOpenWindows("catalog-", e.data);
+  });
 }

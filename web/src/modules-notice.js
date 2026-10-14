@@ -1,6 +1,7 @@
 // modules-notice.js — напоминание на столе, что миру не хватает модулей
 // (см. GET /api/modules: world.missing). Закрывается крестиком до перезагрузки.
 import { fetchModules } from "./api.js";
+import { openModulesShowcase } from "./modules-link.js";
 
 export async function showMissingModulesNotice() {
   let data;
@@ -20,8 +21,10 @@ export async function showMissingModulesNotice() {
   text.textContent = `Не хватает модулей: ${missing.join(", ")}. Карточек и правил из них в мире нет.`;
   const link = document.createElement("a");
   link.href = "/modules.html";
-  link.target = "_blank";
-  link.rel = "noopener";
+  link.onclick = (e) => {
+    e.preventDefault();
+    openModulesShowcase();
+  };
   link.textContent = "Открыть витрину";
   link.style.cssText = "color:var(--accent,#7c6cf0);white-space:nowrap";
   const close = document.createElement("button");

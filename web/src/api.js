@@ -491,6 +491,22 @@ export async function fetchJournalEntry(id) {
 export async function fetchJournalMembers() {
   return apiFetch("/api/journal/members");
 }
+// fetchJournalGraph — граф связей журнала ({nodes, edges}); as — id игрока,
+// глазами которого смотрит ДМ.
+export async function fetchJournalGraph({ as = "" } = {}) {
+  return apiFetch("/api/journal/graph" + (as ? "?as=" + encodeURIComponent(as) : ""));
+}
+// ---- лента сессии (service.SessionLogService) ----
+export async function fetchSessions() {
+  return apiFetch("/api/sessions");
+}
+// as — id игрока, глазами которого смотрит ДМ.
+export async function fetchSessionEvents(id, { as = "" } = {}) {
+  return apiFetch(`/api/sessions/${encodeURIComponent(id)}` + (as ? "?as=" + encodeURIComponent(as) : ""));
+}
+export async function makeSessionSummary(id, { rebuild = false } = {}) {
+  return apiFetch(`/api/sessions/${encodeURIComponent(id)}/summary${rebuild ? "?rebuild=1" : ""}`, { method: "POST" });
+}
 export async function createJournalEntry({ content, folder = "", def = "none", access = {} } = {}) {
   return apiFetch("/api/journal", {
     method: "POST",
@@ -511,6 +527,14 @@ export async function moveJournalEntry(id, folder) {
 }
 export async function deleteJournalEntry(id) {
   return apiFetch(`/api/journal/${id}`, { method: "DELETE" });
+}
+
+// ---- ширма ведущего: игроку сервер отдаёт только открытые ему вкладки ----
+export async function fetchScreen() {
+  return apiFetch("/api/screen");
+}
+export async function saveScreen(screen) {
+  return apiFetch("/api/screen", { method: "PUT", body: JSON.stringify(screen) });
 }
 
 // ---- доски стола (ДМ и игроки) — web/board.html ----

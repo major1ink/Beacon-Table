@@ -55,7 +55,7 @@ test("справочник: группы, категории меню, меда�
   const compiled = schema("reference");
   const cfg = catalogConfig(compiled);
   const cats = categoriesOf(compiled);
-  const labels = { class: "Классы", species: "Виды", background: "Предыстории", trait: "Черты" };
+  const labels = { class: "Классы", species: "Виды", background: "Предыстории", trait: "Черты", rule: "Правила", table: "Таблицы" };
   const list = cards("references");
   assert.ok(list.length > 200);
   for (const r of list) {
@@ -66,5 +66,5 @@ test("справочник: группы, категории меню, меда�
     assert.deepEqual(medallionOf(compiled, r), { glyph: info ? info.glyph : "scroll", color: info ? info.color : "" }, r.name);
   }
   const order = compiled.schema.fields.kind.options.map((o) => o.value);
-  assert.deepEqual(order, ["класс", "архетип", "вид", "черта вида", "происхождение", "черта", "черта класса"].map(kindKey));
+  assert.deepEqual(order, ["класс", "архетип", "вид", "черта вида", "происхождение", "черта", "черта класса", "правило", "таблица"].map(kindKey));
 });

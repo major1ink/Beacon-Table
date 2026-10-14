@@ -283,6 +283,11 @@ type ClientMsg struct {
 	// только КУДА и КОГО (CombatantID).
 	TokenX float64 `json:"tokenX,omitempty"`
 	TokenY float64 `json:"tokenY,omitempty"`
+
+	// CounterDelta/CounterReset — только для "screen_counter": сдвинуть
+	// счётчик ширмы ID или сбросить в ноль.
+	CounterDelta int  `json:"counterDelta,omitempty"`
+	CounterReset bool `json:"counterReset,omitempty"`
 }
 
 // WallPointRef — один конец одной стены в сообщении "move_wall_point". Which

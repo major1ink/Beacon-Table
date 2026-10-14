@@ -109,7 +109,8 @@ function renderNote(element) {
     createElement("div", { className: "board-note-title", key: "t" }, title),
     html
       ? createElement("div", {
-          className: "board-note-body",
+          // note-render — оформление блока связей и врезок из theme.css.
+          className: "board-note-body note-render",
           key: "b",
           dangerouslySetInnerHTML: { __html: html },
         })
@@ -294,7 +295,7 @@ function renderSchemaMonsterCard(card, m, compiled) {
 function monsterControls(card, m) {
   if (!gm) return null;
   const out = [];
-  if (hasHost) {
+  if (hasHost()) {
     out.push(
       cardButton({ key: "map", icon: "map", label: "На карту", title: "Токен в центр текущего вида", onClick: () => askHost({ type: "beacon:placeMonster", id: card.id }) }),
       cardButton({ key: "fight", icon: "sword", label: "В бой", title: "Добавить в трекер инициативы", onClick: () => askHost({ type: "beacon:addCombatant", monsterId: card.id }) })
@@ -359,7 +360,7 @@ function stopOnTable() {
 
 // askHost — просьба столу (dm.html); без стола и не у ДМ молча ничего.
 function askHost(msg) {
-  if (!gm || !hasHost) return;
+  if (!gm || !hasHost()) return;
   hostWindow().postMessage(msg, location.origin);
 }
 
@@ -371,7 +372,7 @@ function renderAudioCard(card) {
   const dead = deadAudio.has(card.url);
   if (dead) tags.push("файла нет в загрузках");
   const controls = [];
-  if (gm && hasHost && !dead) {
+  if (gm && hasHost() && !dead) {
     controls.push(
       cardButton({ key: "play", icon: "play", label: card.sfx ? "Запустить" : "На стол", title: card.sfx ? "Проиграть всем за столом" : "Включить всем за столом", onClick: () => playOnTable(card) })
     );
@@ -450,11 +451,11 @@ function sceneName(id) {
 // beacon:switchSceneId → view_scene): игроки остаются на своей, поэтому
 // метка «на столе сейчас» (current — активная для стола) не трогается.
 function goToScene(id) {
-  if (!gm || !hasHost) return;
+  if (!gm || !hasHost()) return;
   askHost({ type: "beacon:switchSceneId", id });
 }
 
-const canTeleport = () => gm && hasHost;
+const canTeleport = () => gm && hasHost();
 
 // sceneChip — сосед в телепорте: кнопка у ДМ за столом, иначе просто имя.
 function sceneChip(id) {
@@ -672,11 +673,13 @@ function hostWindow() {
   return window.parent;
 }
 
-const hasHost = hostWindow() !== window;
+// hasHost — есть ли стол, которому слать просьбы. У вынесенного окна
+// десктопа opener нет, просьбы столу передаёт десктоп (см. floating-window.js).
+const hasHost = () => hostWindow() !== window || !!(window.beaconDesktop && window.beaconDesktop.toTable);
 
 // openWindow — окном стола, иначе карточка встала бы внутрь рамки доски.
 function openWindow(spec) {
-  if (hasHost) {
+  if (hostWindow() !== window) {
     hostWindow().postMessage({ type: "beacon:openFloatingWindow", ...spec }, location.origin);
   } else {
     openFloatingWindow(spec);

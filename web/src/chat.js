@@ -107,8 +107,11 @@ export function createChatPane(host, { role, selfId, send, onMessage = () => {} 
     who.type = "button";
     who.className = "chat-msg-who";
     who.textContent = own ? "Вы" : m.fromName;
-    // Клик по имени — ответить лично; ушедшему со стола ответить нельзя.
-    if (!own) {
+    if (m.system) {
+      // Сообщение ширмы (порог счётчика) — отвечать некому.
+      who.disabled = true;
+    } else if (!own) {
+      // Клик по имени — ответить лично; ушедшему со стола ответить нельзя.
       const target = m.fromRole === ROLE_DM ? CHAT_TO_DM : m.fromId;
       who.title = "Ответить лично";
       who.onclick = () => {
@@ -121,7 +124,12 @@ export function createChatPane(host, { role, selfId, send, onMessage = () => {} 
       who.disabled = true;
     }
     head.appendChild(who);
-    if (m.to) {
+    if (m.system) {
+      const tag = document.createElement("span");
+      tag.className = "chat-msg-tag";
+      tag.textContent = m.to ? "ширма · только вам" : "ширма";
+      head.appendChild(tag);
+    } else if (m.to) {
       const arrow = document.createElement("span");
       arrow.className = "chat-msg-to";
       arrow.textContent = "→ " + (own ? m.toName : "вам");

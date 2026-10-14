@@ -32,6 +32,7 @@ type IndexEntry struct {
 	Description   string              `json:"description,omitempty"`
 	Author        string              `json:"author,omitempty"`
 	License       string              `json:"license,omitempty"`
+	Attribution   string              `json:"attribution,omitempty"`
 	MinAppVersion string              `json:"minAppVersion,omitempty"`
 	Systems       []string            `json:"systems,omitempty"`
 	Requires      []module.Dependency `json:"requires,omitempty"`
@@ -72,7 +73,7 @@ func BuildIndex(out, baseURL string, merge *Index) (*Index, error) {
 		root := strings.TrimRight(baseURL, "/") + "/" + tag + "/"
 		byID[s.ID] = IndexEntry{
 			ID: s.ID, Title: s.Title, Type: s.Type, Version: s.Version, Description: s.Description,
-			Author: s.Author, License: s.License, MinAppVersion: s.MinAppVersion, Systems: s.Systems,
+			Author: s.Author, License: s.License, Attribution: s.Attribution, MinAppVersion: s.MinAppVersion, Systems: s.Systems,
 			Requires: s.Requires, LegacyIDs: s.LegacyIDs, Size: size, SHA256: hash,
 			URL: root + base + ".btmod", SummaryURL: root + base + ".summary.json",
 		}

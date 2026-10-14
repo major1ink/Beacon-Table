@@ -6,6 +6,7 @@ import { importerInfo } from "./importers.js";
 import { showAlert, showConfirm } from "./modal.js";
 import { isOwner } from "./roles.js";
 import { changeWorldSystem } from "./world-system.js";
+import { openModulesShowcase } from "./modules-link.js";
 
 const lead = (id) => `Этот импорт — для ${importerInfo(id).title}, а мир сейчас играет по другой системе.`;
 
@@ -32,7 +33,7 @@ export async function offerImport(id) {
     return;
   }
   const open = await showConfirm(`${lead(id)} Модуль ${info.title} не установлен — его можно поставить в витрине модулей, а потом выбрать системой мира.`, { title: "Импорт", okLabel: "Открыть витрину" });
-  if (open) window.open(`/modules.html?module=${encodeURIComponent(info.offer)}`, "_blank", "noopener");
+  if (open) openModulesShowcase(`?module=${encodeURIComponent(info.offer)}`);
 }
 
 export const offerButtonLabel = (id) => `Подключить ${importerInfo(id).title}`;

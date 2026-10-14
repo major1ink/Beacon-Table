@@ -1,6 +1,7 @@
 import { Container, Graphics, Text, BlurFilter } from "pixi.js";
 import { dashedPolyline } from "../dash.js";
 import { fogAreaHandles, fogAreaCenter } from "../../geometry.js";
+import { viewerIsDM } from "../vision-plan.js";
 
 // Зоны ручного тумана (domain.FogArea) — замкнутые контуры, которые ДМ
 // рисует точками (как стены, см. interaction.js: tool "fog") и по своей
@@ -121,7 +122,7 @@ export function createManualFogLayer(ctx) {
     playerFill.clear();
     playerHalo.clear();
     const areas = Object.values(ctx.scene.fogAreas || {}).filter((a) => a.points.length >= 3);
-    if (ctx.isDM) {
+    if (viewerIsDM(ctx)) {
       rebuildDM(areas);
       return;
     }

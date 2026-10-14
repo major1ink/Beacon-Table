@@ -53,7 +53,7 @@ const (
 // worldSubdirs — поддиректории мира под dataRoot, которые едут в архив. Всё
 // прочее в dataRoot (beacon.db у legacy-мира, foundry-cache, companies/) —
 // не контент этого мира и в экспорт не попадает.
-var worldSubdirs = []string{"scenes", "journal", "boards", "bestiary", "spells", "items", "references", "conditions"}
+var worldSubdirs = []string{"scenes", "journal", "boards", "bestiary", "spells", "items", "references", "conditions", "screen", "sessions"}
 
 type worldManifest struct {
 	Format           string            `json:"format"`

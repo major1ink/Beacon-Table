@@ -30,6 +30,7 @@ type moduleInfo struct {
 	Description   string              `json:"description,omitempty"`
 	Author        string              `json:"author,omitempty"`
 	License       string              `json:"license,omitempty"`
+	Attribution   string              `json:"attribution,omitempty"`
 	Source        string              `json:"source"`
 	Counts        map[string]int      `json:"counts"`
 }
@@ -40,7 +41,8 @@ func toModuleInfo(m *module.Module) moduleInfo {
 		ID: man.ID, Type: man.Type, Title: man.Title, Version: man.Version,
 		MinAppVersion: man.MinAppVersion, Systems: man.Systems, Requires: man.Requires,
 		Description: man.Description, Author: man.Author, License: man.License,
-		Source: m.Source, Counts: m.Counts(),
+		Attribution: man.Attribution,
+		Source:      m.Source, Counts: m.Counts(),
 	}
 }
 
