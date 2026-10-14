@@ -78,6 +78,7 @@ func (s *Store) Events(_ context.Context, id string) ([]domain.SessionEvent, err
 		return nil, err
 	}
 	s.mu.Lock()
+	//nolint:gosec // G304: p собран из s.dir и id, прошедшего idRe (см. path)
 	data, err := os.ReadFile(p)
 	s.mu.Unlock()
 	if errors.Is(err, fs.ErrNotExist) {
@@ -112,7 +113,8 @@ func (s *Store) Append(_ context.Context, id string, ev domain.SessionEvent) err
 	if err := os.MkdirAll(s.dir, 0o750); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+	//nolint:gosec // G304: p собран из s.dir и проверенного id, см. path
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
