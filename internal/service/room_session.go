@@ -213,8 +213,18 @@ func (r *Room) logTurn() {
 	r.logSession(ev)
 }
 
+// screenTimerRun — запуск таймера ширмы: когда кончится и как подписать.
+type screenTimerRun struct {
+	ends   int64
+	title  string
+	public bool
+	done   bool // конец уже в ленте
+}
+
 // logTimers — в горутине run(), после сохранения ширмы: запущенный таймер
 // в ленту. Запуск видно по новому EndsAt; закрытый от игроков — секрет.
+// Первый снимок (запуск сервера) ничего не пишет: таймеры, кончившиеся без
+// сервера, задним числом в ленту не попадают.
 func (r *Room) logTimers() {
 	r.screenMu.Lock()
 	svc := r.screenSvc
@@ -226,27 +236,50 @@ func (r *Room) logTimers() {
 	if err != nil {
 		return
 	}
-	ends := map[string]int64{}
+	now := time.Now().UnixMilli()
+	runs := map[string]screenTimerRun{}
 	for _, t := range sc.Tabs {
 		for _, c := range t.Cells {
 			if c.Kind != domain.ScreenCellTimer || c.EndsAt == 0 {
 				continue
 			}
-			ends[c.ID] = c.EndsAt
-			if r.timerEnds == nil || r.timerEnds[c.ID] == c.EndsAt {
-				continue
+			run := screenTimerRun{ends: c.EndsAt, title: c.Title, public: c.Public}
+			if run.title == "" {
+				run.title = "Таймер"
 			}
-			title := c.Title
-			if title == "" {
-				title = "Таймер"
+			prev, seen := r.timers[c.ID]
+			switch {
+			case seen && prev.ends == c.EndsAt:
+				run.done = prev.done
+			case r.timers == nil:
+				run.done = c.EndsAt <= now
+			default:
+				r.logSession(domain.SessionEvent{
+					Kind: domain.SessionTimer, Secret: !c.Public,
+					Text: fmt.Sprintf("Таймер «%s»: %s", run.title, timerLabel(c.EndsAt-now)),
+				})
 			}
-			r.logSession(domain.SessionEvent{
-				Kind: domain.SessionTimer, Secret: !c.Public,
-				Text: fmt.Sprintf("Таймер «%s»: %s", title, timerLabel(c.EndsAt-time.Now().UnixMilli())),
-			})
+			runs[c.ID] = run
 		}
 	}
-	r.timerEnds = ends
+	r.timers = runs
+}
+
+// logTimerEnds — на тике run(): кончившийся таймер в ленту, один раз на
+// запуск. Сам таймер ширмы никуда не сообщает — его время видно только по
+// часам, поэтому смотрит сервер.
+func (r *Room) logTimerEnds(now int64) {
+	for id, run := range r.timers {
+		if run.done || run.ends > now {
+			continue
+		}
+		run.done = true
+		r.timers[id] = run
+		r.logSession(domain.SessionEvent{
+			Kind: domain.SessionTimer, Secret: !run.public,
+			Text: fmt.Sprintf("Таймер «%s»: время вышло", run.title),
+		})
+	}
 }
 
 func timerLabel(ms int64) string {

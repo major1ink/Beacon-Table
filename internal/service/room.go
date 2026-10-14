@@ -281,7 +281,7 @@ type Room struct {
 	// Лента сессии (см. room_session.go).
 	sessionsMu sync.Mutex
 	sessions   SessionLogService
-	timerEnds  map[string]int64 // EndsAt таймеров ширмы с прошлого раза
+	timers     map[string]screenTimerRun // идущие таймеры ширмы с прошлого раза, см. logTimers
 }
 
 // NewRoom поднимает комнату из sceneRepo (все сцены с прошлого запуска,
@@ -623,6 +623,7 @@ func (r *Room) run() {
 
 		case <-ticker.C:
 			r.flushIfDirty()
+			r.logTimerEnds(time.Now().UnixMilli())
 
 		case req := <-r.shutdown:
 			// финальное сохранение перед выходом процесса — не ждём таймер,

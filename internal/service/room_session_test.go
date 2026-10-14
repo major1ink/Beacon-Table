@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"beacon-table/internal/domain"
 	"beacon-table/internal/repository/sessionfile"
@@ -60,5 +62,50 @@ func TestSessionFileStoreRejectsBadID(t *testing.T) {
 	s := sessionfile.NewStore(t.TempDir())
 	if err := s.Append(context.Background(), "../x", domain.SessionEvent{}); err == nil {
 		t.Fatal("id с путём")
+	}
+}
+
+// Конец таймера ширмы — в ленту один раз; закрытый от игроков таймер видит
+// только ведущий. Кончившийся до запуска сервера задним числом не пишется.
+func TestRoomSessionLogsTimerEnd(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UnixMilli()
+	r, svc, dm, p1 := screenRoom(t,
+		domain.ScreenCell{ID: "old", Kind: domain.ScreenCellTimer, Title: "Вчерашний", Seconds: 60, EndsAt: now - 5000, Public: true},
+	)
+	sessions, _ := newTestSessionLog(t, t.TempDir())
+	r.UseSessions(sessions)
+	r.handleSession(domain.ClientMsg{Type: "session_start"})
+	r.logTimers() // снимок при запуске сервера
+	r.logTimerEnds(now)
+	if got := sessionEvents(dm); len(got) != 1 {
+		t.Fatalf("таймер, кончившийся без сервера, попал в ленту: %v", got)
+	}
+
+	if _, err := svc.Save(ctx, dm0, counterScreen(
+		domain.ScreenCell{ID: "dawn", Kind: domain.ScreenCellTimer, Title: "До рассвета", Seconds: 60, EndsAt: now + 60000},
+		domain.ScreenCell{ID: "bell", Kind: domain.ScreenCellTimer, Title: "Колокол", Seconds: 30, EndsAt: now + 30000, Public: true},
+	)); err != nil {
+		t.Fatal(err)
+	}
+	r.logTimers()
+	r.logTimerEnds(now + 31000)
+	r.logTimerEnds(now + 61000)
+	r.logTimerEnds(now + 62000)
+
+	ends := func(c *chatClient) []string {
+		var out []string
+		for _, s := range sessionEvents(c) {
+			if strings.HasSuffix(s, "время вышло") {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	if got := ends(dm); strings.Join(got, " | ") != "Таймер «Колокол»: время вышло | Таймер «До рассвета»: время вышло" {
+		t.Fatalf("ведущему: %v", sessionEvents(dm))
+	}
+	if got := ends(p1); strings.Join(got, " | ") != "Таймер «Колокол»: время вышло" {
+		t.Fatalf("игроку: %v", sessionEvents(p1))
 	}
 }
